@@ -1,0 +1,23 @@
+{
+  "name": "ufo-galaxy-realization-v2",
+  "version": "1.0.0",
+  "description": "UFO Galaxy AI System -- Center-based Multi-Relative-Subject Distributed AI",
+  "scripts": {
+    "install:all": "pip install -r requirements.txt && npm run install:electron && npm run install:gui",
+    "install:electron": "cd electron && npm install",
+    "install:gui": "echo 'GUI deps installed via install:electron'",
+    "start": "python -m main",
+    "start:gui": "cd electron && npm start",
+    "start:voice": "python -c \"import asyncio; from core.voice_loop import VoiceLoop; asyncio.run(VoiceLoop(None).start())\"",
+    "service:install": "python -m windows_service.galaxy_service install",
+    "service:start": "python -m windows_service.galaxy_service start",
+    "service:stop": "python -m windows_service.galaxy_service stop",
+    "watchdog:start": "python -m windows_service.watchdog start",
+    "watchdog:stop": "python -m windows_service.watchdog stop",
+    "autostart:enable": "python -m windows_service.autostart",
+    "autostart:disable": "python -m windows_service.autostart --unregister",
+    "model:download-default": "python -c \"import asyncio; from core.huggingface_model_manager import get_hf_model_manager; asyncio.run(get_hf_model_manager().install_recommended('llm_qwen2_7b'))\"",
+    "health": "python scripts/health_check.py",
+    "validate": "python scripts/validate_runtime.py"
+  }
+}

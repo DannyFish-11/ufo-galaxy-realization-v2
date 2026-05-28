@@ -42,6 +42,23 @@ from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.ComputeScheduler")
 
+
+# PR-D8: GPU temperature protection helper
+async def _check_gpu_temperature() -> bool:
+    """Check GPU temperature. Returns False if overheated (>85C)."""
+    try:
+        import pynvml
+
+        pynvml.nvmlInit()
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+        if temp > 85:  # 85C threshold
+            logger.warning("GPU temperature %dC > 85C, pausing inference", temp)
+            return False  # Pause
+        return True
+    except Exception:
+        return True
+
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------

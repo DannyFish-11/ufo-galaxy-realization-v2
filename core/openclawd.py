@@ -1,4 +1,8 @@
 """
+# TODO-PR-Q1: 144 bare except Exception clauses should be refined to specific types
+# (ImportError, ValueError, RuntimeError, etc.) for better debugging.
+# This is a large refactoring task -- deferred to future cleanup PR.
+
 core.openclawd — Subject Core: Cognition, Execution Branching, and Manifestation
 ==================================================================================
 

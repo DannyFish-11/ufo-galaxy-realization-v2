@@ -64,7 +64,9 @@ SERVICE_DESCRIPTION = (
 
 # 重启退避配置（毫秒）
 _RESTART_DELAY_MS = 5000          # 首次重启延迟 5 秒
-_MAX_RESTARTS = 3                 # 24 小时内最多 3 次重启
+_MAX_RESTARTS = 999999            # PR-D3: Permanent retry (essentially unlimited)
+_RESTART_DELAY_INITIAL_S = 5      # PR-D3: 初始延迟5秒
+_RESTART_DELAY_MAX_S = 300        # PR-D3: 最大延迟5分钟
 _RESTART_RESET_PERIOD_MS = 86400_000  # 24 小时重置计数
 
 # 停止超时（秒）
@@ -232,8 +234,27 @@ if _HAVE_PYWIN32:
 
         def _monitor(self) -> None:
             """后台监控 —— 检测子进程崩溃并自动重启。"""
+            import psutil
+            import gc
+
+            process = psutil.Process(self._process.pid) if self._process else None
+
             while self._running:
                 time.sleep(5)
+
+                # PR-D1: Memory leak prevention
+                if process:
+                    try:
+                        mem_mb = process.memory_info().rss / (1024 * 1024)
+                        if mem_mb > 4096:  # >4GB RSS
+                            logger.warning("Memory high: %.0fMB, triggering gc", mem_mb)
+                            gc.collect()
+                        if mem_mb > 8192:  # >8GB RSS -- critical
+                            logger.error("Memory critical: %.0fMB, restarting", mem_mb)
+                            self._process.terminate()
+                            break
+                    except Exception:
+                        pass
 
                 proc = self._process
                 if proc is None:
@@ -246,6 +267,7 @@ if _HAVE_PYWIN32:
 
                 # 进程已退出
                 self._process = None
+                process = None
                 logger.warning(
                     "Galaxy process exited with code %d, preparing restart...", ret
                 )
@@ -264,28 +286,21 @@ if _HAVE_PYWIN32:
                     self._restart_count = 0
 
                 self._restart_count += 1
-                if self._restart_count > _MAX_RESTARTS:
-                    logger.critical(
-                        "Max restarts (%d) reached in 24h, giving up.", _MAX_RESTARTS
-                    )
-                    servicemanager.LogMsg(
-                        servicemanager.EVENTLOG_ERROR_TYPE,
-                        0,
-                        (
-                            f"{SERVICE_NAME} max restarts ({_MAX_RESTARTS}) reached. "
-                            "Manual intervention required.",
-                        ),
-                    )
-                    self._running = False
-                    self.ReportServiceStatus(win32service.SERVICE_STOPPED)
-                    break
+
+                # PR-D3: Exponential backoff: 5s -> 10s -> 20s -> 40s -> ... -> 300s(max)
+                delay = min(
+                    _RESTART_DELAY_INITIAL_S * (2 ** self._restart_count),
+                    _RESTART_DELAY_MAX_S,
+                )
+                logger.info("Restarting in %ds (attempt %d)", delay, self._restart_count)
+                time.sleep(delay)
 
                 self._last_restart_time = now
-                time.sleep(_RESTART_DELAY_MS / 1000)
 
                 if self._running:
                     logger.info("Restarting Galaxy process (attempt %d)...", self._restart_count)
                     self._spawn_galaxy()
+                    process = psutil.Process(self._process.pid) if self._process else None
 
         @staticmethod
         def _pipe_logger(

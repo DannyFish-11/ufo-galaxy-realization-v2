@@ -111,6 +111,30 @@ def print_status(message: str, status: str = "info"):
     print_status_row(message, status=status)
 
 
+async def _ensure_recommended_model():
+    """Ensure at least one recommended model is available (PR-I3)"""
+    try:
+        from core.huggingface_model_manager import get_hf_model_manager
+        hf = get_hf_model_manager()
+
+        local_models = hf.list_local_models()
+        if not local_models:
+            logger.info("No local models found, downloading recommended model...")
+            try:
+                await hf.install_recommended("llm_qwen2_7b")
+                logger.info("Recommended model downloaded successfully")
+            except Exception as exc:
+                logger.warning("Failed to auto-download model: %s", exc)
+                logger.info(
+                    "Please manually download a model: "
+                    "python -c \"from core.huggingface_model_manager import get_hf_model_manager; "
+                    "import asyncio; hf=get_hf_model_manager(); "
+                    "asyncio.run(hf.install_recommended('llm_qwen2_7b'))\""
+                )
+    except Exception:
+        pass
+
+
 def print_section(title: str):
     """打印章节标题。"""
     print_section_header(title)
@@ -640,6 +664,16 @@ class GalaxyUnified:
             self.service_manager.state = SystemState.STARTING_UI
             print_status(f"API 服务启动中: http://localhost:{self.config.web_ui_port}", "info")
             
+        # PR-D2: Update watchdog heartbeat periodically
+        try:
+            from windows_service.watchdog import update_heartbeat
+            update_heartbeat()
+        except Exception:
+            pass
+
+        # PR-I3: Auto-download recommended model on first run
+        await _ensure_recommended_model()
+
         # 系统就绪
         self.service_manager.state = SystemState.RUNNING
         self.running = True

@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+# PR-D7: Set process priority (Windows only)
+try:
+    import sys
+    if sys.platform == "win32":
+        import psutil
+        p = psutil.Process()
+        p.nice(psutil.HIGH_PRIORITY_CLASS)
+except Exception:
+    pass
+
 """
 Galaxy-Nexus 星枢 — System Orchestrator
 ========================================
@@ -63,10 +73,20 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Logging
 # ---------------------------------------------------------------------------
 
+from logging.handlers import RotatingFileHandler
+
+# PR-D6: Log rotation (10MB per file, keep 5 backups)
+log_dir = PROJECT_ROOT / "logs"
+log_dir.mkdir(exist_ok=True)
+handler = RotatingFileHandler(
+    str(log_dir / "galaxy.log"), maxBytes=10 * 1024 * 1024, backupCount=5
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
     datefmt="%H:%M:%S",
+    handlers=[handler, logging.StreamHandler()],
 )
 logger = logging.getLogger("Galaxy")
 

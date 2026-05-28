@@ -1,29 +1,29 @@
 [Unit]
-Description=Galaxy L4 Autonomous Intelligence System
+Description=UFO Galaxy AI System
 Documentation=https://github.com/DannyFish-11/galaxy-realization
-After=network.target docker.service
-Wants=network.target docker.service
+After=network.target
+Wants=network.target
 
 [Service]
 Type=simple
-User=galaxy
-Group=galaxy
-WorkingDirectory=/opt/galaxy
+User=%I
+Group=%I
+WorkingDirectory=/opt/ufo-galaxy
 
 # Environment
-Environment=PYTHONPATH=/opt/galaxy
-Environment=GALAXY_HOME=/opt/galaxy
-Environment=GALAXY_LOG_LEVEL=INFO
-Environment=GALAXY_MODE=production
+Environment="PYTHONPATH=/opt/ufo-galaxy"
+Environment="GALAXY_HOME=/opt/ufo-galaxy"
+Environment="GALAXY_LOG_LEVEL=INFO"
+Environment="GALAXY_MODE=production"
+Environment="USE_LOCAL_BRAIN_FIRST=true"
 
 # Main executable
-ExecStart=/opt/galaxy/venv/bin/python -m galaxy_launcher --daemon --auto-restart
+ExecStart=/usr/bin/python3 -m main --gpu-opt --persistent-models all
 
-# Restart policy - 24/7 operation
+# PR-D4: Automatic restart configuration (always-on)
 Restart=always
 RestartSec=10
-StartLimitInterval=60
-StartLimitBurst=3
+StartLimitInterval=0
 
 # Graceful shutdown
 TimeoutStopSec=30
@@ -32,11 +32,6 @@ KillSignal=SIGTERM
 # Resource limits
 LimitNOFILE=65536
 LimitNPROC=4096
-
-# Security
-NoNewPrivileges=false
-ProtectSystem=no
-ProtectHome=no
 
 # Logging
 StandardOutput=journal

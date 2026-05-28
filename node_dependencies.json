@@ -1741,6 +1741,7 @@
     "pr": "PR-6",
     "description": "Normalize node registry fields and formalize startup policy state machine",
     "change": "All 95 previously-implicit active nodes now carry an explicit startup_policy: \"active\" field. The registry is now fully normalized: every node entry has an explicit startup_policy.",
+    "_comment_skip_nodes": "PR-S1: 6 skip nodes (Node_28-32_Reserved, Node_130_AutonomousCoding) — reserved placeholders and stubs excluded from startup. Reserved slots (28-32) are archived for future plugin/extension use. Node_130 is archived pending implementation.",
     "policy_counts": {
       "active": 95,
       "optional": 29,

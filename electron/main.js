@@ -67,6 +67,24 @@ function toggleVisibility() {
 app.whenReady().then(() => {
     createWindow();
 
+    // PR-D5: Start system tray alongside Electron GUI
+    try {
+        const { spawn } = require('child_process');
+        const trayProcess = spawn('python', ['-m', 'windows_service.tray_icon'], {
+            cwd: path.join(__dirname, '..'),
+            detached: true,
+            stdio: 'ignore'
+        });
+        trayProcess.unref();
+        console.log('System tray started');
+    } catch (err) {
+        console.warn('Failed to start system tray:', err);
+    }
+
+    globalShortcut.register('F12', () => {
+        toggleVisibility();
+    });
+    // PR-R2: Also keep legacy shortcut for backward compat
     globalShortcut.register('CommandOrControl+Shift+G', () => {
         toggleVisibility();
     });

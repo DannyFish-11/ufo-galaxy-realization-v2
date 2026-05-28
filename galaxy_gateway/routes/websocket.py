@@ -27,8 +27,10 @@ galaxy_gateway/routes/websocket.py — WebSocket endpoint registration.
 # ============================================================================
 """
 
+import json
 import logging
 import os
+import time
 import uuid
 from typing import Literal, TypedDict
 
@@ -382,3 +384,45 @@ def register_websocket_routes(app: FastAPI) -> None:
             device_id = str(uuid.uuid4())
         wsm = websocket.app.state.websocket_manager
         await wsm.handle_connection(websocket, device_id)
+
+    # ── Desktop Presence WebSocket (for Electron 3-state GUI) ──
+    @app.websocket("/ws/desktop-presence")
+    async def websocket_desktop_presence(websocket: WebSocket):
+        """Desktop presence WebSocket — for the Electron 3-state GUI.
+
+        This endpoint pushes phase-change events (silent/liminal/manifest)
+        to the desktop overlay so it can animate transitions.
+
+        PR-R1: Added because Electron GUI connects to this endpoint.
+        """
+        await websocket.accept()
+        logger.info("Desktop presence WebSocket connected")
+
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
+        dpr = get_desktop_presence_runtime()
+
+        try:
+            while True:
+                # 接收心跳/请求
+                data = await websocket.receive_text()
+                msg = json.loads(data) if data.startswith("{") else {"type": "ping"}
+
+                if msg.get("type") == "get_phase":
+                    phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
+                    await websocket.send_text(json.dumps({
+                        "type": "phase_change",
+                        "phase": phase,
+                        "timestamp": time.time(),
+                    }))
+                else:
+                    # 心跳响应
+                    phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
+                    await websocket.send_text(json.dumps({
+                        "type": "heartbeat",
+                        "phase": phase,
+                        "timestamp": time.time(),
+                    }))
+        except WebSocketDisconnect:
+            logger.info("Desktop presence WebSocket disconnected")
+        except Exception as exc:
+            logger.debug("Desktop presence WS error: %s", exc)

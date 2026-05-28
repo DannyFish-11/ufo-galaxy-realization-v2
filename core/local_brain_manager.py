@@ -324,6 +324,29 @@ class LocalBrainManager:
                     )
                     return True
 
+        # PR-I1: Auto-install Ollama if not found
+        logger.info("Ollama not found, attempting auto-install...")
+        installed = await self._auto_install_ollama()
+        if installed:
+            # Retry connection
+            from core.local_model_backends import create_backend
+
+            self.backend_name = "ollama"
+            self._backend = create_backend("ollama", base_url=self.ollama_url)
+            await self._backend.load_model(self.brain_model)
+            for attempt in range(10):
+                await asyncio.sleep(1)
+                if await self._ping_ollama():
+                    self._status = LocalBrainStatus.HEALTHY
+                    self._healthy = True
+                    await self._refresh_model_list()
+                    logger.info(
+                        "本地主脑已启动 [ollama-auto-install]: %s (模型: %s)",
+                        self.ollama_url,
+                        self.available_models,
+                    )
+                    return True
+
         # 3. Start failed
         self._status = LocalBrainStatus.UNAVAILABLE
         self._healthy = False
@@ -567,6 +590,67 @@ class LocalBrainManager:
         except Exception as e:
             logger.warning(f"启动 Ollama 失败: {e}")
             return False
+
+    async def _auto_install_ollama(self) -> bool:
+        """Auto-download and install Ollama
+
+        Supported platforms:
+        - Windows: Download ollama-windows-amd64.exe
+        - Linux: curl -fsSL https://ollama.com/install.sh | sh
+        - macOS: brew install ollama or download pkg
+        """
+        import platform
+        import subprocess
+
+        system = platform.system()
+        logger.info("Auto-installing Ollama for %s...", system)
+
+        try:
+            if system == "Windows":
+                # Windows: Download installer
+                ollama_dir = Path.home() / ".ollama"
+                ollama_dir.mkdir(exist_ok=True)
+                ollama_exe = ollama_dir / "ollama.exe"
+
+                if not ollama_exe.exists():
+                    import urllib.request
+
+                    url = "https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.exe"
+                    logger.info("Downloading Ollama from %s...", url)
+                    urllib.request.urlretrieve(url, str(ollama_exe))
+                    logger.info("Ollama downloaded to %s", ollama_exe)
+
+                # Start Ollama
+                subprocess.Popen(
+                    [str(ollama_exe), "serve"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                await asyncio.sleep(5)  # Wait for startup
+                return True
+
+            elif system == "Linux":
+                result = subprocess.run(
+                    ["sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                return result.returncode == 0
+
+            elif system == "Darwin":  # macOS
+                result = subprocess.run(
+                    ["brew", "install", "ollama"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                return result.returncode == 0
+
+        except Exception as exc:
+            logger.error("Auto-install Ollama failed: %s", exc)
+
+        return False
 
     async def _refresh_model_list(self):
         """刷新可用模型列表"""

@@ -42,7 +42,9 @@ Usage
             requestor="scheduler",
             context={"target": "device_xyz"},
         )
-        print(f"Approved with token {token}")
+        # PR-Q2: Never print tokens to console (security risk)
+        # Token is logged securely via audit trail only
+        logger.debug("Request approved (token logged via audit trail)")
         # … proceed with the action …
 
     # In a separate coroutine / operator handler:
