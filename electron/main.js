@@ -57,6 +57,15 @@ function createWindow() {
 
 function createPanelWindow() {
     // Create the unified control panel window (toggled by F12).
+    // WAVE-3-TODO: panel.html will be created during Wave 3 (control panel design).
+    // Until then, F12 toggling is a no-op — the three-state GUI is unaffected.
+    const fs = require('fs');
+    const panelPath = path.join(__dirname, 'renderer', 'panel.html');
+    if (!fs.existsSync(panelPath)) {
+        console.log('[Panel] panel.html not found — F12 panel disabled until Wave 3');
+        return null;
+    }
+
     if (panelWindow) {
         return panelWindow;
     }
@@ -83,8 +92,7 @@ function createPanelWindow() {
         }
     });
 
-    // Panel loads a different HTML (to be created)
-    panelWindow.loadFile(path.join(__dirname, 'renderer', 'panel.html'));
+    panelWindow.loadFile(panelPath);
 
     panelWindow.once('ready-to-show', () => {
         // Don't show yet — wait for F12
