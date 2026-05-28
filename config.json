@@ -2,6 +2,17 @@
   "_comment_web_ui_port": "Galaxy API port (16201). Legacy 9000 migrated.",
   "web_ui_port": 16201,
   "log_level": "INFO",
+  "nats": {
+    "enabled": true,
+    "embedded": true,
+    "host": "0.0.0.0",
+    "port": 4222
+  },
+  "tailscale": {
+    "enabled": false,
+    "optional": true,
+    "auto_detect": true
+  },
   "default_llm_model": null,
   "_comment_default_llm_model": "null = force local brain first. API only used when local unavailable.",
   "llm_models": {},

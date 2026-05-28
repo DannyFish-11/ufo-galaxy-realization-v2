@@ -8,11 +8,15 @@ dispatch between the MasterBrain (control plane) and Edge Workers (data plane).
 Constraints (see plan 强约束):
   C1  — module-level singleton ``nats_bus``
   C2  — emits events to EventBus (NATS_CONNECTED / DISCONNECTED / RECONNECTING)
-  C5  — configured via ``GALAXY_NATS_URL`` env var; no-op mode if not set
+  C5  — configured via ``GALAXY_NATS_URL`` env var; embedded NATS if not set
   C7  — all methods return ``{"success": bool, "error": str | None, ...}``
   C8  — exposes ``is_connected()`` and ``get_stats()``
   C11 — uses stdlib ``logging`` (matching codebase convention)
   C12 — JSON wire format matching Pydantic model field names (snake_case)
+
+PR-NATS-CORE: NATS is a core component. Embedded NATS server starts automatically
+when no external GALAXY_NATS_URL is configured. No-op mode is removed — all
+publish/subscribe calls use real NATS transport.
 
 PR-4 — Agent Bus & Fabric Convergence
 --------------------------------------
@@ -210,23 +214,21 @@ class WorkerLifecycleSubjects:
 class NATSBus:
     """NATS JetStream client for distributed task dispatch.
 
-    Operates in **no-op mode** when ``GALAXY_NATS_URL`` is not set or when
-    the ``nats-py`` package is not installed.  In no-op mode all publish
-    calls return immediately and no subscriptions are created.
+    PR-NATS-CORE: NATS is now a core component. If ``GALAXY_NATS_URL`` is not
+    set, the embedded NATS server is started automatically. No-op mode is
+    removed — all publish/subscribe calls use real NATS transport.
     """
 
     _instance: Optional[NATSBus] = None
 
     def __init__(self) -> None:
+        # PR-NATS-CORE: NATS is now a core component
         self._url = os.environ.get("GALAXY_NATS_URL", "")
         self._auto_local = False  # True when URL was auto-defaulted to localhost
-        if not self._url and _HAS_NATS:
-            self._url = "nats://localhost:4222"
-            self._auto_local = True
         self._nc: Optional[Any] = None  # NATSClient
         self._js: Optional[Any] = None  # JetStreamContext
         self._connected = False
-        self._noop = not self._url or not _HAS_NATS
+        self._embedded: Optional[Any] = None  # EmbeddedNATSServer instance
         self._subscriptions: list = []
         self._subscription_metadata: Dict[int, Dict[str, str]] = {}
         self._stats = {
@@ -236,9 +238,16 @@ class NATSBus:
             "reconnects": 0,
         }
 
-        if self._noop:
-            reason = "nats-py not installed" if not _HAS_NATS else "GALAXY_NATS_URL not set"
-            logger.warning(f"NATSBus: operating in no-op mode ({reason})")
+        # 不再接受no-op — 如果没有URL，准备启动内置服务器
+        if not self._url:
+            if _HAS_NATS:
+                self._url = "nats://localhost:4222"
+                self._auto_local = True
+            else:
+                logger.warning(
+                    "NATSBus: nats-py not installed. "
+                    "Install: pip install nats-py[nats]"
+                )
 
     @classmethod
     def get_instance(cls) -> NATSBus:
@@ -249,23 +258,38 @@ class NATSBus:
     # ── Connection lifecycle ────────────────────────────────────────────────
 
     async def connect(self, url: str = "") -> dict:
-        """Connect to NATS server and create JetStream streams."""
-        if self._noop:
-            return {"success": True, "noop": True}
+        """Connect to NATS server and create JetStream streams.
+
+        PR-NATS-CORE: If no external NATS is available, automatically starts
+        the embedded NATS server.
+        """
         if self._connected:
             return {"success": True, "already_connected": True}
 
         target = url or self._url
+
+        # PR-NATS-CORE: If no URL configured, try to start embedded server
+        if not target and not self._embedded:
+            from core.nats_server import EmbeddedNATSServer
+            self._embedded = EmbeddedNATSServer()
+            if await self._embedded.start():
+                target = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
+                self._url = target
+                self._auto_local = False
+                logger.info("NATSBus: using embedded NATS server at %s", target)
+            else:
+                logger.error("NATSBus: embedded NATS server failed to start")
+                return {"success": False, "error": "Embedded NATS server failed to start"}
+
         try:
             self._nc = await nats.connect(
                 target,
                 reconnected_cb=self._on_reconnect,
                 disconnected_cb=self._on_disconnect,
                 error_cb=self._on_error,
-                # Auto-local default: fail fast on first attempt so we don't
-                # spam errors in a tight reconnect loop before switching to
-                # no-op.  Explicit GALAXY_NATS_URL keeps unlimited retries.
-                max_reconnect_attempts=0 if self._auto_local else -1,
+                # Auto-local default: limited retries for auto-detected URLs,
+                # unlimited retries for explicitly configured URLs.
+                max_reconnect_attempts=3 if self._auto_local else -1,
             )
             self._js = self._nc.jetstream()
 
@@ -300,8 +324,15 @@ class NATSBus:
         except Exception as exc:
             self._stats["errors"] += 1
             if self._auto_local:
-                # Auto-local default failed — fall back to no-op gracefully.
-                self._noop = True
+                # Auto-local default failed — try embedded server as fallback
+                if not self._embedded:
+                    from core.nats_server import EmbeddedNATSServer
+                    self._embedded = EmbeddedNATSServer()
+                if await self._embedded.start():
+                    target = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
+                    self._url = target
+                    self._auto_local = False
+                    return await self.connect(target)
                 lan_ip = _get_lan_ip()
                 hint = (
                     f" For cross-device support set: GALAXY_NATS_URL=nats://{lan_ip}:4222"
@@ -309,17 +340,16 @@ class NATSBus:
                     else " Set GALAXY_NATS_URL=nats://<LAN_IP>:4222 for cross-device support."
                 )
                 logger.warning(
-                    "NATSBus: could not reach nats://localhost:4222 — running in no-op mode "
-                    "(single-machine). To enable NATS locally: nats-server -p 4222.%s",
+                    "NATSBus: could not reach nats://localhost:4222 — embedded server also failed.%s",
                     hint,
                 )
-                return {"success": True, "noop": True, "auto_local_failed": True}
+                return {"success": False, "error": f"NATS connection failed: {exc}"}
             logger.error(f"NATSBus: connection failed — {exc}")
             return {"success": False, "error": str(exc)}
 
     async def disconnect(self) -> dict:
-        """Gracefully close NATS connection."""
-        if self._noop or not self._connected:
+        """Gracefully close NATS connection and stop embedded server if running."""
+        if not self._connected:
             return {"success": True}
         try:
             for sub in self._subscriptions:
@@ -339,6 +369,11 @@ class NATSBus:
             return {"success": True}
         except Exception as exc:
             return {"success": False, "error": str(exc)}
+        finally:
+            # PR-NATS-CORE: Stop embedded server if we started it
+            if self._embedded:
+                self._embedded.stop()
+                self._embedded = None
 
     # ── Publish methods ─────────────────────────────────────────────────────
 
@@ -599,8 +634,6 @@ class NATSBus:
 
     def is_connected(self) -> bool:
         """Check if NATS connection is alive."""
-        if self._noop:
-            return False
         return self._connected and self._nc is not None and self._nc.is_connected
 
     def get_stats(self) -> dict:
@@ -608,8 +641,8 @@ class NATSBus:
         subscription_metadata = getattr(self, "_subscription_metadata", {})
         return {
             "connected": self.is_connected(),
-            "noop_mode": self._noop,
             "url": self._url,
+            "embedded": self._embedded is not None,
             "subscriptions": len(self._subscriptions),
             "active_subjects": [meta["subject"] for meta in subscription_metadata.values()],
             "canonical_worker_subjects": {
@@ -623,30 +656,26 @@ class NATSBus:
 
     # ── Internal helpers ────────────────────────────────────────────────────
 
+    async def _ensure_connected(self) -> bool:
+        """PR-NATS-CORE: Auto-connect if not connected.
+
+        If NATS is not connected, attempt to connect (which may start
+        the embedded server). Returns True if connected, False otherwise.
+        """
+        if self._connected and self._js is not None:
+            return True
+        result = await self.connect()
+        return result.get("success", False)
+
     async def _publish(self, subject: str, data: dict) -> dict:
-        """Serialize and publish a message to NATS JetStream."""
-        if self._noop:
-            # Bridge to in-process EventBus so subscribers still receive messages
-            try:
-                from integration.event_bus import EventBus, EventType
-                bus = EventBus()
-                # Use a generic event type; include NATS subject for routing
-                et = getattr(EventType, "NATS_FALLBACK", None) or EventType.COMMAND_DISPATCHED
-                bus.publish_sync(
-                    et,
-                    source="nats_bus",
-                    data={"subject": subject, "payload": data},
-                )
-            except Exception:
-                pass
-            return {
-                "success": False,
-                "noop": True,
-                "error": "nats_noop_transport",
-                "subject": subject,
-            }
+        """Serialize and publish a message to NATS JetStream.
+
+        PR-NATS-CORE: Auto-connects if not connected. No no-op mode.
+        """
+        # Auto-connect if not connected
         if not self._connected or self._js is None:
-            return {"success": False, "error": "Not connected to NATS"}
+            if not await self._ensure_connected():
+                return {"success": False, "error": "NATS not available (embedded server failed)"}
 
         try:
             payload = json.dumps(data, default=str).encode("utf-8")
@@ -667,16 +696,14 @@ class NATSBus:
         *,
         return_subscription: bool = False,
     ) -> dict:
-        """Create a JetStream pull/push subscription."""
-        if self._noop:
-            return {
-                "success": True,
-                "noop": True,
-                "error": "nats_noop_transport",
-                "subject": subject,
-            }
+        """Create a JetStream pull/push subscription.
+
+        PR-NATS-CORE: Auto-connects if not connected. No no-op mode.
+        """
+        # Auto-connect if not connected
         if not self._connected or self._js is None:
-            return {"success": False, "error": "Not connected to NATS"}
+            if not await self._ensure_connected():
+                return {"success": False, "error": "NATS not available (embedded server failed)"}
 
         try:
             async def _handler(msg):
@@ -755,6 +782,15 @@ class NATSBus:
 
 # ── Module-level singleton (constraint C1) ─────────────────────────────────
 nats_bus = NATSBus.get_instance()
+
+
+def get_nats_bus() -> NATSBus:
+    """Return the module-level NATSBus singleton.
+
+    PR-NATS-CORE: All consumers should use this accessor rather than
+    constructing NATSBus directly.
+    """
+    return nats_bus
 
 
 # ---------------------------------------------------------------------------

@@ -526,6 +526,38 @@ class GalaxyUnified:
 
         tasks.append(start_core())
 
+        # NATS核心任务（PR-NATS-CORE: 启动内置NATS服务器）
+        async def start_nats_core():
+            """PR-NATS-CORE: 启动内置NATS服务器"""
+            from core.nats_server import EmbeddedNATSServer
+            from core.nats_bus import get_nats_bus
+
+            nats_url = os.environ.get("GALAXY_NATS_URL")
+            if not nats_url:
+                # 尝试启动内置服务器
+                server = EmbeddedNATSServer()
+                if await server.start():
+                    print_status("NATS core started (embedded)", "success")
+                else:
+                    print_status("NATS core failed to start — cross-device dispatch unavailable", "warning")
+            else:
+                # 使用外部NATS
+                bus = get_nats_bus()
+                await bus.connect()
+                print_status(f"NATS core connected to {nats_url}", "success")
+
+        # Tailscale选填检测
+        async def start_tailscale_optional():
+            """Tailscale选填检测"""
+            from core.tailscale_manager import TailscaleManager
+            ts = TailscaleManager()
+            ts_ip = await ts.initialize()
+            if ts_ip:
+                print_status(f"Tailscale available: {ts_ip} (WAN mode enabled)", "success")
+            else:
+                print_status("Tailscale not installed (LAN mode only — install for WAN)", "info")
+                print(ts.get_install_guide())
+
         # 本地主脑任务（Ollama 优先启动）
         async def start_local_brain():
             """启动本地主脑（Ollama）"""
@@ -567,6 +599,12 @@ class GalaxyUnified:
 
         tasks.append(start_local_brain())
 
+        # PR-NATS-CORE: NATS核心启动（在节点系统之前启动）
+        tasks.append(start_nats_core())
+
+        # Tailscale选填检测
+        tasks.append(start_tailscale_optional())
+
         # 节点系统任务
         if self.config.enable_nodes:
             async def start_nodes():
@@ -595,10 +633,8 @@ class GalaxyUnified:
         await asyncio.gather(*tasks)
 
         # ── Phase A: NATS Bus + MasterBrain startup ──────────────────────────
-        # NATS is the internal scheduling mainline but is optional: if
-        # GALAXY_NATS_URL is unset the bus operates in no-op mode and the
-        # system starts in single-machine mode.
-        _nats_env_set = bool(os.environ.get("GALAXY_NATS_URL", "").strip())
+        # PR-NATS-CORE: NATS now starts as a core component via start_nats_core()
+        # task above. The inline connection here is a secondary verification.
         nats_url = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
         _is_win = sys.platform.startswith("win")
         _hc_script = r"scripts\health_check.ps1" if _is_win else "scripts/health_check.sh"
@@ -606,38 +642,24 @@ class GalaxyUnified:
 
         print_section("NATS 控制面")
 
-        # Friendly hint when GALAXY_NATS_URL is not explicitly configured.
-        if not _nats_env_set:
-            _lan_ip = _get_lan_ip()
-            print_status("GALAXY_NATS_URL 未设置 — 使用本地默认值", "info")
-            print_status(f"  默认地址: nats://localhost:4222 (单机开发)", "info")
-            if _lan_ip:
-                print_status(
-                    f"  跨设备提示: 设置 GALAXY_NATS_URL=nats://{_lan_ip}:4222"
-                    " 可让其他设备接入",
-                    "info",
-                )
-
-        def _nats_diag(detail: str) -> None:
-            print_status(f"NATS Bus: {detail}", "warning")
-            print_status("提示: 启动 NATS 服务 (nats-server -p 4222) 以启用分布式调度", "info")
-            print_status(f"  当前 NATS URL: {nats_url}", "info")
-            print_status(f"  运行完整诊断: {_hc_cmd}", "info")
-
         try:
             from core.nats_bus import nats_bus
-            conn_result = await nats_bus.connect()
-            if conn_result.get("success") and not conn_result.get("noop"):
-                print_status(f"NATS Bus: 已连接 ({nats_url})", "success")
-            elif conn_result.get("noop"):
-                print_status("NATS Bus: 未启用 (no-op 模式，单机运行)", "info")
+            if not nats_bus.is_connected():
+                conn_result = await nats_bus.connect()
+                if conn_result.get("success"):
+                    print_status(f"NATS Bus: 已连接 ({nats_url})", "success")
+                else:
+                    _nats_error_msg = conn_result.get("error", "连接失败，无详细信息")
+                    print_status(f"NATS Bus: 连接失败 — {_nats_error_msg}", "warning")
+                    print_status("提示: 启动 NATS 服务 (nats-server -p 4222) 以启用分布式调度", "info")
+                    print_status(f"  运行完整诊断: {_hc_cmd}", "info")
             else:
-                _nats_error_msg = conn_result.get("error", "连接失败，无详细信息")
-                _nats_diag(f"连接失败 — {_nats_error_msg}，以降级模式继续启动")
+                print_status(f"NATS Bus: 已连接 ({nats_url})", "success")
             stats = nats_bus.get_stats()
             logger.info("NATS Bus stats: %s", stats)
         except Exception as _nats_err:
-            _nats_diag(f"初始化异常: {_nats_err}，以降级模式继续启动")
+            print_status(f"NATS Bus: 初始化异常: {_nats_err}", "warning")
+            print_status("以降级模式继续启动", "info")
 
         try:
             from core.master_brain import master_brain_enabled
