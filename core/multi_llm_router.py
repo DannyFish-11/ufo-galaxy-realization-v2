@@ -57,6 +57,14 @@ class ProviderConfig:
     timeout: float = 60.0
     multimodal: bool = False          # 是否原生支持多模态（图像/音频/视频输入）
     env_key: str = ""                 # 对应的环境变量名（用于可用性提示）
+    # PR-HA: 硬件感知 + 多模态优先新增字段
+    source_type: str = "api"          # "api" / "local" / "hf_local" / "oneapi"
+    hardware_tier: str = "remote"    # "gpu_full" / "gpu_quantized" / "cpu" / "remote"
+    supports_vision: bool = False     # 是否支持图像输入（VLM能力）
+    supports_audio: bool = False      # 是否支持音频输入
+    kv_cache_enabled: bool = False    # 是否启用KV cache（借鉴vLLM）
+    prefix_cache_enabled: bool = False # 是否启用前缀缓存（借鉴SGLang RadixAttention）
+    quantization: str = "none"        # "none" / "q4" / "q5" / "q8" / "awq" / "gptq"
     # 运行时状态
     status: ProviderStatus = ProviderStatus.HEALTHY
     latency_avg_ms: float = 0.0
@@ -847,17 +855,48 @@ class MultiLLMRouter:
             self.providers["groq"] = cfg
             self.adapters["groq"] = GroqAdapter(cfg)
 
-        # Ollama (local)
+        # Ollama (local) — PR-HA: upgraded to first-class multimodal-capable local provider
         ollama_url = self._get_key("ollama")
         if not ollama_url:
             ollama_url = os.environ.get("OLLAMA_URL", "")
+        ollama_default_url = "http://localhost:11434"
+        if not ollama_url:
+            # 尝试默认地址
+            try:
+                import httpx
+                r = httpx.get(f"{ollama_default_url}/api/tags", timeout=2.0)
+                if r.status_code == 200:
+                    ollama_url = ollama_default_url
+            except Exception:
+                pass
         if ollama_url and not ollama_url.startswith("your-"):
+            # 检测 Ollama 实际可用的模型（包括 VLM）
+            detected_models = ["llama3", "mistral", "codellama", "qwen2"]
+            try:
+                import httpx
+                r = httpx.get(f"{ollama_url}/api/tags", timeout=3.0)
+                if r.status_code == 200:
+                    detected_models = [m["name"] for m in r.json().get("models", [])]
+                    if not detected_models:
+                        detected_models = ["llama3", "qwen2"]
+            except Exception:
+                pass
+
             cfg = ProviderConfig(
                 name="ollama", api_key="", base_url=ollama_url,
-                models=["llama3", "mistral", "codellama"],
-                default_model="llama3",
-                supports_tools=False, supports_json_mode=False,
-                multimodal=False, env_key="OLLAMA_URL",
+                models=detected_models,
+                default_model=detected_models[0] if detected_models else "llama3",
+                supports_tools=True, supports_json_mode=True,
+                multimodal=True,  # PR-HA: Ollama now marked multimodal-capable
+                env_key="OLLAMA_URL",
+                # PR-HA: 新增字段
+                source_type="local",
+                hardware_tier="gpu_full",
+                supports_vision=True,   # llava / bakllava via Ollama
+                supports_audio=False,
+                kv_cache_enabled=True,
+                prefix_cache_enabled=False,
+                quantization="none",  # 由 Ollama 内部管理
             )
             self.providers["ollama"] = cfg
             self.adapters["ollama"] = OllamaAdapter(cfg)
