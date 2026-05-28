@@ -1,3 +1,11 @@
+> ## ⚠️ SUPERSEDED — NOT AUTHORITATIVE
+>
+> **This document has been superseded by [`MULTI_DEVICE_RUNTIME_MATURITY.md`](MULTI_DEVICE_RUNTIME_MATURITY.md).**
+> The content below is preserved for historical reference only.
+> For the current multi-device runtime maturity matrix, see [`MULTI_DEVICE_RUNTIME_MATURITY.md`](MULTI_DEVICE_RUNTIME_MATURITY.md).
+
+---
+
 # Re-Audit: Multi-Device Runtime Maturity Matrix V2
 
 > **Fresh re-audit pass** — `DannyFish-11/ufo-galaxy-realization-v2` and

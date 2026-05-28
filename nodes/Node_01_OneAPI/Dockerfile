@@ -2,7 +2,7 @@ FROM python:3.11-slim
 WORKDIR /app
 RUN pip install --no-cache-dir fastapi uvicorn httpx redis pyjwt
 COPY main.py .
-EXPOSE 8001
+EXPOSE 7995
 RUN addgroup --system --gid 1000 galaxy && adduser --system --uid 1000 --ingroup galaxy --no-create-home galaxy
 RUN chown -R galaxy:galaxy /app
 USER galaxy

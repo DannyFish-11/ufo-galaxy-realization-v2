@@ -1,3 +1,11 @@
+> ## ⚠️ SUPERSEDED — NOT AUTHORITATIVE
+>
+> **This document has been superseded by [`ANDROID_PROTOCOL_MATURITY_MATRIX.md`](ANDROID_PROTOCOL_MATURITY_MATRIX.md).**
+> The content below is preserved for historical reference only.
+> For the current Android protocol maturity matrix, see [`ANDROID_PROTOCOL_MATURITY_MATRIX.md`](ANDROID_PROTOCOL_MATURITY_MATRIX.md).
+
+---
+
 # Re-Audit: Android Long-Tail Protocol Maturity V2
 
 > **Fresh re-audit pass** — `DannyFish-11/ufo-galaxy-realization-v2` and

@@ -1,3 +1,11 @@
+> ## ⚠️ SUPERSEDED — NOT AUTHORITATIVE
+>
+> **This document has been superseded by [`DUAL_REPO_GAP_MATRIX.md`](DUAL_REPO_GAP_MATRIX.md).**
+> The content below is preserved for historical reference only.
+> For the current structured gap matrix, see [`DUAL_REPO_GAP_MATRIX.md`](DUAL_REPO_GAP_MATRIX.md).
+
+---
+
 # Dual-Repo Unresolved Architecture Audit
 
 > **Complete dual-repo linked total audit / clarification PR**

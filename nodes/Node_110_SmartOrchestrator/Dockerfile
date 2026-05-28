@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 8110
+EXPOSE 7997
 
 RUN addgroup --system --gid 1000 galaxy \
     && adduser --system --uid 1000 --ingroup galaxy --no-create-home galaxy \

@@ -1,3 +1,11 @@
+> ## ⚠️ SUPERSEDED — NOT AUTHORITATIVE
+>
+> **This document has been superseded by [`DUAL_REPO_FULL_REAUDIT.md`](DUAL_REPO_FULL_REAUDIT.md).**
+> The content below is preserved for historical reference only.
+> For current dual-repo architecture audit, see [`DUAL_REPO_FULL_REAUDIT.md`](DUAL_REPO_FULL_REAUDIT.md).
+
+---
+
 # Re-Audit: Unresolved Dual-Repo Architecture Gaps — Fresh Pass 2
 
 > **Scope**: `DannyFish-11/ufo-galaxy-realization-v2` (V2 — center-side control plane) and

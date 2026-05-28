@@ -1,3 +1,11 @@
+> ## ⚠️ SUPERSEDED — NOT AUTHORITATIVE
+>
+> **This document has been superseded by [`UNIFIED_SCHEDULING_AUTHORITY_MAP.md`](UNIFIED_SCHEDULING_AUTHORITY_MAP.md).**
+> The content below is preserved for historical reference only.
+> For the current scheduling/authority map, see [`UNIFIED_SCHEDULING_AUTHORITY_MAP.md`](UNIFIED_SCHEDULING_AUTHORITY_MAP.md).
+
+---
+
 # Re-Audit: Scheduling and Authority Map V2
 
 > **Fresh re-audit pass** — `DannyFish-11/ufo-galaxy-realization-v2` and

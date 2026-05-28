@@ -1,3 +1,11 @@
+> ## ⚠️ DEPRECATED — NO LONGER MAINTAINED
+>
+> **This directory and its index are deprecated and no longer maintained.**
+> For current PR history, use `git log` or GitHub's web interface.
+> This file is preserved for historical reference only.
+
+---
+
 # docs/pulls/
 
 Archived GitHub pull-request metadata snapshots.

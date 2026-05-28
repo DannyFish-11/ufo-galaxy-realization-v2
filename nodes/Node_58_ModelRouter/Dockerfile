@@ -29,7 +29,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8058/health || exit 1
 
 # Expose port
-EXPOSE 8058
+EXPOSE 8059
 
 # Environment variables
 ENV DATABASE_PATH=/data/router.db

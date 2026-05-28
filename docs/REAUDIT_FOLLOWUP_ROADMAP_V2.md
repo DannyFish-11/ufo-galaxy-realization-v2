@@ -1,3 +1,11 @@
+> ## ⚠️ SUPERSEDED — NOT AUTHORITATIVE
+>
+> **This document has been superseded by [`FOLLOWUP_IMPLEMENTATION_ROADMAP.md`](FOLLOWUP_IMPLEMENTATION_ROADMAP.md).**
+> The content below is preserved for historical reference only.
+> For the current follow-up roadmap, see [`FOLLOWUP_IMPLEMENTATION_ROADMAP.md`](FOLLOWUP_IMPLEMENTATION_ROADMAP.md).
+
+---
+
 # Re-Audit: Prioritized Follow-Up Roadmap V2
 
 > **Fresh re-audit pass** — `DannyFish-11/ufo-galaxy-realization-v2` and

@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir fastapi uvicorn httpx googlesearch-python
 
 COPY main.py .
 
-EXPOSE 8025
+EXPOSE 8026
 
 RUN addgroup --system --gid 1000 galaxy && adduser --system --uid 1000 --ingroup galaxy --no-create-home galaxy
 RUN chown -R galaxy:galaxy /app
