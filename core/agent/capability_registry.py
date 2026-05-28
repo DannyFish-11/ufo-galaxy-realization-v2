@@ -65,6 +65,18 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("Galaxy.Agent.CapabilityRegistry")
 
 # ---------------------------------------------------------------------------
+# PR-C04: CapabilityRegistry → CapabilityAssimilationLayer integration sentinel
+# ---------------------------------------------------------------------------
+# When CAPABILITY_REGISTRY_ASSIMILATION_LAYER_INTEGRATION is present, every
+# registration method (register / inject_mcp_tool / inject_skill / inject_item)
+# also projects the entry into the CapabilityAssimilationLayer so that the
+# capability graph, task graph, and network graph runtimes see the node.
+# This closes the legacy bypass where entries were written to _items only.
+CAPABILITY_REGISTRY_ASSIMILATION_LAYER_INTEGRATION: str = (
+    "CAPABILITY_REGISTRY_ASSIMILATION_LAYER_INTEGRATION_V1"
+)
+
+# ---------------------------------------------------------------------------
 # Governance sentinel
 # ---------------------------------------------------------------------------
 # Presence of this sentinel confirms that CapabilityRegistry is the canonical
@@ -208,6 +220,9 @@ class CapabilityRegistry:
         if not self._validate_via_contract(item):
             return
         self._items[item.name] = item
+        # PR-C04: project into CapabilityAssimilationLayer so the capability
+        # graph, task graph, and network graph see this entry.
+        self._assimilate_to_capability_layer(item)
         logger.debug("能力已注册: %s (%s)", item.name, item.source)
 
     @staticmethod
@@ -277,6 +292,120 @@ class CapabilityRegistry:
         metadata["runtime_state"] = runtime_state
         item.metadata = metadata
         item.available = runtime_state.get("availability") in {"available", "degraded"}
+
+    # ── PR-C04: AssimilationLayer projection helper ────────────────────────
+
+    @staticmethod
+    def _assimilate_to_capability_layer(item: CapabilityItem) -> None:
+        """Project a registered CapabilityItem into the CapabilityAssimilationLayer.
+
+        This is a best-effort, fire-and-forget projection.  Failure is logged at
+        DEBUG and never raises — registration into CapabilityRegistry must succeed
+        even if the assimilation layer is unavailable.
+
+        The mapping from CapabilityItem.source → assimilation type:
+            - "gateway" / "autonomous" → assimilate_device()
+            - "mcp"                  → assimilate_mcp_provider()
+            - "skill"                → assimilate_skill()
+            - "node" / other         → assimilate_node() (generic)
+        """
+        try:
+            from core.capability_assimilation import (
+                get_capability_assimilation_layer,
+                NodeParticipantKind,
+                assimilate_device,
+                assimilate_mcp_provider,
+                assimilate_skill,
+            )
+
+            source = getattr(item, "source", "") or "unknown"
+            name = getattr(item, "name", "") or ""
+            source_id = getattr(item, "source_id", "") or name
+
+            if source in ("gateway", "autonomous", "device"):
+                # Map device-type sources → assimilate_device
+                caps = []
+                if source == "gateway":
+                    cap_name = name.split("__")[-1] if "__" in name else name
+                    caps = [cap_name] if cap_name else []
+                meta = dict(getattr(item, "metadata", {}) or {})
+                meta.setdefault("capability_registry_source", source)
+                meta.setdefault("capability_registry_name", name)
+                # Extract embedded device_capabilities from metadata if caps empty
+                embedded_caps = meta.get("device_capabilities", []) or []
+                final_caps = caps or embedded_caps
+                assimilate_device(
+                    device_id=source_id or name,
+                    capabilities=final_caps,
+                    tags=[source],
+                    metadata=meta,
+                )
+                logger.debug(
+                    "PR-C04: assimilated device via register path: source=%s name=%s",
+                    source,
+                    name,
+                )
+
+            elif source == "mcp":
+                # Map MCP sources → assimilate_mcp_provider
+                server_id = source_id or name
+                tool_name = name.split("__")[-1] if "__" in name else name
+                assimilate_mcp_provider(
+                    provider_id=server_id,
+                    tools=[tool_name],
+                    tags=["mcp"],
+                    metadata={
+                        "capability_registry_name": name,
+                        "capability_registry_source": source,
+                    },
+                )
+                logger.debug(
+                    "PR-C04: assimilated MCP provider via inject_mcp_tool path: %s",
+                    name,
+                )
+
+            elif source == "skill":
+                # Map Skill sources → assimilate_skill
+                skill_id = source_id or name
+                assimilate_skill(
+                    skill_id=skill_id,
+                    capabilities=[name],
+                    tags=["skill"],
+                    metadata={
+                        "capability_registry_name": name,
+                        "capability_registry_source": source,
+                    },
+                )
+                logger.debug(
+                    "PR-C04: assimilated skill via inject_skill path: %s",
+                    name,
+                )
+
+            else:
+                # Generic node path — fall back to direct assimilate() call
+                layer = get_capability_assimilation_layer()
+                layer.assimilate(
+                    node_id=source_id or name,
+                    capabilities=[name],
+                    participant_kind=NodeParticipantKind.CAPABILITY_PROVIDER,
+                    tags=[source],
+                    metadata={
+                        "capability_registry_source": source,
+                        "capability_registry_name": name,
+                    },
+                )
+                logger.debug(
+                    "PR-C04: assimilated generic provider via register path: source=%s name=%s",
+                    source,
+                    name,
+                )
+
+        except Exception as exc:
+            logger.debug(
+                "PR-C04: CapabilityAssimilationLayer projection skipped for '%s': %s",
+                getattr(item, "name", "?"),
+                exc,
+            )
 
     def _validate_via_contract(self, item: CapabilityItem) -> bool:
         """PR-2: 通过统一能力合同校验 CapabilityItem。
@@ -391,6 +520,8 @@ class CapabilityRegistry:
         if not self._validate_via_contract(item):
             return
         self._items[key] = item
+        # PR-C04: project MCP tool into CapabilityAssimilationLayer
+        self._assimilate_to_capability_layer(item)
         logger.debug("MCP 工具已注入能力总线: %s", key)
 
     def inject_skill(
@@ -419,6 +550,8 @@ class CapabilityRegistry:
         if not self._validate_via_contract(item):
             return
         self._items[key] = item
+        # PR-C04: project Skill into CapabilityAssimilationLayer
+        self._assimilate_to_capability_layer(item)
         logger.debug("Skill 已注入能力总线: %s", key)
 
     def eject(self, name: str) -> None:
@@ -449,6 +582,8 @@ class CapabilityRegistry:
         if not self._validate_via_contract(item):
             return
         self._items[item.name] = item
+        # PR-C04: project injected item into CapabilityAssimilationLayer
+        self._assimilate_to_capability_layer(item)
         logger.debug("CapabilityItem injected: %s (source=%s)", item.name, item.source)
 
     # ──────────────────────────────────────────────────────────────────

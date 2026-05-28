@@ -1614,6 +1614,170 @@ class CommandRouter:
         except Exception as _lc_exc:
             logger.debug("Lifecycle mark_running skipped: %s", _lc_exc)
 
+        # ── PR-WEBRTC-TASK-LIFECYCLE: WebRTC signaling handshake ──────────────
+        # When the envelope declares that it requires a WebRTC video stream,
+        # initiate (or wait for) the signaling handshake before proceeding to
+        # capability enforcement and dispatch.  This closes the gap between
+        # "task needs video" and "video is ready".
+        #
+        # Flow:
+        #   1. If requires_webrtc is False (default) → skip entirely.
+        #   2. Determine the target device (explicit webrtc_target_device or
+        #      first envelope target).
+        #   3. Check if WebRTC is already ready for that device; if yes, skip.
+        #   4. Otherwise call initiate_webrtc_for_task() and await readiness.
+        #   5. On failure → return a structured error (task blocked).
+        #   6. On success → stamp webrtc_ready metadata and continue.
+        _webrtc_task_trigger_applied = False
+        _webrtc_task_trigger_result: Optional[Dict[str, Any]] = None
+        if envelope.requires_webrtc:
+            _wrtc_t0 = time.monotonic()
+            _webrtc_task_trigger_applied = True
+
+            # Resolve target device
+            _wrtc_device: Optional[str] = envelope.webrtc_target_device
+            if not _wrtc_device and envelope.targets:
+                _wrtc_device = envelope.targets[0]
+
+            if not _wrtc_device:
+                _wrtc_elapsed = (time.monotonic() - _wrtc_t0) * 1000
+                logger.warning(
+                    "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: "
+                    "requires_webrtc=True but no device resolved task_id=%s",
+                    envelope.task_id,
+                )
+                return {
+                    "request_id": envelope.task_id,
+                    "task_id": envelope.task_id,
+                    "trace_id": envelope.trace_id,
+                    "command_id": (envelope.metadata or {}).get("command_id", envelope.task_id),
+                    "device_id": "",
+                    "command": envelope.tool_name,
+                    "via": "command_router",
+                    "success": False,
+                    "result": None,
+                    "error_code": GatewayErrorCode.INVALID_ENVELOPE.value,
+                    "error_message": (
+                        "requires_webrtc=True but neither webrtc_target_device "
+                        "nor targets are set; cannot determine which device "
+                        "should provide the video stream"
+                    ),
+                    "latency_ms": round(_wrtc_elapsed, 1),
+                }
+
+            try:
+                from galaxy_gateway.webrtc_proxy import (
+                    is_webrtc_ready_for_device,
+                    initiate_webrtc_for_task,
+                )
+
+                # Fast path: already ready
+                if is_webrtc_ready_for_device(_wrtc_device):
+                    logger.debug(
+                        "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: "
+                        "WebRTC already ready for device=%s task_id=%s",
+                        _wrtc_device,
+                        envelope.task_id,
+                    )
+                    _webrtc_task_trigger_result = {
+                        "applied": True,
+                        "device_id": _wrtc_device,
+                        "ready": True,
+                        "waited": False,
+                        "latency_ms": 0.0,
+                    }
+                else:
+                    logger.info(
+                        "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: "
+                        "initiating WebRTC for device=%s task_id=%s trace_id=%s",
+                        _wrtc_device,
+                        envelope.task_id,
+                        envelope.trace_id,
+                    )
+                    _wrtc_ready_result = await initiate_webrtc_for_task(
+                        device_id=_wrtc_device,
+                        trace_id=envelope.trace_id or "",
+                    )
+                    _wrtc_elapsed = (time.monotonic() - _wrtc_t0) * 1000
+                    if not _wrtc_ready_result.success:
+                        logger.warning(
+                            "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: "
+                            "WebRTC initiation failed device=%s task_id=%s reason=%s",
+                            _wrtc_device,
+                            envelope.task_id,
+                            _wrtc_ready_result.message,
+                        )
+                        return {
+                            "request_id": envelope.task_id,
+                            "task_id": envelope.task_id,
+                            "trace_id": envelope.trace_id,
+                            "command_id": (envelope.metadata or {}).get(
+                                "command_id", envelope.task_id
+                            ),
+                            "device_id": _wrtc_device,
+                            "command": envelope.tool_name,
+                            "via": "command_router",
+                            "success": False,
+                            "result": None,
+                            "error_code": "WEBRTC_TASK_INIT_FAILED",
+                            "error_message": _wrtc_ready_result.message,
+                            "webrtc_task_trigger": {
+                                "applied": True,
+                                "device_id": _wrtc_device,
+                                "ready": False,
+                                "waited": True,
+                                "latency_ms": _wrtc_ready_result.latency_ms,
+                            },
+                            "latency_ms": round(_wrtc_elapsed, 1),
+                        }
+                    # Success — stamp metadata and continue
+                    _webrtc_task_trigger_result = {
+                        "applied": True,
+                        "device_id": _wrtc_device,
+                        "ready": True,
+                        "waited": True,
+                        "latency_ms": _wrtc_ready_result.latency_ms,
+                    }
+                    logger.info(
+                        "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: "
+                        "WebRTC ready for device=%s task_id=%s latency_ms=%.1f",
+                        _wrtc_device,
+                        envelope.task_id,
+                        _wrtc_ready_result.latency_ms,
+                    )
+
+            except Exception as _wrtc_exc:
+                _wrtc_elapsed = (time.monotonic() - _wrtc_t0) * 1000
+                logger.warning(
+                    "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: "
+                    "WebRTC integration error task_id=%s error=%s",
+                    envelope.task_id,
+                    _wrtc_exc,
+                )
+                # Fail-open: log the error but do NOT block dispatch.
+                # This preserves backward compatibility when the webrtc_proxy
+                # module is unavailable or the ingress bridge is not configured.
+                _webrtc_task_trigger_result = {
+                    "applied": True,
+                    "device_id": _wrtc_device,
+                    "ready": False,
+                    "waited": False,
+                    "error": str(_wrtc_exc),
+                    "latency_ms": round(_wrtc_elapsed, 1),
+                }
+
+            # Stamp webrtc_task_trigger result into envelope metadata so
+            # downstream components can see what happened.
+            if _webrtc_task_trigger_result is not None:
+                envelope = envelope.model_copy(
+                    update={
+                        "metadata": {
+                            **(envelope.metadata or {}),
+                            "_webrtc_task_trigger": _webrtc_task_trigger_result,
+                        }
+                    }
+                )
+
         # ── PR-3 / GAP-512-004 closure: Capability graph enforcement ─────────
         # query_routable_executors() is now called with required_capabilities so
         # routing decisions reflect the canonical capability graph rather than
@@ -2471,6 +2635,12 @@ class CommandRouter:
             "posture_filter_applied"
         ):
             result.setdefault("_constraint_chain_trace", _constraint_chain_trace)
+
+        # ── PR-WEBRTC-TASK-LIFECYCLE: propagate trigger result ────────────────
+        # If WebRTC task trigger was applied, attach its result dict to the
+        # response so callers and observability sinks can see the outcome.
+        if _webrtc_task_trigger_applied and _webrtc_task_trigger_result is not None:
+            result.setdefault("_webrtc_task_trigger", _webrtc_task_trigger_result)
 
         # ── PR-H: Finalise live routing explanation and attach to result ───────
         # Now that the dispatch path has been selected and the result is known,

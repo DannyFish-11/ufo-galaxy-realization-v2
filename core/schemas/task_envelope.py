@@ -204,6 +204,27 @@ class TaskEnvelope(BaseModel):
         ),
     )
 
+    # ── WebRTC task lifecycle integration (PR-WEBRTC-TASK-LIFECYCLE) ────────────
+    requires_webrtc: bool = Field(
+        default=False,
+        description=(
+            "When True, the CommandRouter will trigger a WebRTC signaling handshake "
+            "before dispatching this task.  The task execution is paused until the "
+            "video stream from the target Android device is ready.  Defaults to False "
+            "for full backward compatibility. "
+            "(PR-WEBRTC-TASK-LIFECYCLE)"
+        ),
+    )
+    webrtc_target_device: Optional[str] = Field(
+        default=None,
+        description=(
+            "Explicit Android device identifier for the WebRTC video stream. "
+            "When None and requires_webrtc is True, the first target in ``targets`` "
+            "is used as the WebRTC device. "
+            "(PR-WEBRTC-TASK-LIFECYCLE)"
+        ),
+    )
+
     model_config = {"from_attributes": True}
 
     # ── Convenience helpers ─────────────────────────────────────────────────

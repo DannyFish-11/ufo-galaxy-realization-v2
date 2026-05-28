@@ -1,3 +1,16 @@
+# =============================================================================
+# DEPRECATED — DO NOT USE AS PRIMARY ENTRYPOINT
+# =============================================================================
+# This file is a **legacy entrypoint** retained for backward compatibility.
+# The authoritative startup path for UFO Galaxy is:
+#     python main.py
+# which runs the full 7-phase pre-flight before delegating to
+# unified_launcher.py for async service bring-up.
+#
+# If you are starting Galaxy for the first time, use main.py instead.
+# This file may be removed in a future release without further notice.
+# =============================================================================
+
 """
 galaxy_main_loop_l4 — retired root module (re-export tombstone)
 ===============================================================

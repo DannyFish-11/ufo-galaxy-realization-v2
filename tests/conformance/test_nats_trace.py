@@ -434,6 +434,7 @@ class TestLegacyPublishBackwardCompat:
         bus._noop = True
         bus._subscriptions = []
         bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
+        bus._embedded = None
         return bus
 
     @pytest.mark.asyncio

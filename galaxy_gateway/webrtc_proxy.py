@@ -618,3 +618,282 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
             await client_ws.close(code=1011, reason="Node_95 WebRTC Receiver unavailable")
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# PR-WEBRTC-TASK-LIFECYCLE: Task-aware WebRTC signaling initiation
+# ---------------------------------------------------------------------------
+# These helpers are imported and called by CommandRouter.route_envelope()
+# when envelope.requires_webrtc is True.  They bridge the gap between
+# "task needs a video stream" and "WebRTC connection is ready".
+# ---------------------------------------------------------------------------
+
+#: In-memory registry of active WebRTC signaling sessions keyed by device_id.
+#: Each entry is a dict with keys: "trace_id", "started_at", "state".
+_webrtc_task_sessions: Dict[str, Dict[str, Any]] = {}
+
+#: Default timeout (seconds) to wait for WebRTC data channel to become ready.
+WEBRTC_TASK_READY_TIMEOUT_S: float = float(
+    os.getenv("GALAXY_WEBRTC_TASK_READY_TIMEOUT_S", "15")
+)
+
+#: Polling interval (seconds) while waiting for the ingress bridge to report
+#: that frames are flowing from a specific device.
+WEBRTC_TASK_READY_POLL_S: float = 0.5
+
+
+class WebRTCTaskReadinessResult:
+    """Result of attempting to bring up WebRTC for a task."""
+
+    def __init__(
+        self,
+        *,
+        success: bool,
+        device_id: str,
+        trace_id: str,
+        message: str = "",
+        latency_ms: float = 0.0,
+    ) -> None:
+        self.success = success
+        self.device_id = device_id
+        self.trace_id = trace_id
+        self.message = message
+        self.latency_ms = latency_ms
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "success": self.success,
+            "device_id": self.device_id,
+            "trace_id": self.trace_id,
+            "message": self.message,
+            "latency_ms": self.latency_ms,
+        }
+
+
+def get_webrtc_task_session(device_id: str) -> Optional[Dict[str, Any]]:
+    """Return the active WebRTC task session for *device_id*, if any."""
+    return _webrtc_task_sessions.get(device_id)
+
+
+def register_webrtc_task_session(
+    device_id: str,
+    *,
+    trace_id: str,
+    state: str = "signaling_initiated",
+) -> None:
+    """Register that a WebRTC signaling session was initiated for a task."""
+    _webrtc_task_sessions[device_id] = {
+        "trace_id": trace_id,
+        "started_at": time.time(),
+        "state": state,
+    }
+    logger.info(
+        "webrtc_task_session_registered device_id=%s trace_id=%s state=%s",
+        device_id, trace_id, state,
+    )
+
+
+def mark_webrtc_task_session_state(device_id: str, state: str) -> None:
+    """Update the state of an active WebRTC task session."""
+    sess = _webrtc_task_sessions.get(device_id)
+    if sess is not None:
+        old_state = sess["state"]
+        sess["state"] = state
+        logger.debug(
+            "webrtc_task_session_state device_id=%s %s → %s",
+            device_id, old_state, state,
+        )
+
+
+def clear_webrtc_task_session(device_id: str) -> None:
+    """Remove a WebRTC task session entry (idempotent)."""
+    _webrtc_task_sessions.pop(device_id, None)
+
+
+async def initiate_webrtc_for_task(
+    device_id: str,
+    trace_id: str,
+    *,
+    timeout_s: Optional[float] = None,
+) -> WebRTCTaskReadinessResult:
+    """Initiate WebRTC signaling for a task and wait until video is ready.
+
+    This is the **canonical entry point** called by
+    ``CommandRouter.route_envelope()`` when ``envelope.requires_webrtc`` is
+    ``True``.
+
+    What it does
+    ------------
+    1. Registers a task-scoped WebRTC session for *device_id*.
+    2. Probes Node_95 reachability (fast-fail if unreachable).
+    3. Polls ``WebRTCIngressBridge`` until frames from *device_id* are
+       flowing (or timeout).
+    4. Returns a :class:`WebRTCTaskReadinessResult` describing the outcome.
+
+    The actual signaling handshake (offer/answer/ICE) happens asynchronously
+    via the existing ``/ws/webrtc/{device_id}`` endpoint — this function does
+    **not** perform the handshake itself; it only waits for the data-plane
+    side effect (frames ingested) that proves the handshake succeeded.
+
+    Parameters
+    ----------
+    device_id:
+        The Android device identifier that should provide the video stream.
+    trace_id:
+        Distributed trace id propagated from the TaskEnvelope.
+    timeout_s:
+        Max seconds to wait for the video stream to become ready.
+        Defaults to ``WEBRTC_TASK_READY_TIMEOUT_S``.
+
+    Returns
+    -------
+    WebRTCTaskReadinessResult
+        ``success=True`` when frames are flowing; ``success=False`` on
+        timeout or error with an explanatory ``message``.
+    """
+    # PR-WEBRTC-TASK-LIFECYCLE sentinel: function entry
+    _t0 = time.monotonic()
+    timeout_s = timeout_s or WEBRTC_TASK_READY_TIMEOUT_S
+
+    register_webrtc_task_session(
+        device_id=device_id,
+        trace_id=trace_id,
+        state="signaling_initiated",
+    )
+
+    # Step 1: Fast-fail if Node_95 is not reachable
+    _node95_reachable = await check_node95_reachable()
+    if not _node95_reachable:
+        _elapsed = (time.monotonic() - _t0) * 1000
+        mark_webrtc_task_session_state(device_id, "node95_unreachable")
+        logger.warning(
+            "webrtc_task_initiate: Node_95 unreachable device_id=%s trace_id=%s",
+            device_id, trace_id,
+        )
+        return WebRTCTaskReadinessResult(
+            success=False,
+            device_id=device_id,
+            trace_id=trace_id,
+            message="Node_95 WebRTC Receiver is not reachable; cannot initiate WebRTC",
+            latency_ms=round(_elapsed, 1),
+        )
+
+    mark_webrtc_task_session_state(device_id, "node95_reachable")
+
+    # Step 2: Check if the WebRTCIngressBridge is enabled
+    try:
+        from core.multimodal.webrtc_ingress_bridge import get_webrtc_ingress_bridge
+
+        _bridge = get_webrtc_ingress_bridge()
+        if not _bridge.is_enabled:
+            _elapsed = (time.monotonic() - _t0) * 1000
+            mark_webrtc_task_session_state(device_id, "bridge_disabled")
+            logger.warning(
+                "webrtc_task_initiate: WebRTCIngressBridge disabled "
+                "device_id=%s trace_id=%s",
+                device_id, trace_id,
+            )
+            return WebRTCTaskReadinessResult(
+                success=False,
+                device_id=device_id,
+                trace_id=trace_id,
+                message=(
+                    "WebRTCIngressBridge is disabled "
+                    "(enable_webrtc_data_channel=false)"
+                ),
+                latency_ms=round(_elapsed, 1),
+            )
+    except Exception as _bridge_exc:
+        _elapsed = (time.monotonic() - _t0) * 1000
+        mark_webrtc_task_session_state(device_id, f"bridge_error:{_bridge_exc}")
+        logger.warning(
+            "webrtc_task_initiate: WebRTCIngressBridge unavailable "
+            "device_id=%s trace_id=%s error=%s",
+            device_id, trace_id, _bridge_exc,
+        )
+        return WebRTCTaskReadinessResult(
+            success=False,
+            device_id=device_id,
+            trace_id=trace_id,
+            message=f"WebRTCIngressBridge unavailable: {_bridge_exc}",
+            latency_ms=round(_elapsed, 1),
+        )
+
+    mark_webrtc_task_session_state(device_id, "waiting_for_frames")
+
+    # Step 3: Poll until frames from this device are flowing
+    _poll_interval = WEBRTC_TASK_READY_POLL_S
+    _deadline = time.monotonic() + timeout_s
+    _initial_frames = 0
+    try:
+        _initial_frames = _bridge._device_frame_counts.get(device_id, 0)
+    except Exception:
+        pass
+
+    logger.info(
+        "webrtc_task_initiate: polling for frames device_id=%s trace_id=%s "
+        "timeout_s=%.1f initial_frames=%d",
+        device_id, trace_id, timeout_s, _initial_frames,
+    )
+
+    while time.monotonic() < _deadline:
+        try:
+            _current_frames = _bridge._device_frame_counts.get(device_id, 0)
+            if _current_frames > _initial_frames:
+                _elapsed = (time.monotonic() - _t0) * 1000
+                mark_webrtc_task_session_state(device_id, "ready")
+                logger.info(
+                    "webrtc_task_initiate: READY device_id=%s trace_id=%s "
+                    "frames=%d latency_ms=%.1f",
+                    device_id, trace_id, _current_frames, _elapsed,
+                )
+                return WebRTCTaskReadinessResult(
+                    success=True,
+                    device_id=device_id,
+                    trace_id=trace_id,
+                    message=(
+                        f"WebRTC video stream ready for {device_id} "
+                        f"({_current_frames} frames ingested)"
+                    ),
+                    latency_ms=round(_elapsed, 1),
+                )
+        except Exception:
+            pass
+        await asyncio.sleep(_poll_interval)
+
+    # Timeout
+    _elapsed = (time.monotonic() - _t0) * 1000
+    mark_webrtc_task_session_state(device_id, "timeout")
+    logger.warning(
+        "webrtc_task_initiate: TIMEOUT device_id=%s trace_id=%s "
+        "timeout_s=%.1f latency_ms=%.1f",
+        device_id, trace_id, timeout_s, _elapsed,
+    )
+    return WebRTCTaskReadinessResult(
+        success=False,
+        device_id=device_id,
+        trace_id=trace_id,
+        message=(
+            f"Timed out after {timeout_s}s waiting for WebRTC video stream "
+            f"from {device_id}. The signaling handshake may still be in progress."
+        ),
+        latency_ms=round(_elapsed, 1),
+    )
+
+
+def is_webrtc_ready_for_device(device_id: str) -> bool:
+    """Synchronous probe: is the WebRTC video stream ready for *device_id*?
+
+    Called by ``CommandRouter.route_envelope()`` to perform a quick
+    readiness check before deciding whether to initiate signaling.
+    """
+    try:
+        from core.multimodal.webrtc_ingress_bridge import get_webrtc_ingress_bridge
+
+        _bridge = get_webrtc_ingress_bridge()
+        if not _bridge.is_enabled:
+            return False
+        _device_frames = _bridge._device_frame_counts.get(device_id, 0)
+        return _device_frames > 0
+    except Exception:
+        return False

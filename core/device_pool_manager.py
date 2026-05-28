@@ -57,6 +57,18 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.DevicePoolManager")
 
+# ---------------------------------------------------------------------------
+# PR-A04: DevicePool → CapabilityAssimilationLayer integration sentinel
+# ---------------------------------------------------------------------------
+# DevicePoolManager.select_device() queries the canonical
+# CapabilityAssimilationLayer via core.capability_network_runtime_policy.
+# query_routable_executors() before falling back to the local pool.  This
+# ensures that device selection always respects the unified capability graph
+# and never bypasses the assimilation layer.  The sentinel below confirms
+# this integration is present.
+DEVICE_POOL_CAPABILITY_ASSIMILATION_LAYER_INTEGRATED: str = (
+    "DEVICE_POOL_CAPABILITY_ASSIMILATION_LAYER_INTEGRATED_V1"
+)
 
 # ---------------------------------------------------------------------------
 # Enumerations

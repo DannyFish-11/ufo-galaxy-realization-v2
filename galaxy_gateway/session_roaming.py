@@ -140,6 +140,26 @@ class Session:
 
 
 # =============================================================================
+# DEPRECATION GUARD (PR-ROAMING-LEGACY)
+# =============================================================================
+# SessionRoamingManager is a **legacy compatibility layer**.
+# The canonical session management authority is:
+#     core/routes/sessions.py  (REST API)
+#     core.desktop_presence_runtime.DesktopPresenceRuntime  (runtime session)
+#
+# New code MUST NOT add features here.  For session migration, use:
+#     POST /api/v1/sessions/{session_id}/migrate
+#
+# This module is preserved only so existing Android clients that call
+# the legacy roaming endpoints continue to work.  It may be removed
+# in a future release.
+# =============================================================================
+SESSION_ROAMING_LEGACY_GUARD = (
+    "SESSION_ROAMING::LEGACY_COMPATIBILITY_LAYER:: "
+    "canonical_session_management_is_core_routes_sessions"
+)
+
+# =============================================================================
 # 会话漫游管理器
 # =============================================================================
 
