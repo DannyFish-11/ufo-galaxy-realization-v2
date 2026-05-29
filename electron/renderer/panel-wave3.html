@@ -388,14 +388,55 @@
             50%      { opacity: 1; }
         }
 
-        /* Content grid */
+        /* Content grid — NOW EMPTY (reserved for future modules) */
         .content-grid {
             flex: 1;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            grid-template-rows: repeat(2, 1fr);
-            gap: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             overflow-y: auto;
+            position: relative;
+        }
+
+        /* Empty state placeholder */
+        .empty-state {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.15);
+            font-family: var(--font-mono);
+            font-size: 12px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .empty-state .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.3;
+            display: block;
+        }
+
+        /* Live data overlay — top-right corner */
+        .live-status {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.3);
+            letter-spacing: 1px;
+            text-align: right;
+            line-height: 1.8;
+            pointer-events: none;
+        }
+
+        .live-status .live-value {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .live-status .live-label {
+            color: rgba(255, 255, 255, 0.2);
         }
 
         /* Glass Card */
@@ -618,105 +659,32 @@
             </div>
         </aside>
 
-        <!-- Main Content -->
+        <!-- Main Content — Right side empty, shows live data only -->
         <main class="main-content">
             <!-- Top Bar -->
             <header class="top-bar">
-                <h1 class="page-title">System Overview</h1>
+                <h1 class="page-title" id="pageTitle">System Overview</h1>
                 <div class="system-status">
-                    <span class="status-pip"></span>
-                    <span>System Online</span>
+                    <span class="status-pip" id="statusPip"></span>
+                    <span id="systemStatusText">Connecting...</span>
                 </div>
             </header>
 
-            <!-- Content Grid -->
+            <!-- Content Grid — Empty, reserved for future modules -->
             <div class="content-grid">
-                <!-- Card 1: Status -->
-                <div class="glass-card">
-                    <div class="card-title">● Status</div>
-                    <div class="card-content">
-                        <div class="info-row">
-                            <span class="info-label">Local Brain</span>
-                            <span class="info-value accent">Gemma 4 E4B</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">API Brain</span>
-                            <span class="info-value dim">--</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Active Route</span>
-                            <span class="info-value">Local</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Phase</span>
-                            <span class="info-value accent">SILENT</span>
-                        </div>
-                    </div>
+                <div class="empty-state">
+                    <span class="empty-icon">◈</span>
+                    <div>Module Content Area</div>
+                    <div style="font-size:10px; margin-top:8px; opacity:0.5;">Select a navigation item to load</div>
                 </div>
 
-                <!-- Card 2: Hardware -->
-                <div class="glass-card">
-                    <div class="card-title">● Hardware</div>
-                    <div class="card-content">
-                        <div class="info-row">
-                            <span class="info-label">GPU</span>
-                            <span class="info-value">Detecting...</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">GPU Temp</span>
-                            <span class="info-value">-- C</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">VRAM</span>
-                            <span class="info-value">-- / -- GB</span>
-                        </div>
-                        <div class="placeholder-chart">
-                            <div class="bar" style="height: 30%"></div>
-                            <div class="bar" style="height: 55%"></div>
-                            <div class="bar" style="height: 40%"></div>
-                            <div class="bar" style="height: 70%"></div>
-                            <div class="bar" style="height: 45%"></div>
-                            <div class="bar" style="height: 60%"></div>
-                            <div class="bar" style="height: 35%"></div>
-                            <div class="bar" style="height: 80%"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Card 3: Mesh -->
-                <div class="glass-card">
-                    <div class="card-title">● Mesh Topology</div>
-                    <div class="card-content">
-                        <div class="mesh-grid">
-                            <div class="mesh-node active">V2</div>
-                            <div class="mesh-node">--</div>
-                            <div class="mesh-node">--</div>
-                            <div class="mesh-node">--</div>
-                            <div class="mesh-node">--</div>
-                            <div class="mesh-node">--</div>
-                            <div class="mesh-node">--</div>
-                            <div class="mesh-node">--</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Card 4: Devices -->
-                <div class="glass-card">
-                    <div class="card-title">● Devices</div>
-                    <div class="card-content">
-                        <div class="info-row">
-                            <span class="info-label">Android</span>
-                            <span class="info-value dim">Not connected</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Mesh Nodes</span>
-                            <span class="info-value">0</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">NATS</span>
-                            <span class="info-value accent">Online</span>
-                        </div>
-                    </div>
+                <!-- Live data overlay (top-right) -->
+                <div class="live-status" id="liveStatus">
+                    <div><span class="live-label">PHASE</span> <span class="live-value" id="livePhase">--</span></div>
+                    <div><span class="live-label">ROUTE</span> <span class="live-value" id="liveRoute">--</span></div>
+                    <div><span class="live-label">LOCAL</span> <span class="live-value" id="liveLocal">--</span></div>
+                    <div><span class="live-label">ANDROID</span> <span class="live-value" id="liveAndroid">--</span></div>
+                    <div><span class="live-label">WS</span> <span class="live-value" id="liveWS">--</span></div>
                 </div>
             </div>
         </main>
@@ -724,19 +692,16 @@
 
     <script>
         // ============================================
-        // Mouse Follow Spotlight
+        // Panel Wave 3 — Live Control Panel
+        // Dynamic: fluid bg + mouse spotlight + WS data
         // ============================================
+
+        // ── Mouse Follow Spotlight ──
         const spotlight = document.getElementById('mouseSpotlight');
-        let mouseX = window.innerWidth / 2;
-        let mouseY = window.innerHeight / 2;
-        let currentX = mouseX;
-        let currentY = mouseY;
+        let mouseX = window.innerWidth / 2, mouseY = window.innerHeight / 2;
+        let currentX = mouseX, currentY = mouseY;
 
-        document.addEventListener('mousemove', (e) => {
-            mouseX = e.clientX;
-            mouseY = e.clientY;
-        });
-
+        document.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
         function animateSpotlight() {
             currentX += (mouseX - currentX) * 0.08;
             currentY += (mouseY - currentY) * 0.08;
@@ -746,45 +711,147 @@
         }
         animateSpotlight();
 
-        // ============================================
-        // Nav Item Click (visual only)
-        // ============================================
+        // ── Nav Item Click ──
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', () => {
                 document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
                 item.classList.add('active');
+                const title = item.querySelector('span:last-child')?.textContent || 'Overview';
+                document.getElementById('pageTitle').textContent = title;
             });
         });
 
-        // ============================================
-        // Demo: Cycle through three states every 5s
-        // ============================================
-        const states = [
-            { phase: 'Silent',   dot: 'silent',   color: '#FF5F57' },
-            { phase: 'Liminal',  dot: 'liminal',  color: '#FFBD2E' },
-            { phase: 'Manifest', dot: 'manifest', color: '#28C840' }
-        ];
-        let stateIndex = 0;
+        // ── Three-State Display ──
+        const stateDots = {
+            silent:   document.querySelector('.state-dot.silent'),
+            liminal:  document.querySelector('.state-dot.liminal'),
+            manifest: document.querySelector('.state-dot.manifest'),
+        };
+        const stateLabel = document.querySelector('.state-label');
 
-        function cycleState() {
-            const dots = document.querySelectorAll('.state-dot');
-            dots.forEach(d => { d.classList.remove('active', 'inactive'); d.classList.add('inactive'); });
-
-            const activeDot = document.querySelector(`.state-dot.${states[stateIndex].dot}`);
-            if (activeDot) { activeDot.classList.remove('inactive'); activeDot.classList.add('active'); }
-
-            const label = document.querySelector('.state-label');
-            if (label) label.textContent = states[stateIndex].phase;
-
-            stateIndex = (stateIndex + 1) % states.length;
+        function setPanelPhase(phase) {
+            const p = phase.toLowerCase();
+            Object.values(stateDots).forEach(d => { d.classList.remove('active'); d.classList.add('inactive'); });
+            if (stateDots[p]) { stateDots[p].classList.remove('inactive'); stateDots[p].classList.add('active'); }
+            if (stateLabel) stateLabel.textContent = phase.charAt(0).toUpperCase() + phase.slice(1);
+            document.getElementById('livePhase').textContent = phase.toUpperCase();
         }
 
-        // Initial state
-        cycleState();
-        stateIndex = 1; // next will be Liminal
+        // ── Live Status Elements ──
+        const liveRoute   = document.getElementById('liveRoute');
+        const liveLocal   = document.getElementById('liveLocal');
+        const liveAndroid = document.getElementById('liveAndroid');
+        const liveWS      = document.getElementById('liveWS');
+        const statusPip   = document.getElementById('statusPip');
+        const statusText  = document.getElementById('systemStatusText');
 
-        // Auto-cycle every 5 seconds (demo only)
-        setInterval(cycleState, 5000);
+        function setConnectionStatus(status) {
+            statusPip.className = 'status-pip';
+            if (status === 'connected') {
+                statusPip.style.background = '#28C840';
+                statusPip.style.boxShadow = '0 0 6px #28C840';
+                statusText.textContent = 'Live';
+                liveWS.textContent = 'ONLINE';
+            } else if (status === 'connecting') {
+                statusPip.style.background = '#FFBD2E';
+                statusPip.style.boxShadow = '0 0 6px #FFBD2E';
+                statusText.textContent = 'Connecting...';
+                liveWS.textContent = '...';
+            } else {
+                statusPip.style.background = '#FF5F57';
+                statusPip.style.boxShadow = '0 0 6px #FF5F57';
+                statusText.textContent = 'Offline';
+                liveWS.textContent = 'OFFLINE';
+            }
+        }
+
+        // ── WebSocket: Real-time data from V2 ──
+        const WS_URL = 'ws://localhost:8765/ws/desktop-presence';
+        let ws = null;
+        let wsTimer = null;
+
+        function connectWS() {
+            setConnectionStatus('connecting');
+            try {
+                ws = new WebSocket(WS_URL);
+
+                ws.onopen = () => {
+                    console.log('[Panel] WS connected');
+                    setConnectionStatus('connected');
+                    ws.send(JSON.stringify({ type: 'register', client: 'control-panel', version: '3.0' }));
+                    if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        handleWSMessage(msg);
+                    } catch (e) { console.warn('[Panel] Bad WS message:', e); }
+                };
+
+                ws.onclose = () => {
+                    console.log('[Panel] WS closed, reconnecting...');
+                    setConnectionStatus('disconnected');
+                    scheduleReconnect();
+                };
+
+                ws.onerror = () => {
+                    setConnectionStatus('disconnected');
+                };
+            } catch (e) {
+                setConnectionStatus('disconnected');
+                scheduleReconnect();
+            }
+        }
+
+        function scheduleReconnect() {
+            if (wsTimer) return;
+            wsTimer = setTimeout(() => { wsTimer = null; connectWS(); }, 3000);
+        }
+
+        function handleWSMessage(msg) {
+            const type = msg.type;
+
+            // Phase transitions via STATE_EVENT
+            if (type === 'state_event') {
+                const cat = msg.event_category || '';
+                const action = msg.event_action || '';
+                if (cat === 'phase' || cat === 'desktop_presence') {
+                    setPanelPhase(action);
+                }
+                return;
+            }
+
+            // Legacy phase_change
+            if (type === 'phase_change' && msg.phase) {
+                setPanelPhase(msg.phase);
+                return;
+            }
+
+            // Status updates
+            if (type === 'status' || type === 'system_status') {
+                const s = msg.status || msg.data || {};
+                if (s.route)       liveRoute.textContent   = s.route;
+                if (s.local_brain) liveLocal.textContent   = s.local_brain;
+                if (s.android)     liveAndroid.textContent = s.android;
+                return;
+            }
+
+            // Task results
+            if (type === 'task_result' || type === 'goal_execution_result') {
+                setPanelPhase('manifest');
+                return;
+            }
+
+            // Ping
+            if (type === 'ping') {
+                ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
+            }
+        }
+
+        // ── Init ──
+        setPanelPhase('silent');
+        connectWS();
     </script>
 </body>
 </html>

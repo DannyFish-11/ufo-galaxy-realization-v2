@@ -544,8 +544,50 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
-// Keyboard shortcuts (when in dev mode)
+// ============================================
+// F12 Panel: Aurora-Glass Fluidic Control Panel
+// ============================================
+let panelWindow = null;
+
+function toggleControlPanel() {
+    if (panelWindow && !panelWindow.closed) {
+        panelWindow.close();
+        panelWindow = null;
+        console.log('[App] Panel closed');
+        return;
+    }
+
+    const width = 1100;
+    const height = 700;
+    const left = (screen.availWidth - width) / 2;
+    const top = (screen.availHeight - height) / 2;
+
+    panelWindow = window.open(
+        'panel-wave3.html',
+        'galaxy-control-panel',
+        `width=${width},height=${height},left=${left},top=${top},` +
+        'frame=0,resizable=1,scrollbars=0,titlebar=0'
+    );
+
+    if (panelWindow) {
+        console.log('[App] Panel opened');
+        panelWindow.addEventListener('beforeunload', () => {
+            panelWindow = null;
+        });
+    } else {
+        console.error('[App] Failed to open panel (popup blocked?)');
+    }
+}
+
+// Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
+    // F12: Toggle control panel
+    if (e.key === 'F12') {
+        e.preventDefault();
+        toggleControlPanel();
+        return;
+    }
+
     // Ctrl+Shift+1/2/3 for manual phase switching (dev only)
     if (e.ctrlKey && e.shiftKey) {
         switch (e.key) {
