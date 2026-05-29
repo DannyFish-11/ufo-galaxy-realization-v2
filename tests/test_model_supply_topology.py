@@ -60,8 +60,8 @@ from core.model_topology.topology_types import (
 
 OPENAI_DICT = {
     "provider": "openai",
-    "model": "gpt-5.4",
-    "models": ["gpt-5.4", "gpt-4o"],
+    "model": "gpt-5.5",
+    "models": ["gpt-5.5", "gpt-4o"],
     "speed_score": 8,
     "quality_score": 9,
     "available": True,
@@ -71,8 +71,8 @@ OPENAI_DICT = {
 
 ANTHROPIC_DICT = {
     "provider": "anthropic",
-    "model": "claude-opus-4.6",
-    "models": ["claude-opus-4.6", "claude-sonnet-4.6"],
+    "model": "claude-opus-4-8-20250529",
+    "models": ["claude-opus-4-8-20250529", "claude-sonnet-4-6-20251022"],
     "speed_score": 6,
     "quality_score": 10,
     "available": True,
@@ -93,8 +93,8 @@ GROQ_DICT = {
 
 DEEPSEEK_DICT = {
     "provider": "deepseek",
-    "model": "deepseek-ai/DeepSeek-V3.2",
-    "models": ["deepseek-ai/DeepSeek-V3.2"],
+    "model": "deepseek-v4-pro",
+    "models": ["deepseek-v4-pro"],
     "speed_score": 7,
     "quality_score": 9,
     "available": False,

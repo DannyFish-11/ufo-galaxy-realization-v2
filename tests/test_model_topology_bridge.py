@@ -43,8 +43,8 @@ from core.model_topology.topology_types import AvailabilityStatus, ModelIdentity
 
 OPENAI_DICT = {
     "provider": "openai",
-    "model": "gpt-5.4",
-    "models": ["gpt-5.4", "gpt-5.4-thinking", "gpt-4.1", "gpt-4o"],
+    "model": "gpt-5.5",
+    "models": ["gpt-5.5", "gpt-5.5-thinking", "gpt-4.1", "gpt-4o"],
     "speed_score": 8,
     "quality_score": 9,
     "available": True,
@@ -54,8 +54,8 @@ OPENAI_DICT = {
 
 ANTHROPIC_DICT = {
     "provider": "anthropic",
-    "model": "claude-sonnet-4.6",
-    "models": ["claude-opus-4.6", "claude-sonnet-4.6", "claude-haiku-4-5-20251001"],
+    "model": "claude-sonnet-4-6-20251022",
+    "models": ["claude-opus-4-8-20250529", "claude-sonnet-4-6-20251022", "claude-haiku-4-5-20251001"],
     "speed_score": 7,
     "quality_score": 10,
     "available": True,
@@ -77,8 +77,8 @@ GROQ_DICT = {
 
 DEEPSEEK_DICT = {
     "provider": "deepseek",
-    "model": "deepseek-ai/DeepSeek-V3.2",
-    "models": ["deepseek-ai/DeepSeek-V3.2", "deepseek-ai/DeepSeek-V3", "deepseek-chat", "deepseek-reasoner"],
+    "model": "deepseek-v4-pro",
+    "models": ["deepseek-v4-pro", "deepseek-ai/DeepSeek-V3", "deepseek-chat", "deepseek-reasoner"],
     "speed_score": 9,
     "quality_score": 8,
     "available": False,
@@ -140,7 +140,7 @@ class TestLegacyLLMProviderSnapshot:
     def test_from_dict_complete(self):
         s = LegacyLLMProviderSnapshot.from_dict(OPENAI_DICT)
         assert s.provider == "openai"
-        assert s.model == "gpt-5.4"
+        assert s.model == "gpt-5.5"
         assert len(s.models) == 4
         assert s.speed_score == 8
         assert s.quality_score == 9
@@ -188,7 +188,7 @@ class TestBridgeProvider:
     def test_model_identity_set(self, bridge):
         snap = LegacyLLMProviderSnapshot.from_dict(OPENAI_DICT)
         entry = bridge.bridge_provider(snap)
-        assert entry.model.model_id == "gpt-5.4"
+        assert entry.model.model_id == "gpt-5.5"
         assert entry.model.provider_id == "openai"
         assert "gpt-4o" in entry.model.alternatives
 

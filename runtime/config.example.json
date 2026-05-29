@@ -4,22 +4,46 @@
 
   "providers": {
     "openai": {
-      "enabled": true
+      "enabled": true,
+      "model": "gpt-5.5"
     },
     "anthropic": {
-      "enabled": false
+      "enabled": false,
+      "model": "claude-opus-4-8-20250529"
     },
     "gemini": {
-      "enabled": false
+      "enabled": false,
+      "model": "gemini-3.5-flash"
     },
     "deepseek": {
-      "enabled": false
+      "enabled": false,
+      "model": "deepseek-v4-pro"
     },
     "groq": {
       "enabled": false
     },
     "openrouter": {
       "enabled": false
+    },
+    "qwen": {
+      "enabled": false,
+      "model": "qwen3.7-max"
+    },
+    "zhipu": {
+      "enabled": false,
+      "model": "glm-5.1"
+    },
+    "minimax": {
+      "enabled": false,
+      "model": "minimax-m2.7"
+    },
+    "step": {
+      "enabled": false,
+      "model": "step-3.7-flash"
+    },
+    "mimo": {
+      "enabled": false,
+      "model": "mimo-v2.5-pro"
     },
     "oneapi": {
       "enabled": false,

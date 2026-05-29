@@ -69,7 +69,7 @@ class ProviderSelectionResult:
     provider:
         Selected provider name (e.g. ``"anthropic"``).
     model:
-        Selected model string (e.g. ``"claude-sonnet-4.6"``).
+        Selected model string (e.g. ``"claude-sonnet-4-6-20251022"``).
     task_type:
         The task type used for selection.
     reason:

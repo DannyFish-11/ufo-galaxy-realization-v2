@@ -70,7 +70,7 @@ class ModelFamily(str, Enum):
 @dataclass
 class ModelRegistryEntry:
     """已注册模型的元数据"""
-    model_id: str                      # HuggingFace model ID, e.g. "Qwen/Qwen2-7B-Instruct"
+    model_id: str                      # HuggingFace model ID, e.g. "Qwen/Qwen2.5-14B-Instruct"
     family: ModelFamily
     format: ModelFormat
     local_path: str                    # 本地存储路径
@@ -193,7 +193,7 @@ class HuggingFaceModelManager:
         """从 HuggingFace Hub 下载模型
 
         Args:
-            model_id: HuggingFace model ID, e.g. "Qwen/Qwen2-7B-Instruct-GGUF"
+            model_id: HuggingFace model ID, e.g. "Qwen/Qwen2.5-14B-Instruct-GGUF"
             family: 模型家族 (llm/vlm/asr/tts/embedding)
             format: 模型格式 (gguf/transformers/onnx)
             quantization: 量化级别 (q4/q5/q8/none)
@@ -390,12 +390,12 @@ class HuggingFaceModelManager:
             "description": "Gemma 4 E4B Q8 — 更高精度，需6-8GB VRAM",
         },
         # === 备选模型 ===
-        "llm_qwen2_7b": {
-            "model_id": "Qwen/Qwen2-7B-Instruct-GGUF",
+        "llm_qwen2_5_14b": {
+            "model_id": "Qwen/Qwen2.5-14B-Instruct-GGUF",
             "family": "llm",
             "format": "gguf",
             "quantization": "q4",
-            "description": "Qwen2 7B — 中文优秀备选",
+            "description": "Qwen2.5 14B — 中文优秀备选，比Qwen2-7B更强",
         },
         "vlm_gemma4_e4b": {
             "model_id": "google/gemma-4-E4B-it",

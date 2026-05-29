@@ -121,7 +121,7 @@ def _healthy_provider_record(
 
 def _down_provider_record(
     provider_id: str = "anthropic",
-    model: str = "claude-sonnet-4.6",
+    model: str = "claude-sonnet-4-6-20251022",
 ) -> dict:
     return {
         "provider_id": provider_id,
@@ -486,7 +486,7 @@ def test_40_resolve_supply_down_primary_falls_back():
     supply = _make_supply_state_dict(
         providers={
             "openai": _down_provider_record("openai", "gpt-4o"),
-            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4.6"),
+            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4-6-20251022"),
         },
         available_ids=["anthropic"],
         fallback_candidates=["anthropic"],
@@ -503,7 +503,7 @@ def test_41_resolve_supply_down_primary_legality_primary_unavailable():
     supply = _make_supply_state_dict(
         providers={
             "openai": _down_provider_record("openai", "gpt-4o"),
-            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4.6"),
+            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4-6-20251022"),
         },
         available_ids=["anthropic"],
         fallback_candidates=["anthropic"],
@@ -519,7 +519,7 @@ def test_42_resolve_supply_trace_records_skipped_primary():
     supply = _make_supply_state_dict(
         providers={
             "openai": _down_provider_record("openai", "gpt-4o"),
-            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4.6"),
+            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4-6-20251022"),
         },
         available_ids=["anthropic"],
         fallback_candidates=["anthropic"],
@@ -536,7 +536,7 @@ def test_43_resolve_supply_trace_records_selected_secondary():
     supply = _make_supply_state_dict(
         providers={
             "openai": _down_provider_record("openai", "gpt-4o"),
-            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4.6"),
+            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4-6-20251022"),
         },
         available_ids=["anthropic"],
         fallback_candidates=["anthropic"],
@@ -582,7 +582,7 @@ def test_46_resolve_supply_fallback_supplied_differs_from_requested():
     supply = _make_supply_state_dict(
         providers={
             "openai": _down_provider_record("openai", "gpt-4o"),
-            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4.6"),
+            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4-6-20251022"),
         },
         available_ids=["anthropic"],
         fallback_candidates=["anthropic"],
@@ -615,7 +615,7 @@ def test_48_resolve_supply_degraded_primary_not_allowed_falls_back():
     supply = _make_supply_state_dict(
         providers={
             "openai": _degraded_provider_record("openai", "gpt-4o"),
-            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4.6"),
+            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4-6-20251022"),
         },
         available_ids=["openai", "anthropic"],
         fallback_candidates=["anthropic"],
@@ -632,7 +632,7 @@ def test_49_resolve_supply_degraded_fallback_legality_primary_degraded():
     supply = _make_supply_state_dict(
         providers={
             "openai": _degraded_provider_record("openai", "gpt-4o"),
-            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4.6"),
+            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4-6-20251022"),
         },
         available_ids=["openai", "anthropic"],
         fallback_candidates=["anthropic"],
@@ -649,7 +649,7 @@ def test_50_resolve_supply_max_fallback_depth_zero_no_fallback():
     supply = _make_supply_state_dict(
         providers={
             "openai": _down_provider_record("openai", "gpt-4o"),
-            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4.6"),
+            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4-6-20251022"),
         },
         available_ids=["anthropic"],
         fallback_candidates=["anthropic"],
@@ -666,7 +666,7 @@ def test_51_resolve_supply_uses_canonical_fallback_candidates_list():
     supply = _make_supply_state_dict(
         providers={
             "openai": _down_provider_record("openai", "gpt-4o"),
-            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4.6"),
+            "anthropic": _healthy_provider_record("anthropic", "claude-sonnet-4-6-20251022"),
             "gemini": _healthy_provider_record("gemini", "gemini-pro"),
         },
         available_ids=["anthropic", "gemini"],
@@ -906,8 +906,8 @@ def test_74_resolve_supply_capability_mismatch_when_required():
             "anthropic": {
                 "provider_id": "anthropic",
                 "health_status": "healthy",
-                "default_model": "claude-sonnet-4.6",
-                "models": ["claude-sonnet-4.6"],
+                "default_model": "claude-sonnet-4-6-20251022",
+                "models": ["claude-sonnet-4-6-20251022"],
                 "is_available": True,
                 "capability": {"supports_tools": True, "is_natively_multimodal": False},
             },

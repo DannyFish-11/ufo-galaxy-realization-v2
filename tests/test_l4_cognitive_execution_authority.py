@@ -145,7 +145,7 @@ def _make_canonical_context(message_count: int = 2, with_tools: bool = False):
 
 def _make_canonical_supply(
     provider: str = "openai",
-    model: str = "gpt-5.4",
+    model: str = "gpt-5.5",
     satisfied: bool = True,
 ):
     """Return a minimal SupplyResolutionResult with the correct L2 sentinel."""
@@ -179,7 +179,7 @@ def _make_mock_llm_response(
     content: str = "Test response",
     tool_calls=None,
     provider: str = "openai",
-    model: str = "gpt-5.4",
+    model: str = "gpt-5.5",
 ):
     """Return a mock LLMResponse-like object."""
     resp = MagicMock()
@@ -197,7 +197,7 @@ def _make_mock_llm_response(
 def _make_patched_exec_auth(
     response=None,
     provider: str = "openai",
-    model: str = "gpt-5.4",
+    model: str = "gpt-5.5",
 ):
     """Return a CognitiveExecutionAuthority with a patched _dispatch method."""
     from core.llm.execution_authority import CognitiveExecutionAuthority
@@ -348,7 +348,7 @@ def test_15_cognitive_execution_result_authority_default():
         content="hello",
         tool_calls=None,
         provider="openai",
-        model="gpt-5.4",
+        model="gpt-5.5",
     )
     assert res.authority == LLM_EXECUTION_AUTHORITY
 
@@ -359,86 +359,86 @@ def test_16_cognitive_execution_result_is_canonical_default():
         content="hello",
         tool_calls=None,
         provider="openai",
-        model="gpt-5.4",
+        model="gpt-5.5",
     )
     assert res.is_canonical is True
 
 
 def test_17_cognitive_execution_result_to_dict_content_key():
     from core.llm.execution_authority import CognitiveExecutionResult
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "content" in res.to_dict()
 
 
 def test_18_cognitive_execution_result_to_dict_tool_calls_key():
     from core.llm.execution_authority import CognitiveExecutionResult
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "tool_calls" in res.to_dict()
 
 
 def test_19_cognitive_execution_result_to_dict_provider_key():
     from core.llm.execution_authority import CognitiveExecutionResult
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "provider" in res.to_dict()
 
 
 def test_20_cognitive_execution_result_to_dict_model_key():
     from core.llm.execution_authority import CognitiveExecutionResult
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "model" in res.to_dict()
 
 
 def test_21_cognitive_execution_result_to_dict_is_canonical_key():
     from core.llm.execution_authority import CognitiveExecutionResult
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "is_canonical" in res.to_dict()
 
 
 def test_22_cognitive_execution_result_to_dict_authority_key():
     from core.llm.execution_authority import CognitiveExecutionResult
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "authority" in res.to_dict()
 
 
 def test_23_cognitive_execution_result_to_dict_authority_value():
     from core.llm.execution_authority import CognitiveExecutionResult, LLM_EXECUTION_AUTHORITY
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert res.to_dict()["authority"] == LLM_EXECUTION_AUTHORITY
 
 
 def test_24_cognitive_execution_result_to_dict_execution_trace_key():
     from core.llm.execution_authority import CognitiveExecutionResult
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "execution_trace" in res.to_dict()
 
 
 def test_25_cognitive_execution_result_to_dict_source_context_key():
     from core.llm.execution_authority import CognitiveExecutionResult
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "source_context" in res.to_dict()
 
 
 def test_26_cognitive_execution_result_to_dict_source_supply_key():
     from core.llm.execution_authority import CognitiveExecutionResult
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "source_supply" in res.to_dict()
 
 
 def test_27_cognitive_execution_result_to_dict_input_tokens_key():
     from core.llm.execution_authority import CognitiveExecutionResult
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "input_tokens" in res.to_dict()
 
 
 def test_28_cognitive_execution_result_to_dict_output_tokens_key():
     from core.llm.execution_authority import CognitiveExecutionResult
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "output_tokens" in res.to_dict()
 
 
 def test_29_cognitive_execution_result_to_dict_latency_ms_key():
     from core.llm.execution_authority import CognitiveExecutionResult
-    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.4")
+    res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "latency_ms" in res.to_dict()
 
 
@@ -448,7 +448,7 @@ def test_30_cognitive_execution_result_to_dict_json_serialisable():
         content="hello world",
         tool_calls=None,
         provider="openai",
-        model="gpt-5.4",
+        model="gpt-5.5",
         execution_trace=["step1", "step2"],
     )
     serialised = json.dumps(res.to_dict())
@@ -720,9 +720,9 @@ def test_53_execute_result_is_canonical_true():
 def test_54_execute_result_provider_matches_supply():
     from core.llm.execution_authority import CognitiveExecutionRequest
 
-    auth = _make_patched_exec_auth(provider="anthropic", model="claude-sonnet-4.6")
+    auth = _make_patched_exec_auth(provider="anthropic", model="claude-sonnet-4-6-20251022")
     ctx = _make_canonical_context()
-    sup = _make_canonical_supply(provider="anthropic", model="claude-sonnet-4.6")
+    sup = _make_canonical_supply(provider="anthropic", model="claude-sonnet-4-6-20251022")
     req = CognitiveExecutionRequest(context_assembly=ctx, supply_resolution=sup)
 
     result = asyncio.get_event_loop().run_until_complete(auth.execute(req))
@@ -732,13 +732,13 @@ def test_54_execute_result_provider_matches_supply():
 def test_55_execute_result_model_matches_supply():
     from core.llm.execution_authority import CognitiveExecutionRequest
 
-    auth = _make_patched_exec_auth(provider="anthropic", model="claude-sonnet-4.6")
+    auth = _make_patched_exec_auth(provider="anthropic", model="claude-sonnet-4-6-20251022")
     ctx = _make_canonical_context()
-    sup = _make_canonical_supply(provider="anthropic", model="claude-sonnet-4.6")
+    sup = _make_canonical_supply(provider="anthropic", model="claude-sonnet-4-6-20251022")
     req = CognitiveExecutionRequest(context_assembly=ctx, supply_resolution=sup)
 
     result = asyncio.get_event_loop().run_until_complete(auth.execute(req))
-    assert result.model == "claude-sonnet-4.6"
+    assert result.model == "claude-sonnet-4-6-20251022"
 
 
 def test_56_execute_result_execution_trace_non_empty():
@@ -1034,9 +1034,9 @@ def test_85_retry_path_same_context_and_supply_yields_same_provider():
     """Retry with same L3 context and L2 supply must yield the same provider."""
     from core.llm.execution_authority import CognitiveExecutionRequest
 
-    auth = _make_patched_exec_auth(provider="openai", model="gpt-5.4")
+    auth = _make_patched_exec_auth(provider="openai", model="gpt-5.5")
     ctx = _make_canonical_context()
-    sup = _make_canonical_supply(provider="openai", model="gpt-5.4")
+    sup = _make_canonical_supply(provider="openai", model="gpt-5.5")
 
     req1 = CognitiveExecutionRequest(
         context_assembly=ctx,
@@ -1073,9 +1073,9 @@ def test_86_execute_result_to_dict_source_context_has_message_count():
 def test_87_execute_result_to_dict_source_supply_has_requested_provider():
     from core.llm.execution_authority import CognitiveExecutionRequest
 
-    auth = _make_patched_exec_auth(provider="deepseek", model="deepseek-ai/DeepSeek-V3.2")
+    auth = _make_patched_exec_auth(provider="deepseek", model="deepseek-v4-pro")
     ctx = _make_canonical_context()
-    sup = _make_canonical_supply(provider="deepseek", model="deepseek-ai/DeepSeek-V3.2")
+    sup = _make_canonical_supply(provider="deepseek", model="deepseek-v4-pro")
     req = CognitiveExecutionRequest(context_assembly=ctx, supply_resolution=sup)
 
     result = asyncio.get_event_loop().run_until_complete(auth.execute(req))

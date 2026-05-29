@@ -94,8 +94,8 @@ def _make_full_inventory():
     snapshots = [
         LegacyLLMProviderSnapshot.from_dict({
             "provider": "openai",
-            "model": "gpt-5.4",
-            "models": ["gpt-5.4", "gpt-4o"],
+            "model": "gpt-5.5",
+            "models": ["gpt-5.5", "gpt-4o"],
             "speed_score": 8,
             "quality_score": 9,
             "available": True,
@@ -104,8 +104,8 @@ def _make_full_inventory():
         }),
         LegacyLLMProviderSnapshot.from_dict({
             "provider": "anthropic",
-            "model": "claude-opus-4.6",
-            "models": ["claude-opus-4.6"],
+            "model": "claude-opus-4-8-20250529",
+            "models": ["claude-opus-4-8-20250529"],
             "speed_score": 6,
             "quality_score": 10,
             "available": True,

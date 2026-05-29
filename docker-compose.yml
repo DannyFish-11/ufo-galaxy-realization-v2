@@ -80,7 +80,7 @@ services:
       - ONEAPI_URL=${ONEAPI_URL:-}
       - ONEAPI_API_KEY=${ONEAPI_API_KEY:-}
 
-      # 直连 API Keys (备用)
+      # 直连 API Keys (备用) — 2026-05-29: 14个提供商
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.openai.com/v1}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
@@ -89,6 +89,12 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
       - XAI_API_KEY=${XAI_API_KEY:-}
+      # 国产提供商 (2026-05-29新增)
+      - QWEN_API_KEY=${QWEN_API_KEY:-}
+      - ZHIPU_API_KEY=${ZHIPU_API_KEY:-}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+      - STEP_API_KEY=${STEP_API_KEY:-}
+      - MIMO_API_KEY=${MIMO_API_KEY:-}
 
       # 本地模型
       - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}

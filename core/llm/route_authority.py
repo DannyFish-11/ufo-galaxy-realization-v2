@@ -132,7 +132,7 @@ class LLMRouteDecision:
     provider:
         Selected provider identifier (e.g. ``"openai"``, ``"anthropic"``).
     model:
-        Selected model identifier (e.g. ``"gpt-4o"``, ``"claude-sonnet-4.6"``).
+        Selected model identifier (e.g. ``"gpt-5.5"``, ``"claude-sonnet-4-6-20251022"``).
     reason:
         Human-readable explanation of why this provider/model was selected.
     alternatives:

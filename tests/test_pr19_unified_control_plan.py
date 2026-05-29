@@ -195,7 +195,7 @@ class TestChosenModelDecision:
         from core.schemas.unified_control_plan import ChosenModelDecision
         cmd = ChosenModelDecision(
             provider_id="anthropic",
-            model_id="claude-opus-4.6",
+            model_id="claude-opus-4-8-20250529",
             is_native_multimodal=True,
             selection_reason="best multimodal",
             fallback_chain=["openai/gpt-4o"],

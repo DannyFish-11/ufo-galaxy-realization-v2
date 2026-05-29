@@ -1,6 +1,8 @@
 # config/llm_routing_policy.yaml
 # ================================
-# Galaxy Multi-LLM 路由策略配置（Block-6 / PR-6）
+# Galaxy Multi-LLM 路由策略配置（2026-05-29全面更新）
+# 14个提供商, 覆盖8个任务类型
+# 新增: minimax(M2.7), step(3.7 Flash), mimo(V2.5 Pro)
 #
 # 字段说明：
 #   priorities      — 任务类型 → 提供商优先顺序（index 0 最高优先）
@@ -9,15 +11,15 @@
 #   cost_budget     — 每 1k token 最大允许费用（USD）
 #   slo             — SLO 阈值（latency_ms / min_success_rate）
 
-version: "1"
+version: "2"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 全局默认 fallback（任何任务类型均可用）
 # ─────────────────────────────────────────────────────────────────────────────
 global_fallback_chain:
-  - deepseek
-  - openai
-  - anthropic
+  - deepseek    # V4-Pro: 降价75%, ¥0.025/M输入
+  - openai      # GPT-5.5
+  - anthropic   # Opus 4.8 (2026-05-29发布)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 全局 SLO / 预算
@@ -28,12 +30,12 @@ global_slo:
   max_cost_per_1k_tokens: 0.06 # USD — 超过此值触发降级
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 任务类型路由规则
+# 任务类型路由规则 (2026-05-29: 加入minimax/step/mimo)
 # ─────────────────────────────────────────────────────────────────────────────
 task_routing:
 
   reasoning:
-    priorities: [anthropic, openai, google, deepseek, xai]
+    priorities: [anthropic, openai, deepseek, google, qwen, step, xai]
     constraints:
       require_tools: false
     cost_budget:
@@ -44,7 +46,7 @@ task_routing:
     fallback_chain: [deepseek, openai]
 
   fast_response:
-    priorities: [deepseek, groq, google, openai, moonshot]
+    priorities: [deepseek, mimo, groq, google, openai, zhipu, moonshot]
     constraints:
       require_tools: false
     cost_budget:
@@ -55,7 +57,7 @@ task_routing:
     fallback_chain: [openai, anthropic]
 
   coding:
-    priorities: [deepseek, qwen, anthropic, openai]
+    priorities: [deepseek, qwen, anthropic, openai, step, mimo]
     constraints:
       require_tools: false
     cost_budget:
@@ -66,7 +68,7 @@ task_routing:
     fallback_chain: [openai, anthropic]
 
   creative:
-    priorities: [openai, anthropic, mistral, deepseek]
+    priorities: [openai, anthropic, mistral, deepseek, minimax]
     constraints:
       require_tools: false
     cost_budget:
@@ -77,7 +79,7 @@ task_routing:
     fallback_chain: [deepseek, openai]
 
   analysis:
-    priorities: [anthropic, openai, google, perplexity, deepseek]
+    priorities: [anthropic, openai, deepseek, google, perplexity, qwen, step]
     constraints:
       require_tools: false
     cost_budget:
@@ -88,7 +90,7 @@ task_routing:
     fallback_chain: [deepseek, openai]
 
   planning:
-    priorities: [anthropic, openai, xai, deepseek]
+    priorities: [anthropic, openai, deepseek, xai, qwen]
     constraints:
       require_tools: false
     cost_budget:
@@ -99,7 +101,7 @@ task_routing:
     fallback_chain: [openai, deepseek]
 
   agent_control:
-    priorities: [anthropic, openai, deepseek]
+    priorities: [anthropic, openai, deepseek, minimax, step]
     constraints:
       require_tools: true
     cost_budget:
@@ -110,7 +112,7 @@ task_routing:
     fallback_chain: [openai, anthropic]
 
   general:
-    priorities: [openai, anthropic, deepseek, google]
+    priorities: [openai, anthropic, deepseek, google, qwen, zhipu, mimo]
     constraints:
       require_tools: false
     cost_budget:

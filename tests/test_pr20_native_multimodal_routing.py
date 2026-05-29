@@ -412,7 +412,7 @@ class TestBuildUnifiedControlPlanNativeMultimodal:
 
         plan_dict = oc._build_unified_control_plan(
             trace_id="trace_nm_test",
-            chosen_model="gpt-5.4",
+            chosen_model="gpt-5.5",
             chosen_provider="openai",
             is_native_multimodal=True,
         )
@@ -598,7 +598,7 @@ class TestBackwardCompatibility:
 
         plan_dict = oc._build_unified_control_plan(
             trace_id="compat_trace",
-            chosen_model="gpt-5.4",
+            chosen_model="gpt-5.5",
             chosen_provider="openai",
             # is_native_multimodal intentionally omitted — must use default False
         )

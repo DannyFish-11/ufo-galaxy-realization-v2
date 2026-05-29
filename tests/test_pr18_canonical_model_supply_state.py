@@ -45,8 +45,8 @@ OPENAI_DICT = {
 
 ANTHROPIC_DICT = {
     "provider": "anthropic",
-    "model": "claude-opus-4.6",
-    "models": ["claude-opus-4.6", "claude-sonnet-4.6"],
+    "model": "claude-opus-4-8-20250529",
+    "models": ["claude-opus-4-8-20250529", "claude-sonnet-4-6-20251022"],
     "speed_score": 6,
     "quality_score": 10,
     "available": True,
@@ -67,8 +67,8 @@ GROQ_DICT = {
 
 DEEPSEEK_DICT = {
     "provider": "deepseek",
-    "model": "deepseek-ai/DeepSeek-V3.2",
-    "models": ["deepseek-ai/DeepSeek-V3.2"],
+    "model": "deepseek-v4-pro",
+    "models": ["deepseek-v4-pro"],
     "speed_score": 7,
     "quality_score": 9,
     "available": False,
@@ -167,8 +167,8 @@ ROUTER_SPECS = [
     },
     {
         "name": "anthropic",
-        "models": ["claude-opus-4.6", "claude-sonnet-4.6"],
-        "default_model": "claude-opus-4.6",
+        "models": ["claude-opus-4-8-20250529", "claude-sonnet-4-6-20251022"],
+        "default_model": "claude-opus-4-8-20250529",
         "multimodal": True,
         "supports_tools": True,
         "cost_per_1k_input": 0.015,
@@ -189,8 +189,8 @@ ROUTER_SPECS = [
     },
     {
         "name": "deepseek",
-        "models": ["deepseek-ai/DeepSeek-V3.2"],
-        "default_model": "deepseek-ai/DeepSeek-V3.2",
+        "models": ["deepseek-v4-pro"],
+        "default_model": "deepseek-v4-pro",
         "multimodal": False,
         "supports_tools": True,
         "cost_per_1k_input": 0.0,
@@ -333,7 +333,7 @@ class TestNativeMultimodalCapability:
             supports_video=True,
         )
         cap = NativeMultimodalCapability.from_modality_capability(
-            provider_id="google", model_id="gemini-3.1-pro", modality=modality
+            provider_id="google", model_id="gemini-3.5-flash", modality=modality
         )
         assert cap.supports_audio_input is True
         assert cap.supports_video_frame_input is True
@@ -406,7 +406,7 @@ class TestNativeMultimodalCapabilityRegistry:
         from core.model_topology import NativeMultimodalCapability
         reg = self._make_registry()
         cap = NativeMultimodalCapability(
-            provider_id="google", model_id="gemini-3.1",
+            provider_id="google", model_id="gemini-3.5-flash",
             is_natively_multimodal=True,
             supports_audio_input=True,
         )
@@ -438,7 +438,7 @@ class TestNativeMultimodalCapabilityRegistry:
         ))
         # google: image + audio
         reg.register(NativeMultimodalCapability(
-            provider_id="google", model_id="gemini-3.1",
+            provider_id="google", model_id="gemini-3.5-flash",
             is_natively_multimodal=True, supports_image_input=True, supports_audio_input=True,
         ))
         # When audio is required, google should be preferred

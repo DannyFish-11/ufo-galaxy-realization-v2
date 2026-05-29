@@ -23,8 +23,8 @@ Quick start::
     bridge = ConfigBridge()
     snapshot = LegacyLLMProviderSnapshot.from_dict({
         "provider": "openai",
-        "model": "gpt-5.4",
-        "models": ["gpt-5.4", "gpt-4o"],
+        "model": "gpt-5.5",
+        "models": ["gpt-5.5", "gpt-5.5-instant", "gpt-4o"],
         "speed_score": 8,
         "quality_score": 9,
         "available": True,

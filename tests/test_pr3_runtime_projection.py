@@ -52,8 +52,8 @@ from core.projection import ExecutionSummary, RuntimeProjection, build_runtime_p
 
 _OPENAI_DICT = {
     "provider": "openai",
-    "model": "gpt-5.4",
-    "models": ["gpt-5.4", "gpt-4o"],
+    "model": "gpt-5.5",
+    "models": ["gpt-5.5", "gpt-4o"],
     "speed_score": 8,
     "quality_score": 9,
     "available": True,
@@ -63,8 +63,8 @@ _OPENAI_DICT = {
 
 _ANTHROPIC_DICT = {
     "provider": "anthropic",
-    "model": "claude-opus-4.6",
-    "models": ["claude-opus-4.6", "claude-sonnet-4.6"],
+    "model": "claude-opus-4-8-20250529",
+    "models": ["claude-opus-4-8-20250529", "claude-sonnet-4-6-20251022"],
     "speed_score": 6,
     "quality_score": 10,
     "available": True,

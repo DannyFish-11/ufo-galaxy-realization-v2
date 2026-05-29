@@ -110,8 +110,8 @@ bridge = ConfigBridge()
 # 1. Translate a single provider snapshot
 snapshot = LegacyLLMProviderSnapshot.from_dict({
     "provider": "anthropic",
-    "model": "claude-sonnet-4.6",
-    "models": ["claude-opus-4.6", "claude-sonnet-4.6", "claude-haiku-4-5-20251001"],
+    "model": "claude-sonnet-4-6-20251022",
+    "models": ["claude-opus-4-8-20250529", "claude-sonnet-4-6-20251022", "claude-haiku-4-5-20251001"],
     "speed_score": 7,
     "quality_score": 10,
     "available": True,
