@@ -124,57 +124,58 @@ LOCAL_LLM_PROVIDER_ROLE: str = (
 TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
     # 本地主脑优先，API 专科后备
     # LOCAL-BRAIN-FIRST: hf_local (HuggingFace local models) are checked after ollama
-    TaskType.REASONING:      ["ollama", "hf_local", "anthropic", "openai", "google", "deepseek"],
-    TaskType.FAST_RESPONSE:  ["ollama", "hf_local", "deepseek", "groq", "google", "openai"],
-    TaskType.CODING:         ["ollama", "hf_local", "deepseek", "qwen", "anthropic", "openai"],
-    TaskType.CREATIVE:       ["ollama", "hf_local", "openai", "anthropic", "mistral", "deepseek"],
-    TaskType.ANALYSIS:       ["ollama", "hf_local", "anthropic", "openai", "google", "perplexity", "deepseek"],
-    TaskType.PLANNING:       ["ollama", "hf_local", "anthropic", "openai", "xai", "deepseek"],
-    TaskType.AGENT_CONTROL:  ["ollama", "hf_local", "anthropic", "openai", "deepseek"],
-    TaskType.GENERAL:        ["ollama", "hf_local", "openai", "anthropic", "deepseek", "google"],
+    # 2026-05-29: 新增 minimax/step/mimo 三个国产提供商
+    TaskType.REASONING:      ["ollama", "hf_local", "anthropic", "openai", "deepseek", "google", "qwen", "step"],
+    TaskType.FAST_RESPONSE:  ["ollama", "hf_local", "deepseek", "mimo", "groq", "google", "openai", "zhipu"],
+    TaskType.CODING:         ["ollama", "hf_local", "deepseek", "qwen", "anthropic", "openai", "step", "mimo"],
+    TaskType.CREATIVE:       ["ollama", "hf_local", "openai", "anthropic", "mistral", "deepseek", "minimax"],
+    TaskType.ANALYSIS:       ["ollama", "hf_local", "anthropic", "openai", "deepseek", "google", "perplexity", "qwen", "step"],
+    TaskType.PLANNING:       ["ollama", "hf_local", "anthropic", "openai", "deepseek", "xai", "qwen"],
+    TaskType.AGENT_CONTROL:  ["ollama", "hf_local", "anthropic", "openai", "deepseek", "minimax", "step"],
+    TaskType.GENERAL:        ["ollama", "hf_local", "openai", "anthropic", "deepseek", "google", "qwen", "zhipu", "mimo"],
 }
 
-# 提供商 → 推荐模型
+# 提供商 → 推荐模型 (2026-05-29 全面更新)
 PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     "openai": {
-        TaskType.REASONING:     "gpt-5.4-thinking",
-        TaskType.FAST_RESPONSE: "gpt-4o-mini",
-        TaskType.CODING:        "gpt-5.4",
-        TaskType.CREATIVE:      "gpt-5.4",
-        TaskType.ANALYSIS:      "gpt-5.4",
-        TaskType.PLANNING:      "gpt-5.4-thinking",
-        TaskType.AGENT_CONTROL: "gpt-5.4",
-        TaskType.GENERAL:       "gpt-5.4",
+        TaskType.REASONING:     "gpt-5.5",
+        TaskType.FAST_RESPONSE: "gpt-5.5-instant",
+        TaskType.CODING:        "gpt-5.5",
+        TaskType.CREATIVE:      "gpt-5.5",
+        TaskType.ANALYSIS:      "gpt-5.5",
+        TaskType.PLANNING:      "gpt-5.5",
+        TaskType.AGENT_CONTROL: "gpt-5.5",
+        TaskType.GENERAL:       "gpt-5.5",
     },
     "anthropic": {
-        TaskType.REASONING:     "claude-opus-4.6",
-        TaskType.FAST_RESPONSE: "claude-sonnet-4.6",
-        TaskType.CODING:        "claude-sonnet-4.6",
-        TaskType.CREATIVE:      "claude-opus-4.6",
-        TaskType.ANALYSIS:      "claude-opus-4.6",
-        TaskType.PLANNING:      "claude-opus-4.6",
-        TaskType.AGENT_CONTROL: "claude-sonnet-4.6",
-        TaskType.GENERAL:       "claude-sonnet-4.6",
+        TaskType.REASONING:     "claude-opus-4-8-20250529",
+        TaskType.FAST_RESPONSE: "claude-sonnet-4-6-20251022",
+        TaskType.CODING:        "claude-sonnet-4-6-20251022",
+        TaskType.CREATIVE:      "claude-opus-4-8-20250529",
+        TaskType.ANALYSIS:      "claude-opus-4-8-20250529",
+        TaskType.PLANNING:      "claude-opus-4-8-20250529",
+        TaskType.AGENT_CONTROL: "claude-sonnet-4-6-20251022",
+        TaskType.GENERAL:       "claude-sonnet-4-6-20251022",
     },
     "google": {
-        TaskType.REASONING:     "gemini-3.1-deep-think",
-        TaskType.FAST_RESPONSE: "gemini-3.1-flash",
-        TaskType.CODING:        "gemini-3.1-pro",
-        TaskType.CREATIVE:      "gemini-3.1-pro",
-        TaskType.ANALYSIS:      "gemini-3.1-deep-think",
-        TaskType.PLANNING:      "gemini-3.1-deep-think",
-        TaskType.AGENT_CONTROL: "gemini-3.1-pro",
-        TaskType.GENERAL:       "gemini-3.1-flash",
+        TaskType.REASONING:     "gemini-3.5-flash",
+        TaskType.FAST_RESPONSE: "gemini-3.5-flash",
+        TaskType.CODING:        "gemini-3.5-pro",
+        TaskType.CREATIVE:      "gemini-3.5-pro",
+        TaskType.ANALYSIS:      "gemini-3.5-flash",
+        TaskType.PLANNING:      "gemini-3.5-pro",
+        TaskType.AGENT_CONTROL: "gemini-3.5-pro",
+        TaskType.GENERAL:       "gemini-3.5-flash",
     },
     "xai": {
-        TaskType.REASONING:     "grok-4.20",
-        TaskType.FAST_RESPONSE: "grok-4.20",
-        TaskType.CODING:        "grok-4.20",
-        TaskType.CREATIVE:      "grok-4.20",
-        TaskType.ANALYSIS:      "grok-4.20",
-        TaskType.PLANNING:      "grok-4.20",
-        TaskType.AGENT_CONTROL: "grok-4.20",
-        TaskType.GENERAL:       "grok-4.20",
+        TaskType.REASONING:     "grok-4.1",
+        TaskType.FAST_RESPONSE: "grok-4.1",
+        TaskType.CODING:        "grok-4.1",
+        TaskType.CREATIVE:      "grok-4.1",
+        TaskType.ANALYSIS:      "grok-4.1",
+        TaskType.PLANNING:      "grok-4.1",
+        TaskType.AGENT_CONTROL: "grok-4.1",
+        TaskType.GENERAL:       "grok-4.1",
     },
     "mistral": {
         TaskType.REASONING:     "mistral-large-3",
@@ -187,26 +188,62 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL:       "mistral-large-3",
     },
     "deepseek": {
-        TaskType.REASONING:     "deepseek-ai/DeepSeek-V3.2",
-        TaskType.FAST_RESPONSE: "deepseek-ai/DeepSeek-V3.2",
-        TaskType.CODING:        "deepseek-ai/DeepSeek-V3.2",
-        TaskType.CREATIVE:      "deepseek-ai/DeepSeek-V3.2",
-        TaskType.ANALYSIS:      "deepseek-ai/DeepSeek-V3.2",
-        TaskType.PLANNING:      "deepseek-ai/DeepSeek-V3.2",
-        TaskType.AGENT_CONTROL: "deepseek-ai/DeepSeek-V3.2",
-        TaskType.GENERAL:       "deepseek-ai/DeepSeek-V3.2",
+        TaskType.REASONING:     "deepseek-v4-pro",
+        TaskType.FAST_RESPONSE: "deepseek-v4",
+        TaskType.CODING:        "deepseek-v4-pro",
+        TaskType.CREATIVE:      "deepseek-v4-pro",
+        TaskType.ANALYSIS:      "deepseek-v4-pro",
+        TaskType.PLANNING:      "deepseek-v4-pro",
+        TaskType.AGENT_CONTROL: "deepseek-v4-pro",
+        TaskType.GENERAL:       "deepseek-v4-pro",
     },
     "qwen": {
-        TaskType.CODING:        "Qwen/Qwen3.5-397B-A17B-Coder",
-        TaskType.FAST_RESPONSE: "Qwen/Qwen3.5-397B-A17B",
-        TaskType.GENERAL:       "Qwen/Qwen3.5-397B-A17B",
-        TaskType.ANALYSIS:      "Qwen/Qwen3.5-397B-A17B",
+        TaskType.REASONING:     "qwen3.7-max",
+        TaskType.CODING:        "qwen3.7-coder",
+        TaskType.FAST_RESPONSE: "qwen3.7-max",
+        TaskType.GENERAL:       "qwen3.7-max",
+        TaskType.ANALYSIS:      "qwen3.7-max",
+        TaskType.PLANNING:      "qwen3.7-max",
+        TaskType.AGENT_CONTROL: "qwen3.7-max",
     },
     "zhipu": {
-        TaskType.GENERAL:       "glm-4.6",
-        TaskType.ANALYSIS:      "glm-4.6",
-        TaskType.CODING:        "glm-4.6",
-        TaskType.FAST_RESPONSE: "glm-4-flash",
+        TaskType.REASONING:     "glm-5.1",
+        TaskType.GENERAL:       "glm-5.1",
+        TaskType.ANALYSIS:      "glm-5.1",
+        TaskType.CODING:        "glm-5.1",
+        TaskType.FAST_RESPONSE: "glm-5.1-flash",
+        TaskType.CREATIVE:      "glm-5.1",
+        TaskType.PLANNING:      "glm-5.1",
+    },
+    "minimax": {
+        TaskType.REASONING:     "minimax-m2.7",
+        TaskType.FAST_RESPONSE: "minimax-m2.7",
+        TaskType.CODING:        "minimax-m2.7",
+        TaskType.CREATIVE:      "minimax-m2.7",
+        TaskType.ANALYSIS:      "minimax-m2.7",
+        TaskType.PLANNING:      "minimax-m2.7",
+        TaskType.AGENT_CONTROL: "minimax-m2.7",
+        TaskType.GENERAL:       "minimax-m2.7",
+    },
+    "step": {
+        TaskType.REASONING:     "step-3.7-flash",
+        TaskType.FAST_RESPONSE: "step-3.7-turbo",
+        TaskType.CODING:        "step-3.7-flash",
+        TaskType.CREATIVE:      "step-3.7-flash",
+        TaskType.ANALYSIS:      "step-3.7-flash",
+        TaskType.PLANNING:      "step-3.7-flash",
+        TaskType.AGENT_CONTROL: "step-3.7-flash",
+        TaskType.GENERAL:       "step-3.7-flash",
+    },
+    "mimo": {
+        TaskType.REASONING:     "mimo-v2.5-pro",
+        TaskType.FAST_RESPONSE: "mimo-v2.5-lite",
+        TaskType.CODING:        "mimo-v2.5-pro",
+        TaskType.CREATIVE:      "mimo-v2.5-pro",
+        TaskType.ANALYSIS:      "mimo-v2.5-pro",
+        TaskType.PLANNING:      "mimo-v2.5-pro",
+        TaskType.AGENT_CONTROL: "mimo-v2.5-pro",
+        TaskType.GENERAL:       "mimo-v2.5-pro",
     },
     "moonshot": {
         TaskType.GENERAL:       "moonshot-v1-128k",
@@ -223,17 +260,17 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL:       "llama-3.3-70b-versatile",
     },
     "ollama": {
-        TaskType.GENERAL: "llama3",
+        TaskType.GENERAL: "llama3.3",
     },
     "hf_local": {
-        TaskType.REASONING: "Qwen/Qwen2-7B-Instruct",
-        TaskType.FAST_RESPONSE: "Qwen/Qwen2-1.5B-Instruct",
-        TaskType.CODING: "Qwen/Qwen2.5-Coder-7B-Instruct",
-        TaskType.CREATIVE: "Qwen/Qwen2-7B-Instruct",
-        TaskType.ANALYSIS: "Qwen/Qwen2-7B-Instruct",
-        TaskType.PLANNING: "Qwen/Qwen2-7B-Instruct",
-        TaskType.AGENT_CONTROL: "Qwen/Qwen2-7B-Instruct",
-        TaskType.GENERAL: "Qwen/Qwen2-7B-Instruct",
+        TaskType.REASONING:     "Qwen/Qwen2.5-14B-Instruct",
+        TaskType.FAST_RESPONSE: "Qwen/Qwen2.5-3B-Instruct",
+        TaskType.CODING:        "Qwen/Qwen2.5-Coder-14B-Instruct",
+        TaskType.CREATIVE:      "Qwen/Qwen2.5-14B-Instruct",
+        TaskType.ANALYSIS:      "Qwen/Qwen2.5-14B-Instruct",
+        TaskType.PLANNING:      "Qwen/Qwen2.5-14B-Instruct",
+        TaskType.AGENT_CONTROL: "Qwen/Qwen2.5-14B-Instruct",
+        TaskType.GENERAL:       "Qwen/Qwen2.5-14B-Instruct",
     },
 }
 
@@ -605,6 +642,21 @@ class PerplexityAdapter(OpenAIAdapter):
     pass
 
 
+class MiniMaxAdapter(OpenAIAdapter):
+    """MiniMax via OpenAI-compatible API (api.minimax.chat)"""
+    pass
+
+
+class StepAdapter(OpenAIAdapter):
+    """阶跃星辰 Step via OpenAI-compatible API (api.stepfun.com)"""
+    pass
+
+
+class MiMoAdapter(OpenAIAdapter):
+    """小米 MiMo via OpenAI-compatible API (api.mimo.ai)"""
+    pass
+
+
 # ───────────────────── 主路由器 ─────────────────────
 
 ADAPTER_MAP = {
@@ -616,6 +668,9 @@ ADAPTER_MAP = {
     "deepseek":   DeepSeekAdapter,
     "qwen":       QwenAdapter,
     "zhipu":      ZhipuAdapter,
+    "minimax":    MiniMaxAdapter,
+    "step":       StepAdapter,
+    "mimo":       MiMoAdapter,
     "moonshot":   MoonshotAdapter,
     "perplexity": PerplexityAdapter,
     "groq":       GroqAdapter,
@@ -701,8 +756,8 @@ class MultiLLMRouter:
             base = self._get_key("openai_base") or os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
             cfg = ProviderConfig(
                 name="openai", api_key=key, base_url=base,
-                models=["gpt-5.4", "gpt-5.4-thinking", "gpt-5.4-pro", "gpt-4.1", "gpt-4o", "gpt-4o-mini"],
-                default_model="gpt-5.4",
+                models=["gpt-5.5", "gpt-5.5-instant", "gpt-4.1", "gpt-4o", "gpt-4o-mini"],
+                default_model="gpt-5.5",
                 cost_per_1k_input=0.005, cost_per_1k_output=0.015,
                 multimodal=True, env_key="OPENAI_API_KEY",
             )
@@ -717,8 +772,8 @@ class MultiLLMRouter:
             cfg = ProviderConfig(
                 name="anthropic", api_key=key,
                 base_url="https://api.anthropic.com/v1",
-                models=["claude-opus-4.6", "claude-sonnet-4.6", "claude-haiku-4-5-20251001"],
-                default_model="claude-sonnet-4.6",
+                models=["claude-opus-4-8-20250529", "claude-sonnet-4-6-20251022", "claude-haiku-4-5-20251001"],
+                default_model="claude-sonnet-4-6-20251022",
                 cost_per_1k_input=0.003, cost_per_1k_output=0.015,
                 multimodal=True, env_key="ANTHROPIC_API_KEY",
             )
@@ -733,8 +788,8 @@ class MultiLLMRouter:
             cfg = ProviderConfig(
                 name="google", api_key=key,
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai",
-                models=["gemini-3.1-pro", "gemini-3.1-flash", "gemini-3.1-deep-think", "gemini-2.5-pro"],
-                default_model="gemini-3.1-pro",
+                models=["gemini-3.5-flash", "gemini-3.5-pro", "gemini-2.5-pro"],
+                default_model="gemini-3.5-flash",
                 cost_per_1k_input=0.00125, cost_per_1k_output=0.005,
                 multimodal=True, env_key="GOOGLE_API_KEY",
             )
@@ -749,8 +804,8 @@ class MultiLLMRouter:
             cfg = ProviderConfig(
                 name="xai", api_key=key,
                 base_url="https://api.x.ai/v1",
-                models=["grok-4.20", "grok-4.20-beta"],
-                default_model="grok-4.20",
+                models=["grok-4.1", "grok-4.1-beta"],
+                default_model="grok-4.1",
                 cost_per_1k_input=0.005, cost_per_1k_output=0.015,
                 multimodal=True, env_key="XAI_API_KEY",
             )
@@ -773,7 +828,7 @@ class MultiLLMRouter:
             self.providers["mistral"] = cfg
             self.adapters["mistral"] = MistralAdapter(cfg)
 
-        # DeepSeek
+        # DeepSeek (V4-Pro: 2026-04-24发布, 2026-05-22永久降价75%)
         key = self._get_key("deepseek")
         if not key:
             key = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -781,31 +836,31 @@ class MultiLLMRouter:
             cfg = ProviderConfig(
                 name="deepseek", api_key=key,
                 base_url="https://api.deepseek.com/v1",
-                models=["deepseek-ai/DeepSeek-V3.2", "deepseek-ai/DeepSeek-V3", "deepseek-chat", "deepseek-reasoner"],
-                default_model="deepseek-ai/DeepSeek-V3.2",
-                cost_per_1k_input=0.00014, cost_per_1k_output=0.00028,
+                models=["deepseek-v4-pro", "deepseek-v4", "deepseek-chat", "deepseek-reasoner"],
+                default_model="deepseek-v4-pro",
+                cost_per_1k_input=0.000025, cost_per_1k_output=0.00006,
                 multimodal=False, env_key="DEEPSEEK_API_KEY",
             )
             self.providers["deepseek"] = cfg
             self.adapters["deepseek"] = DeepSeekAdapter(cfg)
 
-        # Qwen (via Together AI)
+        # Qwen 3.7 Max (阿里云, 2026-05-20发布, 1M上下文)
         key = self._get_key("qwen")
         if not key:
-            key = os.environ.get("QWEN_API_KEY", "") or os.environ.get("TOGETHER_API_KEY", "")
+            key = os.environ.get("QWEN_API_KEY", "") or os.environ.get("DASHSCOPE_API_KEY", "")
         if key and not key.startswith("your-"):
             cfg = ProviderConfig(
                 name="qwen", api_key=key,
-                base_url="https://api.together.xyz/v1",
-                models=["Qwen/Qwen3.5-397B-A17B", "Qwen/Qwen3.5-397B-A17B-Coder", "Qwen/Qwen3-235B-A22B"],
-                default_model="Qwen/Qwen3.5-397B-A17B",
-                cost_per_1k_input=0.0018, cost_per_1k_output=0.0018,
-                multimodal=False, env_key="QWEN_API_KEY",
+                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                models=["qwen3.7-max", "qwen3.7-coder", "qwen3-235b-a22b"],
+                default_model="qwen3.7-max",
+                cost_per_1k_input=0.0025, cost_per_1k_output=0.0075,
+                multimodal=True, env_key="QWEN_API_KEY",
             )
             self.providers["qwen"] = cfg
             self.adapters["qwen"] = QwenAdapter(cfg)
 
-        # Zhipu GLM
+        # Zhipu GLM-5.1 (智谱AI, 2026-04-08发布, 开源, 2026-05-22高速版400tokens/s)
         key = self._get_key("zhipu")
         if not key:
             key = os.environ.get("ZHIPU_API_KEY", "")
@@ -813,13 +868,61 @@ class MultiLLMRouter:
             cfg = ProviderConfig(
                 name="zhipu", api_key=key,
                 base_url="https://open.bigmodel.cn/api/paas/v4",
-                models=["glm-4.6", "glm-4-flash"],
-                default_model="glm-4.6",
+                models=["glm-5.1", "glm-5.1-flash", "glm-4-plus"],
+                default_model="glm-5.1",
                 cost_per_1k_input=0.001, cost_per_1k_output=0.001,
                 multimodal=True, env_key="ZHIPU_API_KEY",
             )
             self.providers["zhipu"] = cfg
             self.adapters["zhipu"] = ZhipuAdapter(cfg)
+
+        # MiniMax M2.7 (2026-03-18发布, 支持Agent自主规划多工具调用)
+        key = self._get_key("minimax")
+        if not key:
+            key = os.environ.get("MINIMAX_API_KEY", "")
+        if key and not key.startswith("your-"):
+            cfg = ProviderConfig(
+                name="minimax", api_key=key,
+                base_url="https://api.minimax.chat/v1",
+                models=["minimax-m2.7", "minimax-m2.5", "minimax-text-01"],
+                default_model="minimax-m2.7",
+                cost_per_1k_input=0.001, cost_per_1k_output=0.004,
+                multimodal=False, env_key="MINIMAX_API_KEY",
+            )
+            self.providers["minimax"] = cfg
+            self.adapters["minimax"] = MiniMaxAdapter(cfg)
+
+        # Step 3.7 Flash (阶跃星辰, 2026-05-29发布并开源, 稀疏MoE 196B总参/11B激活, 原生多模态Agent)
+        key = self._get_key("step")
+        if not key:
+            key = os.environ.get("STEP_API_KEY", "")
+        if key and not key.startswith("your-"):
+            cfg = ProviderConfig(
+                name="step", api_key=key,
+                base_url="https://api.stepfun.com/v1",
+                models=["step-3.7-flash", "step-3.7-turbo", "step-3.7-mini"],
+                default_model="step-3.7-flash",
+                cost_per_1k_input=0.001, cost_per_1k_output=0.004,
+                multimodal=True, env_key="STEP_API_KEY",
+            )
+            self.providers["step"] = cfg
+            self.adapters["step"] = StepAdapter(cfg)
+
+        # MiMo V2.5 Pro (小米, 2026-04-22公测, 256K上下文, 强化学习Agent, 2026-05-27降价99%)
+        key = self._get_key("mimo")
+        if not key:
+            key = os.environ.get("MIMO_API_KEY", "")
+        if key and not key.startswith("your-"):
+            cfg = ProviderConfig(
+                name="mimo", api_key=key,
+                base_url="https://api.mimo.ai/v1",
+                models=["mimo-v2.5-pro", "mimo-v2.5-standard", "mimo-v2.5-lite"],
+                default_model="mimo-v2.5-pro",
+                cost_per_1k_input=0.00002, cost_per_1k_output=0.00008,
+                multimodal=False, env_key="MIMO_API_KEY",
+            )
+            self.providers["mimo"] = cfg
+            self.adapters["mimo"] = MiMoAdapter(cfg)
 
         # Moonshot Kimi
         key = self._get_key("moonshot")
