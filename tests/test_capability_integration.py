@@ -147,16 +147,16 @@ class TestCapabilityIntegration(unittest.IsolatedAsyncioTestCase):
         for cap_name in test_capabilities:
             try:
                 await self.capability_manager.unregister_capability(cap_name)
-            except:
-                pass
+            except Exception:
+                pass  # 测试清理， capability 可能已不存在
         
         # 清理测试连接
         test_connections = ["test_node_08", "test_lifecycle"]
         for conn_id in test_connections:
             try:
                 await self.connection_manager.disconnect(conn_id)
-            except:
-                pass
+            except Exception:
+                pass  # 测试清理，连接可能已断开
 
 
 class TestSystemIntegration(unittest.TestCase):
