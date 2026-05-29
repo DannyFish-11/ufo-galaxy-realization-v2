@@ -265,7 +265,17 @@ class ThreeStateManager {
             const message = JSON.parse(data);
             console.log('[ThreeStateManager] WS message:', message);
 
-            switch (message.type) {
+            // PR-AIPV3-PHASE: Support both legacy format and AIP v3 STATE_EVENT
+            const msgType = message.type;
+
+            // AIP v3 STATE_EVENT format: {type: "state_event", event_category: "phase", event_action: "liminal"}
+            if (msgType === 'state_event') {
+                this.handleAIPV3StateEvent(message);
+                return;
+            }
+
+            // Legacy format support (backward compatible)
+            switch (msgType) {
                 case 'phase_change':
                     this.handlePhaseChange(message);
                     break;
@@ -277,8 +287,21 @@ class ThreeStateManager {
                     }
                     break;
 
+                case 'task_result':
+                case 'goal_execution_result':
+                    // AIP v3 task result — update manifest display
+                    if (this.manifestState && (message.result || message.data)) {
+                        const resultText = this.formatTaskResult(message);
+                        this.manifestState.setResult(resultText);
+                    }
+                    break;
+
                 case 'ping':
                     this.wsSend({ type: 'pong', timestamp: Date.now() });
+                    break;
+
+                case 'heartbeat_ack':
+                    console.log('[ThreeStateManager] Heartbeat ACK received');
                     break;
 
                 case 'status':
@@ -286,11 +309,95 @@ class ThreeStateManager {
                     break;
 
                 default:
-                    console.log('[ThreeStateManager] Unknown message type:', message.type);
+                    console.log('[ThreeStateManager] Unknown message type:', msgType);
             }
         } catch (err) {
             console.error('[ThreeStateManager] Failed to parse WS message:', err, data);
         }
+    }
+
+    // PR-AIPV3-PHASE: Handle AIP v3 STATE_EVENT messages for phase transitions
+    handleAIPV3StateEvent(message) {
+        const category = message.event_category || '';
+        const action = message.event_action || '';
+        const payload = message.payload || {};
+
+        // Phase transitions via STATE_EVENT
+        if (category === 'phase' || category === 'desktop_presence') {
+            const phaseMap = {
+                'silent': Phase.SILENT,
+                'liminal': Phase.LIMINAL,
+                'manifest': Phase.MANIFEST,
+                'processing': Phase.LIMINAL,    // backward compat
+                'completed': Phase.MANIFEST,     // backward compat
+                'dismissed': Phase.SILENT,       // backward compat
+            };
+            const targetPhase = phaseMap[action.toLowerCase()];
+            if (targetPhase) {
+                this.handlePhaseChange({
+                    phase: targetPhase,
+                    reason: payload.reason || 'aip_v3_state_event',
+                    result: payload.result || payload.message,
+                    metadata: payload.metadata || {},
+                    force: message.force || false,
+                });
+            }
+            return;
+        }
+
+        // Task lifecycle events
+        if (category === 'task') {
+            if (action === 'started' || action === 'assigned') {
+                this.enterState(Phase.LIMINAL, { reason: 'task_started' });
+            } else if (action === 'completed' || action === 'done') {
+                const resultText = this.formatTaskResult(message);
+                this.enterState(Phase.MANIFEST, { result: resultText, reason: 'task_completed' });
+            } else if (action === 'failed' || action === 'cancelled') {
+                const errorText = payload.error || payload.message || 'Task failed';
+                this.enterState(Phase.MANIFEST, { result: `[ERROR] ${errorText}`, reason: action });
+            }
+            return;
+        }
+
+        // Mesh coordination events
+        if (category === 'mesh') {
+            if (action === 'joined' || action === 'coord_sync') {
+                this.enterState(Phase.LIMINAL, { reason: `mesh_${action}` });
+            }
+            return;
+        }
+
+        // Device lifecycle events (display briefly in manifest)
+        if (category === 'device' || category === 'state_sync') {
+            const deviceId = message.device_id || payload.device_id || 'system';
+            const statusText = `[${deviceId}] ${action}`;
+            if (this.currentPhase === Phase.SILENT) {
+                // Brief manifest flash for important device events
+                if (action === 'registered' || action === 'unregistered' || action === 'online' || action === 'offline') {
+                    this.enterState(Phase.MANIFEST, { result: statusText, reason: 'device_event' });
+                    // Auto-return to silent after 3 seconds
+                    setTimeout(() => this.enterState(Phase.SILENT, { reason: 'auto_dismiss' }), 3000);
+                }
+            }
+            return;
+        }
+
+        console.log('[ThreeStateManager] Unhandled STATE_EVENT:', category, action);
+    }
+
+    // Format AIP v3 task result for display
+    formatTaskResult(message) {
+        const payload = message.payload || {};
+        const result = message.result || payload.result || payload.message || '';
+        if (typeof result === 'string') return result;
+        if (typeof result === 'object') {
+            try {
+                return JSON.stringify(result, null, 2);
+            } catch {
+                return String(result);
+            }
+        }
+        return String(result);
     }
 
     handlePhaseChange(message) {

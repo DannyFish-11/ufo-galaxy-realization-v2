@@ -429,11 +429,19 @@ def register_websocket_routes(app: FastAPI) -> None:
                     try:
                         et_name, payload = await asyncio.wait_for(queue.get(), timeout=1.0)
                         phase = et_name.replace("PHASE_", "").lower()
+                        # PR-AIPV3-PHASE: Push AIP v3 STATE_EVENT format
+                        # (backward-compatible: also includes legacy phase_change fields)
                         await websocket.send_text(json.dumps({
-                            "type": "phase_change",
-                            "phase": phase,
-                            "timestamp": time.time(),
+                            "type": "state_event",
+                            "event_category": "phase",
+                            "event_action": phase,
+                            "device_id": "desktop_presence",
+                            "timestamp": int(time.time() * 1000),
                             "reason": payload.get("reason", "") if payload else "",
+                            "result": payload.get("result") if payload else None,
+                            "_aip_version": "3.0",
+                            # Legacy backward-compatible fields
+                            "phase": phase,
                         }))
                     except asyncio.TimeoutError:
                         continue
@@ -451,10 +459,15 @@ def register_websocket_routes(app: FastAPI) -> None:
 
                 if msg.get("type") == "get_phase":
                     phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
+                    # PR-AIPV3-PHASE: AIP v3 STATE_EVENT format with legacy fallback
                     await websocket.send_text(json.dumps({
-                        "type": "phase_change",
-                        "phase": phase,
-                        "timestamp": time.time(),
+                        "type": "state_event",
+                        "event_category": "phase",
+                        "event_action": phase,
+                        "device_id": "desktop_presence",
+                        "timestamp": int(time.time() * 1000),
+                        "_aip_version": "3.0",
+                        "phase": phase,  # legacy backward-compatible
                     }))
                 else:
                     phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"

@@ -347,13 +347,15 @@ class UnifiedNodeExecutor:
                 _gov_exc,
             )
 
-        # -- PR-MESH-NATS-FUSION: device-node resolution + action router -----
-        # Try to resolve via device_node_map and route through the unified
-        # NodeActionRouter. This enables remote device execution without
-        # changing the local node loading logic below.
-        fusion_result = await self._try_fusion_route(envelope)
-        if fusion_result is not None:
-            return fusion_result
+        # -- PR-GOLDEN-PATH: Golden Path node resolution + local facade ----
+        # Try the unified device-node resolution first. If a mapping exists
+        # in device_node_map, use LocalNodeFacade for direct Python calls.
+        # This is the Golden Path: device_node_map → resolver → facade → execute.
+        # If no mapping or execution fails, fall back to legacy fusion_entry loading.
+        golden_result = await self._try_golden_path(envelope)
+        if golden_result is not None and not golden_result.get("fallback"):
+            self._emit_aip_v3_task_result(envelope, golden_result)
+            return golden_result
 
         nodes_root = self._get_nodes_root()
         node_dir = os.path.join(nodes_root, node_id)
@@ -454,166 +456,72 @@ class UnifiedNodeExecutor:
             )
 
     # ------------------------------------------------------------------
-    # PR-MESH-NATS-FUSION: Unified action router integration
+    # PR-GOLDEN-PATH: Golden Path local facade integration
     # ------------------------------------------------------------------
 
-    async def _try_fusion_route(
+    async def _try_golden_path(
         self, envelope: NodeInvocationEnvelope
     ) -> Optional[NodeInvocationResult]:
-        """Attempt to route the invocation through the unified node contract.
+        """Route invocation through the Golden Path (device_node_map → resolver → facade).
 
-        Steps:
-        1. Look up device_node_map via the resolver.
-        2. If a mapping exists, build an InvokeRequest and route through
-           the NodeActionRouter (from schemas.node_contract).
-        3. Return the result if successful; return None on any failure
-           so the caller falls back to local fusion_entry.py loading.
+        PR-GOLDEN-PATH: This is the primary path for device-node execution.
+        1. Resolve the node via DeviceNodeResolver (device_node_map.yaml).
+        2. If mapped, use LocalNodeFacade for direct Python calls.
+        3. If no mapping or execution fails (fallback=True), return None
+           so the caller falls back to legacy fusion_entry.py loading.
 
-        This is additive-only — it never changes the local execution path;
-        it only provides a short-circuit for devices that are registered
-        in the device_node_map with a unified contract facade.
+        This is the **strangler fig** layer — over time all nodes migrate
+        to device_node_map entries and this path becomes the default.
         """
-        try:
-            from schemas.node_contract import (  # noqa: PLC0415
-                InvokeRequest,
-                NodeActionRouter,
-                UnifiedResponse,
-            )
-            from schemas.node_errors import NodeErrorCode, NodeErrorResponse  # noqa: PLC0415
-        except Exception as _import_exc:  # noqa: BLE001
-            logger.debug("Fusion route skipped: contract schemas unavailable: %s", _import_exc)
-            return None
-
-        # Step 1: Resolve via device_node_map
-        resolved_impl: Optional[Dict[str, Any]] = None
-        try:
-            from core.device_node_resolver import get_resolver  # noqa: PLC0415
-
-            resolver = get_resolver()
-            # Try multiple resolution paths
-            resolved_impl = resolver.resolve_by_node_id(envelope.node_id)
-            if resolved_impl is None:
-                # Try fuzzy match on node_id
-                resolved_impl = resolver._fuzzy_resolve_node(envelope.node_id)
-        except Exception as _resolve_exc:  # noqa: BLE001
-            logger.debug(
-                "Fusion route: resolver unavailable for node_id=%s: %s",
-                envelope.node_id,
-                _resolve_exc,
-            )
-            return None
-
-        if resolved_impl is None:
-            # No mapping in device_node_map — fall back to local loading
-            return None
-
-        # Step 2: Build NodeActionRouter for the resolved node
-        node_name = resolved_impl.get("node", envelope.node_id)
-        router = NodeActionRouter(node_name)
-
-        # Attempt to get the facade for this node and register its actions
-        facade_actions_registered = False
-        try:
-            from nodes.common.node_facade import (  # noqa: PLC0415
-                ADBFacade,
-                BLEFacade,
-                MQTTFacade,
-                DesktopAutoFacade,
-                SerialFacade,
-            )
-
-            facade_map = {
-                "Node_33_ADB": ADBFacade,
-                "Node_34_Scrcpy": None,  # uses same ADBFacade
-                "Node_38_BLE": BLEFacade,
-                "Node_41_MQTT": MQTTFacade,
-                "Node_45_DesktopAuto": DesktopAutoFacade,
-                "Node_48_Serial": SerialFacade,
-            }
-            facade_cls = facade_map.get(node_name)
-            if facade_cls is not None:
-                # Create a temporary facade instance to register actions
-                import fastapi
-
-                temp_router = fastapi.APIRouter()
-                port = resolved_impl.get("port", 0)
-                facade = facade_cls(temp_router, base_url=f"http://localhost:{port}")
-                # The facade registers its actions in __init__ via _router
-                # We copy them into our router
-                for action_name in facade._router.supported_actions():
-                    handler = facade._router._handlers.get(action_name)
-                    if handler is not None:
-                        router.register(action_name, handler)
-                facade_actions_registered = True
-                logger.debug(
-                    "Fusion route: registered %d actions from %s facade",
-                    len(facade._router.supported_actions()),
-                    node_name,
-                )
-        except Exception as _facade_exc:  # noqa: BLE001
-            logger.debug(
-                "Fusion route: facade registration failed for %s: %s",
-                node_name,
-                _facade_exc,
-            )
-
-        if not facade_actions_registered:
-            # No facade available — cannot route through unified contract
-            return None
-
-        # Step 3: Route the action
-        invoke_req = InvokeRequest(
-            action=envelope.action,
-            params=envelope.params if isinstance(envelope.params, dict) else {},
-            timeout_ms=int(envelope.timeout_ms),
-            correlation_id=envelope.request_id,
-        )
-
         t0 = time.time()
         try:
-            response: UnifiedResponse = await router.handle(invoke_req)
-            duration_ms = (time.time() - t0) * 1000.0
+            from core.node_facade_local import get_local_node_facade  # noqa: PLC0415
 
-            if response.success:
+            facade = get_local_node_facade()
+            result = await facade.invoke(
+                node_id=envelope.node_id,
+                action=envelope.action,
+                params=envelope.params if isinstance(envelope.params, dict) else {},
+                device_id=getattr(envelope, "device_id", ""),
+                timeout_ms=int(envelope.timeout_ms),
+                trace_id=envelope.trace_id,
+            )
+
+            # Check if we should fall back
+            if result.get("fallback"):
                 logger.debug(
-                    "Fusion route OK | node=%s action=%s duration_ms=%.1f",
-                    node_name,
-                    envelope.action,
-                    duration_ms,
+                    "Golden Path: %s → fallback to legacy (reason: %s)",
+                    envelope.node_id,
+                    result.get("error", "unknown"),
                 )
-                return NodeInvocationResult(
-                    success=True,
-                    node_id=envelope.node_id,
-                    action=envelope.action,
-                    request_id=envelope.request_id,
-                    trace_id=envelope.trace_id,
-                    result=response.data,
-                    duration_ms=duration_ms,
-                    execution_mode="fusion_routed",
-                    execution_source=envelope.invocation_source.value,
-                )
-            else:
-                # Unified contract returned structured error
-                error_data = response.data.get("error", {}) if response.data else {}
-                error_msg = error_data.get("message", "Unknown fusion route error")
-                return NodeInvocationResult(
-                    success=False,
-                    node_id=envelope.node_id,
-                    action=envelope.action,
-                    request_id=envelope.request_id,
-                    trace_id=envelope.trace_id,
-                    error=f"Fusion route error: {error_msg}",
-                    duration_ms=(time.time() - t0) * 1000.0,
-                    execution_mode="fusion_routed",
-                    execution_source=envelope.invocation_source.value,
-                )
+                return None
 
-        except Exception as _route_exc:  # noqa: BLE001
+            # Golden Path succeeded
+            duration_ms = (time.time() - t0) * 1000.0
             logger.debug(
-                "Fusion route execution failed for node=%s action=%s: %s",
-                node_name,
+                "Golden Path OK | node=%s action=%s duration_ms=%.1f",
+                envelope.node_id,
                 envelope.action,
-                _route_exc,
+                duration_ms,
+            )
+            return NodeInvocationResult(
+                success=result.get("success", False),
+                node_id=envelope.node_id,
+                action=envelope.action,
+                request_id=envelope.request_id,
+                trace_id=envelope.trace_id,
+                result=result.get("result"),
+                error=result.get("error", ""),
+                duration_ms=result.get("duration_ms", duration_ms),
+                execution_mode=result.get("via", "golden_path"),
+                execution_source=envelope.invocation_source.value,
+            )
+
+        except Exception as _exc:  # noqa: BLE001
+            logger.debug(
+                "Golden Path error for node=%s: %s — falling back to legacy",
+                envelope.node_id,
+                _exc,
             )
             return None
 
