@@ -161,18 +161,27 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         from core.voice_wake_module import get_voice_wake  # noqa: PLC0415
         _vw = get_voice_wake()
         if _vw.is_available():
-            # Callback: emit STATE_EVENT to trigger LIMINAL phase
+            # Callback: trigger LIMINAL phase via handle_request.
+            # DesktopPresenceRuntime has no tristate_field; phase is driven
+            # exclusively through the handle_request lifecycle (SILENT→LIMINAL
+            #→MANIFEST→SILENT).  We fire a minimal wake-word request.
             def _on_wake_word():
-                try:
-                    from core.desktop_presence_runtime import (  # noqa: PLC0415
-                        get_desktop_presence_runtime,
-                    )
-                    dpr = get_desktop_presence_runtime()
-                    if dpr is not None:
-                        dpr.tristate_field.set_phase_liminal()
-                        logger.info("VoiceWake: 'Galaxy' detected → LIMINAL")
-                except Exception:
-                    pass
+                import asyncio as _asyncio
+                async def _wake_request():
+                    try:
+                        from core.desktop_presence_runtime import (  # noqa: PLC0415
+                            get_desktop_presence_runtime,
+                        )
+                        dpr = get_desktop_presence_runtime()
+                        if dpr is not None:
+                            await dpr.handle_request(
+                                message="[wake-word: Galaxy]",
+                                source="voice_wake",
+                            )
+                            logger.info("VoiceWake: 'Galaxy' detected → LIMINAL via handle_request")
+                    except Exception as _we:
+                        logger.debug("VoiceWake: handle_request failed: %s", _we)
+                _asyncio.create_task(_wake_request())
 
             started = _vw.start(callback=_on_wake_word)
             if started:
