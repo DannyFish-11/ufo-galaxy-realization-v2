@@ -465,6 +465,15 @@ class GalaxyUnified:
         self.l4_launcher = L4EnhancementLauncher(self.service_manager, self.config)
         self.web_ui = UnifiedWebUI(self.service_manager, self.config)
         self.running = False
+
+        # PR-DEVICE-RESOLUTION: LauncherAdapter — unified node contract bridge
+        try:
+            from launcher.launcher_adapter import LauncherAdapter
+            self.launcher_adapter = LauncherAdapter(self.node_launcher)
+            logger.info("LauncherAdapter initialised (mode=%s)", self.launcher_adapter.mode.value)
+        except Exception as e:
+            logger.warning("LauncherAdapter init failed (non-fatal): %s", e)
+            self.launcher_adapter = None
         
         # ===== 集成：初始化能力管理器和连接管理器 =====
         try:
@@ -726,6 +735,20 @@ class GalaxyUnified:
 
         # 并行执行所有启动任务
         await asyncio.gather(*tasks)
+
+        # PR-DEVICE-RESOLUTION: LauncherAdapter — observe core node mappings
+        if self.launcher_adapter is not None:
+            try:
+                adapter_result = await self.launcher_adapter.start()
+                logger.info(
+                    "LauncherAdapter: resolved=%d started=%d skipped=%d mode=%s",
+                    adapter_result.get("resolved", 0),
+                    adapter_result.get("started", 0),
+                    adapter_result.get("skipped", 0),
+                    adapter_result.get("mode", "?"),
+                )
+            except Exception as _adapt_err:
+                logger.debug("LauncherAdapter start skipped: %s", _adapt_err)
 
         # ── Phase A: NATS Bus + MasterBrain startup ──────────────────────────
         # PR-NATS-CORE: NATS now starts as a core component via start_nats_core()
