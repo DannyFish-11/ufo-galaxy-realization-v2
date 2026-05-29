@@ -545,7 +545,6 @@ window.addEventListener('beforeunload', () => {
 });
 
 // Keyboard shortcuts (dev mode only)
-// F12 is handled by Electron main.js (toggles React control panel)
 document.addEventListener('keydown', (e) => {
     // Ctrl+Shift+1/2/3 for manual phase switching (dev only)
     if (e.ctrlKey && e.shiftKey) {
