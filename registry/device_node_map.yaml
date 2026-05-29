@@ -1,0 +1,216 @@
+# Device-to-Node Resolution Map
+# =============================
+# PR-DEVICE-RESOLUTION: Maps AIP v3 device types / transports / capabilities
+# to their canonical Node implementations.
+#
+# This is the single source of truth for "which Node implements which device".
+# It is read by core/device_node_resolver.py at runtime.
+#
+# Three match paths (in priority order):
+#   1. device_type — exact AIPDeviceType match
+#   2. transport   — transport protocol match (ble, mqtt, serial, etc.)
+#   3. capabilities — capability set match (fallback)
+#
+# Startup policies:
+#   always_on  — start with core nodes, always available
+#   on_demand  — start when a matching device is registered in UDM
+#   lazy       — start on first use, then keep alive
+#   shared     — lightweight, start once, shared by many devices
+
+version: 1
+mappings:
+
+  # ── Android devices ──
+  - match:
+      device_type: android_phone
+    implementation:
+      node: Node_33_ADB
+      transport: adb
+      port: 8033
+      startup: on_demand
+      healthcheck: /health
+    capabilities:
+      provides: [GUI_READ, GUI_WRITE, INPUT_TOUCH, INPUT_VOICE, GUI_SCREENSHOT]
+      requires: []
+
+  - match:
+      device_type: android_tablet
+    implementation:
+      node: Node_33_ADB
+      transport: adb
+      port: 8033
+      startup: on_demand
+      healthcheck: /health
+    capabilities:
+      provides: [GUI_READ, GUI_WRITE, INPUT_TOUCH, INPUT_VOICE, GUI_SCREENSHOT]
+      requires: []
+
+  - match:
+      device_type: android_tv
+    implementation:
+      node: Node_33_ADB
+      transport: adb
+      port: 8033
+      startup: on_demand
+      healthcheck: /health
+    capabilities:
+      provides: [GUI_READ, INPUT_VOICE]
+      requires: []
+
+  # Scrcpy is a lighter alternative for Android screen mirroring
+  - match:
+      device_type: android_phone
+      transport: scrcpy
+    implementation:
+      node: Node_34_Scrcpy
+      transport: scrcpy
+      port: 8034
+      startup: lazy
+      healthcheck: /health
+    capabilities:
+      provides: [GUI_READ, GUI_STREAM, INPUT_TOUCH]
+      requires: []
+    note: "lighter alternative to ADB for screen-only use cases"
+
+  # ── Bluetooth LE ──
+  - match:
+      transport: ble
+    implementation:
+      node: Node_38_BLE
+      transport: ble
+      port: 8038
+      startup: lazy
+      healthcheck: /health
+    capabilities:
+      provides: [COMM_BLUETOOTH, SENSOR_MOTION]
+      requires: []
+
+  # ── MQTT IoT ──
+  - match:
+      transport: mqtt
+    implementation:
+      node: Node_41_MQTT
+      transport: mqtt
+      port: 8041
+      startup: shared
+      healthcheck: /health
+    capabilities:
+      provides: [COMM_MQTT]
+      requires: []
+
+  # ── CAN bus (automotive/industrial) ──
+  - match:
+      transport: can
+    implementation:
+      node: Node_42_CANbus
+      transport: can
+      port: 8042
+      startup: on_demand
+      healthcheck: /health
+    capabilities:
+      provides: [COMM_CAN]
+      requires: []
+
+  # ── NFC ──
+  - match:
+      transport: nfc
+    implementation:
+      node: Node_44_NFC
+      transport: nfc
+      port: 8044
+      startup: lazy
+      healthcheck: /health
+    capabilities:
+      provides: [COMM_NFC]
+      requires: []
+
+  # ── Desktop automation ──
+  - match:
+      device_type: windows_desktop
+    implementation:
+      node: Node_45_DesktopAuto
+      transport: uiauto
+      port: 8045
+      startup: on_demand
+      healthcheck: /health
+    capabilities:
+      provides: [GUI_READ, GUI_WRITE, INPUT_KEYBOARD, INPUT_MOUSE, GUI_SCREENSHOT]
+      requires: []
+
+  - match:
+      device_type: linux_desktop
+    implementation:
+      node: Node_45_DesktopAuto
+      transport: uiauto
+      port: 8045
+      startup: on_demand
+      healthcheck: /health
+    capabilities:
+      provides: [GUI_READ, GUI_WRITE, INPUT_KEYBOARD, INPUT_MOUSE, GUI_SCREENSHOT]
+      requires: []
+
+  - match:
+      device_type: macos_desktop
+    implementation:
+      node: Node_45_DesktopAuto
+      transport: uiauto
+      port: 8045
+      startup: on_demand
+      healthcheck: /health
+    capabilities:
+      provides: [GUI_READ, GUI_WRITE, INPUT_KEYBOARD, INPUT_MOUSE, GUI_SCREENSHOT]
+      requires: []
+
+  # ── Camera ──
+  - match:
+      capabilities: [SENSOR_CAMERA]
+    implementation:
+      node: Node_46_Camera
+      transport: camera
+      port: 8046
+      startup: lazy
+      healthcheck: /health
+    capabilities:
+      provides: [SENSOR_CAMERA, GUI_STREAM]
+      requires: []
+
+  # ── Audio / Microphone ──
+  - match:
+      capabilities: [SENSOR_MIC]
+    implementation:
+      node: Node_47_Audio
+      transport: audio
+      port: 8047
+      startup: shared
+      healthcheck: /health
+    capabilities:
+      provides: [SENSOR_MIC, INPUT_VOICE]
+      requires: []
+
+  # ── Serial / UART ──
+  - match:
+      transport: serial
+    implementation:
+      node: Node_48_Serial
+      transport: serial
+      port: 8049
+      startup: on_demand
+      healthcheck: /health
+    capabilities:
+      provides: [COMM_SERIAL]
+      requires: []
+
+  # ── OctoPrint (3D printer) ──
+  - match:
+      device_type: iot_generic
+      transport: http
+    implementation:
+      node: Node_49_OctoPrint
+      transport: http
+      port: 8050
+      startup: lazy
+      healthcheck: /health
+    capabilities:
+      provides: [GUI_READ, GUI_WRITE]
+      requires: []
+    note: "3D printer via OctoPrint REST API"
