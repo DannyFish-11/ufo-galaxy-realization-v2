@@ -76,7 +76,7 @@ async def _async_push_phase_to_all_devices(
             "timestamp": int(time.time() * 1000),
             "session_id": session_id,
             "trace_id": trace_id or session_id,
-            "_aip_version": "3.0",
+            "aip_version": "3.0",
             # Detailed payload
             "payload": {
                 "from_phase": old_phase,
@@ -154,7 +154,7 @@ async def push_task_state_to_device(
             "timestamp": int(time.time() * 1000),
             "session_id": session_id,
             "trace_id": trace_id,
-            "_aip_version": "3.0",
+            "aip_version": "3.0",
             "payload": {
                 "task_status": task_status,
                 "task_result": task_result,

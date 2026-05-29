@@ -439,7 +439,7 @@ def register_websocket_routes(app: FastAPI) -> None:
                             "timestamp": int(time.time() * 1000),
                             "reason": payload.get("reason", "") if payload else "",
                             "result": payload.get("result") if payload else None,
-                            "_aip_version": "3.0",
+                            "aip_version": "3.0",
                             # Legacy backward-compatible fields
                             "phase": phase,
                         }))
@@ -466,7 +466,7 @@ def register_websocket_routes(app: FastAPI) -> None:
                         "event_action": phase,
                         "device_id": "desktop_presence",
                         "timestamp": int(time.time() * 1000),
-                        "_aip_version": "3.0",
+                        "aip_version": "3.0",
                         "phase": phase,  # legacy backward-compatible
                     }))
                 else:

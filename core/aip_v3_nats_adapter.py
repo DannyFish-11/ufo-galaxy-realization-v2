@@ -114,7 +114,7 @@ def to_aip_device_register(registration: Any) -> Dict[str, Any]:
             "capabilities": data.get("capabilities", []),
             "metadata": data.get("metadata", {}),
             "timestamp": _now_ms(),
-            "_aip_version": "3.0",
+            "aip_version": "3.0",
         }
     except Exception as exc:
         logger.debug("to_aip_device_register conversion failed: %s", exc)
@@ -135,7 +135,7 @@ def to_aip_heartbeat(heartbeat: Any) -> Dict[str, Any]:
             "status": data.get("status", "online"),
             "metadata": data.get("metadata", {}),
             "timestamp": data.get("timestamp") or _now_ms(),
-            "_aip_version": "3.0",
+            "aip_version": "3.0",
         }
     except Exception as exc:
         logger.debug("to_aip_heartbeat conversion failed: %s", exc)
@@ -160,7 +160,7 @@ def to_aip_task_assign(dispatch: Any) -> Dict[str, Any]:
             "timeout_ms": data.get("timeout_ms", 30000),
             "trace_id": data.get("trace_id", ""),
             "timestamp": _now_ms(),
-            "_aip_version": "3.0",
+            "aip_version": "3.0",
         }
     except Exception as exc:
         logger.debug("to_aip_task_assign conversion failed: %s", exc)
@@ -191,7 +191,7 @@ def to_aip_task_result(result: Any) -> Dict[str, Any]:
             "duration_ms": data.get("duration_ms", 0),
             "trace_id": data.get("trace_id", ""),
             "timestamp": _now_ms(),
-            "_aip_version": "3.0",
+            "aip_version": "3.0",
         }
     except Exception as exc:
         logger.debug("to_aip_task_result conversion failed: %s", exc)
@@ -213,7 +213,7 @@ def to_aip_worker_shutdown(shutdown: Any) -> Dict[str, Any]:
             "status": "offline",
             "reason": data.get("reason", "shutdown"),
             "timestamp": _now_ms(),
-            "_aip_version": "3.0",
+            "aip_version": "3.0",
         }
     except Exception as exc:
         logger.debug("to_aip_worker_shutdown conversion failed: %s", exc)
@@ -242,7 +242,7 @@ def to_aip_agent_event(event: Any) -> Dict[str, Any]:
             "payload": data.get("payload", {}),
             "timestamp": data.get("timestamp") or _now_ms(),
             "trace_id": data.get("trace_id", ""),
-            "_aip_version": "3.0",
+            "aip_version": "3.0",
         }
     except Exception as exc:
         logger.debug("to_aip_agent_event conversion failed: %s", exc)
@@ -347,7 +347,7 @@ def to_aip_v3(legacy_msg: Any, msg_kind: str = "") -> Dict[str, Any]:
     Returns:
         AIP v3 message dict with "type" field set.
     """
-    if isinstance(legacy_msg, dict) and legacy_msg.get("type") and legacy_msg.get("_aip_version"):
+    if isinstance(legacy_msg, dict) and legacy_msg.get("type") and legacy_msg.get("aip_version"):
         # Already AIP v3
         return legacy_msg
 
@@ -386,6 +386,6 @@ def to_aip_v3(legacy_msg: Any, msg_kind: str = "") -> Dict[str, Any]:
         "type": msg_kind or "unknown",
         "payload": data,
         "timestamp": _now_ms(),
-        "_aip_version": "3.0",
+        "aip_version": "3.0",
         "_aip_auto_detected": False,
     }

@@ -124,7 +124,7 @@ class AIPMessage(BaseModel):
         default_factory=lambda: f"corr_{uuid.uuid4().hex[:8]}",
         description="Message-level correlation ID for request/response pairing",
     )
-    _aip_version: str = Field(default="3.0", description="AIP protocol version")
+    aip_version: str = Field(default="3.0", description="AIP protocol version")
 
     class Config:
         populate_by_name = True
@@ -494,8 +494,14 @@ _MSG_TYPE_TO_CLASS: Dict[MsgType, type] = {
     MsgType.TASK_RESULT: TaskResultMsg,
     MsgType.TASK_CANCEL: TaskCancelMsg,
     MsgType.CANCEL_RESULT: CancelResultMsg,
+    MsgType.TASK_SUBMIT: TaskAssignMsg,
+    MsgType.COMMAND_RESULT: TaskResultMsg,
+    MsgType.PARALLEL_SUBTASK: TaskAssignMsg,
+    MsgType.OPERATOR_ACTION_REQUEST: TaskAssignMsg,
+    MsgType.OPERATOR_ACTION_RESULT: TaskResultMsg,
+    MsgType.BROADCAST: StateEventMsg,
     MsgType.GOAL_EXECUTION: GoalExecutionMsg,
-    MsgType.GOAL_RESULT: GoalResultMsg,
+    MsgType.GOAL_RESULT: GoalExecutionResultMsg,  # alias for GOAL_EXECUTION_RESULT
     MsgType.GOAL_EXECUTION_RESULT: GoalExecutionResultMsg,
     MsgType.MESH_JOIN: MeshJoinMsg,
     MsgType.MESH_LEAVE: MeshLeaveMsg,

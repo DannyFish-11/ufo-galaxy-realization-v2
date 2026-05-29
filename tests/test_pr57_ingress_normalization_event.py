@@ -302,7 +302,7 @@ class TestNormalizedIngressEventConstruction:
         after = time.time()
         assert before <= event.ingress_ts <= after + 1.0
 
-    def test_17_aip_version_defaults_3_0(self):
+    def test_17aip_version_defaults_3_0(self):
         from galaxy_gateway.protocol.normalized_ingress_event import (
             NormalizedIngressEvent
         )
@@ -367,7 +367,7 @@ class TestFromNormalizedDict:
         assert event.trace_id is not None
         assert len(event.trace_id) > 0
 
-    def test_26_version_preserved_in_aip_version(self):
+    def test_26_version_preserved_inaip_version(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
         d = _make_aip_v3_dict()
         event = from_normalized_dict(d)

@@ -954,7 +954,7 @@ class NATSBus:
     def _wrap_aip_v3_callback(callback: Callable) -> Callable:
         """Wrap a callback so AIP v3 messages are auto-converted to legacy format.
 
-        When a subscriber receives an AIP v3 message (has "type" and "_aip_version"),
+        When a subscriber receives an AIP v3 message (has "type" and "aip_version"),
         it is converted to a flat dict matching the legacy format before being
         passed to the callback. Non-AIP-v3 messages pass through unchanged.
 
@@ -968,7 +968,7 @@ class NATSBus:
             return callback
 
         async def _async_wrapper(data: dict):
-            if isinstance(data, dict) and data.get("_aip_version"):
+            if isinstance(data, dict) and data.get("aip_version"):
                 data = from_aip_to_legacy(data)
             if asyncio.iscoroutinefunction(callback):
                 await callback(data)
@@ -976,7 +976,7 @@ class NATSBus:
                 callback(data)
 
         def _sync_wrapper(data: dict):
-            if isinstance(data, dict) and data.get("_aip_version"):
+            if isinstance(data, dict) and data.get("aip_version"):
                 data = from_aip_to_legacy(data)
             callback(data)
 
