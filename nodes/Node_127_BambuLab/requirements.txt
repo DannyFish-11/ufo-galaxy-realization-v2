@@ -2,3 +2,6 @@ fastapi>=0.109.0
 uvicorn>=0.27.0
 pydantic>=2.5.3
 requests==2.31.0
+
+# Device-specific dependencies (auto-detected)
+paho-mqtt>=1.6.1

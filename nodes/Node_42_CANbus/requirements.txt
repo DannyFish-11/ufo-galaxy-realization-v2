@@ -2,3 +2,6 @@ fastapi>=0.109.0
 uvicorn>=0.27.0
 pydantic>=2.5.3
 python-can>=4.3.1
+
+# Device-specific dependencies (auto-detected)
+python-can>=4.3.0

@@ -1,2 +1,7 @@
 websockets
 requests # 模拟 PixVerse API 调用
+
+# Device-specific dependencies (auto-detected)
+fastapi>=0.1.0
+httpx>=0.25.0
+uvicorn[standard]>=0.27.0

@@ -3,3 +3,6 @@ uvicorn>=0.27.0
 pydantic>=2.5.3
 sounddevice>=0.4.6
 scipy>=1.11.0
+
+# Device-specific dependencies (auto-detected)
+numpy>=1.24.0

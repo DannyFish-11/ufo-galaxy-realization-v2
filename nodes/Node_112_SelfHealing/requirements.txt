@@ -3,3 +3,8 @@ uvicorn>=0.27.0
 pydantic>=2.5.3
 requests==2.31.0
 python-multipart>=0.0.6
+
+# Device-specific dependencies (auto-detected)
+aiohttp>=3.9.0
+httpx>=0.25.0
+psutil>=5.9.0

@@ -2,3 +2,7 @@ fastapi>=0.109.0
 uvicorn>=0.27.0
 pydantic>=2.5.3
 nfcpy>=1.0.4
+
+# Device-specific dependencies (auto-detected)
+ndeflib>=0.3.3
+nfcpy>=1.0.4

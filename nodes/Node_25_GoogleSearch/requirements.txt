@@ -4,3 +4,6 @@ pydantic>=2.5.3
 googlesearch-python>=1.2.3
 requests>=2.31.0
 httpx>=0.26.0
+
+# Device-specific dependencies (auto-detected)
+googlesearch-python>=1.2.3

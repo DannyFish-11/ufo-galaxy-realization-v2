@@ -1,1 +1,7 @@
 # No external dependencies beyond the Python standard library
+
+# Device-specific dependencies (auto-detected)
+cryptography>=41.0.0
+fastapi>=0.1.0
+pydantic>=0.1.0
+uvicorn[standard]>=0.27.0
