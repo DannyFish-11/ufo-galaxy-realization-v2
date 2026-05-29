@@ -1,17 +1,25 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
+
+# Security: non-root user
+RUN groupadd -r galaxy && useradd -r -g galaxy -s /bin/false galaxy
 
 WORKDIR /app
 
+# Install common dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copy node code
+COPY . /app/
 
-EXPOSE 8123
-
-RUN addgroup --system --gid 1000 galaxy \
-    && adduser --system --uid 1000 --ingroup galaxy --no-create-home galaxy \
-    && chown -R galaxy:galaxy /app
+# Switch to non-root
 USER galaxy
+
+# Expose service port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
 CMD ["python", "main.py"]

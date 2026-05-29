@@ -1,31 +1,25 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
+
+# Security: non-root user
+RUN groupadd -r galaxy && useradd -r -g galaxy -s /bin/false galaxy
 
 WORKDIR /app
 
-# 安装 Tesseract OCR（降级引擎）及多语言包
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    tesseract-ocr \
-    tesseract-ocr-chi-sim \
-    tesseract-ocr-chi-tra \
-    tesseract-ocr-jpn \
-    tesseract-ocr-kor \
-    libtesseract-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Install common dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 安装 Python 依赖
-RUN pip install --no-cache-dir \
-    aiohttp \
-    Pillow \
-    pytesseract \
-    httpx
+# Copy node code
+COPY . /app/
 
-COPY . .
-
-EXPOSE 8015
-
-RUN addgroup --system --gid 1000 galaxy && adduser --system --uid 1000 --ingroup galaxy --no-create-home galaxy
-RUN chown -R galaxy:galaxy /app
+# Switch to non-root
 USER galaxy
+
+# Expose service port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
 CMD ["python", "main.py"]
