@@ -61,6 +61,7 @@ from galaxy_gateway.routes import (
     sessions_router,
     chat_router,
     llm_router,
+    swarm as swarm_router,
     register_websocket_routes,
     _handle_android_ws,  # re-exported: tests import from here
 )
@@ -119,6 +120,7 @@ app.include_router(tasks_router)
 app.include_router(sessions_router)
 app.include_router(chat_router)
 app.include_router(llm_router)
+app.include_router(swarm_router.router)
 
 try:
     from galaxy_gateway.routes.android_vlm import router as android_vlm_router

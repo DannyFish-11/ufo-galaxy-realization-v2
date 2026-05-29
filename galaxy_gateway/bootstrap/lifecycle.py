@@ -106,6 +106,14 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     except Exception as e:
         logger.warning("MultiLLMRouter unavailable: %s", e)
 
+    # ── Phase 7: Agent Swarm Coordinator ──
+    try:
+        from core.swarm_coordinator import SwarmCoordinator
+        app.state.swarm_coordinator = SwarmCoordinator()
+        logger.info("Agent Swarm Coordinator initialized")
+    except Exception as e:
+        logger.warning("SwarmCoordinator unavailable (swarm endpoint will degrade): %s", e)
+
     logger.info("Galaxy Gateway initialized successfully")
 
     # ── PR-STABILITY-INIT: Initialize dead-code modules into startup chain ──
