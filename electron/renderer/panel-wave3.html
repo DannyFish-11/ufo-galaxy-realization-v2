@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UFO Galaxy // Control Panel</title>
+    <!-- Fonts: Inter for UI, JetBrains Mono for data -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        /* ============================================
+           RESET & BASE
+        ============================================ */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* Aurora-Glass Fluidic Color System */
+            --midnight: #0B0C10;
+            --nebula: #2A1B4E;
+            --aurora: #0A3F47;
+            --crystal: #FFFFFF;
+            --glimmer: rgba(255, 255, 255, 0.6);
+            --quantum: #00E5FF;
+
+            /* macOS Three-State Dots */
+            --dot-silent: #FF5F57;
+            --dot-liminal: #FFBD2E;
+            --dot-manifest: #28C840;
+
+            /* Glass Material */
+            --glass-bg: rgba(255, 255, 255, 0.04);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-blur: blur(24px);
+            --card-bg: rgba(255, 255, 255, 0.02);
+            --card-border: rgba(255, 255, 255, 0.04);
+            --card-blur: blur(16px);
+
+            /* Typography */
+            --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+
+            /* Spacing */
+            --sidebar-w: 240px;
+            --radius-outer: 20px;
+            --radius-inner: 10px;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: var(--font-ui);
+            color: var(--crystal);
+            background: var(--midnight);
+        }
+
+        /* ============================================
+           LAYER 0: Fluid Background (Z-1)
+           Slow-drifting aurora gradient
+        ============================================ */
+        .fluid-bg {
+            position: fixed;
+            inset: 0;
+            z-index: 1;
+            background:
+                radial-gradient(ellipse 80% 60% at 20% 80%, rgba(42, 27, 78, 0.6) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 80% at 80% 20%, rgba(10, 63, 71, 0.5) 0%, transparent 55%),
+                radial-gradient(ellipse 50% 50% at 50% 50%, rgba(42, 27, 78, 0.15) 0%, transparent 70%),
+                var(--midnight);
+            animation: fluidDrift 20s ease-in-out infinite alternate;
+        }
+
+        @keyframes fluidDrift {
+            0% {
+                background-position: 0% 0%, 100% 100%, 50% 50%, 0 0;
+                filter: hue-rotate(0deg);
+            }
+            100% {
+                background-position: 10% 5%, 90% 95%, 45% 55%, 0 0;
+                filter: hue-rotate(8deg);
+            }
+        }
+
+        /* ============================================
+           LAYER 1: Mouse Follow Spotlight (Z-2)
+           300px aurora glow at cursor, 5% opacity
+        ============================================ */
+        .mouse-spotlight {
+            position: fixed;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0, 229, 255, 0.05) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 2;
+            transform: translate(-50%, -50%);
+            transition: left 0.15s ease-out, top 0.15s ease-out;
+            will-change: left, top;
+        }
+
+        /* ============================================
+           LAYOUT: Sidebar + Main (Z-10)
+        ============================================ */
+        .app-shell {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            width: 100%;
+            height: 100vh;
+            padding: 16px;
+            gap: 16px;
+        }
+
+        /* ============================================
+           SIDEBAR (Left)
+           24px blur, 0.04 white transparency
+        ============================================ */
+        .sidebar {
+            width: var(--sidebar-w);
+            min-width: var(--sidebar-w);
+            height: 100%;
+            background: var(--glass-bg);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-outer);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            padding: 24px 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Sidebar Header */
+        .sidebar-header {
+            padding: 0 24px 20px;
+            border-bottom: 1px solid var(--glass-border);
+            margin-bottom: 8px;
+        }
+
+        .sidebar-brand {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .sidebar-sub {
+            font-family: var(--font-mono);
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: var(--quantum);
+            margin-top: 4px;
+            opacity: 0.7;
+        }
+
+        /* Navigation Menu */
+        .nav-menu {
+            flex: 1;
+            padding: 16px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            overflow-y: auto;
+        }
+
+        .nav-section {
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.3);
+            padding: 16px 12px 8px;
+            pointer-events: none;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            border-radius: var(--radius-inner);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            font-size: 13px;
+            font-weight: 400;
+            color: var(--glimmer);
+            user-select: none;
+        }
+
+        .nav-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        /* Active state: "pressed depression" — inset shadow */
+        .nav-item.active {
+            background: rgba(0, 0, 0, 0.2);
+            color: var(--crystal);
+            box-shadow:
+                inset 0 2px 4px rgba(0, 0, 0, 0.6),
+                0 1px 0px rgba(255, 255, 255, 0.1);
+            font-weight: 500;
+        }
+
+        /* Active: breathing border */
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: var(--radius-inner);
+            border: 1px solid rgba(0, 229, 255, 0.15);
+            animation: breatheBorder 3s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        @keyframes breatheBorder {
+            0%, 100% { border-color: rgba(0, 229, 255, 0.08); }
+            50% { border-color: rgba(0, 229, 255, 0.25); }
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+
+        .nav-item:hover .nav-icon,
+        .nav-item.active .nav-icon {
+            opacity: 1;
+        }
+
+        /* ============================================
+           THREE-STATE INDICATOR (Bottom-Left)
+           macOS-style three dots
+        ============================================ */
+        .state-indicator {
+            position: absolute;
+            bottom: 20px;
+            left: 24px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            z-index: 20;
+        }
+
+        .state-dots {
+            display: flex;
+            gap: 8px;
+        }
+
+        .state-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            position: relative;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
+        }
+
+        /* Silent — Red (#FF5F57) */
+        .state-dot.silent {
+            background: linear-gradient(145deg, #FF5F57, #E0443C);
+        }
+
+        /* Liminal — Yellow (#FFBD2E) */
+        .state-dot.liminal {
+            background: linear-gradient(145deg, #FFBD2E, #E5A827);
+        }
+
+        /* Manifest — Green (#28C840) */
+        .state-dot.manifest {
+            background: linear-gradient(145deg, #28C840, #1FA834);
+        }
+
+        /* Inactive dots: dimmed */
+        .state-dot.inactive {
+            opacity: 0.15;
+            transform: scale(0.85);
+            filter: grayscale(0.6);
+        }
+
+        /* Active dot: glow + pulse */
+        .state-dot.active {
+            opacity: 1;
+            transform: scale(1);
+            animation: dotPulse 2.5s ease-in-out infinite;
+        }
+
+        .state-dot.active::after {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 1.5px solid currentColor;
+            opacity: 0.4;
+            animation: dotRing 2.5s ease-in-out infinite;
+        }
+
+        .state-dot.silent.active::after   { border-color: #FF5F57; }
+        .state-dot.liminal.active::after  { border-color: #FFBD2E; }
+        .state-dot.manifest.active::after { border-color: #28C840; }
+
+        @keyframes dotPulse {
+            0%, 100% { box-shadow: 0 0 8px currentColor, inset 0 1px 2px rgba(0,0,0,0.3); }
+            50%      { box-shadow: 0 0 20px currentColor, inset 0 1px 2px rgba(0,0,0,0.3); }
+        }
+
+        @keyframes dotRing {
+            0%, 100% { transform: scale(1); opacity: 0.4; }
+            50%      { transform: scale(1.5); opacity: 0; }
+        }
+
+        .state-label {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--glimmer);
+            opacity: 0.7;
+        }
+
+        /* ============================================
+           MAIN CONTENT (Right)
+        ============================================ */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow: hidden;
+        }
+
+        /* Top bar */
+        .top-bar {
+            height: 56px;
+            background: var(--glass-bg);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-outer);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+        }
+
+        .page-title {
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .status-pip {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--dot-manifest);
+            box-shadow: 0 0 6px var(--dot-manifest);
+            animation: pipBreathe 3s ease-in-out infinite;
+        }
+
+        @keyframes pipBreathe {
+            0%, 100% { opacity: 0.7; }
+            50%      { opacity: 1; }
+        }
+
+        /* Content grid */
+        .content-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            grid-template-rows: repeat(2, 1fr);
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        /* Glass Card */
+        .glass-card {
+            background: var(--card-bg);
+            backdrop-filter: var(--card-blur);
+            -webkit-backdrop-filter: var(--card-blur);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-outer);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glass-card:hover {
+            border-color: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        /* 1px crystal edge highlight */
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: var(--radius-outer);
+            padding: 1px;
+            background: linear-gradient(
+                180deg,
+                rgba(255, 255, 255, 0.12) 0%,
+                rgba(255, 255, 255, 0.02) 30%,
+                transparent 60%,
+                rgba(255, 255, 255, 0.04) 100%
+            );
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+
+        .card-title {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--quantum);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* Info Row */
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-size: 12px;
+        }
+
+        .info-label {
+            color: rgba(255, 255, 255, 0.4);
+            font-weight: 400;
+        }
+
+        .info-value {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.75);
+            font-weight: 500;
+        }
+
+        .info-value.accent {
+            color: var(--quantum);
+        }
+
+        .info-value.dim {
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Placeholder visualization */
+        .placeholder-chart {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            padding-top: 16px;
+            min-height: 80px;
+        }
+
+        .bar {
+            flex: 1;
+            background: linear-gradient(to top, rgba(0, 229, 255, 0.3), rgba(0, 229, 255, 0.08));
+            border-radius: 3px 3px 0 0;
+            transition: height 0.3s ease;
+            min-height: 8px;
+        }
+
+        .bar:nth-child(3n) {
+            background: linear-gradient(to top, rgba(42, 27, 78, 0.5), rgba(42, 27, 78, 0.15));
+        }
+
+        .bar:nth-child(3n+2) {
+            background: linear-gradient(to top, rgba(10, 63, 71, 0.5), rgba(10, 63, 71, 0.15));
+        }
+
+        /* Placeholder mesh visualization */
+        .mesh-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            padding-top: 8px;
+        }
+
+        .mesh-node {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-mono);
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.25);
+            transition: all 0.3s ease;
+        }
+
+        .mesh-node:hover {
+            background: rgba(0, 229, 255, 0.08);
+            border-color: rgba(0, 229, 255, 0.2);
+            color: rgba(0, 229, 255, 0.7);
+        }
+
+        .mesh-node.active {
+            background: rgba(40, 200, 64, 0.1);
+            border-color: rgba(40, 200, 64, 0.3);
+            color: rgba(40, 200, 64, 0.8);
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+    </style>
+</head>
+<body>
+    <!-- Layer 0: Fluid Background -->
+    <div class="fluid-bg"></div>
+
+    <!-- Layer 1: Mouse Spotlight -->
+    <div class="mouse-spotlight" id="mouseSpotlight"></div>
+
+    <!-- Layer 10: App Shell -->
+    <div class="app-shell">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-brand">UFO Galaxy</div>
+                <div class="sidebar-sub">Control Panel // v3.0</div>
+            </div>
+
+            <nav class="nav-menu">
+                <div class="nav-section">System</div>
+                <div class="nav-item active">
+                    <span class="nav-icon">◈</span>
+                    <span>Overview</span>
+                </div>
+                <div class="nav-item">
+                    <span class="nav-icon">◎</span>
+                    <span>Model Routing</span>
+                </div>
+                <div class="nav-item">
+                    <span class="nav-icon">◇</span>
+                    <span>Hardware</span>
+                </div>
+
+                <div class="nav-section">Network</div>
+                <div class="nav-item">
+                    <span class="nav-icon">⚯</span>
+                    <span>Mesh Topology</span>
+                </div>
+                <div class="nav-item">
+                    <span class="nav-icon">◉</span>
+                    <span>Connected Devices</span>
+                </div>
+
+                <div class="nav-section">Runtime</div>
+                <div class="nav-item">
+                    <span class="nav-icon">▣</span>
+                    <span>Task Pipeline</span>
+                </div>
+                <div class="nav-item">
+                    <span class="nav-icon">◐</span>
+                    <span>Agent Dispatch</span>
+                </div>
+            </nav>
+
+            <!-- Three-State Indicator (Bottom-Left) -->
+            <div class="state-indicator">
+                <div class="state-dots">
+                    <div class="state-dot silent active" title="Silent"></div>
+                    <div class="state-dot liminal inactive" title="Liminal"></div>
+                    <div class="state-dot manifest inactive" title="Manifest"></div>
+                </div>
+                <span class="state-label">Silent</span>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <header class="top-bar">
+                <h1 class="page-title">System Overview</h1>
+                <div class="system-status">
+                    <span class="status-pip"></span>
+                    <span>System Online</span>
+                </div>
+            </header>
+
+            <!-- Content Grid -->
+            <div class="content-grid">
+                <!-- Card 1: Status -->
+                <div class="glass-card">
+                    <div class="card-title">● Status</div>
+                    <div class="card-content">
+                        <div class="info-row">
+                            <span class="info-label">Local Brain</span>
+                            <span class="info-value accent">Gemma 4 E4B</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">API Brain</span>
+                            <span class="info-value dim">--</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Active Route</span>
+                            <span class="info-value">Local</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Phase</span>
+                            <span class="info-value accent">SILENT</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: Hardware -->
+                <div class="glass-card">
+                    <div class="card-title">● Hardware</div>
+                    <div class="card-content">
+                        <div class="info-row">
+                            <span class="info-label">GPU</span>
+                            <span class="info-value">Detecting...</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">GPU Temp</span>
+                            <span class="info-value">-- C</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">VRAM</span>
+                            <span class="info-value">-- / -- GB</span>
+                        </div>
+                        <div class="placeholder-chart">
+                            <div class="bar" style="height: 30%"></div>
+                            <div class="bar" style="height: 55%"></div>
+                            <div class="bar" style="height: 40%"></div>
+                            <div class="bar" style="height: 70%"></div>
+                            <div class="bar" style="height: 45%"></div>
+                            <div class="bar" style="height: 60%"></div>
+                            <div class="bar" style="height: 35%"></div>
+                            <div class="bar" style="height: 80%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 3: Mesh -->
+                <div class="glass-card">
+                    <div class="card-title">● Mesh Topology</div>
+                    <div class="card-content">
+                        <div class="mesh-grid">
+                            <div class="mesh-node active">V2</div>
+                            <div class="mesh-node">--</div>
+                            <div class="mesh-node">--</div>
+                            <div class="mesh-node">--</div>
+                            <div class="mesh-node">--</div>
+                            <div class="mesh-node">--</div>
+                            <div class="mesh-node">--</div>
+                            <div class="mesh-node">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 4: Devices -->
+                <div class="glass-card">
+                    <div class="card-title">● Devices</div>
+                    <div class="card-content">
+                        <div class="info-row">
+                            <span class="info-label">Android</span>
+                            <span class="info-value dim">Not connected</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Mesh Nodes</span>
+                            <span class="info-value">0</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">NATS</span>
+                            <span class="info-value accent">Online</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ============================================
+        // Mouse Follow Spotlight
+        // ============================================
+        const spotlight = document.getElementById('mouseSpotlight');
+        let mouseX = window.innerWidth / 2;
+        let mouseY = window.innerHeight / 2;
+        let currentX = mouseX;
+        let currentY = mouseY;
+
+        document.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        function animateSpotlight() {
+            currentX += (mouseX - currentX) * 0.08;
+            currentY += (mouseY - currentY) * 0.08;
+            spotlight.style.left = currentX + 'px';
+            spotlight.style.top = currentY + 'px';
+            requestAnimationFrame(animateSpotlight);
+        }
+        animateSpotlight();
+
+        // ============================================
+        // Nav Item Click (visual only)
+        // ============================================
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+            });
+        });
+
+        // ============================================
+        // Demo: Cycle through three states every 5s
+        // ============================================
+        const states = [
+            { phase: 'Silent',   dot: 'silent',   color: '#FF5F57' },
+            { phase: 'Liminal',  dot: 'liminal',  color: '#FFBD2E' },
+            { phase: 'Manifest', dot: 'manifest', color: '#28C840' }
+        ];
+        let stateIndex = 0;
+
+        function cycleState() {
+            const dots = document.querySelectorAll('.state-dot');
+            dots.forEach(d => { d.classList.remove('active', 'inactive'); d.classList.add('inactive'); });
+
+            const activeDot = document.querySelector(`.state-dot.${states[stateIndex].dot}`);
+            if (activeDot) { activeDot.classList.remove('inactive'); activeDot.classList.add('active'); }
+
+            const label = document.querySelector('.state-label');
+            if (label) label.textContent = states[stateIndex].phase;
+
+            stateIndex = (stateIndex + 1) % states.length;
+        }
+
+        // Initial state
+        cycleState();
+        stateIndex = 1; // next will be Liminal
+
+        // Auto-cycle every 5 seconds (demo only)
+        setInterval(cycleState, 5000);
+    </script>
+</body>
+</html>

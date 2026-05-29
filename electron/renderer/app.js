@@ -44,7 +44,9 @@ class ThreeStateManager {
         this.ws = null;
         this.wsReconnectInterval = 3000;
         this.wsReconnectTimer = null;
-        this.wsUrl = 'ws://localhost:16201/ws/desktop-presence';
+        // PR-WEBSOCKET-PORT-FIX: /ws/desktop-presence is served by Galaxy Gateway
+        // on port 8765 (gateway port), NOT on web_ui_port (16201).
+        this.wsUrl = 'ws://localhost:8765/ws/desktop-presence';
 
         // UI elements
         this.wsStatusEl = document.getElementById('ws-status');
