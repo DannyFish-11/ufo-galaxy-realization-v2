@@ -80,6 +80,9 @@ class SilentState {
         this.pointLight2 = new THREE.PointLight(0x607080, 0.4, 10);
         this.pointLight2.position.set(-2, -1, 2);
 
+        // PR-VISUAL-AMBIENT: Floating ambient particles
+        this._buildAmbientParticles();
+
         this.scene.add(this.ambientLight);
         this.scene.add(this.pointLight1);
         this.scene.add(this.pointLight2);
@@ -87,6 +90,82 @@ class SilentState {
 
         // Initially hidden
         this.setVisible(false);
+    }
+
+    _buildAmbientParticles() {
+        // PR-VISUAL-AMBIENT: Create floating micro-particles around the avatar
+        const particleCount = 60;
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const velocities = new Float32Array(particleCount * 3);
+
+        for (let i = 0; i < particleCount; i++) {
+            // Distribute in a sphere around the avatar
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2 * Math.random() - 1);
+            const r = 0.5 + Math.random() * 1.5; // 0.5 to 2.0 units away
+
+            positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+            positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+            positions[i * 3 + 2] = r * Math.cos(phi);
+
+            // Slow drift velocities
+            velocities[i * 3] = (Math.random() - 0.5) * 0.1;
+            velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.05 + 0.02; // slight upward drift
+            velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.1;
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        const material = new THREE.PointsMaterial({
+            color: 0xa0b8c8,
+            size: 0.015,
+            transparent: true,
+            opacity: 0.4,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        this.ambientParticles = new THREE.Points(geometry, material);
+        this.ambientParticleVelocities = velocities;
+        this.particleGroup.add(this.ambientParticles);
+    }
+
+    _updateAmbientParticles(deltaTime) {
+        if (!this.ambientParticles || !this.isActive) return;
+
+        const positions = this.ambientParticles.geometry.attributes.position.array;
+        const count = positions.length / 3;
+
+        for (let i = 0; i < count; i++) {
+            // Apply velocity
+            positions[i * 3] += this.ambientParticleVelocities[i * 3] * deltaTime;
+            positions[i * 3 + 1] += this.ambientParticleVelocities[i * 3 + 1] * deltaTime;
+            positions[i * 3 + 2] += this.ambientParticleVelocities[i * 3 + 2] * deltaTime;
+
+            // Orbit slowly around center
+            const x = positions[i * 3];
+            const z = positions[i * 3 + 2];
+            const orbitSpeed = 0.1 * deltaTime;
+            positions[i * 3] = x * Math.cos(orbitSpeed) - z * Math.sin(orbitSpeed);
+            positions[i * 3 + 2] = x * Math.sin(orbitSpeed) + z * Math.cos(orbitSpeed);
+
+            // Respawn if too far
+            const dist = Math.sqrt(x*x + positions[i*3+1]*positions[i*3+1] + z*z);
+            if (dist > 3.0 || dist < 0.3) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                const r = 0.8 + Math.random() * 1.0;
+                positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+                positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+                positions[i * 3 + 2] = r * Math.cos(phi);
+            }
+        }
+
+        this.ambientParticles.geometry.attributes.position.needsUpdate = true;
+
+        // Twinkle opacity
+        this.ambientParticles.material.opacity = 0.3 + Math.sin(Date.now() * 0.002) * 0.1;
     }
 
     setVisible(visible) {
@@ -208,6 +287,9 @@ class SilentState {
         // Subtle particle rotation
         this.particleMesh.rotation.y += deltaTime * 0.3;
         this.particleMesh.rotation.x += deltaTime * 0.15;
+
+        // PR-VISUAL-AMBIENT: Update floating ambient particles
+        this._updateAmbientParticles(deltaTime);
     }
 
     dispose() {
@@ -222,6 +304,10 @@ class SilentState {
         if (this.ringMesh) {
             this.ringMesh.geometry.dispose();
             this.ringMesh.material.dispose();
+        }
+        if (this.ambientParticles) {
+            this.ambientParticles.geometry.dispose();
+            this.ambientParticles.material.dispose();
         }
         if (this.particleGroup) {
             this.scene.remove(this.particleGroup);

@@ -225,6 +225,21 @@ class RuntimeSession:
         except Exception:
             pass
 
+        # PR-CROSS-DEVICE-SYNC: proactively push phase change to all connected Android devices.
+        # This is fire-and-forget: failures are logged and swallowed.
+        try:
+            from core.cross_device_sync import emit_cross_device_phase_sync  # noqa: PLC0415
+
+            emit_cross_device_phase_sync(
+                old_phase=old_state.value,
+                new_phase=new_state.value,
+                session_id=self.runtime_session_id,
+                source=self.source,
+                trace_id=self.trace_id,
+            )
+        except Exception:
+            pass
+
     def elapsed_ms(self) -> float:
         """Return elapsed milliseconds since session creation."""
         return (time.monotonic() - self.created_at) * 1_000
