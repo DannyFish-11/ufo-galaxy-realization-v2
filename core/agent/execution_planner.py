@@ -953,7 +953,8 @@ class ExecutionPlanner:
                 except Exception as _dec_err:
                     logger.debug("TaskDecomposer decomposition skipped: %s", _dec_err)
 
-            team_strategy = "swarm" if strategy == "swarm" else "specialized"
+            # Map strategy: swarm → swarm, parallel → parallel, specialized → specialized
+            team_strategy = strategy if strategy in ("swarm", "parallel", "specialized") else "specialized"
             complexity = _estimate_complexity(plan.message)
             team = await manager.create_team(
                 strategy=team_strategy,
