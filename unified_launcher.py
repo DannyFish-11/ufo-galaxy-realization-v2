@@ -479,6 +479,93 @@ class GalaxyUnified:
             self.capability_manager = None
             self.connection_manager = None
         
+    # -- PR-DEVICE-RESOLUTION: observe-only resolution tracing ----------------
+
+    async def _observe_node_resolutions(self) -> None:
+        """Observe-only: record node-to-device mappings before startup.
+
+        Reads the device_node_map.yaml, finds all mappings for nodes that
+        are about to be started, and records them to the activation registry.
+        This does NOT alter which nodes are started; it only creates an
+        audit trail for diagnostics.
+        """
+        import time
+        from core.device_activation_registry import get_registry as get_act_registry
+        from core.device_node_resolver import DeviceNodeResolver
+
+        t0 = time.perf_counter()
+        registry = get_act_registry()
+        resolver = DeviceNodeResolver()
+        resolver._ensure_loaded()
+
+        # Get the set of nodes that will be started
+        if hasattr(self.node_launcher, 'get_core_nodes'):
+            nodes_to_start = set(self.node_launcher.get_core_nodes())
+        else:
+            nodes_to_start = set()
+
+        # Find all mappings that reference these nodes
+        for mapping in resolver._mappings:
+            impl = mapping.get("implementation", {})
+            node_name = impl.get("node", "")
+            if node_name not in nodes_to_start:
+                continue
+
+            match = mapping.get("match", {})
+            device_type = match.get("device_type")
+            transport = match.get("transport")
+            capabilities = match.get("capabilities", [])
+
+            # Build a pseudo-ResolvedMapping for recording
+            from core.device_node_resolver import (
+                CapabilityProfile, NodeImplementation, ResolvedMapping,
+            )
+            from core.activation_policy import (
+                ActivationDecision, ActivationPolicy, ActivationPolicyEngine,
+            )
+
+            node_impl = NodeImplementation(
+                node=node_name,
+                transport=impl.get("transport", "unknown"),
+                port=impl.get("port", 0),
+                startup=impl.get("startup", "unknown"),
+                healthcheck=impl.get("healthcheck", ""),
+                note=mapping.get("note", ""),
+            )
+            caps = CapabilityProfile(
+                provides=mapping.get("capabilities", {}).get("provides", []),
+                requires=mapping.get("capabilities", {}).get("requires", []),
+            )
+            resolved = ResolvedMapping(
+                match_type=list(match.keys())[0] if match else "unknown",
+                match_key=str(list(match.values())[0]) if match else "unknown",
+                implementation=node_impl,
+                capabilities=caps,
+            )
+
+            # Evaluate activation policy for recording
+            engine = ActivationPolicyEngine()
+            decision = engine.evaluate(
+                node_impl,
+                ActivationPolicyEngine.TRIGGER_BOOT,
+            )
+
+            registry.record_resolution(
+                device_type=device_type,
+                transport=transport,
+                capabilities=capabilities if not device_type and not transport else None,
+                result=resolved,
+                decision=decision,
+                source_event="boot",
+                source_module="unified_launcher._observe_node_resolutions",
+                duration_ms=(time.perf_counter() - t0) * 1000,
+            )
+
+        logger.info(
+            "[DeviceResolution] Observed %d node mappings in %.1fms",
+            len(nodes_to_start), (time.perf_counter() - t0) * 1000,
+        )
+
     async def start(self):
         """启动系统"""
         print_banner()
@@ -610,6 +697,14 @@ class GalaxyUnified:
             async def start_nodes():
                 print_status("正在启动节点系统...", "loading")
                 self.service_manager.state = SystemState.STARTING_NODES
+
+                # PR-DEVICE-RESOLUTION-OBSERVE: Record node-to-device mappings
+                # before starting nodes.  Observe-only: does NOT alter startup.
+                try:
+                    await self._observe_node_resolutions()
+                except Exception as _exc:
+                    logger.debug("Node resolution observation skipped: %s", _exc)
+
                 results = await self.node_launcher.start_all(minimal=self.config.minimal_mode)
                 success = sum(1 for v in results.values() if v)
                 print_status(f"节点: {success}/{len(results)} 已启动", 
