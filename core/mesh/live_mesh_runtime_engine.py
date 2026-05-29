@@ -231,6 +231,200 @@ def _import_coordinator_contracts() -> Any:
     return _mod
 
 
+# ---------------------------------------------------------------------------
+# PR-AIPV3-MESH: AIP v3 mesh event emitter
+# ---------------------------------------------------------------------------
+
+def _emit_aip_v3_mesh_events(
+    event_type: str,
+    coordinator_state: Any,
+    participant_results: Dict[str, Any],
+) -> None:
+    """Emit AIP v3 mesh messages for key state transitions.
+
+    Converts internal Mesh state transitions into canonical AIP v3 messages
+    (MESH_JOIN, MESH_LEAVE, MESH_RESULT, COORD_SYNC) and publishes them
+    via the NATS bus when available. This makes Mesh state changes observable
+    by any AIP v3 consumer, not just in-process code.
+
+    Best-effort: failures are logged and swallowed; Mesh state is never
+    affected by emission failures.
+    """
+    try:
+        from core.schemas.aip_v3 import (  # noqa: PLC0415
+            CoordSyncMsg,
+            MeshJoinMsg,
+            MeshLeaveMsg,
+            MeshResultMsg,
+            MeshTopologyMsg,
+        )
+        from core.nats_bus import get_nats_bus  # noqa: PLC0415
+
+        nats = get_nats_bus()
+        if not nats.is_connected():
+            return
+
+        session_id = str(getattr(coordinator_state, "session_id", "") or "")
+        mesh_id = str(getattr(coordinator_state, "mesh_id", "") or "")
+        trace_id = str(getattr(coordinator_state, "trace_id", "") or "")
+        participants = getattr(coordinator_state, "participants", []) or []
+        device_ids = [getattr(p, "device_id", "") for p in participants if getattr(p, "device_id", "")]
+
+        import asyncio
+        loop = asyncio.get_event_loop()
+
+        if event_type == "mesh_join":
+            for did in device_ids:
+                msg = MeshJoinMsg(
+                    device_id=did,
+                    session_id=session_id,
+                    mesh_id=mesh_id,
+                    trace_id=trace_id,
+                    role="participant",
+                )
+                loop.create_task(nats.publish_mesh_join(msg))
+
+        elif event_type == "mesh_leave":
+            for did in device_ids:
+                msg = MeshLeaveMsg(
+                    device_id=did,
+                    session_id=session_id,
+                    mesh_id=mesh_id,
+                    trace_id=trace_id,
+                    reason="session_finalized",
+                )
+                loop.create_task(nats.publish_mesh_leave(msg))
+
+        elif event_type == "mesh_result":
+            if participant_results:
+                subtask_results = []
+                for did, res in participant_results.items():
+                    subtask_results.append({"device_id": did, "result": res if isinstance(res, dict) else {"value": res}})
+                msg = MeshResultMsg(
+                    device_id="coordinator",
+                    session_id=session_id,
+                    mesh_id=mesh_id,
+                    trace_id=trace_id,
+                    subtask_results=subtask_results,
+                    participant_count=len(participant_results),
+                )
+                loop.create_task(nats.publish_mesh_result(msg))
+
+        elif event_type == "coord_sync":
+            mod = _import_coordinator_contracts()
+            participant_statuses = {}
+            for p in participants:
+                did = getattr(p, "device_id", "")
+                status = getattr(p, "status", None)
+                participant_statuses[did] = status.value if hasattr(status, "value") else str(status)
+            barrier_state = getattr(coordinator_state, "barrier_state", None)
+            barrier_status = ""
+            if barrier_state is not None:
+                bs = getattr(barrier_state, "status", None)
+                barrier_status = bs.value if hasattr(bs, "value") else str(bs)
+            msg = CoordSyncMsg(
+                device_id="coordinator",
+                session_id=session_id,
+                mesh_id=mesh_id,
+                trace_id=trace_id,
+                sync_type="tick",
+                barrier_status=barrier_status,
+                participant_statuses=participant_statuses,
+            )
+            loop.create_task(nats.publish_coord_sync(msg))
+
+    except Exception as exc:
+        _logger.debug("_emit_aip_v3_mesh_events: emission failed (non-fatal): %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# PR-MESH-NATS-FUSION: Remote participant dispatch
+# ---------------------------------------------------------------------------
+
+def _dispatch_remote_barrier_requests(
+    session_id: str,
+    waiting_device_ids: List[str],
+    coordinator_state: Any,
+    participant_results: Dict[str, Any],
+) -> None:
+    """Dispatch barrier action requests to remote participants via NATS.
+
+    For each waiting device, checks if it is remote (via MeshNATSConvergence).
+    If remote, schedules an async NATS request as a background task. The reply
+    handler will fill *participant_results* when the remote device responds.
+    Local devices are left untouched — they will arrive through the normal
+    local execution path.
+
+    This function is synchronous (safe to call from _evaluate_barrier) and
+    never raises. On any error it logs and continues so the barrier can still
+    resolve via other paths.
+    """
+    if not session_id or not waiting_device_ids:
+        return
+
+    try:
+        from core.mesh_nats_fusion import get_convergence  # noqa: PLC0415
+
+        convergence = get_convergence()
+        if not convergence.is_available():
+            return
+    except Exception as _exc:  # noqa: BLE001
+        _logger.debug("_dispatch_remote_barrier_requests: convergence unavailable: %s", _exc)
+        return
+
+    # Determine the action to dispatch from coordinator state metadata
+    action: str = "execute"
+    action_params: Dict[str, Any] = {}
+    try:
+        mesh_meta = getattr(coordinator_state, "metadata", None) or {}
+        action = mesh_meta.get("action", "execute")
+        action_params = mesh_meta.get("action_params", {})
+    except Exception:
+        pass
+
+    # Get event loop for scheduling background tasks
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _logger.debug("_dispatch_remote_barrier_requests: no running event loop")
+        return
+
+    dispatched = 0
+    for device_id in waiting_device_ids:
+        try:
+            if convergence.is_remote(device_id):
+                # Fire-and-forget as a background task
+                loop.create_task(
+                    convergence.request_participant_action(
+                        session_id=session_id,
+                        device_id=device_id,
+                        action=action,
+                        params=action_params,
+                        timeout_ms=30_000,
+                    )
+                )
+                dispatched += 1
+                _log_event(
+                    "barrier_remote_dispatched",
+                    session_id,
+                    device_id=device_id,
+                    message=f"Dispatched barrier action '{action}' to remote device via NATS",
+                )
+        except Exception as _dev_exc:  # noqa: BLE001
+            _logger.debug(
+                "_dispatch_remote_barrier_requests: failed for device=%s: %s",
+                device_id,
+                _dev_exc,
+            )
+
+    if dispatched:
+        _logger.info(
+            "[MeshNATS] Dispatched barrier requests to %d/%d remote participants",
+            dispatched,
+            len(waiting_device_ids),
+        )
+
+
 def _get_participant_device_ids(coordinator_state: Any) -> List[str]:
     """Return all participant device IDs from coordinator state."""
     try:
@@ -314,6 +508,13 @@ def _promote_staged_to_active(
             update={
                 "coordination_events": list(promoted.coordination_events) + [event],
             }
+        )
+
+        # PR-AIPV3-MESH: Emit MESH_JOIN AIP v3 messages for all participants
+        _emit_aip_v3_mesh_events(
+            event_type="mesh_join",
+            coordinator_state=promoted,
+            participant_results={},
         )
 
         _log_event(
@@ -479,6 +680,17 @@ def _evaluate_barrier(
         )
 
         if waiting:
+            # PR-MESH-NATS-FUSION: For remote waiting participants, dispatch
+            # via NATS rather than blocking indefinitely. Results are delivered
+            # asynchronously and merged into participant_results on arrival.
+            session_id = str(getattr(coordinator_state, "session_id", ""))
+            _dispatch_remote_barrier_requests(
+                session_id=session_id,
+                waiting_device_ids=waiting,
+                coordinator_state=coordinator_state,
+                participant_results=participant_results,
+            )
+
             # Update barrier to waiting status; mark waiting participants
             new_barrier = barrier_state.model_copy(
                 update={

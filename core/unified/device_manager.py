@@ -178,6 +178,11 @@ class UnifiedDeviceManager:
         self._assimilate_device_to_capability_layer(device)
         self._sync_capabilities_to_authority(device)
 
+        # PR-DEVICE-WORKER-FUSION: Register the device as a NATS Worker.
+        # This is the convergence point: UDM device IS a Worker. No bridge,
+        # no duplication — just a second view of the same entity.
+        self._register_device_as_worker(device)
+
     def register_device_from_dict(self, device_id: str, data: Dict[str, Any]) -> UnifiedDevice:
         """
         从字典构建并注册 UnifiedDevice（向后兼容旧注册路径使用）。
@@ -234,6 +239,9 @@ class UnifiedDeviceManager:
             "Device unregistered",
             extra={"event": "unregister_device", "device_id": device_id},
         )
+
+        # PR-DEVICE-WORKER-FUSION: Remove the device from the NATS Worker plane.
+        self._unregister_device_worker(device_id)
 
     # ------------------------------------------------------------------
     # Internal capability helpers
@@ -424,6 +432,110 @@ class UnifiedDeviceManager:
             logger.debug("CapabilityAuthority device removal skipped for %s: %s", device_id, exc)
 
     # ------------------------------------------------------------------
+    # PR-DEVICE-WORKER-FUSION: Device → NATS Worker convergence
+    # ------------------------------------------------------------------
+
+    def _register_device_as_worker(self, device: "UnifiedDevice") -> None:
+        """Propagate a UDM-registered device into the NATS Worker plane.
+
+        This is the single convergence point where the UDM device becomes a
+        NATS Worker. It is called automatically at the end of register_device().
+        The operation is best-effort: failure to publish the Worker event does
+        NOT fail device registration. The device will still work locally;
+        remote dispatch simply won't be available until the NATS connection
+        is restored.
+
+        Async note: this method is synchronous (called from sync register_device)
+        but the actual NATS publish is async. We schedule it as a background
+        task so it never blocks the registration hot path.
+        """
+        try:
+            from core.device_worker_convergence import get_dwc  # noqa: PLC0415
+
+            dwc = get_dwc()
+            if not dwc.is_available():
+                logger.debug(
+                    "Worker convergence skipped: NATS unavailable for device %s",
+                    device.device_id,
+                )
+                return
+
+            # Schedule the async registration as a background task
+            # because register_device() is a sync method.
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(dwc.on_device_registered(device))
+                logger.debug(
+                    "Scheduled Worker registration for device %s",
+                    device.device_id,
+                )
+            except RuntimeError:
+                # No running loop — cannot schedule. Log and skip.
+                logger.debug(
+                    "Worker registration skipped: no event loop for device %s",
+                    device.device_id,
+                )
+
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "Worker convergence skipped for device %s: %s",
+                device.device_id,
+                exc,
+            )
+
+    def _unregister_device_worker(self, device_id: str) -> None:
+        """Remove a device from the NATS Worker plane on unregister.
+
+        Best-effort: failure does NOT prevent device unregistration.
+        """
+        try:
+            from core.device_worker_convergence import get_dwc  # noqa: PLC0415
+
+            dwc = get_dwc()
+            if not dwc.is_available():
+                return
+
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(dwc.on_device_unregistered(device_id))
+                logger.debug(
+                    "Scheduled Worker unregistration for device %s",
+                    device_id,
+                )
+            except RuntimeError:
+                logger.debug(
+                    "Worker unregistration skipped: no event loop for device %s",
+                    device_id,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "Worker convergence unregistration skipped for device %s: %s",
+                device_id,
+                exc,
+            )
+
+    def _sync_worker_heartbeat(self, device_id: str) -> None:
+        """Sync a device heartbeat into the NATS Worker plane.
+
+        Called automatically from heartbeat(). Best-effort: failure does
+        NOT affect the device's UDM status.
+        """
+        try:
+            from core.device_worker_convergence import get_dwc  # noqa: PLC0415
+
+            dwc = get_dwc()
+            if not dwc.is_available():
+                return
+
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(dwc.on_device_heartbeat(device_id))
+            except RuntimeError:
+                pass
+        except Exception:  # noqa: BLE001
+            pass
+
+    # ------------------------------------------------------------------
     # 状态更新
     # ------------------------------------------------------------------
 
@@ -596,6 +708,9 @@ class UnifiedDeviceManager:
                         "state_version": device.state_version,
                     },
                 )
+
+            # PR-DEVICE-WORKER-FUSION: Sync heartbeat to NATS Worker plane.
+            self._sync_worker_heartbeat(device_id)
 
         # Block-4: feed heartbeat into health scorer
         try:

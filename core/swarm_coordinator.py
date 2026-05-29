@@ -434,9 +434,13 @@ class SwarmCoordinator:
         # ── SUBSTRATE DELEGATION: Dispatch all members concurrently ──────────
         # From this point we hand control to the substrate (CommandRouter).
         # The orchestration layer does not perform any routing itself.
+        # PR-AIPV3-SWARM: Emit TASK_ASSIGN AIP v3 messages before dispatch
+        self._emit_aip_v3_swarm_assign(manifests, root_trace_id, root_task_id, session_id)
         t0 = time.monotonic()
         dispatch_coros = [self._dispatch_one(manifest) for manifest in manifests]
         raw_results = await asyncio.gather(*dispatch_coros, return_exceptions=True)
+        # PR-AIPV3-SWARM: Emit TASK_RESULT AIP v3 messages after dispatch
+        self._emit_aip_v3_swarm_result(manifests, raw_results, root_trace_id, root_task_id, session_id)
 
         # ── ORCHESTRATION LAYER: Aggregate results ───────────────────────────
         total_ms = (time.monotonic() - t0) * 1000
@@ -493,6 +497,89 @@ class SwarmCoordinator:
             total_latency_ms=total_ms,
             total_tokens=0,
         )
+
+    # PR-AIPV3-SWARM: AIP v3 message emission for swarm task lifecycle
+
+    def _emit_aip_v3_swarm_assign(
+        self,
+        manifests: List[Any],
+        trace_id: str,
+        task_id: str,
+        session_id: str,
+    ) -> None:
+        """Emit TASK_ASSIGN AIP v3 messages for each swarm member dispatch.
+
+        Best-effort: published via NATS if connected, otherwise logged only.
+        """
+        try:
+            from core.schemas.aip_v3 import TaskAssignMsg  # noqa: PLC0415
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+            import asyncio
+
+            nats = get_nats_bus()
+            loop = asyncio.get_event_loop()
+            for manifest in manifests:
+                device_id = getattr(manifest, "target_device_id", None) or ""
+                if not device_id:
+                    continue
+                msg = TaskAssignMsg(
+                    device_id=device_id,
+                    task_id=task_id,
+                    action="agent_execute",
+                    params={"manifest_id": getattr(manifest, "manifest_id", "")},
+                    trace_id=trace_id,
+                    session_id=session_id,
+                )
+                if nats.is_connected():
+                    loop.create_task(nats.publish_task_assign(msg))
+                else:
+                    logger.debug("AIPV3-SWARM TASK_ASSIGN: %s", msg.model_dump_json(exclude_none=True))
+        except Exception:
+            pass
+
+    def _emit_aip_v3_swarm_result(
+        self,
+        manifests: List[Any],
+        raw_results: List[Any],
+        trace_id: str,
+        task_id: str,
+        session_id: str,
+    ) -> None:
+        """Emit TASK_RESULT AIP v3 messages for each swarm member result.
+
+        Best-effort: published via NATS if connected, otherwise logged only.
+        """
+        try:
+            from core.schemas.aip_v3 import TaskResultMsg  # noqa: PLC0415
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+            import asyncio
+
+            nats = get_nats_bus()
+            loop = asyncio.get_event_loop()
+            for manifest, result in zip(manifests, raw_results):
+                device_id = getattr(manifest, "target_device_id", None) or ""
+                if isinstance(result, Exception):
+                    status, error = "failed", str(result)
+                    result_data = None
+                else:
+                    status = "completed" if result.get("success", True) else "failed"
+                    error = result.get("error", "")
+                    result_data = result
+                msg = TaskResultMsg(
+                    device_id=device_id,
+                    task_id=task_id,
+                    status=status,
+                    result=result_data,
+                    error=error,
+                    trace_id=trace_id,
+                    session_id=session_id,
+                )
+                if nats.is_connected():
+                    loop.create_task(nats.publish_task_result(msg))
+                else:
+                    logger.debug("AIPV3-SWARM TASK_RESULT: %s", msg.model_dump_json(exclude_none=True))
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Orchestration plan helper (PR-8)

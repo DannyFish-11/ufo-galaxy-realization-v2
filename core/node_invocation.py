@@ -271,12 +271,19 @@ class UnifiedNodeExecutor:
         the node's ``execute`` method, and returns a :class:`NodeInvocationResult`
         with full timing and source metadata.
 
+        PR-MESH-NATS-FUSION: Before local loading, attempts to resolve the
+        device through device_node_map and route via NodeActionRouter for
+        remote-capable devices. Falls back to local loading on any failure.
+
         Errors are caught and surfaced as a failed :class:`NodeInvocationResult`
         so that callers always receive a stable result shape.
         """
         started = envelope.started_at
         node_id = envelope.node_id
         action = envelope.action
+
+        # PR-AIPV3-LOCAL: Emit TASK_ASSIGN for unified tracing
+        self._emit_aip_v3_task_assign(envelope)
 
         logger.debug(
             "invoke node | node_id=%s action=%s source=%s request_id=%s trace_id=%s",
@@ -314,7 +321,7 @@ class UnifiedNodeExecutor:
                     gov_decision.denial_reasons,
                     envelope.request_id,
                 )
-                return NodeInvocationResult(
+                result = NodeInvocationResult(
                     success=False,
                     node_id=node_id,
                     action=action,
@@ -329,6 +336,8 @@ class UnifiedNodeExecutor:
                     execution_source=envelope.invocation_source.value,
                     eligibility_denial=denial_payload,
                 )
+                self._emit_aip_v3_task_result(envelope, result)
+                return result
         except Exception as _gov_exc:  # noqa: BLE001
             # If governance module itself is unavailable, log and proceed
             # (graceful degradation — do not block invocation on import errors).
@@ -337,6 +346,14 @@ class UnifiedNodeExecutor:
                 node_id,
                 _gov_exc,
             )
+
+        # -- PR-MESH-NATS-FUSION: device-node resolution + action router -----
+        # Try to resolve via device_node_map and route through the unified
+        # NodeActionRouter. This enables remote device execution without
+        # changing the local node loading logic below.
+        fusion_result = await self._try_fusion_route(envelope)
+        if fusion_result is not None:
+            return fusion_result
 
         nodes_root = self._get_nodes_root()
         node_dir = os.path.join(nodes_root, node_id)
@@ -400,7 +417,7 @@ class UnifiedNodeExecutor:
                 envelope.request_id,
             )
 
-            return NodeInvocationResult(
+            result = NodeInvocationResult(
                 success=True,
                 node_id=node_id,
                 action=action,
@@ -411,6 +428,8 @@ class UnifiedNodeExecutor:
                 execution_mode=envelope.execution_domain,
                 execution_source=envelope.invocation_source.value,
             )
+            self._emit_aip_v3_task_result(envelope, result)
+            return result
 
         except asyncio.TimeoutError:
             return self._fail(
@@ -433,6 +452,227 @@ class UnifiedNodeExecutor:
                 started,
                 node_id=node_id,
             )
+
+    # ------------------------------------------------------------------
+    # PR-MESH-NATS-FUSION: Unified action router integration
+    # ------------------------------------------------------------------
+
+    async def _try_fusion_route(
+        self, envelope: NodeInvocationEnvelope
+    ) -> Optional[NodeInvocationResult]:
+        """Attempt to route the invocation through the unified node contract.
+
+        Steps:
+        1. Look up device_node_map via the resolver.
+        2. If a mapping exists, build an InvokeRequest and route through
+           the NodeActionRouter (from schemas.node_contract).
+        3. Return the result if successful; return None on any failure
+           so the caller falls back to local fusion_entry.py loading.
+
+        This is additive-only — it never changes the local execution path;
+        it only provides a short-circuit for devices that are registered
+        in the device_node_map with a unified contract facade.
+        """
+        try:
+            from schemas.node_contract import (  # noqa: PLC0415
+                InvokeRequest,
+                NodeActionRouter,
+                UnifiedResponse,
+            )
+            from schemas.node_errors import NodeErrorCode, NodeErrorResponse  # noqa: PLC0415
+        except Exception as _import_exc:  # noqa: BLE001
+            logger.debug("Fusion route skipped: contract schemas unavailable: %s", _import_exc)
+            return None
+
+        # Step 1: Resolve via device_node_map
+        resolved_impl: Optional[Dict[str, Any]] = None
+        try:
+            from core.device_node_resolver import get_resolver  # noqa: PLC0415
+
+            resolver = get_resolver()
+            # Try multiple resolution paths
+            resolved_impl = resolver.resolve_by_node_id(envelope.node_id)
+            if resolved_impl is None:
+                # Try fuzzy match on node_id
+                resolved_impl = resolver._fuzzy_resolve_node(envelope.node_id)
+        except Exception as _resolve_exc:  # noqa: BLE001
+            logger.debug(
+                "Fusion route: resolver unavailable for node_id=%s: %s",
+                envelope.node_id,
+                _resolve_exc,
+            )
+            return None
+
+        if resolved_impl is None:
+            # No mapping in device_node_map — fall back to local loading
+            return None
+
+        # Step 2: Build NodeActionRouter for the resolved node
+        node_name = resolved_impl.get("node", envelope.node_id)
+        router = NodeActionRouter(node_name)
+
+        # Attempt to get the facade for this node and register its actions
+        facade_actions_registered = False
+        try:
+            from nodes.common.node_facade import (  # noqa: PLC0415
+                ADBFacade,
+                BLEFacade,
+                MQTTFacade,
+                DesktopAutoFacade,
+                SerialFacade,
+            )
+
+            facade_map = {
+                "Node_33_ADB": ADBFacade,
+                "Node_34_Scrcpy": None,  # uses same ADBFacade
+                "Node_38_BLE": BLEFacade,
+                "Node_41_MQTT": MQTTFacade,
+                "Node_45_DesktopAuto": DesktopAutoFacade,
+                "Node_48_Serial": SerialFacade,
+            }
+            facade_cls = facade_map.get(node_name)
+            if facade_cls is not None:
+                # Create a temporary facade instance to register actions
+                import fastapi
+
+                temp_router = fastapi.APIRouter()
+                port = resolved_impl.get("port", 0)
+                facade = facade_cls(temp_router, base_url=f"http://localhost:{port}")
+                # The facade registers its actions in __init__ via _router
+                # We copy them into our router
+                for action_name in facade._router.supported_actions():
+                    handler = facade._router._handlers.get(action_name)
+                    if handler is not None:
+                        router.register(action_name, handler)
+                facade_actions_registered = True
+                logger.debug(
+                    "Fusion route: registered %d actions from %s facade",
+                    len(facade._router.supported_actions()),
+                    node_name,
+                )
+        except Exception as _facade_exc:  # noqa: BLE001
+            logger.debug(
+                "Fusion route: facade registration failed for %s: %s",
+                node_name,
+                _facade_exc,
+            )
+
+        if not facade_actions_registered:
+            # No facade available — cannot route through unified contract
+            return None
+
+        # Step 3: Route the action
+        invoke_req = InvokeRequest(
+            action=envelope.action,
+            params=envelope.params if isinstance(envelope.params, dict) else {},
+            timeout_ms=int(envelope.timeout_ms),
+            correlation_id=envelope.request_id,
+        )
+
+        t0 = time.time()
+        try:
+            response: UnifiedResponse = await router.handle(invoke_req)
+            duration_ms = (time.time() - t0) * 1000.0
+
+            if response.success:
+                logger.debug(
+                    "Fusion route OK | node=%s action=%s duration_ms=%.1f",
+                    node_name,
+                    envelope.action,
+                    duration_ms,
+                )
+                return NodeInvocationResult(
+                    success=True,
+                    node_id=envelope.node_id,
+                    action=envelope.action,
+                    request_id=envelope.request_id,
+                    trace_id=envelope.trace_id,
+                    result=response.data,
+                    duration_ms=duration_ms,
+                    execution_mode="fusion_routed",
+                    execution_source=envelope.invocation_source.value,
+                )
+            else:
+                # Unified contract returned structured error
+                error_data = response.data.get("error", {}) if response.data else {}
+                error_msg = error_data.get("message", "Unknown fusion route error")
+                return NodeInvocationResult(
+                    success=False,
+                    node_id=envelope.node_id,
+                    action=envelope.action,
+                    request_id=envelope.request_id,
+                    trace_id=envelope.trace_id,
+                    error=f"Fusion route error: {error_msg}",
+                    duration_ms=(time.time() - t0) * 1000.0,
+                    execution_mode="fusion_routed",
+                    execution_source=envelope.invocation_source.value,
+                )
+
+        except Exception as _route_exc:  # noqa: BLE001
+            logger.debug(
+                "Fusion route execution failed for node=%s action=%s: %s",
+                node_name,
+                envelope.action,
+                _route_exc,
+            )
+            return None
+
+    # PR-AIPV3-LOCAL: AIP v3 message emission for local node tracing
+
+    def _emit_aip_v3_task_assign(self, envelope: NodeInvocationEnvelope) -> None:
+        """Emit TASK_ASSIGN AIP v3 message before local node execution.
+
+        Best-effort: published via NATS if connected, otherwise logged only.
+        This makes local node invocation observable in the unified AIP v3 trace.
+        """
+        try:
+            from core.schemas.aip_v3 import TaskAssignMsg  # noqa: PLC0415
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+            import asyncio
+
+            msg = TaskAssignMsg(
+                device_id="local",
+                task_id=envelope.request_id,
+                action=envelope.action,
+                params=envelope.params if isinstance(envelope.params, dict) else {},
+                trace_id=envelope.trace_id,
+            )
+            nats = get_nats_bus()
+            if nats.is_connected():
+                asyncio.get_event_loop().create_task(nats.publish_task_assign(msg))
+            else:
+                logger.debug("AIPV3-LOCAL TASK_ASSIGN: %s", msg.model_dump_json(exclude_none=True))
+        except Exception:
+            pass
+
+    def _emit_aip_v3_task_result(
+        self, envelope: NodeInvocationEnvelope, result: NodeInvocationResult
+    ) -> None:
+        """Emit TASK_RESULT AIP v3 message after local node execution.
+
+        Best-effort: published via NATS if connected, otherwise logged only.
+        """
+        try:
+            from core.schemas.aip_v3 import TaskResultMsg  # noqa: PLC0415
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+            import asyncio
+
+            msg = TaskResultMsg(
+                device_id="local",
+                task_id=envelope.request_id,
+                status="completed" if result.success else "failed",
+                result=result.result if isinstance(result.result, dict) else {"value": result.result},
+                error=result.error or "",
+                duration_ms=result.duration_ms,
+                trace_id=envelope.trace_id,
+            )
+            nats = get_nats_bus()
+            if nats.is_connected():
+                asyncio.get_event_loop().create_task(nats.publish_task_result(msg))
+            else:
+                logger.debug("AIPV3-LOCAL TASK_RESULT: %s", msg.model_dump_json(exclude_none=True))
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Helpers

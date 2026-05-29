@@ -351,6 +351,35 @@ class CapabilityBus:
         self._lock = threading.Lock()
         self._seeded_from_node_registry: bool = False
 
+    # PR-AIPV3-CAP: AIP v3 capability report emission
+
+    def _emit_aip_v3_capability_report(self, entry: "CapabilityBusEntry") -> None:
+        """Emit CAPABILITY_REPORT AIP v3 message when a capability is registered.
+
+        Best-effort: published via NATS if connected, otherwise logged only.
+        This makes capability registrations observable by any AIP v3 consumer.
+        """
+        try:
+            import asyncio
+            from core.schemas.aip_v3 import CapabilityReportMsg  # noqa: PLC0415
+
+            msg = CapabilityReportMsg(
+                device_id=entry.source_id or entry.name,
+                capabilities=[entry.name],
+                actions=[entry.name],
+                version="1.0.0",
+            )
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+            nats = get_nats_bus()
+            if nats.is_connected():
+                asyncio.get_event_loop().create_task(nats.publish_capability_report(msg))
+            else:
+                logger.debug(
+                    "AIPV3-CAP CAPABILITY_REPORT: %s", msg.model_dump_json(exclude_none=True)
+                )
+        except Exception:
+            pass
+
     # ── Canonical bridge ─────────────────────────────────────────────────────
 
     # Mapping from CapabilityBusRole to the source string recognised by
@@ -441,6 +470,9 @@ class CapabilityBus:
         """Register *entry* in the bus and forward it to the canonical
         :class:`~core.agent.capability_registry.CapabilityRegistry`.
 
+        PR-AIPV3-CAP: Also emits CAPABILITY_REPORT AIP v3 message so that
+        capability registrations are observable by any AIP v3 consumer.
+
         If an entry with the same :attr:`~CapabilityBusEntry.name` already
         exists it is silently replaced (last writer wins).  This allows
         runtime re-registration on node reload or device reconnect without
@@ -462,6 +494,8 @@ class CapabilityBus:
         # Forward to canonical CapabilityRegistry so this entry is visible
         # through CapabilityResolver (canonical consumer path for OpenClawd).
         self._bridge_entry_to_canonical_registry(entry)
+        # PR-AIPV3-CAP: Emit CAPABILITY_REPORT AIP v3 message
+        self._emit_aip_v3_capability_report(entry)
 
     def unregister(self, name: str) -> bool:
         """Remove the entry for *name*.

@@ -220,6 +220,87 @@ WEBRTC_TASK_LIFECYCLE_PR6_SENTINEL: str = (
     "center-side-canonical-pr6-v1"
 )
 
+
+# ---------------------------------------------------------------------------
+# PR-AIPV3-WEBRTC: AIP v3 message emission for WebRTC control plane
+# ---------------------------------------------------------------------------
+
+def _emit_aip_v3_webrtc_bind(binding: "WebRTCTaskBinding") -> None:
+    """Emit WEBRTC_BIND AIP v3 message when a session is bound to a task.
+
+    Best-effort: published via NATS if connected, otherwise logged only.
+    """
+    try:
+        import asyncio
+        from core.schemas.aip_v3 import WebRTCBindMsg  # noqa: PLC0415
+        from core.nats_bus import get_nats_bus  # noqa: PLC0415
+
+        msg = WebRTCBindMsg(
+            device_id=binding.device_id,
+            webrtc_session_id=binding.webrtc_session_id,
+            bind_target="task",
+        )
+        nats = get_nats_bus()
+        if nats.is_connected():
+            asyncio.get_event_loop().create_task(nats.publish_webrtc_bind(msg))
+        else:
+            logger.debug("AIPV3-WEBRTC BIND: %s", msg.model_dump_json(exclude_none=True))
+    except Exception:
+        pass
+
+
+def _emit_aip_v3_webrtc_transport_state(
+    binding: "WebRTCTaskBinding",
+    transport_state: "WebRTCTransportState",
+) -> None:
+    """Emit WEBRTC_TRANSPORT_STATE AIP v3 message on transport state change.
+
+    Best-effort: published via NATS if connected, otherwise logged only.
+    """
+    try:
+        import asyncio
+        from core.schemas.aip_v3 import WebRTCTransportStateMsg  # noqa: PLC0415
+        from core.nats_bus import get_nats_bus  # noqa: PLC0415
+
+        msg = WebRTCTransportStateMsg(
+            device_id=binding.device_id,
+            webrtc_session_id=binding.webrtc_session_id,
+            transport_state=transport_state.value if hasattr(transport_state, "value") else str(transport_state),
+            previous_state=binding.transport_state.value if hasattr(binding.transport_state, "value") else str(binding.transport_state),
+        )
+        nats = get_nats_bus()
+        if nats.is_connected():
+            asyncio.get_event_loop().create_task(nats.publish_webrtc_transport_state(msg))
+        else:
+            logger.debug("AIPV3-WEBRTC STATE: %s", msg.model_dump_json(exclude_none=True))
+    except Exception:
+        pass
+
+
+def _emit_aip_v3_webrtc_unbind(binding: "WebRTCTaskBinding") -> None:
+    """Emit WEBRTC_UNBIND AIP v3 message when a binding is torn down.
+
+    Best-effort: published via NATS if connected, otherwise logged only.
+    """
+    try:
+        import asyncio
+        from core.schemas.aip_v3 import WebRTCUnbindMsg  # noqa: PLC0415
+        from core.nats_bus import get_nats_bus  # noqa: PLC0415
+
+        msg = WebRTCUnbindMsg(
+            device_id=binding.device_id,
+            webrtc_session_id=binding.webrtc_session_id,
+            reason="task_terminal",
+        )
+        nats = get_nats_bus()
+        if nats.is_connected():
+            asyncio.get_event_loop().create_task(nats.publish_webrtc_unbind(msg))
+        else:
+            logger.debug("AIPV3-WEBRTC UNBIND: %s", msg.model_dump_json(exclude_none=True))
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Internal constants
 # ---------------------------------------------------------------------------
@@ -642,6 +723,8 @@ def bind_webrtc_session_to_task(
         webrtc_session_id,
         device_id,
     )
+    # PR-AIPV3-WEBRTC: Emit WEBRTC_BIND AIP v3 message
+    _emit_aip_v3_webrtc_bind(binding)
     return binding
 
 
@@ -830,6 +913,8 @@ def apply_transport_state_to_task_lifecycle(
         transport_state.value,
         action.value,
     )
+    # PR-AIPV3-WEBRTC: Emit WEBRTC_TRANSPORT_STATE AIP v3 message
+    _emit_aip_v3_webrtc_transport_state(binding, transport_state)
     return updated_binding
 
 
@@ -891,6 +976,8 @@ def teardown_binding_on_task_terminal(
         binding.webrtc_session_id,
         binding.device_id,
     )
+    # PR-AIPV3-WEBRTC: Emit WEBRTC_UNBIND AIP v3 message
+    _emit_aip_v3_webrtc_unbind(binding)
     return True
 
 

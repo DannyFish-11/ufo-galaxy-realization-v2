@@ -51,6 +51,14 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
 
 logger = logging.getLogger("Galaxy.TaskGraph")
 
+# PR-AIPV3-DAG: AIP v3 unified message models for cross-device task dispatch
+_AIPV3_AVAILABLE = False
+try:
+    from core.schemas.aip_v3 import TaskAssignMsg, TaskResultMsg, MsgType  # noqa: PLC0415
+    _AIPV3_AVAILABLE = True
+except ImportError:
+    pass
+
 
 # ---------------------------------------------------------------------------
 # Enumerations
@@ -336,6 +344,71 @@ class TaskGraph:
         )
         self._emit_cancel_event("interrupt", reason)
 
+    # PR-AIPV3-DAG: AIP v3 message emission for task lifecycle
+
+    def _emit_aip_v3_task_assign(self, node: TaskNode) -> None:
+        """Emit AIP v3 TASK_ASSIGN message before node execution.
+
+        Best-effort: published via NATS if connected, otherwise logged only.
+        This makes DAG node dispatch observable by any AIP v3 consumer.
+        """
+        if not _AIPV3_AVAILABLE:
+            return
+        try:
+            import asyncio
+            msg = TaskAssignMsg(
+                device_id=node.device_id or "local",
+                task_id=f"{self.graph_id}:{node.node_id}",
+                action=node.description or "execute",
+                params={"node_id": node.node_id, "graph_id": self.graph_id},
+                trace_id=self.trace_id,
+                session_id=self.runtime_session_id,
+            )
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+            nats = get_nats_bus()
+            if nats.is_connected():
+                asyncio.get_event_loop().create_task(nats.publish_task_assign(msg))
+            else:
+                # Log the AIP v3 message for local debugging / tracing
+                logger.debug("AIPV3-DAG TASK_ASSIGN: %s", msg.model_dump_json(exclude_none=True))
+        except Exception:
+            pass
+
+    def _emit_aip_v3_task_result(self, node: TaskNode) -> None:
+        """Emit AIP v3 TASK_RESULT message after node completion.
+
+        Best-effort: published via NATS if connected, otherwise logged only.
+        """
+        if not _AIPV3_AVAILABLE:
+            return
+        try:
+            import asyncio
+            status_map = {
+                NodeStatus.DONE: "completed",
+                NodeStatus.FAILED: "failed",
+                NodeStatus.SKIPPED: "skipped",
+                NodeStatus.CANCELLED: "cancelled",
+                NodeStatus.INTERRUPTED: "interrupted",
+            }
+            msg = TaskResultMsg(
+                device_id=node.device_id or "local",
+                task_id=f"{self.graph_id}:{node.node_id}",
+                status=status_map.get(node.status, str(node.status)),
+                result=node.result if isinstance(node.result, dict) else {"value": node.result},
+                error=node.error or "",
+                duration_ms=int((node.completed_at - node.started_at) * 1000) if node.completed_at and node.started_at else 0,
+                trace_id=self.trace_id,
+                session_id=self.runtime_session_id,
+            )
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+            nats = get_nats_bus()
+            if nats.is_connected():
+                asyncio.get_event_loop().create_task(nats.publish_task_result(msg))
+            else:
+                logger.debug("AIPV3-DAG TASK_RESULT: %s", msg.model_dump_json(exclude_none=True))
+        except Exception:
+            pass
+
     def _emit_cancel_event(self, verb: str, reason: str) -> None:
         """Best-effort StateEventBus emission for cancel/interrupt."""
         try:
@@ -467,6 +540,9 @@ class TaskGraph:
     ) -> None:
         """Execute a single node, honouring its retry policy.
 
+        PR-AIPV3-DAG: Emits TASK_ASSIGN before execution and TASK_RESULT
+        after completion so DAG node lifecycle is observable via AIP v3.
+
         Updates ``node.status``, ``node.result``, ``node.error``,
         ``node.started_at``, ``node.completed_at``, and ``node.attempt``
         in-place.
@@ -491,6 +567,8 @@ class TaskGraph:
         node.status = NodeStatus.RUNNING
         node.started_at = time.time()
         self._emit_node_event(node, NodeStatus.RUNNING)
+        # PR-AIPV3-DAG: Emit TASK_ASSIGN AIP v3 message
+        self._emit_aip_v3_task_assign(node)
         logger.info(
             "TaskGraph '%s' | node='%s' status=running trace_id=%s",
             self.graph_id, node.description or node.node_id, self.trace_id,
@@ -508,6 +586,8 @@ class TaskGraph:
                 node.error = ""
                 node.completed_at = time.time()
                 self._emit_node_event(node, NodeStatus.DONE)
+                # PR-AIPV3-DAG: Emit TASK_RESULT AIP v3 message
+                self._emit_aip_v3_task_result(node)
                 logger.info(
                     "TaskGraph '%s' | node='%s' status=done attempt=%d",
                     self.graph_id, node.description or node.node_id, attempt,
@@ -532,6 +612,8 @@ class TaskGraph:
         node.error = str(last_exc)
         node.completed_at = time.time()
         self._emit_node_event(node, NodeStatus.FAILED)
+        # PR-AIPV3-DAG: Emit TASK_RESULT with failed status
+        self._emit_aip_v3_task_result(node)
         logger.error(
             "TaskGraph '%s' | node='%s' status=failed error=%r",
             self.graph_id, node.description or node.node_id, node.error,

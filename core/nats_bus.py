@@ -79,6 +79,42 @@ from core.schemas.contracts import (
     WorkerShutdownModel,
 )
 
+# PR-AIPV3-NATS: Unified AIP v3 models — NATS transports canonical AIP v3 messages
+from core.schemas.aip_v3 import (
+    AIPMessage,
+    AckMsg,
+    CancelResultMsg,
+    CapabilityQueryMsg,
+    CapabilityReportMsg,
+    CoordSyncMsg,
+    DelegatedExecutionSignalMsg,
+    DeviceRegisterMsg,
+    DeviceUnregisterMsg,
+    GoalExecutionMsg,
+    GoalExecutionResultMsg,
+    HeartbeatAckMsg,
+    HeartbeatMsg,
+    MeshJoinMsg,
+    MeshLeaveMsg,
+    MeshResultMsg,
+    MeshTopologyMsg,
+    MsgType,
+    PeerAnnounceMsg,
+    PeerExchangeMsg,
+    ReconciliationSignalMsg,
+    StateEventMsg,
+    TakeoverRequestMsg,
+    TakeoverResponseMsg,
+    TaskAssignMsg,
+    TaskCancelMsg,
+    TaskResultMsg,
+    WebRTCBindMsg,
+    WebRTCUnbindMsg,
+    WebRTCTransportStateMsg,
+    create_aip_message,
+    parse_aip_message,
+)
+
 # NATS import — may not be installed
 try:
     import nats
@@ -377,44 +413,301 @@ class NATSBus:
 
     # ── Publish methods ─────────────────────────────────────────────────────
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # PR-AIPV3-NATS: AIP v3 unified publish methods (direct model usage)
+    # ═══════════════════════════════════════════════════════════════════════
+    # All NATS messages now carry canonical AIP v3 format.
+    # Publishers use AIPMessage subclasses directly; legacy models auto-convert.
+
+    async def publish_aip_v3(self, subject: str, aip_message: "AIPMessage") -> dict:
+        """Publish a canonical AIP v3 message to NATS.
+
+        This is the PRIMARY publish method. All other publish_* methods delegate
+        here after converting their input to AIPMessage subclasses.
+
+        Args:
+            subject: NATS subject (e.g. "galaxy.tasks.dispatch.worker_01")
+            aip_message: An AIPMessage subclass instance (TaskAssignMsg, HeartbeatMsg, etc.)
+
+        Returns:
+            {"success": bool, "seq": int} or {"success": False, "error": str}
+        """
+        data = aip_message.model_dump(mode="json", exclude_none=True)
+        return await self._publish(subject, data)
+
+    # ── Device lifecycle ──
+
+    async def publish_device_register(self, msg: "DeviceRegisterMsg") -> dict:
+        """Publish DEVICE_REGISTER to ``galaxy.device.register``.
+
+        Used for: Worker registration, Mesh peer enrollment, device discovery.
+        """
+        return await self.publish_aip_v3(NATSTopics.DEVICE_REGISTER, msg)
+
+    async def publish_device_unregister(self, msg: "DeviceUnregisterMsg") -> dict:
+        """Publish DEVICE_UNREGISTER to ``galaxy.device.register`` (status=offline)."""
+        return await self.publish_aip_v3(NATSTopics.DEVICE_REGISTER, msg)
+
+    async def publish_heartbeat(self, heartbeat: "HeartbeatMsg") -> dict:
+        """Publish HEARTBEAT to ``galaxy.device.heartbeat.{device_id}``."""
+        subject = NATSTopics.device_heartbeat(heartbeat.device_id)
+        return await self.publish_aip_v3(subject, heartbeat)
+
+    async def publish_heartbeat_ack(self, ack: "HeartbeatAckMsg") -> dict:
+        """Publish HEARTBEAT_ACK back to device."""
+        return await self.publish_aip_v3(f"galaxy.device.heartbeat_ack.{ack.device_id}", ack)
+
+    async def publish_capability_report(self, msg: "CapabilityReportMsg") -> dict:
+        """Publish CAPABILITY_REPORT to ``galaxy.capability.registered``.
+
+        Announces device capabilities to the system.
+        """
+        return await self.publish_aip_v3(NATSTopics.CAPABILITY_REGISTERED, msg)
+
+    # ── Task / execution ──
+
+    async def publish_task_assign(self, msg: "TaskAssignMsg") -> dict:
+        """Publish TASK_ASSIGN to ``galaxy.tasks.dispatch.{device_id}``."""
+        subject = NATSTopics.task_dispatch(msg.device_id)
+        return await self.publish_aip_v3(subject, msg)
+
+    async def publish_task_result(self, msg: "TaskResultMsg") -> dict:
+        """Publish TASK_RESULT to ``galaxy.tasks.result.{task_id}``."""
+        subject = NATSTopics.task_result(msg.task_id or msg.device_id)
+        return await self.publish_aip_v3(subject, msg)
+
+    async def publish_task_cancel(self, msg: "TaskCancelMsg") -> dict:
+        """Publish TASK_CANCEL to ``galaxy.tasks.cancel.{task_id}``."""
+        return await self.publish_aip_v3(f"galaxy.task.cancel.{msg.task_id}", msg)
+
+    async def publish_goal_execution(self, msg: "GoalExecutionMsg") -> dict:
+        """Publish GOAL_EXECUTION to ``galaxy.tasks.dispatch.{device_id}``."""
+        subject = NATSTopics.task_dispatch(msg.device_id)
+        return await self.publish_aip_v3(subject, msg)
+
+    async def publish_goal_result(self, msg: "GoalExecutionResultMsg") -> dict:
+        """Publish GOAL_EXECUTION_RESULT to ``galaxy.tasks.result.{task_id}``."""
+        subject = NATSTopics.task_result(msg.task_id)
+        return await self.publish_aip_v3(subject, msg)
+
+    # ── Mesh coordination ──
+
+    async def publish_mesh_join(self, msg: "MeshJoinMsg") -> dict:
+        """Publish MESH_JOIN to ``galaxy.mesh.join``."""
+        return await self.publish_aip_v3("galaxy.mesh.join", msg)
+
+    async def publish_mesh_leave(self, msg: "MeshLeaveMsg") -> dict:
+        """Publish MESH_LEAVE to ``galaxy.mesh.leave``."""
+        return await self.publish_aip_v3("galaxy.mesh.leave", msg)
+
+    async def publish_mesh_result(self, msg: "MeshResultMsg") -> dict:
+        """Publish MESH_RESULT to ``galaxy.mesh.result.{mesh_id}``."""
+        return await self.publish_aip_v3(f"galaxy.mesh.result.{msg.mesh_id}", msg)
+
+    async def publish_mesh_topology(self, msg: "MeshTopologyMsg") -> dict:
+        """Publish MESH_TOPOLOGY to ``galaxy.mesh.topology`` or reply."""
+        return await self.publish_aip_v3("galaxy.mesh.topology", msg)
+
+    async def publish_coord_sync(self, msg: "CoordSyncMsg") -> dict:
+        """Publish COORD_SYNC to ``galaxy.mesh.sync.{mesh_id}``."""
+        return await self.publish_aip_v3(f"galaxy.mesh.sync.{msg.mesh_id}", msg)
+
+    # ── Peer / takeover ──
+
+    async def publish_takeover_request(self, msg: "TakeoverRequestMsg") -> dict:
+        """Publish TAKEOVER_REQUEST to ``galaxy.device.takeover``.
+
+        Requests target device to take over task execution.
+        """
+        return await self.publish_aip_v3(f"galaxy.device.takeover.{msg.target_device_id}", msg)
+
+    async def publish_takeover_response(self, msg: "TakeoverResponseMsg") -> dict:
+        """Publish TAKEOVER_RESPONSE back to requester."""
+        return await self.publish_aip_v3(f"galaxy.device.takeover_response.{msg.device_id}", msg)
+
+    async def publish_peer_announce(self, msg: "PeerAnnounceMsg") -> dict:
+        """Publish PEER_ANNOUNCE to ``galaxy.mesh.peers``.
+
+        Announces a new peer device to the mesh.
+        """
+        return await self.publish_aip_v3("galaxy.mesh.peers", msg)
+
+    async def publish_peer_exchange(self, msg: "PeerExchangeMsg") -> dict:
+        """Publish PEER_EXCHANGE to ``galaxy.mesh.peers.{peer_device_id}``."""
+        return await self.publish_aip_v3(f"galaxy.mesh.peers.{msg.peer_device_id}", msg)
+
+    # ── Signals ──
+
+    async def publish_delegated_signal(self, msg: "DelegatedExecutionSignalMsg") -> dict:
+        """Publish DELEGATED_EXECUTION_SIGNAL to ``galaxy.signals.delegated``.
+
+        Carries ACK / PROGRESS / RESULT / TIMEOUT / CANCELLED lifecycle events.
+        """
+        return await self.publish_aip_v3("galaxy.signals.delegated", msg)
+
+    async def publish_reconciliation(self, msg: "ReconciliationSignalMsg") -> dict:
+        """Publish RECONCILIATION_SIGNAL to ``galaxy.signals.reconciliation``.
+
+        Cross-device state reconciliation signal.
+        """
+        return await self.publish_aip_v3("galaxy.signals.reconciliation", msg)
+
+    # ── State events ──
+
+    async def publish_state_event(self, msg: "StateEventMsg") -> dict:
+        """Publish STATE_EVENT to ``galaxy.events.{event_category}``."""
+        subject = f"galaxy.events.{msg.event_category or 'generic'}"
+        return await self.publish_aip_v3(subject, msg)
+
+    # ── WebRTC control ──
+
+    async def publish_webrtc_bind(self, msg: "WebRTCBindMsg") -> dict:
+        """Publish WEBRTC_BIND to ``galaxy.webrtc.bind``.
+
+        Binds a WebRTC session to a task or device.
+        """
+        return await self.publish_aip_v3("galaxy.webrtc.bind", msg)
+
+    async def publish_webrtc_unbind(self, msg: "WebRTCUnbindMsg") -> dict:
+        """Publish WEBRTC_UNBIND to ``galaxy.webrtc.unbind``.
+
+        Unbinds a WebRTC session.
+        """
+        return await self.publish_aip_v3("galaxy.webrtc.unbind", msg)
+
+    async def publish_webrtc_transport_state(self, msg: "WebRTCTransportStateMsg") -> dict:
+        """Publish WEBRTC_TRANSPORT_STATE to ``galaxy.webrtc.state``.
+
+        Notifies of WebRTC transport state changes.
+        """
+        return await self.publish_aip_v3("galaxy.webrtc.state", msg)
+
+    # ── Generic ACK ──
+
+    async def publish_ack(self, msg: "AckMsg") -> dict:
+        """Publish ACK to acknowledge a message."""
+        return await self.publish_aip_v3(f"galaxy.ack.{msg.ack_for_correlation_id}", msg)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Legacy compatibility methods (auto-convert to AIP v3)
+    # ═══════════════════════════════════════════════════════════════════════
+    # These methods accept the old contracts.py models and automatically
+    # convert them to AIP v3 before publishing. Existing callers work
+    # without modification.
+
     async def publish_task_dispatch(self, worker_id: str, task: TaskDispatchModel) -> dict:
-        """Publish TaskDispatch to ``galaxy.tasks.dispatch.{worker_id}``."""
-        subject = f"galaxy.tasks.dispatch.{worker_id}"
-        return await self._publish(subject, task.model_dump(mode="json", exclude_none=True))
+        """[Legacy] Publish TaskDispatch — auto-converts to AIP v3 TASK_ASSIGN."""
+        try:
+            data = task.model_dump(mode="json", exclude_none=True)
+            msg = TaskAssignMsg(
+                device_id=worker_id,
+                task_id=data.get("task_id", ""),
+                action=data.get("action", ""),
+                params=data.get("params", {}),
+                priority=data.get("priority", "normal"),
+                timeout_ms=data.get("timeout_ms", 30000),
+                trace_id=data.get("trace_id", ""),
+            )
+            return await self.publish_task_assign(msg)
+        except Exception as exc:
+            logger.debug("AIP v3 convert failed for task_dispatch, legacy fallback: %s", exc)
+            subject = f"galaxy.tasks.dispatch.{worker_id}"
+            return await self._publish(subject, task.model_dump(mode="json", exclude_none=True))
 
-    async def publish_task_result(self, task_id: str, result: TaskResultModel) -> dict:
-        """Publish TaskResult to ``galaxy.tasks.result.{task_id}``."""
-        subject = f"galaxy.tasks.result.{task_id}"
-        return await self._publish(subject, result.model_dump(mode="json", exclude_none=True))
+    async def publish_legacy_task_result(self, task_id: str, result: TaskResultModel) -> dict:
+        """[Legacy] Publish TaskResult — auto-converts to AIP v3 TASK_RESULT."""
+        try:
+            data = result.model_dump(mode="json", exclude_none=True)
+            msg = TaskResultMsg(
+                device_id=data.get("worker_id", ""),
+                task_id=task_id,
+                status=data.get("status", ""),
+                result=data.get("result"),
+                error=data.get("error", ""),
+                duration_ms=data.get("duration_ms", 0),
+                trace_id=data.get("trace_id", ""),
+            )
+            return await self.publish_task_result(msg)
+        except Exception as exc:
+            logger.debug("AIP v3 convert failed for task_result, legacy fallback: %s", exc)
+            subject = f"galaxy.tasks.result.{task_id}"
+            return await self._publish(subject, result.model_dump(mode="json", exclude_none=True))
 
-    async def publish_heartbeat(self, heartbeat: WorkerHeartbeatModel) -> dict:
-        """Publish heartbeat to ``galaxy.workers.heartbeat``."""
-        return await self._publish(
-            WorkerLifecycleSubjects.HEARTBEAT,
-            heartbeat.model_dump(mode="json", exclude_none=True),
-        )
+    async def publish_legacy_heartbeat(self, heartbeat: WorkerHeartbeatModel) -> dict:
+        """[Legacy] Publish WorkerHeartbeat — auto-converts to AIP v3 HEARTBEAT."""
+        try:
+            data = heartbeat.model_dump(mode="json", exclude_none=True)
+            msg = HeartbeatMsg(
+                device_id=data.get("worker_id", ""),
+                status=data.get("status", "online"),
+                metadata=data.get("metadata", {}),
+                timestamp=data.get("timestamp", int(time.time() * 1000)),
+            )
+            return await self.publish_heartbeat(msg)
+        except Exception as exc:
+            logger.debug("AIP v3 convert failed for heartbeat, legacy fallback: %s", exc)
+            return await self._publish(
+                WorkerLifecycleSubjects.HEARTBEAT,
+                heartbeat.model_dump(mode="json", exclude_none=True),
+            )
 
-    async def publish_worker_registration(self, registration: WorkerRegistrationModel) -> dict:
-        """Publish a worker registration on the canonical lifecycle subject."""
-        return await self._publish(
-            WorkerLifecycleSubjects.REGISTER,
-            registration.model_dump(mode="json", exclude_none=True),
-        )
+    async def publish_legacy_worker_registration(self, registration: WorkerRegistrationModel) -> dict:
+        """[Legacy] Publish WorkerRegistration — auto-converts to AIP v3 DEVICE_REGISTER."""
+        try:
+            data = registration.model_dump(mode="json", exclude_none=True)
+            msg = DeviceRegisterMsg(
+                device_id=data.get("worker_id", ""),
+                device_type=data.get("worker_type", "worker"),
+                capabilities=data.get("capabilities", []),
+                metadata=data.get("metadata", {}),
+                status="online",
+            )
+            return await self.publish_device_register(msg)
+        except Exception as exc:
+            logger.debug("AIP v3 convert failed for worker_registration, legacy fallback: %s", exc)
+            return await self._publish(
+                WorkerLifecycleSubjects.REGISTER,
+                registration.model_dump(mode="json", exclude_none=True),
+            )
 
-    async def publish_worker_shutdown(self, shutdown: WorkerShutdownModel) -> dict:
-        """Publish a worker shutdown on the canonical lifecycle subject."""
-        return await self._publish(
-            WorkerLifecycleSubjects.SHUTDOWN,
-            shutdown.model_dump(mode="json", exclude_none=True),
-        )
+    async def publish_legacy_worker_shutdown(self, shutdown: WorkerShutdownModel) -> dict:
+        """[Legacy] Publish WorkerShutdown — auto-converts to AIP v3 DEVICE_UNREGISTER."""
+        try:
+            data = shutdown.model_dump(mode="json", exclude_none=True)
+            msg = DeviceUnregisterMsg(
+                device_id=data.get("worker_id", ""),
+                reason=data.get("reason", "shutdown"),
+            )
+            return await self.publish_device_unregister(msg)
+        except Exception as exc:
+            logger.debug("AIP v3 convert failed for worker_shutdown, legacy fallback: %s", exc)
+            return await self._publish(
+                WorkerLifecycleSubjects.SHUTDOWN,
+                shutdown.model_dump(mode="json", exclude_none=True),
+            )
 
     async def publish_event(self, event: AgentEventModel) -> dict:
-        """Publish event to ``galaxy.events.{event_type}``."""
-        subject = f"galaxy.events.{event.event_type}"
-        return await self._publish(subject, event.model_dump(mode="json", exclude_none=True))
+        """[Legacy] Publish AgentEvent — auto-converts to AIP v3 STATE_EVENT."""
+        try:
+            data = event.model_dump(mode="json", exclude_none=True)
+            msg = StateEventMsg(
+                event_category=data.get("event_type", "generic"),
+                event_action="triggered",
+                payload=data.get("payload", {}),
+                trace_id=data.get("trace_id", ""),
+            )
+            return await self.publish_state_event(msg)
+        except Exception as exc:
+            logger.debug("AIP v3 convert failed for event, legacy fallback: %s", exc)
+            subject = f"galaxy.events.{event.event_type}"
+            return await self._publish(subject, event.model_dump(mode="json", exclude_none=True))
 
     async def publish_mcp_call(self, request: MCPCallRequestModel) -> dict:
-        """Publish MCP call to ``galaxy.mcp.calls``."""
+        """Publish MCP call to ``galaxy.mcp.calls``.
+
+        MCP uses its own standard protocol (JSON-RPC); it does NOT convert to AIP v3.
+        MCP messages are bridged via the MCP Gateway Adapter, not the NATS AIP v3 adapter.
+        """
         return await self._publish(
             "galaxy.mcp.calls",
             request.model_dump(mode="json", exclude_none=True),
@@ -574,9 +867,14 @@ class NATSBus:
     async def subscribe_task_dispatches(
         self, worker_id: str, callback: Callable
     ) -> dict:
-        """Subscribe to task dispatches for a specific worker."""
+        """Subscribe to task dispatches for a specific worker.
+
+        PR-AIPV3-NATS: Received AIP v3 messages are automatically converted to
+        legacy format before passing to the callback.
+        """
         subject = f"galaxy.tasks.dispatch.{worker_id}"
-        return await self._subscribe(subject, callback, durable=f"worker-{worker_id}")
+        wrapped = self._wrap_aip_v3_callback(callback)
+        return await self._subscribe(subject, wrapped, durable=f"worker-{worker_id}")
 
     async def subscribe_task_results(
         self,
@@ -584,35 +882,55 @@ class NATSBus:
         *,
         include_subscription: bool = False,
     ) -> dict:
-        """Subscribe to all task results."""
+        """Subscribe to all task results.
+
+        PR-AIPV3-NATS: Received AIP v3 messages are automatically converted to
+        legacy format before passing to the callback.
+        """
+        wrapped = self._wrap_aip_v3_callback(callback)
         return await self._subscribe(
             WorkerLifecycleSubjects.RESULT,
-            callback,
+            wrapped,
             durable="brain-results",
             return_subscription=include_subscription,
         )
 
     async def subscribe_heartbeats(self, callback: Callable) -> dict:
-        """Subscribe to worker heartbeats."""
+        """Subscribe to worker heartbeats.
+
+        PR-AIPV3-NATS: Received AIP v3 HEARTBEAT messages are automatically
+        converted to legacy WorkerHeartbeatModel format.
+        """
+        wrapped = self._wrap_aip_v3_callback(callback)
         return await self._subscribe(
             WorkerLifecycleSubjects.HEARTBEAT,
-            callback,
+            wrapped,
             durable="brain-heartbeats",
         )
 
     async def subscribe_worker_registrations(self, callback: Callable) -> dict:
-        """Subscribe to worker registration lifecycle messages."""
+        """Subscribe to worker registration lifecycle messages.
+
+        PR-AIPV3-NATS: Received AIP v3 DEVICE_REGISTER messages are automatically
+        converted to legacy WorkerRegistrationModel format.
+        """
+        wrapped = self._wrap_aip_v3_callback(callback)
         return await self._subscribe(
             WorkerLifecycleSubjects.REGISTER,
-            callback,
+            wrapped,
             durable="brain-worker-register",
         )
 
     async def subscribe_worker_shutdowns(self, callback: Callable) -> dict:
-        """Subscribe to worker shutdown lifecycle messages."""
+        """Subscribe to worker shutdown lifecycle messages.
+
+        PR-AIPV3-NATS: Received AIP v3 messages are automatically converted to
+        legacy format before passing to the callback.
+        """
+        wrapped = self._wrap_aip_v3_callback(callback)
         return await self._subscribe(
             WorkerLifecycleSubjects.SHUTDOWN,
-            callback,
+            wrapped,
             durable="brain-worker-shutdown",
         )
 
@@ -629,6 +947,42 @@ class NATSBus:
     async def subscribe_mcp_results(self, callback: Callable) -> dict:
         """Subscribe to MCP call results."""
         return await self._subscribe("galaxy.mcp.results", callback, durable="brain-mcp-results")
+
+    # ── PR-AIPV3-NATS: AIP v3 callback wrapper ──────────────────────────────
+
+    @staticmethod
+    def _wrap_aip_v3_callback(callback: Callable) -> Callable:
+        """Wrap a callback so AIP v3 messages are auto-converted to legacy format.
+
+        When a subscriber receives an AIP v3 message (has "type" and "_aip_version"),
+        it is converted to a flat dict matching the legacy format before being
+        passed to the callback. Non-AIP-v3 messages pass through unchanged.
+
+        This ensures all existing consumers work without modification even though
+        NATS now transports AIP v3 messages.
+        """
+        try:
+            from core.aip_v3_nats_adapter import from_aip_to_legacy  # noqa: PLC0415
+        except Exception:
+            # Adapter unavailable — return callback as-is
+            return callback
+
+        async def _async_wrapper(data: dict):
+            if isinstance(data, dict) and data.get("_aip_version"):
+                data = from_aip_to_legacy(data)
+            if asyncio.iscoroutinefunction(callback):
+                await callback(data)
+            else:
+                callback(data)
+
+        def _sync_wrapper(data: dict):
+            if isinstance(data, dict) and data.get("_aip_version"):
+                data = from_aip_to_legacy(data)
+            callback(data)
+
+        if asyncio.iscoroutinefunction(callback):
+            return _async_wrapper
+        return _sync_wrapper
 
     # ── Health / Stats (constraint C8) ──────────────────────────────────────
 
