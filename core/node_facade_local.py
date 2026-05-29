@@ -43,79 +43,9 @@ try:
 except ImportError:
     _AIPV3_AVAILABLE = False
 
-# Action → fusion_entry function name mapping for 11 nodes from device_node_map.yaml
-_ACTION_MAP: Dict[str, Dict[str, str]] = {
-    # ── Android ADB ──
-    "Node_33_ADB": {
-        "connect": "execute", "disconnect": "execute",
-        "adb_shell": "execute", "adb_screenshot": "execute",
-        "adb_tap": "execute", "adb_swipe": "execute",
-        "adb_input_text": "execute", "adb_keyevent": "execute",
-        "execute": "execute",
-    },
-    # ── Scrcpy (screen mirroring) ──
-    "Node_34_Scrcpy": {
-        "scrcpy_start": "execute", "scrcpy_stop": "execute",
-        "scrcpy_screenshot": "execute", "scrcpy_tap": "execute",
-        "execute": "execute",
-    },
-    # ── Bluetooth LE ──
-    "Node_38_BLE": {
-        "ble_scan": "execute", "ble_connect": "execute",
-        "ble_disconnect": "execute", "ble_read": "execute",
-        "ble_write": "execute", "ble_notify": "execute",
-        "execute": "execute",
-    },
-    # ── MQTT IoT ──
-    "Node_41_MQTT": {
-        "mqtt_publish": "execute", "mqtt_subscribe": "execute",
-        "mqtt_unsubscribe": "execute", "mqtt_connect": "execute",
-        "mqtt_disconnect": "execute",
-        "execute": "execute",
-    },
-    # ── CAN bus ──
-    "Node_42_CANbus": {
-        "can_send": "execute", "can_receive": "execute", "can_listen": "execute",
-        "execute": "execute",
-    },
-    # ── NFC ──
-    "Node_44_NFC": {
-        "nfc_read": "execute", "nfc_write": "execute", "nfc_emulate": "execute",
-        "execute": "execute",
-    },
-    # ── Desktop automation ──
-    "Node_45_DesktopAuto": {
-        "ui_click": "execute", "ui_type": "execute",
-        "ui_screenshot": "execute", "ui_find": "execute", "ui_hotkey": "execute",
-        "execute": "execute",
-    },
-    # ── Camera ──
-    "Node_46_Camera": {
-        "camera_capture": "execute", "camera_stream_start": "execute",
-        "camera_stream_stop": "execute",
-        "execute": "execute",
-    },
-    # ── Audio / Microphone ──
-    "Node_47_Audio": {
-        "audio_record_start": "execute", "audio_record_stop": "execute",
-        "audio_play": "execute", "audio_list_devices": "execute",
-        "execute": "execute",
-    },
-    # ── Serial / UART ──
-    "Node_48_Serial": {
-        "serial_open": "execute", "serial_close": "execute",
-        "serial_read": "execute", "serial_write": "execute",
-        "serial_flush": "execute", "serial_list_ports": "execute",
-        "execute": "execute",
-    },
-    # ── OctoPrint (3D printer) ──
-    "Node_49_OctoPrint": {
-        "octoprint_status": "execute", "octoprint_print": "execute",
-        "octoprint_pause": "execute", "octoprint_cancel": "execute",
-        "octoprint_home": "execute", "octoprint_set_temp": "execute",
-        "execute": "execute",
-    },
-}
+# Action → fusion_entry function name mapping for ALL 130 nodes
+# Auto-generated from fusion_entry.py AST analysis
+from core.node_facade_local_action_map import _ACTION_MAP  # noqa: F401
 
 # In-memory module cache
 _module_cache: Dict[str, Any] = {}
