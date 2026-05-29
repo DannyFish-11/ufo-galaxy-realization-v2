@@ -56,13 +56,11 @@ function createWindow() {
 }
 
 function createPanelWindow() {
-    // Create the unified control panel window (toggled by F12).
-    // WAVE-3-TODO: panel.html will be created during Wave 3 (control panel design).
-    // Until then, F12 toggling is a no-op — the three-state GUI is unaffected.
+    // Wave 3 control panel — Aurora-Glass Fluidic aesthetic design.
     const fs = require('fs');
-    const panelPath = path.join(__dirname, 'renderer', 'panel.html');
+    const panelPath = path.join(__dirname, 'renderer', 'panel-wave3.html');
     if (!fs.existsSync(panelPath)) {
-        console.log('[Panel] panel.html not found — F12 panel disabled until Wave 3');
+        console.log('[Panel] panel-wave3.html not found');
         return null;
     }
 

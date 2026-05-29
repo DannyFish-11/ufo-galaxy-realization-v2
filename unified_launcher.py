@@ -904,7 +904,12 @@ async def _run_check_only(galaxy: 'GalaxyUnified'):
 
 
 def _start_electron_gui():
-    """Launch Electron three-state GUI if available."""
+    """Launch Electron three-state GUI if available.
+
+    PR-ELECTRON-DEDUP: PID file lock prevents duplicate launches when both
+    Phase 6 (system_orchestrator) and unified_launcher try to start Electron.
+    Phase 6 writes the lock first; this function exits if lock exists + alive.
+    """
     import os
     import subprocess
     import sys
@@ -920,10 +925,22 @@ def _start_electron_gui():
     if not os.path.isdir(os.path.join(electron_dir, "node_modules")):
         return
 
+    # PR-ELECTRON-DEDUP: PID file lock
+    pid_file = os.path.join(project_root, ".electron.pid")
+    if os.path.exists(pid_file):
+        try:
+            with open(pid_file) as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)  # raises OSError if process is dead
+            print("[Launcher] Electron already running (pid=%d)" % pid)
+            return
+        except (OSError, ValueError):
+            os.remove(pid_file)  # stale lock
+
     try:
         env = os.environ.copy()
         env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
-        subprocess.Popen(
+        proc = subprocess.Popen(
             ["npm", "start"],
             cwd=electron_dir,
             env=env,
@@ -931,7 +948,9 @@ def _start_electron_gui():
             stderr=subprocess.DEVNULL,
             start_new_task=True if sys.platform != "win32" else False,
         )
-        print("[Launcher] Electron GUI started")
+        with open(pid_file, "w") as f:
+            f.write(str(proc.pid))
+        print("[Launcher] Electron GUI started (pid=%d)" % proc.pid)
     except Exception:
         pass
 

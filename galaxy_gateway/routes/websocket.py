@@ -390,10 +390,11 @@ def register_websocket_routes(app: FastAPI) -> None:
     async def websocket_desktop_presence(websocket: WebSocket):
         """Desktop presence WebSocket — for the Electron 3-state GUI.
 
-        This endpoint pushes phase-change events (silent/liminal/manifest)
-        to the desktop overlay so it can animate transitions.
+        Pushes phase-change events (silent/liminal/manifest) to the desktop
+        overlay so it can animate transitions.
 
-        PR-R1: Added because Electron GUI connects to this endpoint.
+        PR-PHASE-PUSH: Now actively pushes phase changes via state_event_bus
+        subscription instead of only responding to client requests.
         """
         await websocket.accept()
         logger.info("Desktop presence WebSocket connected")
@@ -401,9 +402,50 @@ def register_websocket_routes(app: FastAPI) -> None:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
         dpr = get_desktop_presence_runtime()
 
+        # PR-PHASE-PUSH: Active push — subscribe to state_event_bus phase events
+        _push_task = None
+        _stop_event = asyncio.Event()
+
+        async def _phase_pusher():
+            """Listen for phase-change events and push to WebSocket."""
+            try:
+                from core.state_event_bus import subscribe
+
+                queue = asyncio.Queue()
+
+                def _on_phase_event(event_type, payload):
+                    asyncio.get_event_loop().call_soon_threadsafe(
+                        queue.put_nowait, (event_type, payload)
+                    )
+
+                # Subscribe to all three phase events
+                for et_name in ("PHASE_SILENT", "PHASE_LIMINAL", "PHASE_MANIFEST"):
+                    try:
+                        subscribe(et_name, _on_phase_event)
+                    except Exception:
+                        pass
+
+                while not _stop_event.is_set():
+                    try:
+                        et_name, payload = await asyncio.wait_for(queue.get(), timeout=1.0)
+                        phase = et_name.replace("PHASE_", "").lower()
+                        await websocket.send_text(json.dumps({
+                            "type": "phase_change",
+                            "phase": phase,
+                            "timestamp": time.time(),
+                            "reason": payload.get("reason", "") if payload else "",
+                        }))
+                    except asyncio.TimeoutError:
+                        continue
+                    except Exception:
+                        break
+            except Exception:
+                pass  # state_event_bus not available — fall back to request/response
+
+        _push_task = asyncio.create_task(_phase_pusher())
+
         try:
             while True:
-                # 接收心跳/请求
                 data = await websocket.receive_text()
                 msg = json.loads(data) if data.startswith("{") else {"type": "ping"}
 
@@ -415,7 +457,6 @@ def register_websocket_routes(app: FastAPI) -> None:
                         "timestamp": time.time(),
                     }))
                 else:
-                    # 心跳响应
                     phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
                     await websocket.send_text(json.dumps({
                         "type": "heartbeat",
@@ -426,3 +467,7 @@ def register_websocket_routes(app: FastAPI) -> None:
             logger.info("Desktop presence WebSocket disconnected")
         except Exception as exc:
             logger.debug("Desktop presence WS error: %s", exc)
+        finally:
+            _stop_event.set()
+            if _push_task and not _push_task.done():
+                _push_task.cancel()
