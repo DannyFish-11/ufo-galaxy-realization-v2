@@ -88,18 +88,27 @@ async def _async_push_phase_to_all_devices(
             "phase": new_phase,
         }
 
-        # Send to all connected devices
+        # Send to all connected devices with retry
         sent = 0
         skipped = 0
+        failed = 0
+        MAX_RETRIES = 2
         for device_id, device in _bridge._devices.items():
             if device.websocket is not None and getattr(device, "connected", False):
-                try:
-                    await device.websocket.send_json(msg)
-                    sent += 1
-                except Exception as exc:
-                    logger.debug(
-                        "CrossDeviceSync: failed to push to %s: %s", device_id, exc
-                    )
+                for attempt in range(MAX_RETRIES):
+                    try:
+                        await device.websocket.send_json(msg)
+                        sent += 1
+                        break
+                    except Exception as exc:
+                        if attempt < MAX_RETRIES - 1:
+                            await asyncio.sleep(0.1 * (attempt + 1))
+                        else:
+                            logger.debug(
+                                "CrossDeviceSync: failed to push to %s after %d attempts: %s",
+                                device_id, MAX_RETRIES, exc,
+                            )
+                            failed += 1
             else:
                 skipped += 1
 

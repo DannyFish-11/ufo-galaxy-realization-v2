@@ -587,7 +587,8 @@ def _track_participants_working(
         participants = getattr(coordinator_state, "participants", []) or []
 
         # PR-AIPV3-MESH-HEARTBEAT: Participant heartbeat timeout detection
-        PARTICIPANT_HEARTBEAT_TIMEOUT_SECONDS = 60.0
+        # 30 seconds for interactive tasks (faster failure detection)
+        PARTICIPANT_HEARTBEAT_TIMEOUT_SECONDS = 30.0
         now = time.time()
 
         new_participants = []

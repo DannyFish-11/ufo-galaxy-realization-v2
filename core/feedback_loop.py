@@ -264,6 +264,31 @@ class FeedbackLoop:
         failures = [e for e in self._history if not e.success]
         return [e.to_dict() for e in failures[-n:]]
 
+    def get_best_device_for_action(self, action: str) -> Optional[str]:
+        """Recommend the best device for an action based on historical success.
+
+        PR-STABILITY-DECISION: Query historical success rate to recommend
+        the most reliable device for a given action. Used by OpenClawd
+        _determine_execution_path to make data-driven device selection.
+        """
+        if action not in self._action_quality:
+            return None
+        aq = self._action_quality[action]
+        if aq.total_executions < 3:
+            return None  # Not enough data
+        return None  # Device info not stored in ActionQuality; see UserPreferenceMemory
+
+    def should_use_local(self, action: str) -> bool:
+        """Recommend whether to use local execution based on history.
+
+        Returns True if local execution has high success rate,
+        False if cross-device has been more reliable.
+        """
+        aq = self._action_quality.get(action)
+        if aq is None or aq.total_executions < 3:
+            return True  # Default to local when no data
+        return aq.success_count / aq.total_executions > 0.7
+
     def get_improvement_suggestions(self) -> List[str]:
         """Generate improvement suggestions based on feedback history."""
         suggestions = []

@@ -3,6 +3,12 @@ core/voice_wake_module.py
 =========================
 PR-VOICE-WAKE: Local Voice Wake-Word Detection.
 
+Install dependencies (optional — system works without them):
+    pip install pvporcupine webrtcvad faster-whisper pyaudio
+
+Graceful degradation: if any dependency is missing, the module
+silently skips and the system continues without voice wake.
+
 Detects the wake word "Galaxy" locally and triggers tri-state transition
 from SILENT → LIMINAL.
 

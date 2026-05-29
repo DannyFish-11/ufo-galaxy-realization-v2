@@ -179,21 +179,19 @@ class LocalNodeFacade:
             return {"success": False, "error": f"no_handler_for_action:{action}", "fallback": True}
 
         # Step 4: Execute
+        # PR-STABILITY-SIGNATURE: All 5 key nodes use execute(self, command, **params).
+        # We pass command=action then unpack params as keyword arguments.
         try:
-            # Build call args — match what fusion_entry expects
-            call_args = {
-                "action": action,
-                "params": params,
-                "device_id": device_id,
-            }
+            call_kwargs = dict(params) if params else {}
+            if device_id:
+                call_kwargs["device_id"] = device_id
             if trace_id:
-                call_args["trace_id"] = trace_id
+                call_kwargs["trace_id"] = trace_id
 
-            # Call handler
             if asyncio.iscoroutinefunction(handler):
-                result = await handler(**call_args)
+                result = await handler(command=action, **call_kwargs)
             else:
-                result = handler(**call_args)
+                result = handler(command=action, **call_kwargs)
 
             duration_ms = int((time.time() - started) * 1000)
 

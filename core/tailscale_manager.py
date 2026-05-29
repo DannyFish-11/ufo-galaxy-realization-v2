@@ -36,7 +36,8 @@ class TailscaleManager:
     4. 与NetworkTopologyRuntime联动更新拓扑节点
     """
 
-    _CHECK_INTERVAL_SECONDS = 30.0
+    # PR-STABILITY: Configurable check interval (env var override)
+    _CHECK_INTERVAL_SECONDS = float(os.environ.get("GALAXY_TAILSCALE_CHECK_INTERVAL", "30.0"))
     _instance = None
 
     def __new__(cls):

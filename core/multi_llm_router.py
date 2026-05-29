@@ -1710,6 +1710,33 @@ class MultiLLMRouter:
             decision.reason = f"本地主脑优先: 本地不可用，升级到云端 → {decision.reason}"
         return decision
 
+    # ───────── Identity injection helper ─────────
+
+    def _inject_identity_to_messages(self, messages: List[Dict]) -> List[Dict]:
+        """Inject Agent identity into system prompt.
+
+        PR-STABILITY-IDENTITY: Prepends the Agent's self-description
+        to the system message so the model knows who it is.
+        """
+        try:
+            from core.agent_identity_memory import get_identity_memory  # noqa: PLC0415
+
+            identity = get_identity_memory()
+            identity_text = identity.get_system_prompt_addition()
+            has_system = False
+            for msg in messages:
+                if msg.get("role") == "system":
+                    existing = msg.get("content", "")
+                    if identity_text not in existing:
+                        msg["content"] = existing + "\n\n" + identity_text
+                    has_system = True
+                    break
+            if not has_system and identity_text:
+                messages = [{"role": "system", "content": identity_text}] + list(messages)
+        except Exception:
+            pass
+        return messages
+
     # ───────── 统一调用入口 ─────────
 
     async def chat(
@@ -1739,6 +1766,9 @@ class MultiLLMRouter:
             response_format: 响应格式
             auto_failover: 是否自动故障转移
         """
+        # PR-STABILITY-IDENTITY: Inject Agent identity into system prompt
+        messages = self._inject_identity_to_messages(messages)
+
         # 1. 分类任务 + 复杂度评估（结构化向量）
         classified = self.classify_task(messages, task_type)
         cv = self._compute_complexity_vector(messages, tools)

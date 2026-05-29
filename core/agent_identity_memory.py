@@ -111,6 +111,9 @@ class AgentIdentity:
             "changed_by": changed_by,
             "version": self.version,
         })
+        # PR-STABILITY: Cap evolution log at 100 entries
+        if len(self.evolution_log) > 100:
+            self.evolution_log = self.evolution_log[-100:]
         self.version += 1
 
 
