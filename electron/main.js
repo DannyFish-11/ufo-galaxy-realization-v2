@@ -56,11 +56,11 @@ function createWindow() {
 }
 
 function createPanelWindow() {
-    // Wave 3 control panel — Aurora-Glass Fluidic aesthetic design.
+    // Wave 3 control panel — Aura-Glass Fluidic (React + Vite build)
     const fs = require('fs');
-    const panelPath = path.join(__dirname, 'renderer', 'panel-wave3.html');
+    const panelPath = path.join(__dirname, 'renderer', 'panel', 'index.html');
     if (!fs.existsSync(panelPath)) {
-        console.log('[Panel] panel-wave3.html not found');
+        console.log('[Panel] panel/index.html not found');
         return null;
     }
 
