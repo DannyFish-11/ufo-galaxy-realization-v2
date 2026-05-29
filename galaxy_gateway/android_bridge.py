@@ -97,6 +97,7 @@ from galaxy_gateway.android.handlers.generic import (
 from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
 from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
 from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+from galaxy_gateway.android.handlers.takeover_request import handle_takeover_request
 from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
 from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
 from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
@@ -894,6 +895,7 @@ class AndroidBridge:
         )
 
         # Android Takeover Protocol: uplink takeover_response from Android
+        self._message_handlers[MessageType.TAKEOVER_REQUEST] = _wrap(handle_takeover_request)
         self._message_handlers[MessageType.TAKEOVER_RESPONSE] = _wrap(handle_takeover_response)
 
         # PR-7-V2: Android reconciliation signal canonical ingress
@@ -1704,6 +1706,4 @@ class AndroidBridge:
 
 # =============================================================================
 # 全局实例
-# =============================================================================
-
-android_bridge = AndroidBridge()
+# ===========================

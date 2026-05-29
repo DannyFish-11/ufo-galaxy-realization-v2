@@ -671,6 +671,33 @@ class NetworkTopologyRuntime:
         self._recovered_node_ids: set[str] = set()
         self._recovered_edge_ids: set[str] = set()
 
+    # PR-AIPV3-TOPO: AIP v3 state event emission for topology changes
+
+    def _emit_aip_v3_state_event(self, event_category: str, event_action: str, node_id: str, details: Dict[str, Any]) -> None:
+        """Emit STATE_EVENT AIP v3 message for topology changes.
+
+        Best-effort: published via NATS if connected, otherwise logged only.
+        This makes topology state changes observable by any AIP v3 consumer.
+        """
+        try:
+            import asyncio
+            from core.schemas.aip_v3 import StateEventMsg  # noqa: PLC0415
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+
+            msg = StateEventMsg(
+                device_id=node_id,
+                event_category=event_category,
+                event_action=event_action,
+                payload=details,
+            )
+            nats = get_nats_bus()
+            if nats.is_connected():
+                asyncio.get_event_loop().create_task(nats.publish_state_event(msg))
+            else:
+                logger.debug("AIPV3-TOPO STATE_EVENT: %s", msg.model_dump_json(exclude_none=True))
+        except Exception:
+            pass
+
     # ── Node management ───────────────────────────────────────────────────
 
     def register_node(self, node: TopologyNode) -> TopologyNode:
@@ -735,6 +762,14 @@ class NetworkTopologyRuntime:
             node.kind,
             node.state,
         )
+        self._emit_aip_v3_state_event(
+            event_category="topology",
+            event_action="node_registered",
+            node_id=node.node_id,
+            details={"kind": node.kind.value if isinstance(node.kind, TopologyNodeKind) else str(node.kind),
+                     "state": node.state.value if isinstance(node.state, TopologyConnectionState) else str(node.state),
+                     "host": node.host, "port": node.port},
+        )
         self.persist_durable_state()
         return node
 
@@ -775,6 +810,12 @@ class NetworkTopologyRuntime:
             kind=node.kind.value if isinstance(node.kind, TopologyNodeKind) else str(node.kind),
             state=state.value if isinstance(state, TopologyConnectionState) else str(state),
         )
+        self._emit_aip_v3_state_event(
+            event_category="topology",
+            event_action="node_state_changed",
+            node_id=node_id,
+            details={"new_state": state.value if isinstance(state, TopologyConnectionState) else str(state)},
+        )
         self.persist_durable_state()
         return node
 
@@ -807,6 +848,12 @@ class NetworkTopologyRuntime:
             "node_removed",
             node_id,
             details={"removed_edges": len(to_remove)},
+        )
+        self._emit_aip_v3_state_event(
+            event_category="topology",
+            event_action="node_removed",
+            node_id=node_id,
+            details={"removed_edges": len(to_remove) if 'to_remove' in locals() else 0},
         )
         self.persist_durable_state()
         return True
@@ -882,6 +929,13 @@ class NetworkTopologyRuntime:
                 "preferred": edge.preferred,
             },
         )
+        self._emit_aip_v3_state_event(
+            event_category="topology",
+            event_action="edge_registered",
+            node_id=edge.source_node_id,
+            details={"edge_id": edge.edge_id, "target": edge.target_node_id,
+                     "kind": edge.kind.value if isinstance(edge.kind, TopologyEdgeKind) else str(edge.kind)},
+        )
         self.persist_durable_state()
         return edge
 
@@ -925,6 +979,12 @@ class NetworkTopologyRuntime:
             state=state.value if isinstance(state, TopologyConnectionState) else str(state),
             details={"edge_id": edge_id},
         )
+        self._emit_aip_v3_state_event(
+            event_category="topology",
+            event_action="edge_state_changed",
+            node_id=edge_id,
+            details={"new_state": state.value if isinstance(state, TopologyConnectionState) else str(state)},
+        )
         self.persist_durable_state()
         return edge
 
@@ -947,6 +1007,12 @@ class NetworkTopologyRuntime:
             "edge_removed",
             edge.source_node_id,
             details={"edge_id": edge_id},
+        )
+        self._emit_aip_v3_state_event(
+            event_category="topology",
+            event_action="edge_removed",
+            node_id=edge_id,
+            details={},
         )
         self.persist_durable_state()
         return True

@@ -425,6 +425,44 @@ def _dispatch_remote_barrier_requests(
         )
 
 
+def _emit_mesh_heartbeat_leave(coordinator_state: Any, device_id: str) -> None:
+    """Emit AIP v3 MESH_LEAVE when a participant times out (heartbeat failure).
+
+    PR-AIPV3-MESH-HEARTBEAT: Mesh participants that have not signaled
+    within ``PARTICIPANT_HEARTBEAT_TIMEOUT_SECONDS`` are marked offline
+    and a MESH_LEAVE AIP v3 message is emitted for observability.
+
+    Best-effort: never raises.
+    """
+    try:
+        from core.schemas.aip_v3 import MeshLeaveMsg  # noqa: PLC0415
+        from core.nats_bus import get_nats_bus  # noqa: PLC0415
+        import asyncio
+
+        session_id = str(getattr(coordinator_state, "session_id", "") or "")
+        mesh_id = str(getattr(coordinator_state, "mesh_id", "") or "")
+        trace_id = str(getattr(coordinator_state, "trace_id", "") or "")
+
+        msg = MeshLeaveMsg(
+            device_id=device_id,
+            session_id=session_id,
+            mesh_id=mesh_id,
+            trace_id=trace_id,
+            reason="heartbeat_timeout",
+        )
+        nats = get_nats_bus()
+        if nats.is_connected():
+            asyncio.get_event_loop().create_task(nats.publish_mesh_leave(msg))
+            _logger.info(
+                "[MeshHeartbeat] Participant %s timed out, MESH_LEAVE emitted",
+                device_id,
+            )
+        else:
+            _logger.debug("AIPV3-MESH-HEARTBEAT MESH_LEAVE: %s", msg.model_dump_json(exclude_none=True))
+    except Exception as exc:
+        _logger.debug("_emit_mesh_heartbeat_leave failed (non-fatal): %s", exc)
+
+
 def _get_participant_device_ids(coordinator_state: Any) -> List[str]:
     """Return all participant device IDs from coordinator state."""
     try:
@@ -548,9 +586,36 @@ def _track_participants_working(
         mod = _import_coordinator_contracts()
         participants = getattr(coordinator_state, "participants", []) or []
 
+        # PR-AIPV3-MESH-HEARTBEAT: Participant heartbeat timeout detection
+        PARTICIPANT_HEARTBEAT_TIMEOUT_SECONDS = 60.0
+        now = time.time()
+
         new_participants = []
         for p in participants:
             did = getattr(p, "device_id", "")
+            last_seen = getattr(p, "last_seen", None)
+
+            # Heartbeat timeout check
+            if last_seen is not None and (now - last_seen) > PARTICIPANT_HEARTBEAT_TIMEOUT_SECONDS:
+                current = getattr(p, "status", mod.MeshParticipantStatus.pending)
+                current_val = current.value if hasattr(current, "value") else str(current)
+                if current_val in ("working", "ready", "waiting"):
+                    # Participant has timed out — mark offline and emit MESH_LEAVE
+                    new_p = p.model_copy(
+                        update={"status": mod.MeshParticipantStatus.offline}
+                    )
+                    new_participants.append(new_p)
+                    _log_event(
+                        "participant_heartbeat_timeout",
+                        getattr(coordinator_state, "session_id", None),
+                        device_id=did,
+                        last_seen=last_seen,
+                        timeout_sec=PARTICIPANT_HEARTBEAT_TIMEOUT_SECONDS,
+                    )
+                    # Emit AIP v3 MESH_LEAVE for heartbeat timeout
+                    _emit_mesh_heartbeat_leave(coordinator_state, did)
+                    continue
+
             if did in participant_results:
                 new_p = p.model_copy(
                     update={"status": mod.MeshParticipantStatus.working}
