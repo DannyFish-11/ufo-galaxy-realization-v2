@@ -130,9 +130,9 @@ TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
     TaskType.CODING:         ["ollama", "hf_local", "deepseek", "qwen", "anthropic", "openai", "step", "mimo"],
     TaskType.CREATIVE:       ["ollama", "hf_local", "openai", "anthropic", "mistral", "deepseek", "minimax"],
     TaskType.ANALYSIS:       ["ollama", "hf_local", "anthropic", "openai", "deepseek", "google", "perplexity", "qwen", "step"],
-    TaskType.PLANNING:       ["ollama", "hf_local", "anthropic", "openai", "deepseek", "xai", "qwen"],
+    TaskType.PLANNING:       ["ollama", "hf_local", "anthropic", "openai", "deepseek", "xai", "qwen", "minimax", "step"],
     TaskType.AGENT_CONTROL:  ["ollama", "hf_local", "anthropic", "openai", "deepseek", "minimax", "step"],
-    TaskType.GENERAL:        ["ollama", "hf_local", "openai", "anthropic", "deepseek", "google", "qwen", "zhipu", "mimo"],
+    TaskType.GENERAL:        ["ollama", "hf_local", "openai", "anthropic", "deepseek", "google", "qwen", "zhipu", "minimax", "step", "mimo"],
 }
 
 # 提供商 → 推荐模型 (2026-05-29 全面更新)

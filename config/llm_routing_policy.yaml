@@ -90,7 +90,7 @@ task_routing:
     fallback_chain: [deepseek, openai]
 
   planning:
-    priorities: [anthropic, openai, deepseek, xai, qwen]
+    priorities: [anthropic, openai, deepseek, xai, qwen, minimax, step]
     constraints:
       require_tools: false
     cost_budget:
@@ -112,7 +112,7 @@ task_routing:
     fallback_chain: [openai, anthropic]
 
   general:
-    priorities: [openai, anthropic, deepseek, google, qwen, zhipu, mimo]
+    priorities: [openai, anthropic, deepseek, google, qwen, zhipu, minimax, step, mimo]
     constraints:
       require_tools: false
     cost_budget:
