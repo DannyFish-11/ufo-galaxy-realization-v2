@@ -355,6 +355,7 @@ class UnifiedNodeExecutor:
         golden_result = await self._try_golden_path(envelope)
         if golden_result is not None and not golden_result.get("fallback"):
             self._emit_aip_v3_task_result(envelope, golden_result)
+            self._record_feedback(envelope, golden_result)
             return golden_result
 
         nodes_root = self._get_nodes_root()
@@ -431,6 +432,7 @@ class UnifiedNodeExecutor:
                 execution_source=envelope.invocation_source.value,
             )
             self._emit_aip_v3_task_result(envelope, result)
+            self._record_feedback(envelope, result)
             return result
 
         except asyncio.TimeoutError:
@@ -504,7 +506,7 @@ class UnifiedNodeExecutor:
                 envelope.action,
                 duration_ms,
             )
-            return NodeInvocationResult(
+            golden_result = NodeInvocationResult(
                 success=result.get("success", False),
                 node_id=envelope.node_id,
                 action=envelope.action,
@@ -526,6 +528,30 @@ class UnifiedNodeExecutor:
             return None
 
     # PR-AIPV3-LOCAL: AIP v3 message emission for local node tracing
+
+    def _record_feedback(
+        self, envelope: NodeInvocationEnvelope, result: NodeInvocationResult
+    ) -> None:
+        """Record execution result to feedback loop for learning.
+
+        PR-STABILITY-FEEDBACK: Every node invocation result is recorded
+        for feedback-loop analysis (success rate, duration trends, etc.).
+        Best-effort: never raises.
+        """
+        try:
+            from core.feedback_loop import get_feedback_loop  # noqa: PLC0415
+
+            feedback = get_feedback_loop()
+            feedback.record_result(
+                task_id=envelope.request_id,
+                device_id=getattr(envelope, "device_id", "local"),
+                action=envelope.action,
+                success=result.success,
+                duration_ms=int(result.duration_ms),
+                error_message=result.error or "",
+            )
+        except Exception:
+            pass
 
     def _emit_aip_v3_task_assign(self, envelope: NodeInvocationEnvelope) -> None:
         """Emit TASK_ASSIGN AIP v3 message before local node execution.
@@ -683,4 +709,4 @@ async def invoke_node(
     if session_id is not None:
         envelope.session_id = session_id
 
-    return await get_unified_node_executor().execute(envelope)
+    return 

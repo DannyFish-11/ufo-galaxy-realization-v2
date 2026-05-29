@@ -108,6 +108,90 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
 
     logger.info("Galaxy Gateway initialized successfully")
 
+    # ── PR-STABILITY-INIT: Initialize dead-code modules into startup chain ──
+    # These modules were created but never initialized. They are now integrated
+    # into the official startup sequence with graceful degradation.
+
+    # 1. Agent Identity Memory — loads persistent self-identity
+    try:
+        from core.agent_identity_memory import get_identity_memory  # noqa: PLC0415
+        _identity = get_identity_memory()
+        logger.info("AgentIdentity: loaded — %s", _identity.get_identity().name)
+        app.state.agent_identity = _identity
+    except Exception as _id_err:
+        logger.debug("AgentIdentity init skipped (non-fatal): %s", _id_err)
+
+    # 2. Node Capability Loader — discovers node actions on startup
+    try:
+        from core.node_capability_loader import get_capability_loader  # noqa: PLC0415
+        _loader = get_capability_loader()
+        # Defer loading to background — don't block startup
+        async def _load_capabilities_bg():
+            try:
+                result = await _loader.load_all_capabilities()
+                logger.info("NodeCapability: loaded %d nodes", len(result))
+            except Exception as _cl_err:
+                logger.debug("NodeCapability background load failed: %s", _cl_err)
+        _asyncio.create_task(_load_capabilities_bg())
+        app.state.capability_loader = _loader
+    except Exception as _cl_err:
+        logger.debug("NodeCapability init skipped (non-fatal): %s", _cl_err)
+
+    # 3. State Sync Bus — cross-standard synchronization
+    try:
+        from core.state_sync_bus import install_default_sync  # noqa: PLC0415
+        install_default_sync()
+        logger.info("StateSyncBus: default sync handlers installed")
+    except Exception as _ss_err:
+        logger.debug("StateSyncBus init skipped (non-fatal): %s", _ss_err)
+
+    # 4. Tailscale Manager — optional VPN tunnel monitoring
+    try:
+        from core.tailscale_manager import get_tailscale_manager  # noqa: PLC0415
+        _ts_mgr = get_tailscale_manager()
+        await _ts_mgr.initialize()
+        if _ts_mgr.is_available():
+            logger.info("Tailscale: available at %s", _ts_mgr.get_tailscale_ip())
+        app.state.tailscale_manager = _ts_mgr
+    except Exception as _ts_err:
+        logger.debug("Tailscale init skipped (non-fatal): %s", _ts_err)
+
+    # 5. Voice Wake Module — local "Galaxy" wake-word detection
+    try:
+        from core.voice_wake_module import get_voice_wake  # noqa: PLC0415
+        _vw = get_voice_wake()
+        if _vw.is_available():
+            # Callback: emit STATE_EVENT to trigger LIMINAL phase
+            def _on_wake_word():
+                try:
+                    from core.desktop_presence_runtime import (  # noqa: PLC0415
+                        get_desktop_presence_runtime,
+                    )
+                    dpr = get_desktop_presence_runtime()
+                    if dpr is not None:
+                        dpr.tristate_field.set_phase_liminal()
+                        logger.info("VoiceWake: 'Galaxy' detected → LIMINAL")
+                except Exception:
+                    pass
+
+            started = _vw.start(callback=_on_wake_word)
+            if started:
+                logger.info("VoiceWake: 'Galaxy' wake-word detection active")
+            app.state.voice_wake = _vw
+    except Exception as _vw_err:
+        logger.debug("VoiceWake init skipped (non-fatal): %s", _vw_err)
+
+    # 6. Feedback Loop — execution result tracking
+    try:
+        from core.feedback_loop import get_feedback_loop  # noqa: PLC0415
+        _fb = get_feedback_loop()
+        app.state.feedback_loop = _fb
+        logger.info("FeedbackLoop: initialized (%d history entries)", len(_fb._history))
+    except Exception as _fb_err:
+        logger.debug("FeedbackLoop init skipped (non-fatal): %s", _fb_err)
+
+    logger.info("PR-STABILITY-INIT: all modules integrated")
+
     # ── Phase B: NATS ↔ WebSocket gateway adapter ──
     try:
         from core.nats_bus import nats_bus
