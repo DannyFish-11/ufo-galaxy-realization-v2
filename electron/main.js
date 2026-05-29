@@ -1,10 +1,12 @@
 const { app, BrowserWindow, globalShortcut, ipcMain } = require('electron');
 const path = require('path');
 
-// ── Single-window architecture ──
-// mainWindow : Three-State Full-Screen AI (always on, never hidden)
-// Panel removed — will be rebuilt with full design brief + reference images
+// ── Two-window architecture ──
+// mainWindow  : Three-State Full-Screen AI (always on, never hidden)
+// panelWindow : AI Control Panel — Colorless Lens (toggled by F12)
 let mainWindow = null;
+let panelWindow = null;
+let isPanelVisible = false;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -70,8 +72,10 @@ app.whenReady().then(() => {
         console.warn('Failed to start system tray:', err);
     }
 
-    // F12 panel shortcut removed — panel will be rebuilt with full design brief
-    // globalShortcut.register('F12', () => { togglePanel(); });
+    // F12: Toggle AI Control Panel (Colorless Lens)
+    globalShortcut.register('F12', () => {
+        togglePanel();
+    });
 
     app.on('browser-window-created', (event, window) => {
         if (mainWindow) {
@@ -79,6 +83,71 @@ app.whenReady().then(() => {
         }
     });
 });
+
+// ═══════════════════════════════════════════
+// AI Control Panel — Colorless Lens
+// ═══════════════════════════════════════════
+
+function createPanelWindow() {
+    const fs = require('fs');
+    const panelPath = path.join(__dirname, 'renderer', 'panel', 'index.html');
+    if (!fs.existsSync(panelPath)) {
+        console.log('[Panel] renderer/panel/index.html not found');
+        return null;
+    }
+
+    if (panelWindow) return panelWindow;
+
+    panelWindow = new BrowserWindow({
+        width: 1200,
+        height: 700,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        fullscreen: false,
+        skipTaskbar: false,
+        hasShadow: true,
+        resizable: true,
+        movable: true,
+        closable: true,
+        focusable: true,
+        show: false,
+        backgroundColor: '#00000000',
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js'),
+            webSecurity: true,
+        }
+    });
+
+    panelWindow.loadFile(panelPath);
+
+    panelWindow.on('closed', () => {
+        panelWindow = null;
+        isPanelVisible = false;
+    });
+
+    return panelWindow;
+}
+
+function togglePanel() {
+    if (!panelWindow) {
+        createPanelWindow();
+    }
+    if (!panelWindow) return;
+
+    if (isPanelVisible) {
+        panelWindow.hide();
+        isPanelVisible = false;
+        console.log('[Panel] Hidden (F12)');
+    } else {
+        panelWindow.show();
+        panelWindow.focus();
+        isPanelVisible = true;
+        console.log('[Panel] Shown (F12)');
+    }
+}
 
 app.on('window-all-closed', () => {
     app.quit();
