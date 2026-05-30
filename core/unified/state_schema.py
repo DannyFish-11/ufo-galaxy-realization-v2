@@ -146,39 +146,59 @@ class DeviceState:
 
 @dataclass
 class TaskState:
-    """Canonical snapshot of a task's lifecycle.
+    """Enhanced canonical snapshot of a task's lifecycle with JudgeLoop support.
+
+    This is the single source of truth for all task execution.  Every organ
+    (Coder, Verifier, Research, etc.) reads this state and writes structured
+    results back to it.  The JudgeLoop uses this to make pass/retry/switch/stop
+    decisions.
 
     Attributes
     ----------
-    task_id:
-        Globally unique task identifier.
-    trace_id:
-        End-to-end correlation ID (shared with the request that spawned this task).
-    session_id:
-        Session that owns this task.
-    tool_name:
-        Name of the skill/tool/action being executed.
-    status:
-        Current lifecycle status (see :class:`TaskStatus`).
-    entry_path:
-        Whether this task was created via the canonical or legacy path.
-    via_legacy_adapter:
-        ``True`` when the task was submitted through a legacy adapter.
-    created_at:
-        Unix timestamp when the task was created.
-    updated_at:
-        Unix timestamp of the last status change.
-    result_summary:
-        Short human-readable summary of the result (populated on done/failed).
-    error:
-        Error message if status is ``failed``.
+    task_id / trace_id / session_id:
+        Identity & correlation.
+    goal:
+        User's original intent — the single sentence OpenClawd extracts.
+    constraints:
+        Confirmed constraints (budget, time, style rules, etc.).
+    phase:
+        JudgeLoop phase: interpret/plan/dispatch/execute/verify/judge/respond.
+    sub_tasks:
+        If the task was split, the sub-task states live here.
+    judge_history:
+        Every Judge decision (pass/retry/switch/stop + reason).
+    failure_points:
+        Current blockers / failed checks.
+    verified_items:
+        Checks that have already passed.
+    user_preferences:
+        Injected from LongTermMemory (style, speed, verbosity, etc.).
+    tool_name / status / entry_path / via_legacy_adapter:
+        Legacy fields (kept for backward compat).
+    created_at / updated_at:
+        Timestamps.
+    result_summary / error:
+        Final output or failure reason.
     metadata:
-        Arbitrary extra fields.
+        Extension bucket.
     """
 
+    # ── identity ──
     task_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     trace_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     session_id: str = ""
+
+    # ── JudgeLoop core (NEW) ──
+    goal: str = ""                           # 用户原始意图
+    constraints: List[str] = field(default_factory=list)   # 已确认约束
+    phase: str = "interpret"                 # JudgeLoop阶段
+    sub_tasks: List[Dict[str, Any]] = field(default_factory=list)  # 子任务
+    judge_history: List[Dict[str, Any]] = field(default_factory=list)  # 裁决历史
+    failure_points: List[str] = field(default_factory=list)   # 失败点
+    verified_items: List[str] = field(default_factory=list)   # 已验证项
+    user_preferences: Dict[str, Any] = field(default_factory=dict)   # 用户偏好
+
+    # ── legacy (kept for backward compat) ──
     tool_name: str = ""
     status: str = TaskStatus.CREATED.value
     entry_path: str = EntryPath.UNKNOWN.value
@@ -197,6 +217,53 @@ class TaskState:
         known = {f for f in cls.__dataclass_fields__}
         filtered = {k: v for k, v in data.items() if k in known}
         return cls(**filtered)
+
+    # ── JudgeLoop helpers (NEW) ──
+    def add_judge_record(self, decision: str, reason: str) -> None:
+        """Append a Judge decision to the history."""
+        self.judge_history.append({
+            "decision": decision,
+            "reason": reason,
+            "timestamp": time.time(),
+        })
+        self.updated_at = time.time()
+
+    def mark_verified(self, item: str) -> None:
+        """Mark an item as passed."""
+        if item not in self.verified_items:
+            self.verified_items.append(item)
+        self.updated_at = time.time()
+
+    def mark_failure(self, point: str) -> None:
+        """Record a failure point."""
+        if point not in self.failure_points:
+            self.failure_points.append(point)
+        self.updated_at = time.time()
+
+    def resolve_failure(self, point: str) -> None:
+        """Remove a failure point (on retry success)."""
+        if point in self.failure_points:
+            self.failure_points.remove(point)
+        self.updated_at = time.time()
+
+    def set_goal(self, goal: str) -> None:
+        """Set the user goal (Interpret step)."""
+        self.goal = goal
+        self.phase = "plan"
+        self.updated_at = time.time()
+
+    def set_phase(self, phase: str) -> None:
+        """Move to the next JudgeLoop phase."""
+        self.phase = phase
+        self.updated_at = time.time()
+
+    def is_blocked(self) -> bool:
+        """Return True if there are unresolved failure points."""
+        return len(self.failure_points) > 0
+
+    def all_verified(self, required: List[str]) -> bool:
+        """Return True if all required items are verified."""
+        return all(r in self.verified_items for r in required)
 
 
 # ---------------------------------------------------------------------------

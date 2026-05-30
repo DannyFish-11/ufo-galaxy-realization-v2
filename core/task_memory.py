@@ -339,6 +339,79 @@ class TaskMemory:
         ]
         return before - len(self._records)
 
+    # ── 语义压缩 (SimpleMem-inspired) ──
+
+    def compress_turn(self, raw_text: str) -> List[str]:
+        """将原始对话压缩为原子事实列表。"""
+        if not raw_text or not raw_text.strip():
+            return []
+        sentences = re.split(r'[。\.\n]+', raw_text.strip())
+        sentences = [s.strip() for s in sentences if s.strip()]
+        stop_words = {"的", "了", "在", "是", "和", "或", "the", "a", "is", "to", "of"}
+        facts = []
+        for sent in sentences:
+            words = sent.split() if sent.isascii() else list(sent)
+            filtered = [w for w in words if w.lower() not in stop_words]
+            if len(filtered) >= 3:
+                facts.append("".join(filtered) if not sent.isascii() else " ".join(filtered))
+        return facts if facts else [raw_text[:200]]
+
+    # ── 跨会话相似度检索 ──
+
+    def retrieve_similar(self, query: str, k: int = 5, min_score: float = 0.3) -> List[TaskSummary]:
+        """跨会话检索与 query 最相似的历史任务。"""
+        if not query or not self._records:
+            return []
+        query_words = set(self._tokenize(query))
+        scored = []
+        for rec in self._records:
+            text = f"{rec.task} {rec.result_summary}"
+            text_words = set(self._tokenize(text))
+            score = self.jaccard(query_words, text_words)
+            if score >= min_score:
+                scored.append((score, rec))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [rec for _, rec in scored[:k]]
+
+    # ── 意图感知检索深度 ──
+
+    def adaptive_context(self, task_query: str, depth: str = "auto") -> str:
+        """根据查询意图动态选择检索深度。"""
+        if depth == "auto":
+            depth = "shallow" if len(task_query) < 20 else "standard" if len(task_query) < 100 else "deep"
+        parts = []
+        if depth == "shallow":
+            parts.append(self._fmt(self.get_recent_summaries(3), "Recent"))
+        elif depth == "standard":
+            parts.append(self._fmt(self.get_recent_summaries(5), "Recent"))
+            parts.append(self._fmt(self.retrieve_similar(task_query, 3), "Related"))
+        elif depth == "deep":
+            parts.append(self._fmt(self.get_recent_summaries(10), "Recent"))
+            parts.append(self._fmt(self.retrieve_similar(task_query, 5), "Related"))
+            facts = self.compress_turn(task_query)
+            if facts:
+                parts.append("Facts: " + "; ".join(facts[:5]))
+        ctx = "\n".join(filter(None, parts))
+        return f"\n{_CONTEXT_MARKER}\n{ctx}\n{_CONTEXT_MARKER}\n" if ctx else ""
+
+    def _fmt(self, records, label):
+        if not records:
+            return ""
+        lines = [f"- {r.task} → {r.result_summary[:60]}" for r in records]
+        return f"{label}:\n" + "\n".join(lines)
+
+    # ── 完整事件链 ──
+
+    def get_event_chain(self, session_id: str) -> List[TaskSummary]:
+        """获取一个会话的完整事件链。"""
+        return [r for r in self._records if r.session_id == session_id]
+
+    def get_task_lineage(self, keyword: str) -> List[TaskSummary]:
+        """获取包含关键字的任务家族。"""
+        return sorted(self.retrieve_similar(keyword, 10), key=lambda r: r.timestamp)
+
+    # ── 上下文注入 (G6) ──
+
     def inject_into_context(
         self,
         context: List[Dict[str, str]],
