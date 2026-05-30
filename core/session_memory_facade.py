@@ -9,6 +9,14 @@ from core.session_manager import get_session_manager
 logger = logging.getLogger("Galaxy.SessionMemoryFacade")
 
 
+# ── TaskMemory bridge (unified access) ──
+
+def _get_task_memory():
+    """Lazy import to avoid circular deps."""
+    from core.task_memory import get_task_memory
+    return get_task_memory()
+
+
 def _is_adjacent_duplicate(
     conversation_session_id: str,
     *,
@@ -152,3 +160,117 @@ def get_session_context(
     except Exception:
         pass
     return []
+
+
+# ── Unified TaskMemory queries (NEW) ──
+# These expose TaskMemory capabilities through the single facade entry point.
+
+
+def get_adaptive_context(
+    session_id: str,
+    query: str,
+    depth: str = "auto",
+) -> str:
+    """Unified adaptive context — retrieves task history via TaskMemory.
+
+    depth: "shallow" | "standard" | "deep" | "auto"
+    """
+    if not session_id or not query:
+        return ""
+    try:
+        return _get_task_memory().adaptive_context(query, depth)
+    except Exception as e:
+        logger.debug("get_adaptive_context failed (non-fatal): %s", e)
+        return ""
+
+
+def get_event_chain(session_id: str) -> str:
+    """Unified event chain — all tasks in a session, sorted by time."""
+    if not session_id:
+        return ""
+    try:
+        records = _get_task_memory().get_event_chain(session_id)
+        if not records:
+            return ""
+        lines = [f"- [{r.timestamp:.0f}] {r.task} → {r.result_summary[:60]}" for r in records]
+        return "Session event chain:\n" + "\n".join(lines)
+    except Exception as e:
+        logger.debug("get_event_chain failed (non-fatal): %s", e)
+        return ""
+
+
+def get_task_lineage(keyword: str) -> str:
+    """Unified task lineage — similar tasks across sessions."""
+    if not keyword:
+        return ""
+    try:
+        records = _get_task_memory().get_task_lineage(keyword)
+        if not records:
+            return ""
+        lines = [f"- [{r.timestamp:.0f}] {r.task} → {r.result_summary[:60]}" for r in records]
+        return "Related task lineage:\n" + "\n".join(lines)
+    except Exception as e:
+        logger.debug("get_task_lineage failed (non-fatal): %s", e)
+        return ""
+
+
+# ── Unified memory query (single entry point for ALL memory) ──
+
+def get_unified_context(
+    session_id: str,
+    query: str = "",
+    depth: str = "auto",
+    max_turns: int = 10,
+) -> List[Dict[str, str]]:
+    """THE single entry point for all memory queries.
+
+    Returns a list of system messages containing:
+    1. Long-term preferences
+    2. Short-term conversation context
+    3. Adaptive task history (cross-session)
+    4. Event chain (current session)
+
+    OpenClawd should call this instead of querying individual memory modules.
+    """
+    messages: List[Dict[str, str]] = []
+
+    # 1. Long-term preferences
+    try:
+        from core.cognitive.long_term_memory import get_long_term_memory
+        ltm = get_long_term_memory()
+        prefs = ltm.retrieve_all(namespace="preferences")
+        if prefs:
+            lines = [f"- {e['key']}: {e['value']}" for e in prefs[:10]]
+            messages.append({
+                "role": "system",
+                "content": "[Long-term memory — user preferences]\n" + "\n".join(lines),
+            })
+    except Exception:
+        pass
+
+    # 2. Short-term conversation context
+    try:
+        turns = get_session_context(session_id, max_turns=max_turns)
+        for turn in turns:
+            messages.append({"role": turn["role"], "content": turn["content"]})
+    except Exception:
+        pass
+
+    # 3. Adaptive task history (cross-session, NEW)
+    if query:
+        try:
+            ctx = get_adaptive_context(session_id, query, depth)
+            if ctx:
+                messages.append({"role": "system", "content": ctx})
+        except Exception:
+            pass
+
+    # 4. Event chain (current session, NEW)
+    try:
+        chain = get_event_chain(session_id)
+        if chain:
+            messages.append({"role": "system", "content": chain})
+    except Exception:
+        pass
+
+    return messages

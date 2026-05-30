@@ -7734,46 +7734,48 @@ class OpenClawd:
                 },
             ]
 
-            # Block-3: Inject long-term memory preferences as an additive system
-            # context message.  Best-effort — failures must not block the chat path.
+            # PR-UNIFIED-MEMORY: Use the single unified memory entry point.
+            # All memory queries go through session_memory_facade — no direct
+            # imports of individual memory modules.  This ensures:
+            #   1. Long-term preferences (from LTM)
+            #   2. Short-term conversation context (WM → SessionManager)
+            #   3. Adaptive task history (cross-session via TaskMemory)
+            #   4. Event chain (current session via TaskMemory)
             try:
-                from core.cognitive.long_term_memory import get_long_term_memory
+                from core.session_memory_facade import get_unified_context
 
-                _ltm = get_long_term_memory()
-                _prefs = _ltm.retrieve_all(namespace="preferences")
-                if _prefs:
-                    _pref_lines = [f"- {e['key']}: {e['value']}" for e in _prefs[:10]]
-                    messages.append(
-                        {
+                _ctx_messages = get_unified_context(
+                    session_id=session_id,
+                    query=message,
+                    depth="auto",
+                    max_turns=10,
+                )
+                messages.extend(_ctx_messages)
+            except Exception as _ctx_err:
+                logger.debug("Unified memory inject failed (non-fatal): %s", _ctx_err)
+                # Fallback: legacy direct injection (kept for backward compat)
+                try:
+                    from core.cognitive.long_term_memory import get_long_term_memory
+                    _ltm = get_long_term_memory()
+                    _prefs = _ltm.retrieve_all(namespace="preferences")
+                    if _prefs:
+                        _pref_lines = [f"- {e['key']}: {e['value']}" for e in _prefs[:10]]
+                        messages.append({
                             "role": "system",
-                            "content": ("[Long-term memory — user preferences]\n" + "\n".join(_pref_lines)),
-                        }
-                    )
-            except Exception as _ltm_err:
-                logger.debug("LongTermMemory inject failed (non-fatal): %s", _ltm_err)
-
-            # Block-3: use the unified session memory facade as the primary
-            # short-term conversation context source.  It reads working memory
-            # first, then SessionManager history, and only then falls back to
-            # legacy _session_memory for backward compatibility.
-            _wm_entries = []
-            try:
-                from core.session_memory_facade import get_session_context
-
-                _wm_entries = get_session_context(session_id, max_turns=10)
-            except Exception as _wm_err:
-                logger.debug("session_memory_facade.get_session_context failed (non-fatal): %s", _wm_err)
-
-            # 添加会话历史
-            session_history = self._session_memory.get(session_id, [])
-            # Block-3: prefer working memory entries; fall back to session_memory preserving
-            # original dict structure for full backward compatibility.
-            if _wm_entries:
-                for turn in _wm_entries:
-                    messages.append({"role": turn["role"], "content": turn["content"]})
-            else:
-                for turn in session_history[-10:]:
-                    messages.append(turn)
+                            "content": "[Long-term memory — user preferences]\n" + "\n".join(_pref_lines),
+                        })
+                except Exception:
+                    pass
+                # Fallback short-term
+                try:
+                    from core.session_memory_facade import get_session_context
+                    _wm_entries = get_session_context(session_id, max_turns=10)
+                    for turn in _wm_entries:
+                        messages.append({"role": turn["role"], "content": turn["content"]})
+                except Exception:
+                    session_history = self._session_memory.get(session_id, [])
+                    for turn in session_history[-10:]:
+                        messages.append(turn)
 
             messages.append({"role": "user", "content": message})
 
