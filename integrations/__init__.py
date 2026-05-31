@@ -88,9 +88,10 @@ async def init_integration(
             _init_error = None
             logger.info("SmartHome gateway initialized — %s", url)
             return _gateway
-        except Exception:
+        except Exception as exc:
+            logger.warning("SmartHome gateway init failed: %s", exc)
             _gateway = None
-            _init_error = Exception("Init failed")
+            _init_error = exc
             raise
 
 

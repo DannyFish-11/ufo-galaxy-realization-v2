@@ -274,9 +274,10 @@ async def _push_to_one_device(
                 await asyncio.sleep(0.05 * (attempt + 1))
             else:
                 raise
-        except Exception:
+        except Exception as exc:
             latency_ms = (time.time() - t0) * 1000
             profile.record(latency_ms, success=False)
+            logger.debug("Push to %s failed after %d attempts: %s", device_id, attempt + 1, exc)
             raise
 
     return False

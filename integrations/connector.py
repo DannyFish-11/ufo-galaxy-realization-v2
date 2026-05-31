@@ -150,8 +150,9 @@ class HAConnector:
         try:
             sub_id = await self._send_subscribe('state_changed')
             return sub_id
-        except Exception:
+        except Exception as exc:
             # Rollback on failure
+            logger.warning("Subscribe state changes failed: %s", exc)
             if callback in self._event_callbacks:
                 self._event_callbacks.remove(callback)
             raise

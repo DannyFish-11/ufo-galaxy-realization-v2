@@ -105,8 +105,8 @@ class SmartHomeGateway:
                 logger.exception("Gateway init failed, rolling back")
                 try:
                     await self._connector.disconnect()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Rollback disconnect error (ignored): %s", exc)
                 self._initialized = False
                 raise
 
@@ -117,8 +117,8 @@ class SmartHomeGateway:
                 # Still try to disconnect connector if it was partially started
                 try:
                     await self._connector.disconnect()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Disconnect during non-init state (ignored): %s", exc)
                 return
 
             self._initialized = False
