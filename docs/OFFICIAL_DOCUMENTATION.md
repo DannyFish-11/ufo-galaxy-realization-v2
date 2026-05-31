@@ -43,7 +43,8 @@ Galaxy 是一个**桌面原生 AI 助手操作系统**，通过 Electron 三态�
 
 | 指标 | 数值 |
 |------|------|
-| 核心代码 (core+gateway+nodes+enhancements) | ~663,105 行 (1,530 文件) |
+| 核心代码 (core+gateway+nodes+enhancements+skills+launcher) | ~663,105 行 (1,530 文件) |
+| **Android 客户端** | **~283,378 行 Kotlin (200+ 文件)** |
 | 节点数量 | 133 个 |
 | 路由端点总数 | ~300+ 个 |
 | 文档数量 | 206 个 Markdown |
@@ -899,10 +900,10 @@ asyncio.run(test())
 
 ### B. 相关仓库
 
-| 仓库 | 职责 |
-|------|------|
-| [galaxy-android](https://github.com/DannyFish-11/galaxy-android) | Android客户端 (APK) |
-| galaxy-realization-v2（本仓库） | 服务端 + 桥接 + VLM + 桌面覆盖层 |
+| 仓库 | 代码规模 | 职责 |
+|------|----------|------|
+| [ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android) | ~28万行 Kotlin | Android客户端 — AIP v3协议、MobileVLM本地推理、SeeClick视觉定位 |
+| ufo-galaxy-realization（本仓库） | ~66万行 Python | 服务端 + Galaxy Gateway + Electron桌面覆盖层 |
 
 ### C. 许可证
 
