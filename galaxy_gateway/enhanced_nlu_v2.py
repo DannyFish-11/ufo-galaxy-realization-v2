@@ -50,7 +50,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
 import asyncio
-import aiohttp
+
 from datetime import datetime
 
 # ============================================================================
@@ -309,46 +309,121 @@ class LLMClient:
         }
         return env_names.get(provider, "")
     
+    # PR-GEMMA4: Ollama 模型从环境变量读取，默认 gemma4（Google 本地多模态模型）
+    _OLLAMA_MODEL_DEFAULT = os.getenv("OLLAMA_MODEL", "gemma4:latest")
+
     def _get_default_model(self, provider: str) -> str:
         """获取默认模型"""
         models = {
-            "ollama": "qwen2.5:7b",
+            "ollama": self._OLLAMA_MODEL_DEFAULT,
             "groq": "llama-3.3-70b-versatile",
-            "deepseek": "deepseek-coder", # 文本/代码生成模型
-            "openrouter": "deepseek/deepseek-chat"
+            "deepseek": "deepseek-chat",
+            "openrouter": "google/gemma-4-it"
         }
-        return models.get(provider, "qwen2.5:7b")
+        return models.get(provider, self._OLLAMA_MODEL_DEFAULT)
+
+    # PR-FALLBACK: 级联回退优先级（本地优先 → 云端兜底）
+    _FALLBACK_CHAIN = [
+        ("ollama", "OLLAMA_MODEL"),       # 本地 Gemma 4
+        ("deepseek", "DEEPSEEK_API_KEY"),  # 云端兜底1: 便宜+中文好
+        ("openrouter", "OPENROUTER_API_KEY"),  # 云端兜底2: 模型多
+        ("groq", "GROQ_API_KEY"),          # 云端兜底3: 速度快
+    ]
 
     async def generate(self, prompt: str, system_prompt: str = None) -> str:
         """
-        生成文本
-        
-        Args:
-            prompt: 用户提示
-            system_prompt: 系统提示
-        
-        Returns:
-            生成的文本
+        生成文本（带级联回退）
+
+        自动尝试：本地 Ollama → DeepSeek → OpenRouter → Groq
+        返回结果中包含 fallback 标记，让调用方知道是否降级。
         """
-        if self.provider == "ollama":
-            return await self._generate_ollama(prompt, system_prompt)
-        else:
-            return await self._generate_openai_compatible(prompt, system_prompt)
-    
+        return await self.generate_with_fallback(prompt, system_prompt)
+
+    def _is_provider_available(self, provider: str) -> bool:
+        """检查提供商是否配置了 API Key（ollama 除外，总是尝试）。"""
+        if provider == "ollama":
+            return True
+        env_key = self._get_api_key_env(provider)
+        return bool(os.getenv(env_key, "").strip())
+
+    async def _generate_with_provider(
+        self, provider: str, model: str, prompt: str, system_prompt: str = None
+    ) -> str:
+        """使用指定提供商生成（临时切换）。"""
+        old_provider, old_model, old_base, old_key = (
+            self.provider, self.model, self.api_base, self.api_key
+        )
+        try:
+            self.provider = provider
+            self.model = model
+            self.api_base = self._get_default_api_base(provider)
+            self.api_key = os.getenv(self._get_api_key_env(provider), "")
+            if provider == "ollama":
+                result = await self._generate_ollama(prompt, system_prompt)
+            else:
+                result = await self._generate_openai_compatible(prompt, system_prompt)
+            return result
+        finally:
+            self.provider, self.model, self.api_base, self.api_key = (
+                old_provider, old_model, old_base, old_key
+            )
+
+    async def generate_with_fallback(
+        self, prompt: str, system_prompt: str = None
+    ) -> str:
+        """
+        级联回退生成。
+
+        Returns:
+            JSON 字符串: {"text": "...", "provider": "ollama", "fallback": false}
+        """
+        import json
+
+        for provider, env_name in self._FALLBACK_CHAIN:
+            if not self._is_provider_available(provider):
+                continue
+            try:
+                model = self._get_default_model(provider)
+                text = await self._generate_with_provider(
+                    provider, model, prompt, system_prompt
+                )
+                if text and text.strip():
+                    result = {
+                        "text": text,
+                        "provider": provider,
+                        "model": model,
+                        "fallback": provider != "ollama",
+                    }
+                    return json.dumps(result, ensure_ascii=False)
+            except Exception as e:
+                logger.warning("[%s] 生成失败，尝试下一个: %s", provider, e)
+                continue
+
+        # 全部失败
+        result = {
+            "text": "",
+            "provider": "none",
+            "model": "",
+            "fallback": True,
+            "error": "所有提供商均不可用，请检查：1) Ollama 是否运行 2) 是否配置了云端 API Key",
+        }
+        return json.dumps(result, ensure_ascii=False)
+
     async def _generate_ollama(self, prompt: str, system_prompt: str = None) -> str:
         """使用 Ollama 生成"""
+        import aiohttp
         url = f"{self.api_base}/api/generate"
-        
+
         payload = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
             "format": "json"  # 要求 JSON 输出
         }
-        
+
         if system_prompt:
             payload["system"] = system_prompt
-        
+
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as response:
@@ -363,7 +438,7 @@ class LLMClient:
                 return ""
     
     async def _generate_openai_compatible(self, prompt: str, system_prompt: str = None) -> str:
-        
+        import aiohttp
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -841,7 +916,7 @@ async def main():
         # 理解用户输入
         result = await nlu_engine.understand(user_input)
         
-        print(f"\n解析结果:")
+        print("\n解析结果:")
         print(f"  成功: {result.success}")
         print(f"  置信度: {result.confidence:.2f}")
         print(f"  方法: {result.method}")
@@ -861,7 +936,7 @@ async def main():
                     print(f"      依赖: {task.depends_on}")
         
         if result.clarifications:
-            print(f"\n需要澄清:")
+            print("\n需要澄清:")
             for clarification in result.clarifications:
                 print(f"  - {clarification}")
 

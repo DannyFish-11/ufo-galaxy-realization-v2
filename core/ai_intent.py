@@ -14,16 +14,13 @@ Galaxy - AI 意图理解引擎
   用户说"帮我整理任务" → 系统理解意图 → 自动执行 → 显示结果
 """
 
-import asyncio
-import hashlib
-import json
+import asyncio  # noqa
 import logging
-import os
-import time
-from collections import defaultdict
-from dataclasses import dataclass, field
+import time  # noqa
+from collections import defaultdict  # noqa
+from dataclasses import dataclass, field, asdict  # noqa
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple  # noqa
 
 logger = logging.getLogger("Galaxy.AIIntent")
 
@@ -624,6 +621,11 @@ class SemanticSearch:
 
         try:
             from qdrant_client.models import PointStruct
+            from dataclasses import dataclass, field, asdict
+            import hashlib
+            import json
+            import os
+            import time
             self._qdrant_client.upsert(
                 collection_name=self._collection_name,
                 points=[PointStruct(

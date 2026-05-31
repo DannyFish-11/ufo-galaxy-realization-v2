@@ -50,22 +50,17 @@ NOTE — Device WebSocket ingress authority:
 """
 
 import asyncio
-import base64
-import json
 import logging
-import os
 import time
-import uuid
 
 _startup_time = time.time()
-from datetime import datetime, timezone
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
-from core.unified_response import UnifiedChatResponse
+from pydantic import BaseModel, Field  # noqa
+from core.unified_response import UnifiedChatResponse  # noqa
 
 # 导入鉴权模块
 try:
@@ -259,7 +254,7 @@ def get_device_ingress_surface_report(
 # Re-export shared state and models for backward compatibility
 # (other modules that imported from core.api_routes directly still work)
 # ---------------------------------------------------------------------------
-from core.routes._shared import (
+from core.routes._shared import (  # noqa
     RouteConnectionPool,
     connection_manager,
     registered_devices,
@@ -270,7 +265,7 @@ from core.routes._shared import (
     _sse_queues,
     _sse_queues_lock,
 )
-from core.routes._models import (
+from core.routes._models import (  # noqa
     DeviceRegisterRequest,
     DeviceStatusUpdate,
     VisionRequest,
@@ -286,7 +281,7 @@ from core.routes._models import (
     UnifiedCommandRequest,
     UnifiedCommandResponse,
 )
-from core.routes._helpers import nodes_root, _load_node, _execute_node, _node_instances
+from core.routes._helpers import nodes_root, _load_node, _execute_node, _node_instances  # noqa
 
 
 # ============================================================================
@@ -470,7 +465,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     #         never block API startup.  The sentinel asserts the audit layer is
     #         present and machine-checkable.
     try:
-        from core.runtime_closure_audit import (  # noqa: F401
+        from core.runtime_closure_audit import (  # noqa
             RUNTIME_CLOSURE_AUDIT_AUTHORITY as _RCA_AUTHORITY,
         )
         RUNTIME_CLOSURE_AUDIT_INTEGRATED: str = (
@@ -1314,6 +1309,11 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
 
                         elif msg_type == "get_health":
                             from core.monitoring import get_monitoring_manager
+                            from dataclasses import dataclass, field, asdict
+                            import base64
+                            import json
+                            import os
+                            import time
                             mon = get_monitoring_manager()
                             await websocket.send_json({
                                 "type": "health",

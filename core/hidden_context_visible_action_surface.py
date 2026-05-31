@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple  # noqa
 
 HIDDEN_CONTEXT_VISIBLE_ACTION_SURFACE_AUTHORITY = (
     "HIDDEN_CONTEXT_VISIBLE_ACTION_SURFACE_AUTHORITY::DESKTOP_PRESENCE_MAINLINE_V1"

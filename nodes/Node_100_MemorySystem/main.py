@@ -17,9 +17,8 @@ Node_100_MemorySystem - 记忆和学习系统
 日期：2026-01-22
 作者：Manus AI
 """
-import asyncio
 
-
+import logging
 import os
 import json
 import sqlite3
@@ -47,7 +46,12 @@ app.add_middleware(
 # 配置
 # ============================================================================
 
-DB_PATH = os.getenv("MEMORY_DB_PATH", "/tmp/galaxy_memory.db")
+# PR-PERSISTENT-PATH: 默认持久化到 /app/data/（docker-compose 已挂 volume）
+# 本地开发时自动回退到项目根目录的 data/ 文件夹
+default_db_path = "/app/data/galaxy_memory.db"
+if not os.path.isdir("/app/data"):
+    default_db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "galaxy_memory.db")
+DB_PATH = os.getenv("MEMORY_DB_PATH", default_db_path)
 MAX_SHORT_TERM_SIZE = 100  # 短期记忆最大条目数
 
 # ============================================================================

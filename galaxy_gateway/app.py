@@ -142,6 +142,20 @@ except Exception as _ai_err:
     logger.warning("AI Agent 路由挂载跳过: %s", _ai_err)
 
 try:
+    from galaxy_gateway.routes.linux_agent import router as _linux_agent_router
+    app.include_router(_linux_agent_router)
+    logger.info("Linux Agent 路由已挂载 (/api/v1/agents/linux/*)")
+except Exception as _la_err:
+    logger.warning("Linux Agent 路由挂载跳过: %s", _la_err)
+
+try:
+    from galaxy_gateway.routes.sandbox import router as _sandbox_router
+    app.include_router(_sandbox_router)
+    logger.info("Sandbox 路由已挂载 (/api/v1/agents/sandbox/*)")
+except Exception as _sb_err:
+    logger.warning("Sandbox 路由挂载跳过: %s", _sb_err)
+
+try:
     from .gateway_service import router as _gateway_v5_router
     app.include_router(_gateway_v5_router, tags=["gateway-v5"])
     logger.info("Gateway v5.0 路由已挂载")

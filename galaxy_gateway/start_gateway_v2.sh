@@ -10,6 +10,7 @@ echo "======================================================================"
 export LLM_PROVIDER="${LLM_PROVIDER:-ollama}"
 export LLM_API_BASE="${LLM_API_BASE:-http://localhost:11434}"
 export LLM_API_KEY="${LLM_API_KEY:-}"
+export OLLAMA_MODEL="${OLLAMA_MODEL:-gemma4:latest}"  # PR-GEMMA4: Google 本地多模态模型
 
 # 检查 Python 版本
 python3 --version
@@ -27,11 +28,11 @@ if [ "$LLM_PROVIDER" = "ollama" ]; then
         sleep 3
     fi
     
-    # 检查模型是否已下载
-    echo "检查 Qwen2.5 模型..."
-    ollama list | grep -q "qwen2.5:7b" || {
-        echo "下载 Qwen2.5 模型..."
-        ollama pull qwen2.5:7b
+    # PR-GEMMA4: 检查 Google Gemma 4 模型（本地多模态，E4B 适合普通电脑）
+    echo "检查 Google Gemma 4 模型 ($OLLAMA_MODEL)..."
+    ollama list | grep -q "$OLLAMA_MODEL" || {
+        echo "下载 $OLLAMA_MODEL ..."
+        ollama pull "$OLLAMA_MODEL"
     }
 fi
 
@@ -40,7 +41,6 @@ echo "======================================================================"
 echo "启动 Galaxy Gateway v2.0..."
 echo "======================================================================"
 echo "LLM 提供商: $LLM_PROVIDER"
+echo "OLLAMA 模型: $OLLAMA_MODEL"
 echo "LLM API 地址: $LLM_API_BASE"
-echo "======================================================================"
-
-python3 gateway_service.py
+echo "===========
