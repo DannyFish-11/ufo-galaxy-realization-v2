@@ -903,7 +903,7 @@ asyncio.run(test())
 | 仓库 | 代码规模 | 职责 |
 |------|----------|------|
 | [ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android) | ~28万行 Kotlin | Android客户端 — AIP v3协议、MobileVLM本地推理、SeeClick视觉定位 |
-| ufo-galaxy-realization（本仓库） | ~66万行 Python | 服务端 + Galaxy Gateway + Electron桌面覆盖层 |
+| ufo-galaxy-realization-v2（本仓库） | ~66万行 Python | 服务端 + Galaxy Gateway + Electron桌面覆盖层 |
 
 ### C. 许可证
 

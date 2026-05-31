@@ -1328,4 +1328,5 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         except WebSocketDisconnect:
             connection_manager.unsubscribe_status(websocket)
         except Exception as exc:
+            logger.debug("WebSocket status error: %s", exc)
             connection_manager.unsubscribe_status(websocket)

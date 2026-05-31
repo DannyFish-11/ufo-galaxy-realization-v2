@@ -319,7 +319,7 @@ WebSocket: `ws://localhost:8765/ws/desktop-presence`
 | 仓库 | 代码规模 | 职责 |
 |------|----------|------|
 | [ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android) | ~28万行 Kotlin | Android 客户端 (APK) — AIP v3 协议、本地 MobileVLM 推理、SeeClick 视觉定位 |
-| ufo-galaxy-realization（本仓库） | ~66万行 Python | 服务端 + Galaxy Gateway + Electron 桌面覆盖层 |
+| ufo-galaxy-realization-v2（本仓库） | ~66万行 Python | 服务端 + Galaxy Gateway + Electron 桌面覆盖层 |
 
 **Android 客户端快速开始**：
 ```bash
