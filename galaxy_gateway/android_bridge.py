@@ -343,6 +343,119 @@ class AndroidBridge:
         self._message_handlers: Dict[MessageType, Callable] = {}
         self._lock = asyncio.Lock()
 
+    # =========================================================================
+    # LIQUID-ISLAND: 当前对话设备追踪 + 灵动岛消息路由
+    # =========================================================================
+
+    def set_active_conversation_device(self, device_id: str) -> None:
+        """标记 device_id 为当前对话设备。
+
+        当用户在某个设备上发起语音/文本交互时调用。
+        后续消息/结果优先投送到该设备（隔空投送体验）。
+        """
+        self._active_conversation_device = device_id
+        self._active_conversation_at = time.time()
+        logger.debug("LiquidIsland: active conversation device = %s", device_id)
+
+    def get_active_conversation_device(self) -> Optional[str]:
+        """获取当前对话设备，考虑 TTL 过期。"""
+        if self._active_conversation_device is None:
+            return None
+        elapsed = time.time() - self._active_conversation_at
+        if elapsed > self._ACTIVE_CONVERSATION_TTL:
+            # TTL 过期，清空
+            self._active_conversation_device = None
+            return None
+        return self._active_conversation_device
+
+    async def route_liquid_message(
+        self,
+        msg_type: str,
+        content: Dict[str, Any],
+        fallback_broadcast: bool = True,
+    ) -> Dict[str, bool]:
+        """灵动岛式消息路由。
+
+        1. 优先投送到当前对话设备（隔空投送）
+        2. 如果对话设备离线，回退到发起设备
+        3. 如果 fallback_broadcast=True，再广播给其他设备
+
+        返回: {device_id: success}
+        """
+        results: Dict[str, bool] = {}
+
+        # 1. 优先：当前对话设备
+        target = self.get_active_conversation_device()
+        if target and target in self._devices:
+            device = self._devices[target]
+            if device.connected and device.websocket:
+                try:
+                    liquid_msg = {
+                        "type": "liquid_event",
+                        "liquid": {
+                            "msg_type": msg_type,
+                            **content,
+                            "route": "active_conversation",
+                        },
+                        "timestamp": int(time.time() * 1000),
+                    }
+                    await device.websocket.send_json(liquid_msg)
+                    results[target] = True
+                    logger.info("LiquidIsland: msg '%s' routed to active device %s", msg_type, target)
+                    # 如果不需要广播，到此结束
+                    if not fallback_broadcast:
+                        return results
+                except Exception as exc:
+                    logger.warning("LiquidIsland: active device %s send failed: %s", target, exc)
+                    results[target] = False
+
+        # 2. 回退：所有在线设备（如果 fallback_broadcast 启用）
+        if fallback_broadcast:
+            for did, dev in self._devices.items():
+                if did in results:
+                    continue  # 跳过已发送的
+                if dev.connected and dev.websocket:
+                    try:
+                        liquid_msg = {
+                            "type": "liquid_event",
+                            "liquid": {
+                                "msg_type": msg_type,
+                                **content,
+                                "route": "broadcast",
+                            },
+                            "timestamp": int(time.time() * 1000),
+                        }
+                        await dev.websocket.send_json(liquid_msg)
+                        results[did] = True
+                    except Exception:
+                        results[did] = False
+
+        return results
+
+    async def route_phase_change(
+        self,
+        old_phase: str,
+        new_phase: str,
+        source: str = "desktop_presence_runtime",
+    ) -> None:
+        """Phase 变化的灵动岛式路由。
+
+        始终广播给所有设备（phase 是全局状态，所有设备都需要知道）。
+        但当前对话设备优先收到（排序在前）。
+        """
+        # 使用已有的 cross_device_sync 引擎（adaptive async concurrent）
+        from core.cross_device_sync import emit_cross_device_phase_sync  # noqa: PLC0415
+        emit_cross_device_phase_sync(
+            old_phase=old_phase,
+            new_phase=new_phase,
+            session_id=getattr(self, "_session_id", ""),
+            source=source,
+        )
+        # 用户当前在哪个设备上对话，消息就优先投送到该设备
+        self._active_conversation_device: Optional[str] = None
+        self._active_conversation_at: float = 0.0
+        self._ACTIVE_CONVERSATION_TTL: float = 300.0  # 5分钟无活动则过期
+
         # 注册默认处理器
         self._register_default_handlers()
 
@@ -999,6 +1112,10 @@ class AndroidBridge:
                 "UNKNOWN_MESSAGE_TYPE",
                 f"Unknown message type: {msg_type_str}",
             )
+
+        # LIQUID-ISLAND: 任何非心跳消息都标记发送设备为当前对话设备
+        if device_id and msg_type not in (MessageType.HEARTBEAT, MessageType.PING):
+            self.set_active_conversation_device(device_id)
 
         schema_gate_evidence = None
         if _evaluate_android_uplink_schema_gate is not None:

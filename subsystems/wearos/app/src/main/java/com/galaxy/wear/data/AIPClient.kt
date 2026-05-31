@@ -240,6 +240,16 @@ class AIPClient(
                     ))
                 }
                 "pong" -> { /* Heartbeat response, ignore */ }
+                "liquid_event" -> {
+                    // LIQUID-ISLAND: 灵动岛式消息
+                    val liquid = json["liquid"]?.jsonObject
+                    if (liquid != null) {
+                        _messages.tryEmit(AIPMessage.LiquidEvent(
+                            msgType = liquid["msg_type"]?.jsonPrimitive?.content ?: "",
+                            content = liquid
+                        ))
+                    }
+                }
             }
         } catch (e: CancellationException) {
             throw e
@@ -358,5 +368,13 @@ sealed class AIPMessage {
         val data: JsonObject
     ) : AIPMessage() {
         override val type = "event"
+    }
+
+    @kotlinx.serialization.Serializable
+    data class LiquidEvent(
+        val msgType: String,
+        val content: JsonObject
+    ) : AIPMessage() {
+        override val type = "liquid_event"
     }
 }

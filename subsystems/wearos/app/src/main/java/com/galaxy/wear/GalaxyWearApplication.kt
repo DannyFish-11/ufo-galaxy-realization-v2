@@ -76,6 +76,57 @@ class GalaxyWearApplication : Application() {
                 Log.e(TAG, "Phase observer crashed: ${e.message}")
             }
         }
+
+        // LIQUID-ISLAND: 收集灵动岛消息
+        appScope.launch {
+            try {
+                aipClient.messages.collect { msg ->
+                    when (msg) {
+                        is AIPMessage.LiquidEvent -> handleLiquidEvent(msg)
+                        else -> {} // Ignore other types
+                    }
+                }
+            } catch (e: CancellationException) {
+                Log.d(TAG, "Liquid event observer cancelled")
+            } catch (e: Exception) {
+                Log.e(TAG, "Liquid event observer crashed: ${e.message}")
+            }
+        }
+    }
+
+    private fun handleLiquidEvent(event: AIPMessage.LiquidEvent) {
+        Log.i(TAG, "LiquidIsland: msg=${event.msgType} content=${event.content}")
+        when (event.msgType) {
+            "phase_change" -> {
+                val toPhase = event.content["to_phase"]?.jsonPrimitive?.content
+                if (toPhase != null) {
+                    _phase.value = when (toPhase.lowercase()) {
+                        "manifest" -> Phase.MANIFEST
+                        "liminal" -> Phase.LIMINAL
+                        else -> Phase.SILENT
+                    }
+                }
+            }
+            "task_done" -> {
+                // 任务完成：光环跳动 + 马达反馈
+                val deviceName = event.content["device_name"]?.jsonPrimitive?.content ?: "设备"
+                Log.i(TAG, "LiquidIsland: task done on $deviceName")
+                // TODO: trigger halo pulse + haptic feedback
+            }
+            "task_progress" -> {
+                // 任务进度：更新显示 "2/3 完成"
+                val completed = event.content["completed"]?.jsonPrimitive?.int ?: 0
+                val total = event.content["total"]?.jsonPrimitive?.int ?: 0
+                Log.i(TAG, "LiquidIsland: progress $completed/$total")
+                // TODO: update progress indicator
+            }
+            "text_result" -> {
+                // 文本结果（如天气查询）：显示在表盘上
+                val text = event.content["text"]?.jsonPrimitive?.content ?: ""
+                Log.i(TAG, "LiquidIsland: text result: $text")
+                // TODO: display text on watch face temporarily
+            }
+        }
     }
 
     fun connect(serverUrl: String, token: String) {
