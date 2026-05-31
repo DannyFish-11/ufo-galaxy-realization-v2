@@ -148,16 +148,38 @@ class PolicyGate:
         """True when system-action execution is switched on."""
         return self._enabled
 
+    # PR-SANDBOX-A: 危险命令模式（保守策略A — PolicyGate安全扩展）
+    _DANGEROUS_COMMAND_PATTERNS = [
+        "rm -rf", "dd if=", "mkfs", "fdisk", "format",
+        ":(){ :|:& };:",           # fork bomb
+        "chmod 777 /", "> /dev/sda", ">/dev/sda",
+        "mv / /dev/null", "shutdown", "reboot", "halt", "poweroff",
+        "iptables -f", "ufw disable", "userdel ", "groupdel ",
+        "kill -9 -1", "kill -9 1", "curl http", "wget http",
+    ]
+
     def allows(self, target: str) -> bool:
         """Return True if *target* is permitted under current policy.
 
         An empty allowlist always returns False (deny-by-default).
+        Additionally, targets that look like shell commands containing
+        dangerous patterns are blocked (PR-SANDBOX-A).
         """
         if not self._enabled:
             return False
         if not self._allowlist:
             return False
         tgt_lower = target.lower()
+
+        # PR-SANDBOX-A: 阻止看起来像危险命令的target
+        # 只启动应用名（如 "chrome", "code"），不执行shell命令
+        if any(p in tgt_lower for p in self._DANGEROUS_COMMAND_PATTERNS):
+            return False
+        # 包含shell元字符的也阻止（防止命令注入）
+        shell_metas = set(";|&`$(){}[]<>#!\\\n\r")
+        if any(c in target for c in shell_metas):
+            return False
+
         return any(tgt_lower == entry or tgt_lower.startswith(entry) for entry in self._allowlist)
 
     def check_action_level(self, action_level_str: str) -> bool:

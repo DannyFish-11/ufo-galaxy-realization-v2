@@ -52,7 +52,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Union  # noqa
 
 logger = logging.getLogger("Galaxy.StateEventBus")
 
@@ -507,3 +507,17 @@ def emit_state(
         )
     except Exception as _exc:
         logger.debug("state_event_bus.emit_state failed (non-fatal): %s", _exc)
+
+
+# ── Convenience module-level subscribe helper ──
+# PR-WEBSOCKET-EXPORT: galaxy_gateway/routes/websocket.py imports this
+def subscribe(
+    event_type: Union[StateEventType, str],
+    callback: Callable[[StateEvent], Any],
+) -> SubscriptionToken:
+    """Module-level convenience wrapper for StateEventBus.subscribe().
+
+    Mirrors the pattern used by get_state_event_bus().subscribe() but
+    avoids forcing callers to fetch the singleton first.
+    """
+    return get_state_event_bus().subscribe(event_type, callback)

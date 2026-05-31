@@ -37,6 +37,7 @@ services:
       - GALAXY_MODE=development
       - GALAXY_LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:latest}
       - NEO4J_URI=bolt://neo4j:7687
       - QDRANT_URL=http://qdrant:6333
       - REDIS_URL=redis://redis:6379
