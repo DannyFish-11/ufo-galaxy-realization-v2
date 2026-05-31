@@ -64,8 +64,8 @@ def _try_emit_event(event_type_name: str, data: dict) -> None:
         et = getattr(EventType, event_type_name, None)
         if et is not None:
             event_bus.publish_sync(et, "agentic_os", data)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
 
 class MCPDynamicGateway:
@@ -257,8 +257,8 @@ class MCPDynamicGateway:
                                 tools.append(descriptor)
                         else:
                             tools.append(descriptor)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
         except ImportError:
             pass
 

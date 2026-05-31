@@ -178,13 +178,13 @@ def _extract_dict(payload: Any) -> Dict[str, Any]:
     if hasattr(payload, "model_dump"):
         try:
             return payload.model_dump()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     if hasattr(payload, "to_dict"):
         try:
             return payload.to_dict()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     if hasattr(payload, "__dict__"):
         return {k: v for k, v in payload.__dict__.items() if not k.startswith("_")}
     return {}
@@ -294,8 +294,8 @@ class TaskAdapterLayer:
             from core.schemas.task_envelope import TaskEnvelope as _TE  # type: ignore
             if isinstance(payload, _TE):
                 return self._from_task_envelope(payload, origin=origin, TaskOrigin=TaskOrigin, build=build_canonical_task)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # ── Resolve origin ────────────────────────────────────────────────
         resolved_origin = self._resolve_origin(origin, payload, TaskOrigin)

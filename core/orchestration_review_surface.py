@@ -833,8 +833,8 @@ def _assemble_fallback_cascade() -> tuple[FallbackCascadeReview, Optional[str]]:
                     raw_reason=ctx.raw_reason,
                     authority="core.windows_execution_arbiter",
                 ))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         had_fallback = len(steps) > 0
         final_tier = steps[-1].to_tier if steps else ""

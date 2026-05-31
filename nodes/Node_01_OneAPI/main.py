@@ -115,8 +115,8 @@ async def _probe_local_llm_once() -> bool:
             )
             if resp.status_code == 200:
                 return True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         if attempt < 3:
             await asyncio.sleep(attempt * 0.5)
     return False
@@ -578,8 +578,8 @@ async def list_models():
                         "cost": 0,
                         "priority": LOCAL_LLM_PRIORITY
                     })
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     
     # 云端模型
     if OPENROUTER_API_KEY:

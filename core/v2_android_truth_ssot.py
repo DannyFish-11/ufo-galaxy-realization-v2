@@ -447,6 +447,7 @@ def build_v2_android_truth_block(
         )
         block.sources.append("core.android_network_participation")
     except Exception as exc:  # noqa: BLE001
+        logger.debug("Fallback triggered: %s", exc)
         note = f"android_network_participation unavailable: {exc}"
         logger.debug("build_v2_android_truth_block[%s]: %s", device_id, note)
         block.build_error_notes.append(note)
@@ -520,6 +521,7 @@ def build_v2_android_truth_block(
                 )
             block.sources.append("core.android_device_state_store")
     except Exception as exc:  # noqa: BLE001
+        logger.debug("Fallback triggered: %s", exc)
         note = f"android_device_state_store unavailable: {exc}"
         logger.debug("build_v2_android_truth_block[%s]: %s", device_id, note)
         block.build_error_notes.append(note)
@@ -578,6 +580,7 @@ def build_v2_android_truth_block(
                     block.local_mode_active = True
             block.sources.append("core.android_mode_gate_policy")
     except Exception as exc:  # noqa: BLE001
+        logger.debug("Fallback triggered: %s", exc)
         note = f"android_mode_gate_policy unavailable: {exc}"
         logger.debug("build_v2_android_truth_block[%s]: %s", device_id, note)
         block.build_error_notes.append(note)

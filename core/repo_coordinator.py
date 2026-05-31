@@ -343,7 +343,8 @@ class RepoCoordinator:
                 if str(getattr(d.device_type, "value", d.device_type)).lower()
                 in ("android", "android_phone", "android_tablet")
             ]
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             device_ids = list(self.android_devices.keys())
 
         results = {}
@@ -457,8 +458,8 @@ class RepoCoordinator:
                 "timestamp": datetime.now().isoformat(),
                 "source": "udm",
             }
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # Legacy compat cache fallback.
         online_count = sum(

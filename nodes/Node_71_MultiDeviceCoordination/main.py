@@ -211,8 +211,8 @@ class MultiDeviceCoordinator:
                 node = registry.get_node(node_id)
                 if node and node.config.get("url"):
                     return node.config["url"]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return os.getenv(env_var, default)
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -465,6 +465,7 @@ class MultiDeviceCoordinator:
             return True
             
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             task.state = TaskState.FAILED
             task.results["error"] = str(e)
             logger.error(f"Task {task_id} failed: {e}")

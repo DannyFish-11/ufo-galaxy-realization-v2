@@ -1201,8 +1201,8 @@ def _wait_for_staged_mesh_participant_results(
                 )
                 if event_id:
                     processed_event_ids.add(event_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         if len(collected) >= len(expected_set):
             if settled_after_all_collected_at is None:
@@ -1697,8 +1697,8 @@ def _try_governance_snapshot() -> Optional[Dict[str, Any]]:
                 return snap.to_dict()
             if isinstance(snap, dict):
                 return snap
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)
     return None
 
 
@@ -1708,8 +1708,8 @@ def _try_policy_alignment() -> Optional[Dict[str, Any]]:
         from core.routes.projection import _assemble_policy_alignment  # type: ignore[attr-defined]
 
         return _assemble_policy_alignment()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)
     return None
 
 
@@ -1725,8 +1725,8 @@ def _try_mesh_session(mesh_id: Optional[str] = None) -> Optional[Dict[str, Any]]
 
             session = build_mesh_session(mesh_id=mesh_id or "default_mesh")
         return session.to_dict() if hasattr(session, "to_dict") else dict(session)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)
     return None
 
 
@@ -1742,8 +1742,8 @@ def _try_mesh_memberships(mesh_id: Optional[str] = None) -> Optional[List[Dict[s
                 m.to_dict() if hasattr(m, "to_dict") else dict(m)
                 for m in memberships
             ]
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)
     return None
 
 
@@ -1765,8 +1765,8 @@ def _try_run_local_execution(
                 _openclawd_instance = OpenClawd.get_instance()
             elif hasattr(OpenClawd, "_instance"):
                 _openclawd_instance = OpenClawd._instance
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed: %s", exc)
 
         if _openclawd_instance is not None and hasattr(_openclawd_instance, "_run_execution"):
             return _openclawd_instance._run_execution(
@@ -2129,7 +2129,7 @@ def select_dispatch_mode(
                 _eligibility_reason = (
                     f"posture:{_result.posture}:role:{coordination_role}"
                 )
-            except Exception:  # noqa: BLE001
+            except Exception as exc:
                 # Fallback: treat observer_only as ineligible, others by posture.
                 _eligible = (
                     coordination_role != "observer_only"
@@ -2144,7 +2144,8 @@ def select_dispatch_mode(
                     is_source_eligible_for_local_execution as _posture_eligible,
                 )
                 _eligible = _posture_eligible(source_runtime_posture)
-            except Exception:  # noqa: BLE001
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 _eligible = source_runtime_posture != "control_only"
             _eligibility_reason = f"posture:{source_runtime_posture}"
 
@@ -2397,7 +2398,8 @@ def _score_candidate(
         if callable(_is_local_ai_ready):
             try:
                 _local_ai_ready = bool(_is_local_ai_ready())
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 _local_ai_ready = False
         elif _is_local_ai_ready is not None:
             _local_ai_ready = bool(_is_local_ai_ready)
@@ -2445,7 +2447,8 @@ def _score_candidate(
             model_ready=_model_ready,
         )
         _canonical_gate_decision = _canonical_gate.decision
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         _canonical_gate_decision = "allow"
 
     if _canonical_gate_decision == "deny" and _model_ready is False and not _fallback_tier:
@@ -2752,7 +2755,8 @@ def _select_target_from_candidates(
                 if callable(_is_local_ai_ready):
                     try:
                         _local_inference_available_for_gate = bool(_is_local_ai_ready())
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug("Fallback triggered: %s", exc)
                         _local_inference_available_for_gate = False
                 elif _is_local_ai_ready is not None:
                     _local_inference_available_for_gate = bool(_is_local_ai_ready)
@@ -3682,8 +3686,8 @@ def orchestrate_source_runtime_dispatch(
                                 handoff_env_dict["dispatch_contract_metadata"] = (
                                     _dispatch_contract_metadata_dict
                                 )
-                            except Exception:  # noqa: BLE001
-                                pass
+                            except Exception as exc:
+                                logger.debug("Suppressed: %s", exc)
                         # Attempt remote handoff
                         try:
                             from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
@@ -4001,8 +4005,8 @@ def _extract_decision_reason(plan: Any) -> Optional[str]:
         meta = getattr(plan, "metadata", None)
         if meta and isinstance(meta, dict):
             return meta.get("decision_reason")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)
     return None
 
 

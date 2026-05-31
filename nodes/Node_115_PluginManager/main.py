@@ -20,14 +20,15 @@ from pydantic import BaseModel
 
 try:
     from nodes.common.cors_config import get_cors_origins
-except Exception:
+except Exception as exc:
     def get_cors_origins():
         return ["*"]
 
 try:
     from core.port_config import get_node_port
     _DEFAULT_PORT = get_node_port("Node_115_PluginManager")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _DEFAULT_PORT = 8115
 
 logging.basicConfig(level=logging.INFO)
@@ -280,9 +281,11 @@ async def check_plugin(plugin_id: str):
             check_result["status_code"] = resp.status_code
             try:
                 check_result["health"] = resp.json()
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 check_result["health"] = resp.text[:200]
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             check_result["reachable"] = False
             check_result["error"] = str(e)
             plugin["status"] = "error"

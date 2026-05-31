@@ -422,6 +422,7 @@ def get_reliability_registry_snapshot() -> Dict[str, Any]:
         try:
             paths[key] = summary.to_dict()
         except Exception as exc:  # pragma: no cover
+            logger.debug("Fallback triggered: %s", exc)
             paths[key] = {"error": str(exc), "path_key": key}
     return {
         "paths": paths,

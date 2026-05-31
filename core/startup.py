@@ -305,6 +305,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["cache"] = {"status": "ok", "backend": cache.backend_type}
         logger.info(f"缓存已初始化: {cache.backend_type}")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["cache"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"缓存初始化失败（降级到内存）: {e}")
 
@@ -332,6 +333,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["monitoring"] = {"status": "ok"}
         logger.info("监控系统已启动")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["monitoring"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"监控系统启动失败: {e}")
 
@@ -347,6 +349,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["error_framework"] = {"status": "ok"}
         logger.info("统一错误处理框架已初始化")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["error_framework"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"错误处理框架初始化失败: {e}")
 
@@ -364,6 +367,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["concurrency_manager"] = {"status": "ok"}
         logger.info("并发管理器已启动")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["concurrency_manager"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"并发管理器启动失败: {e}")
 
@@ -386,6 +390,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["config_hot_reload"] = {"status": "ok", "path": config_path}
         logger.info(f"配置热更新管理器已启动: {config_path}")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["config_hot_reload"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"配置热更新管理器启动失败: {e}")
 
@@ -400,6 +405,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["security_middleware"] = {"status": "ok"}
         logger.info("安全中间件已安装 (审计日志 + 安全头 + IP 黑名单)")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["security_middleware"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"安全中间件安装失败: {e}")
 
@@ -437,6 +443,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
 
         results["performance"] = {"status": "ok", "middlewares": 4 if cache else 3}
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["performance"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"性能中间件加载失败: {e}")
 
@@ -466,6 +473,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["command_router"] = {"status": "ok"}
         logger.info("命令路由引擎已初始化")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["command_router"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"命令路由引擎初始化失败: {e}")
 
@@ -484,6 +492,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["ai_intent"] = {"status": "ok"}
         logger.info("AI 意图引擎已初始化")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["ai_intent"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"AI 意图引擎初始化失败: {e}")
 
@@ -501,7 +510,8 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
                     logger.info(f"Qdrant 向量数据库已连接: {qdrant_url}")
                 else:
                     results["qdrant"] = {"status": "unreachable"}
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             results["qdrant"] = {"status": "not_available"}
             logger.info("Qdrant 不可用（语义搜索将使用本地模式）")
 
@@ -516,6 +526,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["event_bridge"] = {"status": "ok"}
         logger.info("事件桥接已建立")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["event_bridge"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"事件桥接建立失败: {e}")
 
@@ -539,6 +550,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             f"{status['healthy_providers']} 可用"
         )
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["llm_router"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"多 LLM 路由器初始化失败: {e}")
 
@@ -569,6 +581,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
                 f"恢复 {len(agent_factory.agents)} 个 Agent)"
             )
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             results["agent_system"] = {"status": "degraded", "error": str(e)}
             logger.warning(f"Agent 系统初始化失败: {e}")
 
@@ -597,6 +610,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             f"全链路编排器就绪"
         )
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["session_manager"] = {"status": "degraded", "error": str(e)}
         results["e2e_pipeline"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"会话管理/全链路编排器初始化失败: {e}")
@@ -620,6 +634,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             f"(活跃会话: {len(session_roaming._sessions)})"
         )
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["session_roaming"] = {"status": "degraded", "error": str(e)}
         results["wake_event_bus"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"SessionRoaming/WakeEventBus 初始化失败: {e}")
@@ -669,6 +684,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             f"{auto_started} 个自动启动"
         )
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["mcp_loader"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"MCP 加载器初始化失败: {e}")
 
@@ -685,6 +701,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         }
         logger.info(f"能力编排器就绪: {cap_count} 个能力已注册")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["capability_orchestrator"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"能力编排器初始化失败: {e}")
 
@@ -698,6 +715,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["digital_twin"] = {"status": "ok"}
         logger.info("数字孪生引擎已初始化")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["digital_twin"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"数字孪生引擎初始化失败: {e}")
 
@@ -711,6 +729,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["world_model"] = {"status": "ok", "pillars": ["ontology", "epistemology", "information"]}
         logger.info("三位一体世界模型已初始化 (本体论 + 认知论 + 信息论)")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["world_model"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"世界模型初始化失败: {e}")
 
@@ -727,6 +746,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["node_discovery"] = {"status": "ok", "node_id": node_id}
         logger.info(f"节点发现服务已启动: {node_id}")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["node_discovery"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"节点发现服务启动失败: {e}")
 
@@ -745,8 +765,8 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         try:
             from core.monitoring import get_monitoring_manager
             _monitoring = get_monitoring_manager()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         uhm.wire(
             monitoring=_monitoring,
@@ -759,6 +779,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["health_integration"] = {"status": "ok"}
         logger.info("健康检查整合层已启动")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["health_integration"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"健康检查整合层启动失败: {e}")
 
@@ -775,6 +796,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     except ImportError:
         logger.debug("mcp_bridge package not available — skipping")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["mcp_bridge"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"MCP Bridge startup failed (non-fatal): {e}")
 
@@ -787,6 +809,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["galaxy_gateway"] = {"status": "ok"}
         logger.info("Galaxy Gateway 已挂载到 /gateway")
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         results["galaxy_gateway"] = {"status": "not_available", "error": str(e)}
         logger.info(f"Galaxy Gateway 未加载: {e}")
 
@@ -799,6 +822,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             results["device_router"] = {"status": "ok", "instance": "device_router"}
             logger.info("设备路由器就绪")
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             results["device_router"] = {"status": "degraded", "error": str(e)}
             logger.warning(f"设备路由器降级: {e}")
 
@@ -811,6 +835,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             results["orchestrator"] = {"status": "ok"}
             logger.info("GalaxyOrchestrator 就绪")
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             results["orchestrator"] = {"status": "degraded", "error": str(e)}
             logger.warning(f"编排器降级: {e}")
 
@@ -861,6 +886,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             _stt_restored,
         )
     except Exception as _exc:
+        logger.debug("Fallback triggered: %s", _exc)
         results["session_truth_snapshot"] = {"status": "degraded", "error": str(_exc)}
         logger.warning("Session truth 快照存储挂载失败（降级）: %s", _exc)
 
@@ -901,6 +927,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
                 _recovery_report.inflight_tasks_resumable,
             )
     except Exception as _exc:
+        logger.debug("Fallback triggered: %s", _exc)
         results["startup_recovery"] = {"status": "degraded", "error": str(_exc)}
         logger.warning("启动恢复跳过（降级）: %s", _exc)
 
@@ -923,6 +950,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             _rid_store.size(),
         )
     except Exception as _exc:
+        logger.debug("Fallback triggered: %s", _exc)
         results["durable_result_idempotency"] = {"status": "degraded", "error": str(_exc)}
         logger.warning("持久化结果幂等性存储初始化失败（降级）: %s", _exc)
 
@@ -1056,8 +1084,8 @@ async def shutdown_subsystems():
         from core.command_router import get_command_router
         cmd_router = get_command_router()
         await _shutdown_with_timeout("命令路由", cmd_router.cleanup(max_age_seconds=0))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # 3. 监控系统
     try:

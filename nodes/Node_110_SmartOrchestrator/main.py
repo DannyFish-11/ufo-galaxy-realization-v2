@@ -97,7 +97,7 @@ async def _check_llm_provider_available() -> bool:
         async with httpx.AsyncClient(timeout=1.5) as client:
             r = await client.get(f"{_LLM_ROUTER_URL}/health")
             return r.status_code < 400
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -366,6 +366,7 @@ class SmartOrchestrator:
             logger.info(f"Task {task.task_id} completed")
             
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             task.error = str(e)
             task.retry_count += 1
             
@@ -472,6 +473,7 @@ class SmartOrchestrator:
             logger.info(f"Workflow execution {execution.execution_id} completed")
             
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             execution.status = WorkflowStatus.FAILED
             execution.error = str(e)
             execution.completed_at = datetime.now()

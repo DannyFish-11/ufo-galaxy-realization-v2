@@ -128,7 +128,8 @@ def get_device_operational_support(
             from core.unified.device_manager import get_unified_device_manager
 
             device_record = get_unified_device_manager().get_device(device_id)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             device_record = None
 
     if raw_device_type is None and device_record is not None:

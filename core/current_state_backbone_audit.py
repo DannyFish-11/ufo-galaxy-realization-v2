@@ -222,7 +222,7 @@ def _probe(module_path: str, token: str) -> bool:
             return False
         with open(spec.origin, "r", encoding="utf-8", errors="ignore") as fh:
             return token in fh.read()
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -230,7 +230,7 @@ def _module_exists(module_path: str) -> bool:
     """检查 V2 侧模块是否可找到。"""
     try:
         return importlib.util.find_spec(module_path) is not None
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -944,7 +944,8 @@ def build_backbone_snapshot() -> BackboneSnapshot:
         from core.v2_unified_mode_model import build_unified_mode_model_catalog
 
         snap.layered_mode_model = build_unified_mode_model_catalog()
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         snap.layered_mode_model = {}
 
     # --- 已成立 -----------------------------------------------------------

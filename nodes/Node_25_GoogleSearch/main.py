@@ -125,6 +125,7 @@ class GoogleSearchNode:
             self.logger.info(f"为查询 '{query}' 成功获取 {len(results)} 条结果")
             return {"query": query, "search_type": "web", "results": results}
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             self.logger.error(f"执行搜索时发生严重错误: {e}", exc_info=True)
             self.status = NodeStatus.ERROR
             raise HTTPException(status_code=500, detail=f"搜索服务内部错误: {e}")
@@ -145,6 +146,7 @@ class GoogleSearchNode:
         except HTTPException:
             raise
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             self.logger.error(f"图片搜索时发生错误: {e}", exc_info=True)
             self.status = NodeStatus.ERROR
             raise HTTPException(status_code=500, detail=f"图片搜索服务内部错误: {e}")
@@ -217,6 +219,7 @@ class GoogleSearchNode:
             )
             return search_results
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             self.logger.error(f"googlesearch库调用失败: {e}", exc_info=True)
             if "HTTP Error 429" in str(e):
                 self.logger.warning("收到HTTP 429，可能需要增加 pause 时间或更换 IP")
@@ -235,6 +238,7 @@ class GoogleSearchNode:
                 port=self.config.api_config.port
             )
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             self.logger.critical(f"无法启动Uvicorn服务器: {e}", exc_info=True)
             self.status = NodeStatus.ERROR
         finally:
@@ -275,6 +279,7 @@ async def main():
         node.run()
 
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         logging.critical(f"节点启动过程中发生致命错误: {e}", exc_info=True)
         # 确保即使在启动失败时也能记录日志
 

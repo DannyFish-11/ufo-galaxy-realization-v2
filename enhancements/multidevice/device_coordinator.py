@@ -131,7 +131,7 @@ class DeviceSession:
             # AIP v3.0: 优先使用 JSON 序列化
             try:
                 await self.websocket.send_text(message.to_json())
-            except Exception:
+            except Exception as exc:
                 # 回退到 v2.0 二进制（旧版客户端兼容）
                 await self.websocket.send_bytes(message.to_bytes())
             self.update_activity()
@@ -567,7 +567,8 @@ class DeviceCoordinator:
                 try:
                     data = await websocket.receive_text()
                     is_text = True
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Fallback triggered: %s", exc)
                     data = await websocket.receive_bytes()
                     is_text = False
                 self._messages_received += 1

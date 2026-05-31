@@ -22,7 +22,8 @@ import uvicorn
 try:
     from core.port_config import get_node_port
     _port_from_config = get_node_port("Node_87_ImageAnalysis")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _port_from_config = None
 
 try:
@@ -199,7 +200,8 @@ class ImageAnalysisService:
                 text = await self._openai_vision(prompt, req.image_base64, req.image_url)
                 try:
                     parsed = json.loads(text)
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Fallback triggered: %s", exc)
                     parsed = {"raw_analysis": text}
                 return {"success": True, "provider": "openai", "features": features, "analysis": parsed}
 
@@ -333,7 +335,8 @@ class ImageAnalysisService:
                 try:
                     parsed = json.loads(text)
                     classifications = parsed.get("classifications", [])
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Fallback triggered: %s", exc)
                     classifications = [{"category": text, "confidence": 1.0}]
                 return {"success": True, "classifications": classifications, "provider": "openai"}
             elif VISION_PROVIDER == "azure":
@@ -365,7 +368,8 @@ class ImageAnalysisService:
                 try:
                     parsed = json.loads(text)
                     objects = parsed.get("objects", [])
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Fallback triggered: %s", exc)
                     objects = []
                 return {"success": True, "objects": objects, "count": len(objects), "provider": "openai"}
             elif VISION_PROVIDER == "azure":
@@ -427,7 +431,8 @@ class ImageAnalysisService:
                     text = resp.json()["choices"][0]["message"]["content"]
                 try:
                     parsed = json.loads(text)
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Fallback triggered: %s", exc)
                     parsed = {"raw_comparison": text}
                 return {"success": True, "comparison": parsed, "provider": "openai"}
             else:

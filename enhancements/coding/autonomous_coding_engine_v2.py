@@ -93,7 +93,8 @@ class CodeAnalyzer:
                     timeout=5
                 )
                 tools[tool] = result.returncode == 0
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 tools[tool] = False
         
         return tools
@@ -281,6 +282,7 @@ class TestRunner:
         except subprocess.TimeoutExpired:
             result['error'] = "Code execution timed out"
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             result['error'] = str(e)
         
         return result

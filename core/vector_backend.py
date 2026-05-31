@@ -200,8 +200,8 @@ class _ChromaBackend:
         if self._ready and self._collection is not None:
             try:
                 return self._collection.count()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return self._fallback.document_count
 
     @property

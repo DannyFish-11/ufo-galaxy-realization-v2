@@ -33,7 +33,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     try:
         from core.security_middleware import RateLimiter as _RateLimiter
         _vault_fetch_limiter = _RateLimiter(requests_per_minute=30, burst_size=10)
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         _vault_fetch_limiter = None
 
     @router.post("/api/v1/vault/credentials")

@@ -209,8 +209,8 @@ class RouteExplanation:
             if isinstance(raw, dict):
                 try:
                     bases.append(_DB.from_dict(raw))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             elif isinstance(raw, DecisionBasis):
                 bases.append(raw)
 
@@ -220,8 +220,8 @@ class RouteExplanation:
             if isinstance(raw, dict):
                 try:
                     candidates.append(RejectedCandidate.from_dict(raw))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             elif isinstance(raw, RejectedCandidate):
                 candidates.append(raw)
 
@@ -229,7 +229,8 @@ class RouteExplanation:
         if isinstance(raw_conf, dict):
             try:
                 confidence = RouteConfidence.from_dict(raw_conf)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 confidence = UNDETERMINED_CONFIDENCE
         elif isinstance(raw_conf, RouteConfidence):
             confidence = raw_conf
@@ -331,7 +332,7 @@ def build_route_explanation(
             task_id=task_id,
             trace_id=trace_id,
         )
-    except Exception:
+    except Exception as exc:
         return EMPTY_ROUTE_EXPLANATION
 
 

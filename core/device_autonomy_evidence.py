@@ -151,7 +151,8 @@ def classify_device_autonomy(device_id: str) -> Dict[str, Any]:
         from core.unified.device_manager import get_unified_device_manager
 
         device_record = get_unified_device_manager().get_device(device_id)
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         device_record = None
     host_identity = build_android_runtime_host_identity(device_record or {"device_id": device_id})
     cross_repo_report = build_canonical_cross_repo_evidence_report()
@@ -309,8 +310,8 @@ def build_device_autonomy_report(device_ids: Optional[List[str]] = None) -> Dict
             from core.unified.device_manager import get_unified_device_manager
 
             known_ids.update(device.device_id for device in get_unified_device_manager().list_devices())
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     classes = [classify_device_autonomy(device_id) for device_id in sorted(known_ids)]
     return {
         "authority": DEVICE_AUTONOMY_EVIDENCE_AUTHORITY,

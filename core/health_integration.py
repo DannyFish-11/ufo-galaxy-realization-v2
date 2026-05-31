@@ -298,21 +298,24 @@ class UnifiedHealthManager:
         if self._load_monitor:
             try:
                 dashboard["system_load"] = self._load_monitor.export_stats()
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 dashboard["system_load"] = {"error": "unavailable"}
 
         # 错误追踪
         if self._error_tracker:
             try:
                 dashboard["errors"] = self._error_tracker.get_summary()
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 dashboard["errors"] = {"error": "unavailable"}
 
         # 并发管理
         if self._concurrency:
             try:
                 dashboard["concurrency"] = self._concurrency.get_status()
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 dashboard["concurrency"] = {"error": "unavailable"}
 
         # 节点发现 (PR-12: expose canonical discovery participation summary)
@@ -335,7 +338,8 @@ class UnifiedHealthManager:
                 )
                 try:
                     dashboard["node_discovery"] = self._discovery.get_status()
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Fallback triggered: %s", exc)
                     dashboard["node_discovery"] = {"error": "unavailable"}
 
         return dashboard
@@ -355,7 +359,8 @@ class UnifiedHealthManager:
         if self._load_monitor:
             try:
                 result["load_score"] = round(self._load_monitor.get_load_score(), 4)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 result["load_score"] = -1
 
         if self._error_tracker:
@@ -363,8 +368,8 @@ class UnifiedHealthManager:
                 summary = self._error_tracker.get_summary()
                 result["error_rate_1m"] = summary.get("error_rate_1m", 0)
                 result["total_errors"] = summary.get("total_errors", 0)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         return result
 

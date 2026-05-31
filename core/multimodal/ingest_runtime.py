@@ -204,15 +204,15 @@ def stop_ingest_bus() -> None:
     if _ingest_bus is not None:
         try:
             _ingest_bus.stop()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         _ingest_bus = None
 
     if _ingest_task is not None:
         try:
             _ingest_task.cancel()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         _ingest_task = None
 
     logger.debug("MultimodalIngressBus stopped")

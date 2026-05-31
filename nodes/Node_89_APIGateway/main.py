@@ -25,7 +25,8 @@ import uvicorn
 try:
     from core.port_config import get_node_port
     _port_from_config = get_node_port("Node_89_APIGateway")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _port_from_config = None
 
 try:

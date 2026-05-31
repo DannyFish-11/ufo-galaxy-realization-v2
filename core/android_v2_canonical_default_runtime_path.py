@@ -473,7 +473,8 @@ def build_android_presence_runtime_field() -> AndroidPresenceRuntimeField:
 
     try:
         records_dicts = [r.to_dict() for r in summary.records]
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         records_dicts = []
 
     return AndroidPresenceRuntimeField(

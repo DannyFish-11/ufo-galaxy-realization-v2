@@ -155,6 +155,7 @@ async def reload_mcp(server_id: str) -> Dict[str, Any]:
         from core.mcp_loader import MCPLoader
         loader = MCPLoader.get_instance()
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         error = f"MCPLoader 不可用: {e}"
         _set_status(key, loaded=False, error=error)
         return {"server_id": server_id, "loaded": False, "error": error}
@@ -168,6 +169,7 @@ async def reload_mcp(server_id: str) -> Dict[str, Any]:
         elif hasattr(loader, "load_server"):
             await loader.load_server(server_id)
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         error = f"MCP 加载失败: {e}"
         _set_status(key, loaded=False, error=error)
         logger.warning("MCP 热重载失败 %s: %s", server_id, e)
@@ -223,6 +225,7 @@ async def reload_skill(skill_id: str) -> Dict[str, Any]:
         from core.skill_loader import SkillLoader
         loader = SkillLoader.get_instance()
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         error = f"SkillLoader 不可用: {e}"
         _set_status(key, loaded=False, error=error)
         return {"skill_id": skill_id, "loaded": False, "error": error}
@@ -238,6 +241,7 @@ async def reload_skill(skill_id: str) -> Dict[str, Any]:
         else:
             skill = None
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         error = f"Skill 加载失败: {e}"
         _set_status(key, loaded=False, error=error)
         logger.warning("Skill 热重载失败 %s: %s", skill_id, e)
@@ -257,7 +261,8 @@ async def reload_skill(skill_id: str) -> Dict[str, Any]:
                 None,
             )
             validation = _validate_skill(matched) if matched else {"valid": True, "errors": []}
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             validation = {"valid": True, "errors": []}
 
     valid = validation["valid"]
@@ -385,8 +390,8 @@ def get_load_status() -> Dict[str, Any]:
                     "error": "",
                     "last_updated": 0.0,
                 }
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # 补充 SkillLoader 实时状态
     try:
@@ -406,7 +411,7 @@ def get_load_status() -> Dict[str, Any]:
                     "error": "",
                     "last_updated": 0.0,
                 }
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     return {"mcp": mcp, "skills": skills}

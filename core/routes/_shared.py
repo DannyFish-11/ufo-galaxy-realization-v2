@@ -220,8 +220,8 @@ class RouteConnectionPool:
             return await self._unified().send_command_and_wait(
                 device_id, command, params, timeout=timeout
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # Fallback: local pending-response path (compat)
         command_id = f"cmd_{uuid.uuid4().hex[:12]}"
@@ -259,8 +259,8 @@ class RouteConnectionPool:
         # Delegate to UCM first
         try:
             self._unified().resolve_command_response(command_id, payload)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # Local fallback (compat)
         future = self._pending_responses.get(command_id)

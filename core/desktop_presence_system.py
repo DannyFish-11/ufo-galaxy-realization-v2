@@ -488,8 +488,8 @@ def build_desktop_presence_system_view(
                 if hasattr(android_presence_participation, "to_dict")
                 else dict(android_presence_participation)
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     return view
 
 

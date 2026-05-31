@@ -223,8 +223,8 @@ def _get_selector_status(device_id: str) -> Optional[Any]:
                 try:
                     device = getattr(udm, fn)(device_id)
                     break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
         if device is None:
             # Try list_devices and filter
@@ -259,8 +259,8 @@ def _get_mesh_membership(device_id: str) -> Optional[Any]:
                 if entry is not None:
                     from contracts.mesh_membership import from_body_mesh_entry
                     return from_body_mesh_entry(entry)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # Try device formation summary
         try:
@@ -271,8 +271,8 @@ def _get_mesh_membership(device_id: str) -> Optional[Any]:
             for m in memberships or []:
                 if str(getattr(m, "member_device_id", "")) == device_id:
                     return m
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     except Exception as exc:
         logger.debug("_get_mesh_membership(%s): %s", device_id, exc)
@@ -287,8 +287,8 @@ def _get_mesh_session(device_id: str) -> Optional[Any]:
         try:
             from contracts.mesh_session_coordinator import get_active_session_for_device
             return get_active_session_for_device(device_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         try:
             from core.runtime.source_dispatch_orchestrator import (
@@ -300,8 +300,8 @@ def _get_mesh_session(device_id: str) -> Optional[Any]:
                 for p in participants:
                     if str(getattr(p, "device_id", "")) == device_id:
                         return session
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     except Exception as exc:
         logger.debug("_get_mesh_session(%s): %s", device_id, exc)

@@ -185,8 +185,8 @@ class UnifiedConfigManager:
                 return self._backend.to_dict(include_sensitive=include_sensitive)
             if hasattr(self._backend, "_config"):
                 return dict(self._backend._config)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return {}
 
 

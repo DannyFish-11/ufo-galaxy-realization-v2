@@ -127,6 +127,9 @@ class TaskOrchestrator:
         self._worker_task: Optional[asyncio.Task] = None
         # Round-robin index for distributing tasks across connected devices.
         self._device_rr_index: int = -1
+        # PR-CONCURRENT-DEVICE-CONTROL: per-device task count with lock
+        self._device_task_counts: Dict[str, int] = {}
+        self._device_count_lock = asyncio.Lock()
         # PR-2: TaskEnvelope registry — each submitted task is wrapped in an
         # envelope immediately so all internal processing uses the unified format.
         self._task_envelopes: Dict[str, Any] = {}
@@ -392,7 +395,13 @@ class TaskOrchestrator:
                     pass
         finally:
             task.completed_at = datetime.now(timezone.utc)
-    
+            # PR-CONCURRENT-DEVICE-CONTROL: release device task count
+            if task.assigned_device:
+                try:
+                    await self.release_device_task(task.assigned_device)
+                except Exception:
+                    pass
+
     async def _select_device(self, task: Task) -> Optional[str]:
         """选择执行任务的设备（优先选择自主执行能力的设备）"""
         # 如果已指定设备
@@ -450,22 +459,36 @@ class TaskOrchestrator:
             if typed_devices:
                 preferred = typed_devices
 
-        # 2. 最少任务优先: 选择当前负载最低的设备
-        if not hasattr(self, "_device_task_counts"):
-            self._device_task_counts = {}
-            self._rr_index = 0
+        # 2. 最少任务优先: 选择当前负载最低的设备 (async-safe)
+        async with self._device_count_lock:
+            preferred_sorted = sorted(
+                preferred,
+                key=lambda d: self._device_task_counts.get(d, 0)
+            )
 
-        preferred_sorted = sorted(
-            preferred,
-            key=lambda d: self._device_task_counts.get(d, 0)
-        )
-
-        # 3. 轮询 (在同等负载中轮询)
-        selected = preferred_sorted[self._rr_index % len(preferred_sorted)]
-        self._rr_index += 1
-        self._device_task_counts[selected] = self._device_task_counts.get(selected, 0) + 1
+            # 3. 轮询 (在同等负载中轮询)
+            selected = preferred_sorted[self._device_rr_index % len(preferred_sorted)]
+            self._device_rr_index += 1
+            self._device_task_counts[selected] = self._device_task_counts.get(selected, 0) + 1
 
         return selected
+
+    async def release_device_task(self, device_id: str) -> None:
+        """Decrement task count when a task completes. Call this after task done/failed.
+
+        PR-CONCURRENT-DEVICE-CONTROL: prevents _device_task_counts from growing
+        indefinitely and breaking load balancing.
+        """
+        async with self._device_count_lock:
+            current = self._device_task_counts.get(device_id, 0)
+            if current > 0:
+                self._device_task_counts[device_id] = current - 1
+
+    async def reset_device_counts(self) -> None:
+        """Reset all device task counts. Useful when topology changes dramatically."""
+        async with self._device_count_lock:
+            self._device_task_counts.clear()
+            self._device_rr_index = -1
     
     async def _decompose_task(self, task: Task) -> List[Command]:
         """分解任务为命令序列。

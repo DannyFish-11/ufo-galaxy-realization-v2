@@ -228,8 +228,8 @@ def build_discovery_health_surface(
             surface["discovery_healthy"] = status.get("healthy_nodes", 0)
             if surface["discovery_total"] > 0:
                 surface["discovery_participation"] = "partial"
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     except Exception as exc:
         logger.debug("build_discovery_health_surface: summary query failed: %s", exc)
 

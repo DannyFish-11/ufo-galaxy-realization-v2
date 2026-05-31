@@ -22,14 +22,15 @@ from pydantic import BaseModel
 
 try:
     from nodes.common.cors_config import get_cors_origins
-except Exception:
+except Exception as exc:
     def get_cors_origins():
         return ["*"]
 
 try:
     from core.port_config import get_node_port
     _DEFAULT_PORT = get_node_port("Node_98_MultimodalFusion")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _DEFAULT_PORT = 8098
 
 logging.basicConfig(level=logging.INFO)
@@ -279,7 +280,8 @@ async def cross_modal_search(req: CrossModalSearchRequest):
     try:
         parsed = json.loads(raw)
         ranked = parsed.get("ranked", [])[:req.top_k]
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         ranked = []
 
     return {

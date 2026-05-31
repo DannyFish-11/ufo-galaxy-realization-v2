@@ -27,7 +27,8 @@ import httpx
 try:
     from nodes.common.cors_config import get_cors_origins
     _cors_origins = get_cors_origins()
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _cors_origins = ["*"]
 
 port = int(os.getenv("NODE_93_PORT", "8093"))

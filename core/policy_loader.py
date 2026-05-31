@@ -36,8 +36,8 @@ def get_policy() -> Dict[str, Any]:
         try:
             with open(_POLICY_FILE, "r", encoding="utf-8") as fh:
                 return json.load(fh)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     return _DEFAULT_POLICY.copy()
 
 

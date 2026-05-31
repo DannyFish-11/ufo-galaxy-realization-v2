@@ -80,7 +80,8 @@ async def _do_fetch(req: FetchRequest) -> Dict[str, Any]:
     content_type = response.headers.get("content-type", "")
     try:
         content = raw.decode("utf-8", errors="replace") if raw else ""
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         content = ""
 
     return {
@@ -141,6 +142,7 @@ async def fetch(request: FetchRequest):
         stats["error_count"] += 1
         raise HTTPException(status_code=502, detail=f"Request error: {exc}")
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         stats["error_count"] += 1
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -161,6 +163,7 @@ async def fetch_batch(request: BatchFetchRequest):
                 stats["success_count"] += 1
                 return result
             except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 stats["error_count"] += 1
                 return {"success": False, "url": req.url, "error": str(exc)}
 
@@ -190,6 +193,7 @@ async def ping(url: str = Query(..., description="要检查的 URL")):
             "reachable": True,
         }
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         stats["error_count"] += 1
         return {"success": False, "url": url, "reachable": False, "error": str(exc)}
 

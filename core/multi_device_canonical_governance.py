@@ -782,7 +782,8 @@ try:
         CoordinationRole as _CoordinationRole,
     )
     _COORDINATION_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _COORDINATION_AVAILABLE = False
     _get_coordination_runtime = None  # type: ignore[assignment]
     _CoordinationRole = None  # type: ignore[assignment]
@@ -793,7 +794,8 @@ try:
         get_android_delegated_audit_recorder as _get_audit_recorder,
     )
     _AUDIT_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _AUDIT_AVAILABLE = False
     _get_audit_recorder = None  # type: ignore[assignment]
 
@@ -804,7 +806,8 @@ try:
         AndroidParticipantStatus as _AndroidParticipantStatus,
     )
     _PARTICIPANT_EVIDENCE_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _PARTICIPANT_EVIDENCE_AVAILABLE = False
     _ingest_participant_evidence = None  # type: ignore[assignment]
     _AndroidParticipantStatus = None  # type: ignore[assignment]
@@ -815,7 +818,8 @@ try:
         list_attached_sessions as _list_attached_sessions,
     )
     _SESSION_REGISTRY_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _SESSION_REGISTRY_AVAILABLE = False
     _list_attached_sessions = None  # type: ignore[assignment]
 
@@ -825,7 +829,8 @@ try:
         converge_multi_device_truth as _converge_truth,
     )
     _TRUTH_CONVERGENCE_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _TRUTH_CONVERGENCE_AVAILABLE = False
     _converge_truth = None  # type: ignore[assignment]
 

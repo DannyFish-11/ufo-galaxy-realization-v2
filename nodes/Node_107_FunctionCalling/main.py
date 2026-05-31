@@ -23,14 +23,15 @@ from pydantic import BaseModel
 
 try:
     from nodes.common.cors_config import get_cors_origins
-except Exception:
+except Exception as exc:
     def get_cors_origins():
         return ["*"]
 
 try:
     from core.port_config import get_node_port
     _DEFAULT_PORT = get_node_port("Node_107_FunctionCalling")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _DEFAULT_PORT = 8107
 
 logging.basicConfig(level=logging.INFO)

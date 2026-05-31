@@ -733,6 +733,6 @@ def reset_network_graph_runtime(*, clear_durable_state: bool = False) -> None:
     if clear_durable_state and NetworkGraphRuntime._instance is not None:
         try:
             NetworkGraphRuntime._instance.clear_durable_state()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     NetworkGraphRuntime._instance = None

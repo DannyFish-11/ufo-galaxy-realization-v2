@@ -247,7 +247,8 @@ class GlobalRouter:
                     node.last_heartbeat = datetime.now()
                 else:
                     node.status = NodeStatus.DEGRADED
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             node.status = NodeStatus.UNHEALTHY
             
         return node.status

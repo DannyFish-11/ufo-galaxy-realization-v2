@@ -202,6 +202,7 @@ class OpenCodeEngine:
             self.generation_history.append(result)
             return result
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"OpenCodeEngine: LLM 调用失败 — {exc}"
             logger.error(err, exc_info=True)
             result = CodeGenerationResult(
@@ -275,6 +276,7 @@ class OpenCodeEngine:
             finally:
                 loop.close()
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             gen_id = f"codegen_{uuid.uuid4().hex[:12]}"
             err = f"OpenCodeEngine: 同步调用失败 — {exc}"
             logger.error(err, exc_info=True)

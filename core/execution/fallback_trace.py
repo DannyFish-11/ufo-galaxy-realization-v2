@@ -516,8 +516,8 @@ def _build_trace(
                 primary_path = runtime_domain
             else:
                 primary_path = "local_executor"
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.warning("Exception suppressed: %s", exc)
 
     eff_session_id = runtime_session_id or profile_session_id
 
@@ -549,8 +549,8 @@ def _build_trace(
                             selected=False,
                         ).to_dict()
                     )
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.warning("Exception suppressed: %s", exc)
 
     # --- Derive fallback path + outcome from execution result -------------
     fallback_path: Optional[str] = None
@@ -600,8 +600,8 @@ def _build_trace(
                     outcome = FallbackOutcome.BLOCKED.value
                     fallback_path = None
                     fallback_reason = primary_block_reason
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.warning("Exception suppressed: %s", exc)
 
     # --- Add selected fallback candidate ---------------------------------
     try:
@@ -614,8 +614,8 @@ def _build_trace(
                     selected=True,
                 ).to_dict()
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.warning("Exception suppressed: %s", exc)
 
     return FallbackDecisionTrace(
         runtime_session_id=eff_session_id,

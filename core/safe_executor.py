@@ -383,8 +383,8 @@ class SafeExecutor:
         except asyncio.TimeoutError:
             try:
                 proc.kill()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
             return ExecutionResult(
                 language=language, success=False,
                 error=f"Execution timeout ({timeout}s)",
@@ -502,8 +502,8 @@ class SafeExecutor:
         finally:
             try:
                 os.unlink(tmp_path)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
     # ================================================================
     # 辅助
@@ -676,8 +676,8 @@ class ExecutionFeedbackLoop:
                 row = cursor.fetchone()
                 if row:
                     suggestions.append(row[0])
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         return suggestions[:limit]
 

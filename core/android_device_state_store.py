@@ -586,8 +586,8 @@ class _AndroidDeviceStateStore:
                         "source": "DEVICE_EXECUTION_EVENT",
                     },
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         logger.debug(
             "Absorbed DEVICE_EXECUTION_EVENT from %s (flow=%s, phase=%s, step=%d)",
@@ -1595,8 +1595,8 @@ def _forward_execution_event_to_flow_surface(evt: DeviceExecutionEvent) -> None:
             entity.metadata["_last_android_execution_event"] = ace.to_dict()
             entity.metadata["_last_android_phase"] = evt.phase
             entity.metadata["_last_android_event_absorbed_at"] = evt.absorbed_at
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     except Exception as exc:
         logger.debug("Failed to forward execution event to flow surface: %s", exc)

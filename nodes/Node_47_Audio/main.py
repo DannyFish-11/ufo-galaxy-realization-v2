@@ -15,7 +15,8 @@ from nodes.common.cors_config import get_cors_origins
 try:
     from core.port_config import get_node_port
     PORT = get_node_port("Node_47_Audio")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     PORT = int(os.getenv("PORT", "8047"))
 
 try:
@@ -123,6 +124,7 @@ async def record_start(request: RecordStartRequest):
         recording_state["stream"] = stream
         return {"success": True, "samplerate": request.samplerate, "channels": request.channels}
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         recording_state["active"] = False
         return {"success": False, "error": str(e)}
 

@@ -27,7 +27,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     try:
         from core.security_middleware import RateLimiter as _RateLimiter
         _channel_send_limiter = _RateLimiter(requests_per_minute=60, burst_size=20)
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         _channel_send_limiter = None
 
     @router.get("/api/v1/channels")
@@ -66,7 +67,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             body = {}
             try:
                 body = await request.json()
-            except Exception:
+            except Exception as exc:
                 logger.debug("channel_auto_load: no JSON body, using defaults")
             plugins_dir = body.get("directory") if body else None
             from core.channel_plugins import get_channel_loader

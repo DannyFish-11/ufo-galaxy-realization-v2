@@ -207,7 +207,8 @@ class HardwareComputeProfiler:
                     self._avx_support = "avx2"
                 elif "avx" in flags:
                     self._avx_support = "avx"
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 self._avx_support = "none"
 
     # ── CUDA 检测 ──
@@ -262,7 +263,8 @@ class HardwareComputeProfiler:
                     util = pynvml.nvmlDeviceGetUtilizationRates(handle)
                     try:
                         temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug("Fallback triggered: %s", exc)
                         temp = 0
 
                     gpus.append(GPUProfile(
@@ -275,8 +277,8 @@ class HardwareComputeProfiler:
                         utilization_percent=util.gpu,
                         temperature_c=temp,
                     ))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # AMD GPU (rocm)
         if not gpus:
@@ -294,8 +296,8 @@ class HardwareComputeProfiler:
                         total_vram_mb=0, free_vram_mb=0, used_vram_mb=0,
                         utilization_percent=0.0, temperature_c=0.0,
                     ))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # Intel GPU
         if not gpus:
@@ -344,7 +346,7 @@ class HardwareComputeProfiler:
         try:
             import cpuinfo
             return cpuinfo.get_cpu_info().get("brand_raw", "unknown")
-        except Exception:
+        except Exception as exc:
             return "unknown"
 
     # ── 策略决策（核心） ──

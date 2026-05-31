@@ -458,6 +458,7 @@ async def execute_action(request: ADBRequest):
         )
         
     except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
         execution_time = (datetime.now() - start_time).total_seconds() * 1000
         return ADBResponse(
             success=False,

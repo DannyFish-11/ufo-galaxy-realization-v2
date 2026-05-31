@@ -89,8 +89,8 @@ def set_resource_limits(memory_limit_mb: int, cpu_limit_seconds: Optional[int]):
         # CPU 时间限制
         if cpu_limit_seconds:
             _resource.setrlimit(_resource.RLIMIT_CPU, (cpu_limit_seconds, cpu_limit_seconds))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
 
 def _check_language_available(lang: str, config: dict) -> bool:
@@ -102,7 +102,7 @@ def _check_language_available(lang: str, config: dict) -> bool:
             timeout=1,
         )
         return result.returncode == 0
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -122,8 +122,8 @@ async def lifespan(app: FastAPI):
             try:
                 if await fut:
                     _available_languages.append(lang)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
     if _available_languages:
         logger.info("Node_09_Sandbox: 可用语言: %s", _available_languages)
     else:
@@ -347,7 +347,8 @@ async def list_languages():
             result = subprocess.run(config["version_check"], capture_output=True, text=True, timeout=5)
             version = result.stdout.strip() if result.returncode == 0 else "unknown"
             available = result.returncode == 0
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             version = "not installed"
             available = False
         

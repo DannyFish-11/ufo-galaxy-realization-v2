@@ -54,6 +54,7 @@ def evaluate_nats_posture() -> Dict[str, Any]:
         connected = bool(bus_stats.get("connected", False))
         noop_mode = bool(bus_stats.get("noop_mode", True))
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         bus_error = str(exc)
 
     # Policy contract:

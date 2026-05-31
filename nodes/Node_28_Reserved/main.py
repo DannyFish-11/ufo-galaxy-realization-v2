@@ -242,6 +242,7 @@ async def execute_plugin(request: ExecuteRequest):
         stats["execute_count"] += 1
         return {"success": True, "plugin": request.plugin_name, "result": result}
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         stats["execute_errors"] += 1
         logger.error("Plugin execute error (%s): %s", request.plugin_name, exc)
         raise HTTPException(status_code=500, detail=str(exc))

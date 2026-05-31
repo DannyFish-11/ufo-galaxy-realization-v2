@@ -1856,6 +1856,7 @@ def execute_governed_operator_action(
             error = f"action_kind={action_kind!r} has no orchestration path in PR-4"
 
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         error = str(exc)
         rollback_needed = True
         outcome = OperatorActionOrchestrationOutcome.rollback_needed.value

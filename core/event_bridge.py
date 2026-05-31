@@ -247,8 +247,8 @@ class EventBridge:
 
             event_bus.subscribe(EventType.PERFORMANCE_ALERT, _perf_alert_handler, async_callback=True)
             _wired_count += 1
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # ====================================================================
         # 6. DeviceRegistry → EventBus (设备注册/上线/离线)
@@ -340,8 +340,8 @@ class EventBridge:
                             await _orig_on_connected(device_id, device_info)
                         else:
                             _orig_on_connected(device_id, device_info)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
 
             async def _comm_device_disconnected(device_id: str):
                 event_bus.publish_sync(
@@ -355,8 +355,8 @@ class EventBridge:
                             await _orig_on_disconnected(device_id)
                         else:
                             _orig_on_disconnected(device_id)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
 
             device_comm._on_device_connected = _comm_device_connected
             device_comm._on_device_disconnected = _comm_device_disconnected
@@ -385,8 +385,8 @@ class EventBridge:
                             await _orig_on_migrate(session_id, from_device, to_device)
                         else:
                             _orig_on_migrate(session_id, from_device, to_device)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
 
             session_roaming._on_session_migrated = _session_migrated_handler
             _wired_count += 1
@@ -452,8 +452,8 @@ class EventBridge:
                     from core.command_router import get_command_router
                     router = get_command_router()
                     await router.cleanup(max_age_seconds=3600)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
                 # 清理事件历史
                 try:
@@ -461,8 +461,8 @@ class EventBridge:
                     history = event_bus.get_event_history()
                     if len(history) > 800:
                         event_bus.clear_history()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
             except asyncio.CancelledError:
                 break
@@ -481,8 +481,8 @@ class EventBridge:
         try:
             from integration.event_bus import event_bus
             await event_bus.stop()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         logger.info("EventBridge: 已关闭")
 

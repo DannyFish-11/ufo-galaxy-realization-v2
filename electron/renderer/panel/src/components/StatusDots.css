@@ -1,0 +1,83 @@
+/* ============================================================
+   StatusDots — 三态实时显示
+   三个点分别对应 SILENT/LIMINAL/MANIFEST
+   当前态高亮，非当前态暗下去
+   ============================================================ */
+
+.status-dots-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dots-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* 基础点样式 */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+/* 非激活态 — 暗下去 */
+.status-dot:not(.active) {
+  opacity: 0.2;
+  transform: scale(0.85);
+}
+
+/* ── SILENT — 黑 ── */
+.status-dot.silent {
+  background: rgba(30, 30, 35, 0.8);
+}
+
+.status-dot.silent.active {
+  opacity: 1;
+  transform: scale(1);
+  background: rgba(20, 20, 25, 0.95);
+  box-shadow: 0 0 10px rgba(20, 20, 25, 0.5);
+}
+
+/* ── LIMINAL — 白 + 脉冲 ── */
+.status-dot.liminal {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.status-dot.liminal.active {
+  opacity: 1;
+  transform: scale(1);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
+  animation: dot-pulse-liminal 1.8s ease-in-out infinite;
+}
+
+@keyframes dot-pulse-liminal {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(255, 255, 255, 0.5);
+    transform: scale(1.15);
+  }
+}
+
+/* ── MANIFEST — 灰 ── */
+.status-dot.manifest {
+  background: rgba(140, 145, 155, 0.6);
+}
+
+.status-dot.manifest.active {
+  opacity: 1;
+  transform: scale(1);
+  background: rgba(120, 125, 135, 0.95);
+  box-shadow: 0 0 12px rgba(120, 125, 135, 0.35);
+}

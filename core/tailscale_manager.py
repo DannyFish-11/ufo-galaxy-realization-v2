@@ -175,15 +175,15 @@ class TailscaleManager:
                 asyncio.get_event_loop().create_task(nats.publish_state_event(msg))
             else:
                 logger.debug("AIPV3-TAILSCALE STATE_EVENT: %s", msg.model_dump_json(exclude_none=True))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # Notify local callbacks (e.g., system_mode, network_topology_runtime)
         for cb in self._callbacks:
             try:
                 cb(event_action, details)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
     def on_state_change(self, callback: Callable[[str, Dict[str, Any]], None]) -> None:
         """Register a callback for Tailscale state changes.

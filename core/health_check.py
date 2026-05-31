@@ -60,8 +60,8 @@ def get_system_metrics() -> Dict[str, Any]:
                 "used_percent": load.disk.usage_percent,
             }
         return metrics
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # 回退: 直接采集
     try:
@@ -99,7 +99,8 @@ def get_system_metrics() -> Dict[str, Any]:
                 "available_mb": round(mem_avail, 1),
                 "used_percent": round((1 - mem_avail / mem_total) * 100, 1),
             }
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             metrics["memory"] = {"note": "psutil not installed"}
 
         try:
@@ -109,7 +110,8 @@ def get_system_metrics() -> Dict[str, Any]:
                 "load_avg_1m": round(load[0], 2),
                 "load_avg_5m": round(load[1], 2),
             }
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             metrics["cpu"] = {"count": os.cpu_count() or 1}
 
     return metrics
@@ -176,6 +178,7 @@ class HealthChecker:
                 if isinstance(result, dict) and not result.get("ready", True):
                     overall_ready = False
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 checks[name] = {"ready": False, "error": str(e)}
                 overall_ready = False
 

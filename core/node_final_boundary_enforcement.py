@@ -594,7 +594,8 @@ def get_node_count_from_canonical_source(
             try:
                 healthy = fab.list_healthy()
                 active = len(healthy)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 active = sum(
                     1 for n in all_nodes
                     if _get_node_status_value(n) in ("running", "ready", "active")

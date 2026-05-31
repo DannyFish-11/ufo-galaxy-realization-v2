@@ -233,6 +233,7 @@ async def call_with_guardian(
             return result
 
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             last_exc = exc
             last_result = None
             logger.warning(

@@ -94,7 +94,8 @@ def build_control_plane_backend_authority_input(
                 "incomplete": dict(closure.get("incomplete_state") or {}).get("state") == "present",
             },
         }
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         payload["operational_state_board"] = {}
 
     payload["shared_execution_visibility"] = _derive_shared_execution_visibility(payload)
@@ -122,7 +123,8 @@ def build_control_plane_backend_authority_input(
             ],
             "_source": "core.control_plane_authority_input.build_control_plane_backend_authority_input",
         }
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         payload["participation_truth_consumption"] = {}
 
     try:
@@ -155,7 +157,8 @@ def build_control_plane_backend_authority_input(
                 "states": ["established", "partial", "open"],
             },
         }
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         payload["foundational_system_truth"] = {}
 
     return payload

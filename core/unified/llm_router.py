@@ -542,7 +542,7 @@ class UnifiedLLMRouter:
                 "available_provider_ids": available,
                 "fallback_candidates": available,
             }
-        except Exception:
+        except Exception as exc:
             return {}
 
     def _enrich_l3_context(
@@ -730,6 +730,7 @@ class UnifiedLLMRouter:
                 is_fallback = idx > 0
                 break
             except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 last_exc = exc
                 logger.warning(
                     "LLM provider %s failed (attempt %d/%d): %s",
@@ -887,8 +888,8 @@ class UnifiedLLMRouter:
         try:
             if hasattr(self._backend, "is_available"):
                 return bool(self._backend.is_available())
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return True
 
     def get_default_model(self) -> str:
@@ -898,8 +899,8 @@ class UnifiedLLMRouter:
         try:
             if hasattr(self._backend, "get_default_model"):
                 return str(self._backend.get_default_model())
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return "gpt-4o"
 
     async def chat_completion(
@@ -1060,6 +1061,7 @@ class UnifiedLLMRouter:
             )
             return result
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             latency_ms = (time.monotonic() - start) * 1000
             self._telemetry.record(
                 _effective_provider or "unknown",
@@ -1095,7 +1097,7 @@ class UnifiedLLMRouter:
                 precision_requirement=0.5,
                 tool_needs=0.5,
             )
-        except Exception:
+        except Exception as exc:
             return None
 
     def get_execution_backend(self) -> Any:

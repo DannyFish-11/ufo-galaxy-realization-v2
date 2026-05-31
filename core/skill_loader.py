@@ -180,8 +180,8 @@ class SkillLoader:
                 "skill_loader",
                 {"skill_id": skill_id, "event": event},
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # PR4: 推送 skill_update + capability_update 到 /ws/status 和 /api/v1/stream 订阅者
         try:
@@ -196,8 +196,8 @@ class SkillLoader:
             if loop and loop.is_running():
                 loop.create_task(broadcast_event("skill_update", _payload))
                 loop.create_task(broadcast_event("capability_update", {"source": "skill_loader", **_payload}))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     
     # ========================================================================
     # 加载/卸载
@@ -313,8 +313,8 @@ class SkillLoader:
                     asyncio.ensure_future(
                         self._refresh_capability_registry(skill_id, "load")
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             else:
                 logger.warning(
                     "技能 %s (%s) 状态为 ERROR（%s），跳过注入能力总线",
@@ -396,8 +396,8 @@ class SkillLoader:
             asyncio.ensure_future(
                 self._refresh_capability_registry(skill_id, "unload")
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         
         return {
             "success": True,
@@ -521,6 +521,7 @@ class SkillLoader:
             }
             
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             self.stats["failed_executions"] += 1
             logger.error(f"执行技能失败: {skill_id} - {e}")
             return {

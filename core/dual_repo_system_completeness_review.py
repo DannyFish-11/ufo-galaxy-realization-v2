@@ -605,7 +605,7 @@ def _try_import(module_path: str) -> bool:
         return True
     except (ImportError, ModuleNotFoundError):
         return False
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -907,8 +907,8 @@ class DualRepoSystemCompletenessReviewer:
                     report.evidence_status
                     == HistoryEvidenceStatus.observed_and_closed
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # Recovery truth surface
         recovery_surface_available = _try_import("core.recovery_truth_surface")
@@ -929,8 +929,8 @@ class DualRepoSystemCompletenessReviewer:
                 reset_system_acceptance_evaluator()
                 _rpt = evaluate_system_acceptance()
                 acceptance_runnable = True
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         completed: List[str] = []
         gaps: List[str] = []
@@ -1136,8 +1136,8 @@ class DualRepoSystemCompletenessReviewer:
                 hasattr(MessageType, name)
                 for name in handoff_message_type_names
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         try:
             import galaxy_gateway.android_bridge as android_bridge  # type: ignore[import]
@@ -1146,8 +1146,8 @@ class DualRepoSystemCompletenessReviewer:
                 hasattr(android_bridge, name)
                 for name in gateway_handler_names
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         reconciliation_type_registered = _prefer_runtime_over_source(
             reconciliation_type_runtime_verified,
@@ -1176,8 +1176,8 @@ class DualRepoSystemCompletenessReviewer:
             eco = _get_eco_summary()
             devices_with_snapshot = eco.get("total_devices_with_snapshot", 0)
             runtime_cross_repo_activated = devices_with_snapshot > 0
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         completed: List[str] = []
         gaps: List[str] = []
@@ -1319,7 +1319,8 @@ class DualRepoSystemCompletenessReviewer:
                 r = evaluate_distributed_release_gate()
                 skeleton_enforcing = getattr(r, "is_enforcing", None)
                 enforcement_authority_present = bool(GATE_IS_NOW_CI_ENFORCING_AUTHORITY)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 skeleton_enforcing = None
         governance_ci_workflow_present = _file_exists(
             ".github/workflows/governance_gate_enforcement.yml"
@@ -1338,8 +1339,8 @@ class DualRepoSystemCompletenessReviewer:
                 )
                 reg = get_terminology_registry()
                 taxonomy_functional = len(reg.entries) > 0
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         completed: List[str] = []
         gaps: List[str] = []

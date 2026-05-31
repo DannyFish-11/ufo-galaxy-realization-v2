@@ -108,6 +108,7 @@ from galaxy_gateway.android.handlers.mesh_lifecycle import (
 )
 from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
 from galaxy_gateway.android.handlers.acceptance_report import handle_device_acceptance_report
+from galaxy_gateway.android.handlers.state_event import handle_state_event
 from galaxy_gateway.android.handlers.evaluator_artifact_report import (
     handle_evaluator_artifact_report,
 )
@@ -868,6 +869,9 @@ class AndroidBridge:
         # 设备状态上报
         self._message_handlers[MessageType.DEVICE_STATUS] = _wrap(handle_device_status)
 
+        # PR-CROSS-DEVICE-SYNC: 状态事件（Windows → Android phase 同步）
+        self._message_handlers[MessageType.STATE_EVENT] = _wrap(handle_state_event)
+
         # 任务生命周期：task_end 结束确认
         self._message_handlers[MessageType.TASK_END] = _wrap(handle_task_end)
 
@@ -1436,6 +1440,15 @@ class AndroidBridge:
             if device_id in self._devices:
                 self._devices[device_id].connected = False
                 self._devices[device_id].websocket = None
+                # PR-CROSS-DEVICE-SYNC: clear synced_phase on disconnect
+                if hasattr(self._devices[device_id], 'synced_phase'):
+                    self._devices[device_id].synced_phase = {}
+                # PR-CROSS-DEVICE-SYNC: clear latency profile for adaptive sync
+                try:
+                    from core.cross_device_sync import forget_device
+                    forget_device(device_id)
+                except Exception:
+                    pass
                 logger.info("Device disconnected: %s", device_id)
             self._sync_device_router_session(device_id, connected=False)
             self._patch_disconnect_to_udm(device_id)
@@ -1499,6 +1512,38 @@ class AndroidBridge:
 
         self._patch_reconnect_to_udm(device_id)
         self._sync_device_router_session(device_id, websocket=websocket, connected=True)
+
+        # PR-CROSS-DEVICE-SYNC: push current phase to reconnected device
+        try:
+            from core.desktop_presence_runtime import get_desktop_presence_runtime
+            dpr = get_desktop_presence_runtime()
+            current_phase = dpr.get_current_phase() if hasattr(dpr, 'get_current_phase') else 'silent'
+            if current_phase and websocket is not None:
+                import json, time as _time
+                asyncio.create_task(websocket.send_json({
+                    "type": "state_event",
+                    "event_category": "phase",
+                    "event_action": current_phase,
+                    "device_id": "v2_desktop",
+                    "timestamp": int(_time.time() * 1000),
+                    "aip_version": "3.0",
+                    "payload": {
+                        "from_phase": "unknown",
+                        "to_phase": current_phase,
+                        "source": "desktop_presence_runtime",
+                        "sync_type": "cross_device_reconnect_sync",
+                    },
+                    "phase": current_phase,
+                }))
+                logger.info(
+                    "CrossDeviceSync: phase=%s pushed to reconnected device=%s",
+                    current_phase, device_id,
+                )
+        except Exception as _phase_exc:
+            logger.debug(
+                "CrossDeviceSync: reconnect phase push non-fatal: device_id=%s error=%s",
+                device_id, _phase_exc,
+            )
 
         # V2 lifecycle mainline: reconnect attached session in AttachedSessionRegistry
         # so that runtime_session_id is preserved and the session returns to active.

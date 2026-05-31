@@ -1082,6 +1082,39 @@ async def handle_device_register(
             device_id, device.model, device.platform, inbound_attachment_id,
         )
 
+        # PR-CROSS-DEVICE-SYNC: Push current desktop phase to newly registered device
+        # so Android immediately knows the current state without waiting for next transition.
+        try:
+            from core.desktop_presence_runtime import get_desktop_presence_runtime
+            dpr = get_desktop_presence_runtime()
+            current_phase = dpr.get_current_phase() if hasattr(dpr, 'get_current_phase') else 'silent'
+            if current_phase and device.websocket is not None:
+                import json, time
+                await device.websocket.send_json({
+                    "type": "state_event",
+                    "event_category": "phase",
+                    "event_action": current_phase,
+                    "device_id": "v2_desktop",
+                    "timestamp": int(time.time() * 1000),
+                    "aip_version": "3.0",
+                    "payload": {
+                        "from_phase": "unknown",
+                        "to_phase": current_phase,
+                        "source": "desktop_presence_runtime",
+                        "sync_type": "cross_device_initial_sync",
+                    },
+                    "phase": current_phase,
+                })
+                logger.info(
+                    "CrossDeviceSync: initial phase=%s pushed to newly registered device=%s",
+                    current_phase, device_id,
+                )
+        except Exception as _phase_exc:
+            logger.debug(
+                "CrossDeviceSync: initial phase push non-fatal: device_id=%s error=%s",
+                device_id, _phase_exc,
+            )
+
         _gaps = get_registration_gaps(device_id)
         if _gaps:
             logger.warning(

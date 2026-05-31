@@ -313,6 +313,7 @@ class AgentTeam:
             return result
 
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             self.status = TeamStatus.ERROR
             logger.error(f"Team {self.team_id} 执行失败: {e}")
             return TeamResult(
@@ -705,8 +706,8 @@ class TeamManager:
                     return self._router.select_model_by_complexity(
                         prov_name, _task_type, complexity_score,
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             return prov_cfg.default_model
 
         if strategy == TeamStrategy.PARALLEL:
@@ -720,8 +721,8 @@ class TeamManager:
                     try:
                         agent = self._factory.create_from_template("research")
                         agent_id = agent.id
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
 
                 members.append(TeamMember(
                     agent_id=agent_id,
@@ -747,8 +748,8 @@ class TeamManager:
                     try:
                         agent = self._factory.create_from_template(template)
                         agent_id = agent.id
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
 
                 members.append(TeamMember(
                     agent_id=agent_id,
@@ -766,8 +767,8 @@ class TeamManager:
                 try:
                     agent = self._factory.create_from_template("coordinator")
                     agent_id = agent.id
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             members.append(TeamMember(
                 agent_id=agent_id,
                 agent_name="总协调",
@@ -787,8 +788,8 @@ class TeamManager:
                     try:
                         agent = self._factory.create_from_template("research")
                         agent_id = agent.id
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                 members.append(TeamMember(
                     agent_id=agent_id,
                     agent_name=f"Swarm-{i+1}",

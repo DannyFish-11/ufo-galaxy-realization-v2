@@ -273,7 +273,7 @@ class NodeDiscoveryService:
         from pathlib import Path
         try:
             from core.port_config import get_node_port
-        except Exception:
+        except Exception as exc:
             def get_node_port(name: str) -> int:
                 raise ValueError(f"Port configuration not available for node: {name}")
 
@@ -289,7 +289,8 @@ class NodeDiscoveryService:
         for node_name, node_info in config.get("nodes", {}).items():
             try:
                 port = get_node_port(node_name)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 port = 0
             if port <= 0:
                 continue

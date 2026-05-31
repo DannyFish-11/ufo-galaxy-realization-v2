@@ -662,7 +662,7 @@ def _probe_continuity_available() -> bool:
     try:
         import core.flow_continuity_coordinator  # noqa: F401
         return True
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -670,7 +670,7 @@ def _probe_recovery_available() -> bool:
     try:
         import core.delegated_flow_recovery_coordinator  # noqa: F401
         return True
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -678,7 +678,7 @@ def _probe_closure_available() -> bool:
     try:
         import core.recovery_durability_closure_validator  # noqa: F401
         return True
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -686,7 +686,7 @@ def _probe_signal_guard_available() -> bool:
     try:
         import core.attached_runtime_recovery_readiness  # noqa: F401
         return True
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -694,7 +694,7 @@ def _probe_restart_recovery_available() -> bool:
     try:
         import core.runtime_restart_recovery  # noqa: F401
         return True
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -702,7 +702,7 @@ def _probe_offline_replay_contract_available() -> bool:
     try:
         import core.offline_replay_ordering_contract  # noqa: F401
         return True
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -710,7 +710,7 @@ def _probe_continuity_contract_available() -> bool:
     try:
         import core.inflight_task_continuity_contract  # noqa: F401
         return True
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -783,7 +783,8 @@ def _build_reconnect_entry(available_modules: List[str]) -> RecoveryTruthEntry:
                 callable(coordinate_reconnect)
                 and hasattr(FlowContinuityCoordinator, "decide_reconnect")
             )
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             reconnect_decision_callable = None
 
     if reconnect_decision_callable:
@@ -844,7 +845,8 @@ def _build_redispatch_entry(available_modules: List[str]) -> RecoveryTruthEntry:
         try:
             from core.delegated_flow_recovery_coordinator import RecoveryAction
             redispatch_action_present = hasattr(RecoveryAction, "redispatch_runtime")
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             redispatch_action_present = None
 
     if redispatch_action_present:
@@ -930,7 +932,8 @@ def _build_in_flight_continuity_entry(available_modules: List[str]) -> RecoveryT
                 hasattr(TaskContinuityReport, "has_unrecovered_tasks"),
                 hasattr(TaskContinuityReport, "has_ambiguous_tasks"),
             ])
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             continuity_contract_present = None
 
     continuity_actions_present: Optional[bool] = None
@@ -941,7 +944,8 @@ def _build_in_flight_continuity_entry(available_modules: List[str]) -> RecoveryT
                 hasattr(RecoveryAction, a)
                 for a in ("resume_in_place", "replay_from_checkpoint", "preserve_partial_then_resume")
             )
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             continuity_actions_present = None
 
     if continuity_contract_present:
@@ -1034,7 +1038,8 @@ def _build_duplicate_dispatch_entry(available_modules: List[str]) -> RecoveryTru
                 DelegatedFlowRecoveryCoordinator,
             )
             idempotency_present = hasattr(RecoveryAction, "suppress_duplicate_recovery")
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             idempotency_present = None
 
     if "core.attached_runtime_recovery_readiness" in available_modules:
@@ -1043,7 +1048,8 @@ def _build_duplicate_dispatch_entry(available_modules: List[str]) -> RecoveryTru
                 check_signal_guard,
             )
             signal_guard_present = callable(check_signal_guard)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             signal_guard_present = None
 
     if idempotency_present and signal_guard_present:
@@ -1120,7 +1126,8 @@ def _build_state_aligned_entry(available_modules: List[str]) -> RecoveryTruthEnt
             )
             r = build_recovery_closure_report()
             closure_all_closed = getattr(r, "all_closed", None)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             closure_all_closed = None
 
     if closure_all_closed is True:

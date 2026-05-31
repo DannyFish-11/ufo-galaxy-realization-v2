@@ -330,7 +330,8 @@ class HybridExecutionArbiter:
         try:
             from core.hybrid_orchestration_continuity import get_continuity_registry
             return get_continuity_registry()
-        except Exception:
+        except Exception as exc:
+            logger.warning("Continuity registry unavailable: %s", exc)
             return None
 
     @staticmethod

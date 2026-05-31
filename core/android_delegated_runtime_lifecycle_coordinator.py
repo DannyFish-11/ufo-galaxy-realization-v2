@@ -226,7 +226,8 @@ try:
 
     _android_result_consumer = _SourceDispatchOrchestrator()
     _RESULT_CONSUMER_AVAILABLE: bool = True
-except Exception:  # pragma: no cover  # noqa: BLE001
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _android_result_consumer = None  # type: ignore[assignment]
     _RESULT_CONSUMER_AVAILABLE = False
 

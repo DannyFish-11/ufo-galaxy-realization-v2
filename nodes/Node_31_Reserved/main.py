@@ -15,7 +15,8 @@ from nodes.common.cors_config import get_cors_origins
 try:
     from core.port_config import get_node_port
     PORT = get_node_port("Node_31_Reserved")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     PORT = int(os.getenv("PORT", "8031"))
 
 app = FastAPI(title="Node 31 - Plugin Framework", version="2.0.0")

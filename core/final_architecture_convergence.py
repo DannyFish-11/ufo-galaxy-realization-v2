@@ -840,6 +840,7 @@ def run_final_convergence_checks() -> ConvergenceReport:
         try:
             findings = check_fn()
         except Exception as exc:  # noqa: BLE001
+            logger.debug("Fallback triggered: %s", exc)
             findings = [_cerror(
                 check_name,
                 f"Check {check_name!r} raised an unexpected exception: {exc}",

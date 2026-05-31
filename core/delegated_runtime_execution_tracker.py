@@ -992,8 +992,8 @@ class DelegatedExecutionTrackingRuntime:
             if tmp_path is not None:
                 try:
                     os.remove(tmp_path)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
 
 # ---------------------------------------------------------------------------

@@ -285,8 +285,8 @@ class MeshSessionLifecycleCoordinator:
                 primary_device_id=str(session_dict.get("primary_device_id") or ""),
                 reason="mesh_session_created",
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return record
 
     def activate_session(
@@ -469,8 +469,8 @@ class MeshSessionLifecycleCoordinator:
                     is_resumable=True,
                     reason="restore_session: session successfully restored from suspended state",
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return active_record
 
     def terminate_session(
@@ -791,8 +791,8 @@ class MeshSessionLifecycleCoordinator:
                     primary_device_id=str(sd.get("primary_device_id") or ""),
                     reason=op_name,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return record
 
     def _persist(self, record: MeshSessionLifecycleRecord) -> None:

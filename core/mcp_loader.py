@@ -257,8 +257,8 @@ class MCPLoader:
                 "mcp_loader",
                 {"server_id": server_id, "event": event},
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("MCP capability event publish failed: %s", exc)
 
         # PR4: 推送 mcp_update + capability_update 到 /ws/status 和 /api/v1/stream 订阅者
         try:
@@ -273,12 +273,12 @@ class MCPLoader:
             if loop and loop.is_running():
                 loop.create_task(broadcast_event("mcp_update", _payload))
                 loop.create_task(broadcast_event("capability_update", {"source": "mcp_loader", **_payload}))
-        except Exception:
-            pass
-    
+        except Exception as exc:
+            logger.warning("MCP broadcast event failed: %s", exc)
+
     # ========================================================================
     # 加载/卸载
-    # ========================================================================
+    # =====================================================================
     
     async def load(
         self,
@@ -370,9 +370,9 @@ class MCPLoader:
             asyncio.ensure_future(
                 self._refresh_capability_registry(server_id, "unload")
             )
-        except Exception:
-            pass
-        
+        except Exception as exc:
+            logger.warning("Capability registry refresh failed on unload: %s", exc)
+
         return {
             "success": True,
             "server_id": server_id,
@@ -455,6 +455,7 @@ class MCPLoader:
             return True
             
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             server.status = MCPServerStatus.ERROR
             server.error = str(e)
             logger.error(f"启动 MCP 服务器失败: {e}")
@@ -562,8 +563,8 @@ class MCPLoader:
                 asyncio.ensure_future(
                     self._refresh_capability_registry(server_id, "load")
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Capability registry refresh failed on load: %s", exc)
 
             return True
         

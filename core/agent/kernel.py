@@ -401,6 +401,7 @@ class AgentKernel:
                 latency_ms=latency,
             )
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             latency = (time.monotonic() - t0) * 1000
             logger.exception("AgentKernel: 未捕获异常: %s", exc)
             return KernelResponse(
@@ -797,8 +798,8 @@ class AgentKernel:
                 device_id=device_id,
                 metadata=metadata,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     def get_status(self) -> Dict[str, Any]:
         """返回内核状态信息（供 Dashboard 监控）。"""
@@ -811,8 +812,8 @@ class AgentKernel:
                     if hasattr(self._llm_router, "is_available")
                     else True
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         return {
             "kernel": "AgentKernel",

@@ -31,7 +31,8 @@ try:
         ParticipantTransitionTrigger as _PTT,
         PARTICIPANT_STATE_TRANSITIONS as _PL_TRANSITIONS,
     )
-except Exception:  # pragma: no cover - defensive fallback only
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _PLS = None
     _PR = None
     _PTT = None
@@ -227,8 +228,8 @@ def _derive_signal(device_id: str) -> Dict[str, Any]:
             signal["readiness"] = "ready"
         else:
             signal["readiness"] = "suspended"
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     try:
         from core.device_readiness import get_device_readiness
@@ -242,8 +243,8 @@ def _derive_signal(device_id: str) -> Dict[str, Any]:
             signal["reasons"].append("device_not_online_or_routable")
         elif signal["readiness"] == "unknown":
             signal["readiness"] = "ready"
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     return signal
 

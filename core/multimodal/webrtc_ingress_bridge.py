@@ -113,8 +113,8 @@ def _is_webrtc_data_channel_enabled() -> bool:
         if _cfg.get("enable_webrtc_data_channel", False):
             _WEBRTC_DATA_CHANNEL_ENABLED = True
             return True
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     return False
 
@@ -343,8 +343,8 @@ class WebRTCIngressBridge:
             from .ingest_runtime import get_ingest_bus
 
             self._ingress_bus_ref = get_ingest_bus()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         return self._ingress_bus_ref
 

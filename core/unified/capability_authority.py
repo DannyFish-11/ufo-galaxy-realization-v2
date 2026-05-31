@@ -50,8 +50,8 @@ class CapabilityAuthority:
             from core.unified.capability_resolver import get_capability_resolver
 
             get_capability_resolver().invalidate_cache()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     @staticmethod
     def _coerce_contract(value: Any) -> CapabilityContract:

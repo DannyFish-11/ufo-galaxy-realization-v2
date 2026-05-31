@@ -284,6 +284,7 @@ class ExternalToolWrapper:
             execution.stderr = "Execution timed out"
             execution.exit_code = -1
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             execution.stderr = str(e)
             execution.exit_code = -1
         

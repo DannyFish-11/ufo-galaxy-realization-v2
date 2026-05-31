@@ -666,7 +666,7 @@ def _try_import(module_path: str) -> bool:
     try:
         importlib.import_module(module_path)
         return True
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -675,7 +675,7 @@ def _has_attr(module_path: str, attr_name: str) -> bool:
     try:
         mod = importlib.import_module(module_path)
         return hasattr(mod, attr_name)
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -1081,7 +1081,8 @@ class DualRepoSystemRealityAuditor:
 
                 r = build_recovery_closure_report()
                 closure_all_closed = getattr(r, "all_closed", None)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 closure_all_closed = None
 
         # Check recovery truth surface for structured multi-layer evidence
@@ -1097,7 +1098,8 @@ class DualRepoSystemRealityAuditor:
                 truth_open_dims = tr.open_dimensions
                 truth_deferred_dims = tr.deferred_dimensions
                 truth_v2_internal_success = tr.v2_internal_success
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 truth_open_dims = None
                 truth_deferred_dims = None
                 truth_v2_internal_success = None
@@ -1224,7 +1226,8 @@ class DualRepoSystemRealityAuditor:
 
                 r = evaluate_distributed_release_gate()
                 skeleton_is_enforcing = getattr(r, "is_enforcing", None)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 skeleton_is_enforcing = None
 
         available: List[str] = []

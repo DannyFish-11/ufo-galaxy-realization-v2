@@ -311,11 +311,12 @@ def evaluate_node_governance_eligibility(
     # ------------------------------------------------------------------
     try:
         healthy = node_info.is_healthy(heartbeat_ttl)
-    except Exception:
+    except Exception as exc:
         try:
             status = getattr(node_info, "status", None)
             healthy = str(status).lower() in {"healthy", "starting"}
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             healthy = False
 
     diagnostic["is_healthy"] = healthy
@@ -366,6 +367,7 @@ def evaluate_node_governance_eligibility(
                 else:
                     diagnostic["lifecycle_rule"] = f"passed: lifecycle_stage={stage_value}"
             except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 diagnostic["lifecycle_rule"] = f"error evaluating lifecycle_stage: {exc}"
                 governor_consulted = False
     else:
@@ -431,8 +433,8 @@ def get_governance_eligible_nodes(
         if governor is not None and node_id is not None:
             try:
                 gov_record = governor.get_record(node_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         decision = evaluate_node_governance_eligibility(
             node, governor_record=gov_record, heartbeat_ttl=heartbeat_ttl
         )
@@ -486,8 +488,8 @@ def build_governance_exclusion_report(
         if governor is not None and node_id is not None:
             try:
                 gov_record = governor.get_record(node_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         decision = evaluate_node_governance_eligibility(
             node, governor_record=gov_record, heartbeat_ttl=heartbeat_ttl
         )

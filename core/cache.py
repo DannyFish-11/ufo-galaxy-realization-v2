@@ -157,8 +157,8 @@ class RedisCache:
         if self._redis:
             try:
                 await self._redis.flushdb()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
     async def info(self) -> Dict[str, Any]:
         if not self._redis:

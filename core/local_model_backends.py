@@ -129,8 +129,8 @@ class OllamaBackend(LocalModelBackend):
                     json={"model": model_id, "keep_alive": 0},
                     timeout=10.0,
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     async def health_check(self) -> bool:
         try:
@@ -148,8 +148,8 @@ class OllamaBackend(LocalModelBackend):
             resp = httpx.get(f"{self.base_url}/api/tags", timeout=3.0)
             if resp.status_code == 200:
                 return [m["name"] for m in resp.json().get("models", [])]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return []
 
 
@@ -236,8 +236,8 @@ class LlamaCppBackend(LocalModelBackend):
             entry = mgr.registry.get(model_id)
             if entry and entry.is_gguf and os.path.exists(entry.local_path):
                 return entry.local_path
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # 3. Search in models/ directory
         models_dir = os.path.join(os.path.dirname(__file__), "..", "models")
@@ -264,8 +264,8 @@ class LlamaCppBackend(LocalModelBackend):
 
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
     async def health_check(self) -> bool:
         return len(self._models) > 0
@@ -345,8 +345,8 @@ class TransformersBackend(LocalModelBackend):
                 return tokenizer.apply_chat_template(
                     messages, tokenize=False, add_generation_prompt=True
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # Fallback: simple concatenation
         prompt = ""
@@ -406,8 +406,8 @@ class TransformersBackend(LocalModelBackend):
             entry = mgr.registry.get(model_id)
             if entry and entry.format.value == "transformers" and os.path.exists(entry.local_path):
                 return entry.local_path
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # 3. Search in models/ directory
         models_dir = os.path.join(os.path.dirname(__file__), "..", "models")
@@ -432,8 +432,8 @@ class TransformersBackend(LocalModelBackend):
 
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
     async def health_check(self) -> bool:
         return len(self._pipelines) > 0

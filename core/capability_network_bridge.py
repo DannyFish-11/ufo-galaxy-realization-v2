@@ -529,6 +529,7 @@ def joint_select(
             record = layer.get_record(target_id)
             candidates = [record] if record else []
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             candidates = []
             notes.append(f"assimilation_lookup_failed: {exc}")
     else:

@@ -740,8 +740,8 @@ class ConstellationRuntime:
             if et is None:
                 return
             ledger.append(et, **kwargs)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
 
 # ---------------------------------------------------------------------------

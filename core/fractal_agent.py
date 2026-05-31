@@ -224,6 +224,7 @@ class FractalAgent:
                 depth=self.depth, decomposition_used=False,
             )
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             task.error = str(e)
             return FractalResult(
                 task_id=task.id, success=False, output=str(e),

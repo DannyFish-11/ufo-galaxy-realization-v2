@@ -248,7 +248,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             udm = get_unified_device_manager()
             udm_devices = {d.device_id: d for d in udm.list_devices()}
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             udm_devices = {}
 
         # 以 UDM 为主，registered_devices 补充 UDM 中不存在的遗留条目
@@ -372,10 +373,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         host = from_registered_runtime_device(rrd)
                         results.append(summarize_local_runtime_host(host))
                         seen.add(did)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # Supplement with registered_devices cache for any not yet included
         for did, raw in registered_devices.items():
@@ -395,8 +396,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 host = from_registered_runtime_device(rrd)
                 results.append(summarize_local_runtime_host(host))
                 seen.add(did)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         return JSONResponse({"runtime_hosts": results, "count": len(results)})
 
@@ -419,8 +420,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "online": device_id in connection_manager.active_devices or udm_dev.is_online(),
                 }
                 return JSONResponse(info)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # 遗留缓存兜底
         if device_id in registered_devices:
@@ -451,8 +452,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             if udm_dev is not None:
                 contract: RegisteredRuntimeDevice = from_udm_device(udm_dev)
                 return JSONResponse(contract.to_dict())
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # Fall back to legacy device registry
         try:
@@ -461,8 +462,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             if legacy_dev is not None:
                 contract = from_device_registry_record(legacy_dev)
                 return JSONResponse(contract.to_dict())
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # Final fall-back: build minimal contract from registered_devices cache
         if device_id in registered_devices:
@@ -495,8 +496,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         udm_dev = None
         try:
             udm_dev = udm.get_device(device_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         if udm_dev is None and device_id not in registered_devices:
             raise HTTPException(status_code=404, detail="设备未注册")
 
@@ -532,8 +533,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         udm_dev = None
         try:
             udm_dev = udm.get_device(device_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         if udm_dev is None and device_id not in registered_devices:
             raise HTTPException(status_code=404, detail="设备未注册")
 
@@ -899,8 +900,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             udm_dev = get_unified_device_manager().get_device(device_id)
             if udm_dev is not None:
                 rrd = from_udm_device(udm_dev)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # Fall back to legacy device registry
         if rrd is None:
@@ -909,8 +910,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 legacy_dev = _dr.get(device_id)
                 if legacy_dev is not None:
                     rrd = from_device_registry_record(legacy_dev)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # Final fall-back: build minimal contract from registered_devices cache
         if rrd is None and device_id in registered_devices:

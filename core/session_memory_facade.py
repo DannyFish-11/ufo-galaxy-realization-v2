@@ -38,8 +38,8 @@ def _is_adjacent_duplicate(
                 and (not device_id or last_device_id == device_id)
             ):
                 return True
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     try:
         history = get_session_manager().get_full_history(conversation_session_id)
@@ -51,8 +51,8 @@ def _is_adjacent_duplicate(
                 and (not device_id or last.get("device_id", "") == device_id)
             ):
                 return True
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
     return False
 
 
@@ -110,8 +110,8 @@ async def record_session_turn(
             trace_id=trace_id,
             metadata=merged_metadata,
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     try:
         from core.ai_intent import get_conversation_memory
@@ -122,8 +122,8 @@ async def record_session_turn(
             content,
             metadata=merged_metadata,
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
 
 def get_session_context(
@@ -147,8 +147,8 @@ def get_session_context(
                 }
                 for entry in wm_entries
             ]
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     try:
         history = get_session_manager().get_history(
@@ -157,8 +157,8 @@ def get_session_context(
         )
         if history:
             return history
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
     return []
 
 
@@ -245,16 +245,16 @@ def get_unified_context(
                 "role": "system",
                 "content": "[Long-term memory — user preferences]\n" + "\n".join(lines),
             })
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # 2. Short-term conversation context
     try:
         turns = get_session_context(session_id, max_turns=max_turns)
         for turn in turns:
             messages.append({"role": turn["role"], "content": turn["content"]})
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # 3. Adaptive task history (cross-session, NEW)
     if query:
@@ -262,15 +262,15 @@ def get_unified_context(
             ctx = get_adaptive_context(session_id, query, depth)
             if ctx:
                 messages.append({"role": "system", "content": ctx})
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # 4. Event chain (current session, NEW)
     try:
         chain = get_event_chain(session_id)
         if chain:
             messages.append({"role": "system", "content": chain})
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     return messages

@@ -121,7 +121,8 @@ try:
     import logging as _logging
 
     _logger = _logging.getLogger(logger_name)
-except Exception:  # pragma: no cover
+except Exception as exc:
+    _logger.debug("Fallback triggered: %s", exc)
     _logger = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
@@ -907,7 +908,7 @@ def _emit_audit_event(
             },
         )
         return True
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
         return False
 
 
@@ -965,7 +966,7 @@ def _is_record_terminal(record: Any) -> bool:
         # Fallback: string check against phase value
         phase_val = str(phase).lower()
         return any(t in phase_val for t in _TERMINAL_PHASES)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
         return False
 
 
@@ -1027,14 +1028,16 @@ def reconcile_android_participant_truth(
     if _runtime is None and _TRACKER_AVAILABLE and get_execution_tracking_runtime is not None:
         try:
             _runtime = get_execution_tracking_runtime()
-        except Exception:  # noqa: BLE001
+        except Exception as exc:
+            _logger.debug("Fallback triggered: %s", exc)
             _runtime = None
 
     _registry: Any = registry
     if _registry is None and _REGISTRY_AVAILABLE and get_session_registry is not None:
         try:
             _registry = get_session_registry()
-        except Exception:  # noqa: BLE001
+        except Exception as exc:
+            _logger.debug("Fallback triggered: %s", exc)
             _registry = None
 
     # ------------------------------------------------------------------
@@ -1170,7 +1173,7 @@ def reconcile_android_participant_truth(
                 terminal_phase=tracking_record_phase,
                 canonical_update=canonical_update,
             )
-        except Exception:  # noqa: BLE001
+        except Exception as exc:
             pass  # audit is non-fatal
 
     outcome = AndroidParticipantReconcileOutcome(
@@ -1213,8 +1216,8 @@ def _resolve_tracking_record(
                 return record
         if envelope.session_id:
             return runtime.get_latest_for_session(envelope.session_id)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        _logger.debug("Suppressed: %s", exc)
     return None
 
 
@@ -1488,8 +1491,8 @@ def _build_ownership_context(
                 create_session=False,
             )
             canonical_session_identity = identity.as_metadata()
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("Exception suppressed: %s", exc)
 
     canonical_session_identity["runtime_attachment_session_id"] = (
         canonical_session_identity.get("runtime_attachment_session_id")
@@ -1829,8 +1832,8 @@ def _record_last_reconciliation_outcome(outcome: AndroidParticipantReconcileOutc
         }
         with _last_reconciliation_lock:
             _last_reconciliation_outcome = snapshot
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        _logger.debug("Suppressed: %s", exc)
 
 
 def get_last_reconciliation_outcome() -> Optional[Dict[str, Any]]:

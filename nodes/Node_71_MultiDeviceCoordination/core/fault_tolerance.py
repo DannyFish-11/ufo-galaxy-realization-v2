@@ -442,8 +442,8 @@ class FailoverManager:
                             healthy = await checker()
                             if healthy:
                                 recovered.append(device_id)
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.warning("Exception suppressed: %s", exc)
 
                 for device_id in recovered:
                     del self._failed_devices[device_id]

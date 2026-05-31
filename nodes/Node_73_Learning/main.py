@@ -29,13 +29,15 @@ import uvicorn
 try:
     from core.port_config import get_service_port
     PORT = get_service_port("node_73") or 8073
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     PORT = int(os.getenv("PORT", "8073"))
 
 try:
     from nodes.common.cors_config import get_cors_origins
     CORS_ORIGINS = get_cors_origins()
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     CORS_ORIGINS = ["*"]
 
 # ---------------------------------------------------------------------------
@@ -172,6 +174,7 @@ class LearningService:
             job.status = TaskStatus.FAILED
             job.error = "任务被取消"
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             job.status = TaskStatus.FAILED
             job.error = str(e)
             logger.error(f"训练任务 {job.job_id} 失败: {e}")
@@ -215,6 +218,7 @@ class LearningService:
             result.completed_at = datetime.utcnow().isoformat()
             logger.info(f"推理 {result.result_id} 完成")
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             result.status = TaskStatus.FAILED
             result.error = str(e)
             logger.error(f"推理 {result.result_id} 失败: {e}")

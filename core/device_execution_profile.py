@@ -322,8 +322,8 @@ def build_profile_from_device_info(
     if isinstance(pre_built, dict) and pre_built:
         try:
             return DeviceExecutionProfile.model_validate(pre_built)
-        except Exception:
-            pass
+        except Exception as exc:
+            logging.warning("Exception suppressed: %s", exc)
 
     did = device_id or device_info.get("device_id") or device_info.get("id")
 

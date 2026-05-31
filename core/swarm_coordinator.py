@@ -534,8 +534,8 @@ class SwarmCoordinator:
                     loop.create_task(nats.publish_task_assign(msg))
                 else:
                     logger.debug("AIPV3-SWARM TASK_ASSIGN: %s", msg.model_dump_json(exclude_none=True))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     def _emit_aip_v3_swarm_result(
         self,
@@ -578,8 +578,8 @@ class SwarmCoordinator:
                     loop.create_task(nats.publish_task_result(msg))
                 else:
                     logger.debug("AIPV3-SWARM TASK_RESULT: %s", msg.model_dump_json(exclude_none=True))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # ------------------------------------------------------------------
     # Orchestration plan helper (PR-8)
@@ -666,8 +666,8 @@ class SwarmCoordinator:
                         )
                         _mode_result = resolve_mode(profile=_exec_profile, task_intent="agent_execute")
                         resolved_mode = _mode_result.mode
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
 
             decisions.append(OrchestrationDecision(
                 agent_id=agent_id,

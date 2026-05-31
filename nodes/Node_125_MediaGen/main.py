@@ -195,6 +195,7 @@ class MediaGenService:
                 logger.info(f"任务 {task_id} 已成功完成，结果保存在: {result_path}")
 
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 task.status = GenerationStatus.FAILED
                 task.error_message = str(e)
                 logger.error(f"任务 {task_id} 处理失败: {e}", exc_info=True)

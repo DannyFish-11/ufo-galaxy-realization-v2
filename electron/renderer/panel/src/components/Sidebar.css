@@ -1,0 +1,156 @@
+/* ============================================================
+   Sidebar — 左侧边栏
+   220px 宽，包含 Galaxy 标题、Tab 导航、状态点
+   ============================================================ */
+
+.sidebar {
+  width: 220px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 36px 20px 28px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.06) 0%,
+    rgba(0, 0, 0, 0.02) 100%
+  );
+  flex-shrink: 0;
+}
+
+/* Header */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 40px;
+}
+
+.brand-title {
+  font-size: 28px;
+  font-weight: 200;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.4);
+  margin: 0;
+}
+
+.connection-badge {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.connection-badge.online {
+  color: rgba(80, 200, 120, 0.9);
+  background: rgba(80, 200, 120, 0.1);
+}
+
+.connection-badge.offline {
+  color: rgba(220, 80, 60, 0.6);
+  background: rgba(220, 80, 60, 0.08);
+}
+
+/* Tab 导航 */
+.tab-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  opacity: 0.35;
+}
+
+.tab-item:hover {
+  opacity: 0.6;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tab-item.active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tab-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+  transition: background 0.2s ease;
+}
+
+.tab-item.active .tab-icon {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.tab-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tab-cn {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.tab-en {
+  font-size: 10px;
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* Footer */
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 状态标签 — 三态 */
+.status-label {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  font-weight: 400;
+  transition: all 0.5s ease;
+}
+
+/* SILENT — 灰 */
+.status-label.phase-silent {
+  color: rgba(140, 150, 160, 0.45);
+}
+
+/* LIMINAL — 白 + 呼吸 */
+.status-label.phase-liminal {
+  color: rgba(255, 255, 255, 0.75);
+  animation: label-breathe 2s ease-in-out infinite;
+}
+
+@keyframes label-breathe {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* MANIFEST — 黑（深沉） */
+.status-label.phase-manifest {
+  color: rgba(35, 35, 40, 0.65);
+}

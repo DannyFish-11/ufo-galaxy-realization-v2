@@ -152,6 +152,7 @@ class UFODeepIntegration:
 
                 result["message"] = "Microsoft UFO initialized (AppPuppeteer + ControlReceiver)"
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 result["message"] = f"UFO instance creation failed: {e}"
         else:
             result["message"] = f"UFO load failed: {self.loader.load_errors}"

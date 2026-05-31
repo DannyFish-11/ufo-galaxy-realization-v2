@@ -167,7 +167,7 @@ class HardwareAwareMultimodalRouter:
             import httpx
             resp = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
             return resp.status_code == 200
-        except Exception:
+        except Exception as exc:
             return False
 
     # ── 核心路由方法 ──
@@ -193,7 +193,8 @@ class HardwareAwareMultimodalRouter:
         try:
             from core.hardware_compute_profiler import get_compute_profile_sync
             profile = get_compute_profile_sync()
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             profile = None
 
         # 2. 获取本地模型列表
@@ -347,8 +348,8 @@ class HardwareAwareMultimodalRouter:
                             "source": "ollama",
                             "size_mb": m.get("size", 0) // (1024 * 1024),
                         })
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # 扫描 HF 本地模型
         try:
@@ -361,8 +362,8 @@ class HardwareAwareMultimodalRouter:
                     "size_mb": entry.size_mb,
                     "quantization": entry.quantization,
                 })
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         self._local_models = models
         self._last_refresh = now

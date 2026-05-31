@@ -43,7 +43,7 @@ async def _check_llm_available() -> bool:
         async with httpx.AsyncClient(timeout=1.5) as client:
             r = await client.get(f"{_LLM_ROUTER_URL}/health")
             return r.status_code < 400
-    except Exception:
+    except Exception as exc:
         return False
 
 
@@ -529,7 +529,7 @@ class SelfHealingEngine:
                         return HealthStatus.DEGRADED
                     else:
                         return HealthStatus.UNHEALTHY
-        except Exception:
+        except Exception as exc:
             return HealthStatus.UNHEALTHY
     
     async def _tcp_check(self, check: HealthCheck) -> HealthStatus:
@@ -558,7 +558,7 @@ class SelfHealingEngine:
                 if process_name.lower() in proc.info['name'].lower():
                     return HealthStatus.HEALTHY
             return HealthStatus.UNHEALTHY
-        except Exception:
+        except Exception as exc:
             return HealthStatus.UNKNOWN
     
     async def _resource_check(self, check: HealthCheck) -> HealthStatus:
@@ -579,7 +579,7 @@ class SelfHealingEngine:
             elif cpu > cpu_threshold * 0.8 or mem > mem_threshold * 0.8:
                 return HealthStatus.DEGRADED
             return HealthStatus.HEALTHY
-        except Exception:
+        except Exception as exc:
             return HealthStatus.UNKNOWN
     
     async def _detect_fault(self, check: HealthCheck):
@@ -682,6 +682,7 @@ class SelfHealingEngine:
                 plan.failure_count += 1
             
         except Exception as e:
+            _logger.debug("Fallback triggered: %s", e)
             execution.error = str(e)
             logger.error(f"Recovery failed for fault {fault_id}: {e}")
         

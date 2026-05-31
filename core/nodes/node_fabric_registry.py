@@ -580,8 +580,8 @@ class NodeFabricRegistry:
             try:
                 from core.node_lifecycle_governor import get_node_lifecycle_governor  # noqa: PLC0415
                 _governor = get_node_lifecycle_governor()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         except ImportError:
             pass  # Fallback: arch-class + health filtering only (non-canonical path)
 
@@ -598,8 +598,8 @@ class NodeFabricRegistry:
                     if _governor is not None:
                         try:
                             gov_record = _governor.get_record(node.node_id)
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.warning("Exception suppressed: %s", exc)
                     decision = _governance_evaluate(
                         node,
                         governor_record=gov_record,
@@ -1086,6 +1086,6 @@ def reset_node_fabric_registry(*, clear_durable_state: bool = False) -> None:
     if clear_durable_state and NodeFabricRegistry._instance is not None:
         try:
             NodeFabricRegistry._instance.clear_durable_state()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     NodeFabricRegistry._instance = None

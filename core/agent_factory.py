@@ -698,7 +698,7 @@ class AgentFactory:
                 AuthorityDomain,
             )
             assert_center_authority_intact(AuthorityDomain.ORCHESTRATION_TRUTH)
-        except Exception:
+        except Exception as exc:
             pass  # 非致命：编排边界不可用时允许分裂（fail-open for availability）
 
         parent = self.agents.get(agent_id)
@@ -930,6 +930,7 @@ class AgentFactory:
                 )
 
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 agent.metrics["tasks_failed"] += 1
                 results.append({"task": task, "error": str(e)})
 
@@ -1025,7 +1026,8 @@ class AgentFactory:
                     t0 = _time.time()
                     try:
                         result = await clawd._dispatch_tool_call(tc_name, tc_args)
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug("Fallback triggered: %s", exc)
                         result = {"success": False, "error": f"工具 {tc_name} 不可用"}
                     elapsed_ms = (_time.time() - t0) * 1000
 

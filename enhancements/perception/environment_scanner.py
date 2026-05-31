@@ -292,8 +292,8 @@ class EnvironmentScanner:
             
             if result.returncode == 0:
                 return result.stdout.strip().split('\n')[0]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         
         return None
     
@@ -329,8 +329,8 @@ class EnvironmentScanner:
                         device_id = line.split('\t')[0]
                         devices.append(device_id)
                 return devices
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         
         return []
     

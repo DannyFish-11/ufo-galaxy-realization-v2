@@ -238,8 +238,8 @@ class EntrypointRouter:
                 },
                 trace_id=routing_meta.get("trace_id", ""),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -321,8 +321,8 @@ def resolve_entry_mode(
         try:
             from galaxy_gateway.cross_device_switch import is_cross_device_enabled
             _cross_device_on = is_cross_device_enabled()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         _explicit_target = bool(target_device and target_device.strip())
 
@@ -338,8 +338,8 @@ def resolve_entry_mode(
                 try:
                     from core.device_readiness import is_device_cross_device_ready
                     _target_ready = is_device_cross_device_ready(target_device or "")
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
                 _device_count = 1 if _target_ready else 0
 
@@ -369,8 +369,8 @@ def resolve_entry_mode(
                 try:
                     from core.device_readiness import get_cross_device_ready_devices
                     _ready_devices = get_cross_device_ready_devices()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
                 _device_count = len(_ready_devices)
 
@@ -403,8 +403,8 @@ def resolve_entry_mode(
                 try:
                     from core.unified.device_manager import get_unified_device_manager
                     _device_count = get_unified_device_manager().get_online_count()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
             _has_multiple_devices = _device_count >= 2
 
@@ -443,8 +443,8 @@ def resolve_entry_mode(
             },
             trace_id=trace_id,
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # ------------------------------------------------------------------
     # Decision-diff telemetry (PR-14) — observability only, no side effects
@@ -480,8 +480,8 @@ def resolve_entry_mode(
                         _legacy_online = (
                             get_unified_device_manager().get_online_count()
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                 _online_count = _legacy_online
                 if _cross_device_on and (
                     _has_explicit_target or _legacy_online >= 2
@@ -507,8 +507,8 @@ def resolve_entry_mode(
                             _tgt_ready = is_device_cross_device_ready(
                                 target_device or ""
                             )
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.warning("Exception suppressed: %s", exc)
                         _canonical_ready = 1 if _tgt_ready else 0
                         _canonical_resolved = (
                             "cross_device" if _tgt_ready else "local"
@@ -522,8 +522,8 @@ def resolve_entry_mode(
                                 get_cross_device_ready_devices,
                             )
                             _ready_devs = get_cross_device_ready_devices()
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.warning("Exception suppressed: %s", exc)
                         _canonical_ready = len(_ready_devs)
                         _canonical_resolved = (
                             "cross_device" if _canonical_ready >= 2 else "local"
@@ -544,8 +544,8 @@ def resolve_entry_mode(
                 online_device_count=_online_count,
                 diff_reason_codes=_diff_reasons if _diff_reasons else None,
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     return resolved
 

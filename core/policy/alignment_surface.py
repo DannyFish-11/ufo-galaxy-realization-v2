@@ -1133,8 +1133,8 @@ def _summarize_fallback_dimension(fallback_trace: Optional[Any]) -> AlignmentDim
             if hasattr(obj, "compact_summary"):
                 try:
                     return obj.compact_summary() or {}
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             if isinstance(obj, dict):
                 return obj
             return {}
@@ -1269,8 +1269,8 @@ def build_execution_policy_alignment_surface(
                     resolved_session_id = resolved_session_id or _safe_str(
                         getattr(execution_trace_envelope, "runtime_session_id", None)
                     ) or None
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # 3. Resolve runtime_domain / tri_state_phase from available sources
         resolved_domain = runtime_domain

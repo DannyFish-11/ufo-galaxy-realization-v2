@@ -415,8 +415,8 @@ class HITLPolicy:
         if self._classifier is not None:
             try:
                 return bool(self._classifier(action, context))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         action_lower = action.lower()
         return any(kw in action_lower for kw in _HIGH_RISK_KEYWORDS)
 

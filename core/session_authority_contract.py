@@ -328,7 +328,8 @@ def build_session_authority_snapshot() -> SessionAuthoritySnapshot:
         try:
             active = registry.list_all_active()
             snapshot.active_session_count = len(active) if active is not None else 0
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             snapshot.active_session_count = 0
 
     # Coordinator availability
@@ -338,7 +339,8 @@ def build_session_authority_snapshot() -> SessionAuthoritySnapshot:
         try:
             recent = coordinator.list_recent(n=100)
             snapshot.pending_continuity_count = len(recent) if recent is not None else 0
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             snapshot.pending_continuity_count = 0
 
     return snapshot

@@ -252,8 +252,8 @@ class LocalBrainManager:
                         "自动选择 llama_cpp 后端 (GPU + GGUF 模型可用)"
                     )
                     return "llama_cpp"
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("llama_cpp GPU check failed: %s", exc)
 
         # Priority 2: Ollama (most stable, easiest setup)
         if "ollama" in available:
@@ -269,8 +269,8 @@ class LocalBrainManager:
                         "自动选择 ollama 后端 (Ollama 正在运行)"
                     )
                     return "ollama"
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Ollama availability check failed: %s", exc)
 
         # Priority 3: llama_cpp without GPU (still works on CPU)
         if "llama_cpp" in available:
@@ -372,17 +372,17 @@ class LocalBrainManager:
         if self.backend_name in ("ollama", "auto"):
             try:
                 import httpx
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(timeout=10.0) as client:
                     await client.delete(f"{self.ollama_url}/api/delete", json={"name": ""}, timeout=5.0)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Ollama cleanup delete failed: %s", exc)
 
             # 查找并终止 ollama 进程
             try:
                 if sys.platform.startswith("win"):
-                    subprocess.run(["taskkill", "/F", "/IM", "ollama.exe"], capture_output=True)
+                    subprocess.run(["taskkill", "/F", "/IM", "ollama.exe"], capture_output=True, timeout=10)
                 else:
-                    subprocess.run(["pkill", "-f", "ollama"], capture_output=True)
+                    subprocess.run(["pkill", "-f", "ollama"], capture_output=True, timeout=10)
             except Exception as e:
                 logger.debug(f"停止 Ollama 进程时出错: {e}")
 
@@ -501,7 +501,7 @@ class LocalBrainManager:
         """
         try:
             import httpx
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.delete(
                     f"{self.ollama_url}/api/delete",
                     json={"name": model_name},
@@ -565,7 +565,8 @@ class LocalBrainManager:
             async with httpx.AsyncClient(timeout=3.0) as client:
                 resp = await client.get(f"{self.ollama_url}/api/tags")
                 return resp.status_code == 200
-        except Exception:
+        except Exception as exc:
+            logger.debug("Ollama health check failed: %s", exc)
             return False
 
     async def _start_ollama(self) -> bool:
@@ -712,15 +713,16 @@ class LocalBrainManager:
         try:
             import multiprocessing
             profile.cpu_cores = multiprocessing.cpu_count()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("CPU count detection failed: %s", exc)
 
         # 检测系统内存
         try:
             import psutil
             mem = psutil.virtual_memory()
             profile.system_ram_mb = mem.total // (1024 * 1024)
-        except Exception:
+        except Exception as exc:
+            logger.debug("psutil memory detection failed: %s", exc)
             # fallback: 读取 /proc/meminfo
             try:
                 with open("/proc/meminfo") as f:
@@ -728,8 +730,8 @@ class LocalBrainManager:
                         if line.startswith("MemTotal:"):
                             profile.system_ram_mb = int(line.split()[1]) // 1024
                             break
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("/proc/meminfo fallback failed: %s", exc)
 
         return profile
 

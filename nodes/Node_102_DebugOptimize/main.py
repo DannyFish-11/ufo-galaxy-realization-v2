@@ -160,7 +160,7 @@ class ErrorDetector:
                     ))
             
             except Exception as e:
-                pass
+                logger.warning("Exception suppressed: %s", e)
         
         return errors
 
@@ -419,8 +419,8 @@ class PerformanceAnalyzer:
             # 检查大量的字符串拼接
             # （简化版，实际需要更复杂的分析）
 
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         
         return bottlenecks
 

@@ -347,5 +347,5 @@ class DAGEvolver:
                 task_id=payload.pop("task_id", ""),
                 payload=payload,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)

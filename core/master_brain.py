@@ -53,8 +53,8 @@ def _try_emit_event(event_type_name: str, data: dict) -> None:
         et = getattr(EventType, event_type_name, None)
         if et is not None:
             event_bus.publish_sync(et, "agentic_os", data)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
 
 # Heartbeat timeout: 3 missed heartbeats (10s interval × 3 = 30s)
@@ -311,6 +311,7 @@ class MasterBrain:
             self._temporal_worker_task.add_done_callback(self._on_temporal_worker_exit)
             self._temporal_worker_state = "running"
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             self._temporal_worker_state = "failed"
             self._temporal_last_error = str(exc)
             logger.debug("MasterBrain: Temporal unavailable, workflow features disabled: %s", exc)
@@ -737,8 +738,8 @@ class MasterBrain:
         try:
             validated = TaskDispatchModel.model_validate(raw_task)
             self._register_task_graph_node(task=validated, trace_id=trace_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         self._transition_task_graph(task_id, "admitted", reason="temporal_workflow_requested")
         self._upsert_task_record(
             task_id=task_id,
@@ -1517,6 +1518,7 @@ class MasterBrain:
             self._last_scaling_decision = decision
             return decision
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             decision = {
                 "action": "no_change",
                 "reason": f"scaler_unavailable:{exc}",
@@ -1557,6 +1559,7 @@ class MasterBrain:
             self._last_scaling_decision = decision
             return decision
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             decision = {
                 "action": "no_change",
                 "reason": f"scaler_unavailable:{exc}",
@@ -1938,6 +1941,7 @@ class MasterBrain:
             self._persistence_degraded = False
             self._persistence_last_error = ""
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             self._persistence_degraded = True
             self._persistence_last_error = str(exc)
             logger.warning("MasterBrain: failed to persist state to %s: %s", self._state_path, exc)
@@ -1962,6 +1966,7 @@ class MasterBrain:
                     if isinstance(record, dict)
                 }
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             self._persistence_degraded = True
             self._persistence_last_error = str(exc)
             logger.warning("MasterBrain: failed to load persisted state from %s: %s", self._state_path, exc)

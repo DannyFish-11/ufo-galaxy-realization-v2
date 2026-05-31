@@ -593,14 +593,14 @@ def get_liminal_space_map(
     try:
         from core.local_execution_chain import build_local_chain_snapshot
         local_snap_dict = build_local_chain_snapshot().to_dict()
-    except Exception:  # pragma: no cover
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)
 
     try:
         from core.cross_device_execution_chain import build_cross_device_chain_snapshot
         cd_snap_dict = build_cross_device_chain_snapshot().to_dict()
-    except Exception:  # pragma: no cover
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)
 
     return build_liminal_space_map(
         local_snapshot_dict=local_snap_dict,

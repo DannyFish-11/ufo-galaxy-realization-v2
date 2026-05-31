@@ -268,6 +268,7 @@ class DigitalTwin:
             await self._sync_from_physical()
             return {"mode": "executed", "result": result}
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             self.status = TwinStatus.ERROR
             return {"mode": "error", "reason": str(e)}
 
@@ -385,6 +386,7 @@ class DigitalTwin:
                 risks = predicted.pop("_risks", [])
                 side_effects = predicted.pop("_side_effects", [])
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 predicted = current_state
                 success_prob = 0.5
                 risks.append(f"物理模型异常: {e}")

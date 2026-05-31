@@ -809,10 +809,11 @@ def build_runtime_capability_profile(device: Any) -> RuntimeCapabilityProfile:
             capability_tier=tier,
         )
 
-    except Exception:
+    except Exception as exc:
         try:
             fallback_id = str(getattr(device, "device_id", "") or "")
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             fallback_id = ""
         return RuntimeCapabilityProfile(
             device_id=fallback_id,
@@ -1136,7 +1137,7 @@ def evaluate_execution_surface_eligibility(
             inputs_snapshot=inputs_snap,
         )
 
-    except Exception:
+    except Exception as exc:
         return ExecutionSurfaceEligibility(
             eligible=False,
             surface=ExecutionSurface.unavailable,

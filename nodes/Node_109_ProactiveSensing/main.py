@@ -186,6 +186,7 @@ class ProactiveSensingEngine:
             return reading
             
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             sensor.error_count += 1
             logger.error(f"Error reading sensor {sensor_id}: {e}")
             return None

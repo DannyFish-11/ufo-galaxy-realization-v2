@@ -166,8 +166,8 @@ class DecayController:
             payload = getattr(event, "payload", {}) or {}
             task_id = str(payload.get("task_id", ""))
             trace_id = getattr(event, "trace_id", "") or ""
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         self.trigger_decay(task_id=task_id, trace_id=trace_id)
 
     async def _async_decay_sequence(self, *, task_id: str, trace_id: str) -> None:

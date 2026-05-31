@@ -175,6 +175,7 @@ class LocalNodeFacade:
                 }
 
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             duration_ms = int((time.time() - started) * 1000)
             logger.warning(
                 "LocalFacade: %s.%s failed: %s", mapped_node_id, action, exc

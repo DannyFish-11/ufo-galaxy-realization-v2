@@ -132,6 +132,7 @@ class LoggingMiddleware(CommandMiddleware):
             )
             return result
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             elapsed_ms = (time.monotonic() - start) * 1000
             logger.error(
                 "Command ERROR | trace=%s cmd=%s latency=%.1fms error=%s",

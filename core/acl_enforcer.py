@@ -176,8 +176,8 @@ class ACLEnforcer:
                 "reason": result.reason,
                 "ts": time.time(),
             })
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # ── Policy loading ───────────────────────────────────────────────────────
 

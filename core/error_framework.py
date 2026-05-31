@@ -233,8 +233,8 @@ class ErrorTracker:
         for handler in self._handlers.get(error.category, []):
             try:
                 handler(error)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
     def register_handler(self, category: ErrorCategory, handler: Callable):
         """注册错误处理回调"""
@@ -293,6 +293,7 @@ def error_boundary(category: ErrorCategory = ErrorCategory.INTERNAL,
             except GalaxyError:
                 raise  # 已经是 GalaxyError，直接抛出
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 ufo_err = GalaxyError(
                     message=f"{func.__name__} 执行失败: {e}",
                     category=category,
@@ -311,6 +312,7 @@ def error_boundary(category: ErrorCategory = ErrorCategory.INTERNAL,
             except GalaxyError:
                 raise
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 ufo_err = GalaxyError(
                     message=f"{func.__name__} 执行失败: {e}",
                     category=category,

@@ -343,7 +343,7 @@ def classify_android_runtime_host(device: Any) -> AndroidRuntimeHostRole:
         # Rule 6: insufficient data
         return AndroidRuntimeHostRole.UNCLASSIFIED
 
-    except Exception:
+    except Exception as exc:
         return AndroidRuntimeHostRole.UNCLASSIFIED
 
 
@@ -413,10 +413,11 @@ def build_android_runtime_host_identity(device: Any) -> AndroidRuntimeHostIdenti
             runtime_version=rt_version,
             formation_eligible=formation_eligible,
         )
-    except Exception:
+    except Exception as exc:
         try:
             fallback_id = str(getattr(device, "device_id", "") or _make_android_fallback_id())
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             fallback_id = _make_android_fallback_id()
         return AndroidRuntimeHostIdentity(device_id=fallback_id)
 

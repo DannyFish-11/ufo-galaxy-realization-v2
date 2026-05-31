@@ -137,6 +137,7 @@ class CommandDispatcher:
             result = await self.router.dispatch(request)
             return result
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             self._error_count += 1
             logger.error(
                 "CommandDispatcher.dispatch error | command=%s targets=%s error=%s",

@@ -478,6 +478,7 @@ class NodeLifecycleGovernor:
                 outcome = NodeGovernanceOutcome.SKIPPED
                 detail = "not_yet_in_any_startup_tier — governance debt; add to node_dependencies.json"
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             outcome = NodeGovernanceOutcome.SKIPPED
             detail = f"startup_tier_model unavailable: {exc}"
 
@@ -522,6 +523,7 @@ class NodeLifecycleGovernor:
             )
             detail = f"callable={callable_result}, arch_class={arch_str}"
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             callable_result = False
             outcome = NodeGovernanceOutcome.SKIPPED
             detail = f"callable_node_baseline unavailable: {exc}"
@@ -569,6 +571,7 @@ class NodeLifecycleGovernor:
             )
             detail = f"capability_registered={registered}"
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             registered = False
             outcome = NodeGovernanceOutcome.SKIPPED
             detail = f"CapabilityRegistry unavailable: {exc}"
@@ -725,8 +728,8 @@ class NodeLifecycleGovernor:
             for node in registry.get_all_nodes():
                 if node.node_id not in governed_names and node.node_name not in governed_names:
                     wild_growth.append(node.node_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         snap = NodeLifecycleGovernorSnapshot(
             snapshot_id=str(_uuid.uuid4()),

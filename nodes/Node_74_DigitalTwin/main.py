@@ -31,13 +31,15 @@ import uvicorn
 try:
     from core.port_config import get_service_port
     PORT = get_service_port("node_74") or 8074
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     PORT = int(os.getenv("PORT", "8074"))
 
 try:
     from nodes.common.cors_config import get_cors_origins
     CORS_ORIGINS = get_cors_origins()
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     CORS_ORIGINS = ["*"]
 
 # ---------------------------------------------------------------------------

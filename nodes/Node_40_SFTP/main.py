@@ -12,7 +12,8 @@ from nodes.common.cors_config import get_cors_origins
 try:
     from core.port_config import get_node_port
     PORT = get_node_port("Node_40_SFTP")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     PORT = int(os.getenv("PORT", "8040"))
 
 try:

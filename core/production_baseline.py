@@ -707,7 +707,8 @@ def build_production_baseline_summary(
         summary["perception_boundary"] = build_perception_fact_boundary_summary(
             response_metadata
         )
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         summary["perception_boundary"] = {
             "canonical_fact_surface": "response.metadata.canonical_perception_state",
             "canonical_fact_present": bool(
@@ -721,7 +722,8 @@ def build_production_baseline_summary(
         )
 
         summary["multimodal_runtime_profile"] = build_multimodal_runtime_profile_summary()
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         summary["multimodal_runtime_profile"] = {
             "profile": "unknown",
             "authority": "MULTIMODAL_RUNTIME_PROFILE::UNAVAILABLE",
@@ -731,7 +733,8 @@ def build_production_baseline_summary(
         from core.compat_freeze_enforcement import build_compat_freeze_summary
 
         summary["compat_freeze"] = build_compat_freeze_summary()
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         summary["compat_freeze"] = {
             "is_frozen": False,
             "authority": "COMPAT_FREEZE_ENFORCEMENT::UNAVAILABLE",

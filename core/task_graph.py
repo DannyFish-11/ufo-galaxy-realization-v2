@@ -371,8 +371,8 @@ class TaskGraph:
             else:
                 # Log the AIP v3 message for local debugging / tracing
                 logger.debug("AIPV3-DAG TASK_ASSIGN: %s", msg.model_dump_json(exclude_none=True))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     def _emit_aip_v3_task_result(self, node: TaskNode) -> None:
         """Emit AIP v3 TASK_RESULT message after node completion.
@@ -406,8 +406,8 @@ class TaskGraph:
                 asyncio.get_event_loop().create_task(nats.publish_task_result(msg))
             else:
                 logger.debug("AIPV3-DAG TASK_RESULT: %s", msg.model_dump_json(exclude_none=True))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     def _emit_cancel_event(self, verb: str, reason: str) -> None:
         """Best-effort StateEventBus emission for cancel/interrupt."""
@@ -426,8 +426,8 @@ class TaskGraph:
                 trace_id=self.trace_id,
                 runtime_session_id=self.runtime_session_id,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # ------------------------------------------------------------------
     # Topological utilities (internal)
@@ -526,8 +526,8 @@ class TaskGraph:
                 "attempt": node.attempt,
                 "ts": time.time(),
             })
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # ------------------------------------------------------------------
     # Node execution (with retries)
@@ -594,6 +594,7 @@ class TaskGraph:
                 )
                 return
             except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 last_exc = exc
                 logger.warning(
                     "TaskGraph '%s' | node='%s' attempt=%d/%d failed: %s",
@@ -773,8 +774,8 @@ class TaskGraph:
                             try:
                                 if not edge.condition(pred_node):
                                     skip_due_to_condition = True
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                logger.warning("Exception suppressed: %s", exc)
 
                 if blocking_pred is not None or skip_due_to_condition:
                     node.status = NodeStatus.SKIPPED

@@ -379,8 +379,8 @@ def _dispatch_remote_barrier_requests(
         mesh_meta = getattr(coordinator_state, "metadata", None) or {}
         action = mesh_meta.get("action", "execute")
         action_params = mesh_meta.get("action_params", {})
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Exception suppressed: %s", exc)
 
     # Get event loop for scheduling background tasks
     try:

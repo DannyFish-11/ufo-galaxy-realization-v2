@@ -569,8 +569,8 @@ class TaskMemory:
                     if self._ttl_seconds > 0 and (now - entry.timestamp) > self._ttl_seconds:
                         continue
                     loaded.append(entry)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             self._records = loaded
         except Exception as e:
             logger.warning("TaskMemory: 加载文件失败: %s", e)

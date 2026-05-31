@@ -21,7 +21,7 @@ SYSTEM_REALITY_CHECKPOINT_AUTHORITY: str = (
 def _safe_call(fn, default):
     try:
         return fn()
-    except Exception:
+    except Exception as exc:
         return default
 
 
@@ -132,7 +132,8 @@ def _build_model_topology_checkpoint() -> Dict[str, Any]:
         from core.multi_llm_router import get_llm_router
 
         supply = build_canonical_model_supply_state_from_router(get_llm_router()).to_dict()
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         supply = {}
     providers = list(supply.get("provider_records", []) or [])
     available = [p for p in providers if str(p.get("availability", "")).lower() == "available"]

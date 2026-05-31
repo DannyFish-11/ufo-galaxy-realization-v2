@@ -258,6 +258,7 @@ class {node_name}Engine:
             result = await self._do_process(data)
             return {{"success": True, "result": result}}
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             self._stats["errors"] += 1
             logger.error(f"处理失败: {{e}}")
             return {{"success": False, "error": str(e)}}

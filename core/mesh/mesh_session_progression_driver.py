@@ -327,7 +327,7 @@ class MeshSessionProgressionDriver:
             try:
                 cls = _import_live_coordinator()
                 return cls(None, barrier_timeout_seconds=barrier_timeout_seconds)
-            except Exception:
+            except Exception as exc:
                 return None
 
     # ------------------------------------------------------------------
@@ -599,7 +599,8 @@ class MeshSessionProgressionDriver:
                 if coord_state is None:
                     try:
                         coord_state = self._coordinator.state
-                    except Exception:
+                    except Exception as exc:
+                        _logger.debug("Fallback triggered: %s", exc)
                         coord_state = None
 
             coord_val = ""
@@ -629,8 +630,8 @@ class MeshSessionProgressionDriver:
             if self._coordinator is not None:
                 try:
                     coordinator_is_complete = self._coordinator.is_complete
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _logger.warning("Exception suppressed: %s", exc)
 
             # Priority: highest-status target wins
             if coord_val in ("completed", "partial") and current_val not in terminal_vals:

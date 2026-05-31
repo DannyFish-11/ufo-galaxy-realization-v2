@@ -193,8 +193,8 @@ class LLMManager:
         if backend is not None and hasattr(backend, "get_usage_summary"):
             try:
                 return backend.get_usage_summary()  # type: ignore[return-value]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return {"total_cost": 0.0, "by_model": {}, "history_count": 0}
 
 

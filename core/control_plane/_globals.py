@@ -117,7 +117,7 @@ def _wire_health_audit_callback(registry: DeviceHealthRegistry) -> None:
                 message=f"{event_name} for device '{device_id}'",
                 payload=kwargs,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     registry.set_event_callback(_callback)

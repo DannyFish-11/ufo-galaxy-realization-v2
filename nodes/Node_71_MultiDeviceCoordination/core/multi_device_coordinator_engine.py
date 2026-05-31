@@ -935,6 +935,7 @@ class MultiDeviceCoordinatorEngine:
                     result = await self._send_command(device, action, params)
                     results[device_id] = {"success": True, "result": result}
                 except Exception as e:
+                    logger.debug("Fallback triggered: %s", e)
                     results[device_id] = {"success": False, "error": str(e)}
             else:
                 results[device_id] = {"success": False, "error": "Device not found"}

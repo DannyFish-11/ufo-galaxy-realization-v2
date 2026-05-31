@@ -266,6 +266,7 @@ def _check_startup_tier_model_importable(
         req.status = BaselineCheckStatus.PASSED
         req.detail = f"startup_tier_model importable; NodeSystemLauncher accessible"
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         req.status = BaselineCheckStatus.FAILED
         req.detail = str(exc)[:200]
     return req
@@ -310,6 +311,7 @@ def _check_callable_node_baseline(
             f"sentinel={CALLABLE_NODE_BASELINE_ESTABLISHED[:40]}..."
         )
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         req.status = BaselineCheckStatus.FAILED
         req.detail = str(exc)[:200]
     return req
@@ -331,6 +333,7 @@ def _check_capability_registry_importable(
         req.status = BaselineCheckStatus.PASSED
         req.detail = "CapabilityRegistry importable; canonical sentinel present"
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         req.status = BaselineCheckStatus.FAILED
         req.detail = str(exc)[:200]
     return req
@@ -356,6 +359,7 @@ def _check_node_dependencies_json(
         req.status = BaselineCheckStatus.FAILED
         req.detail = f"node_dependencies.json not found at {ndj_path}"
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         req.status = BaselineCheckStatus.FAILED
         req.detail = str(exc)[:200]
     return req
@@ -380,6 +384,7 @@ def _check_core_tier_non_empty(
             req.status = BaselineCheckStatus.FAILED
             req.detail = "Core tier has zero nodes — cannot form minimum runtime"
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         req.status = BaselineCheckStatus.FAILED
         req.detail = str(exc)[:200]
     return req
@@ -407,6 +412,7 @@ def _check_standard_tier_superset(
             req.status = BaselineCheckStatus.FAILED
             req.detail = f"Standard tier missing Core nodes: {list(missing)[:5]}"
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         req.status = BaselineCheckStatus.FAILED
         req.detail = str(exc)[:200]
     return req
@@ -428,6 +434,7 @@ def _check_outward_truth_importable(
         req.status = BaselineCheckStatus.PASSED
         req.detail = "outward_runtime_truth importable; compile_outward_truth callable"
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         req.status = BaselineCheckStatus.FAILED
         req.detail = str(exc)[:200]
     return req
@@ -450,6 +457,7 @@ def _check_node_lifecycle_governor_importable(
         req.status = BaselineCheckStatus.PASSED
         req.detail = "node_lifecycle_governor importable and singleton accessible"
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         req.status = BaselineCheckStatus.FAILED
         req.detail = str(exc)[:200]
     return req
@@ -521,6 +529,7 @@ def check_runtime_baseline(
         try:
             req = fn(env)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             req = DeploymentBaselineRequirement(
                 check_name=getattr(fn, "__name__", "unknown"),
                 environment=env,

@@ -167,8 +167,8 @@ class EndToEndPipeline:
                 self.session_manager.add_message(
                     session_id, "assistant", result["reply"], ""
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # 广播到所有关联设备
         if session_id and self.connection_manager and self.session_manager:

@@ -393,8 +393,8 @@ def _derive_policy(
                 merge_confirmation_required = bool(execution_policy.get("requires_confirmation", False))
             else:
                 merge_confirmation_required = bool(getattr(execution_policy, "requires_confirmation", False))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     has_fallback = any(m.role == FormationRole.FALLBACK for m in members)
     if not has_fallback:

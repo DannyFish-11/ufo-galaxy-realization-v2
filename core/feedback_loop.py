@@ -217,8 +217,8 @@ class FeedbackLoop:
             )
             if entry.user_input:
                 prefs.record_command(entry.user_input, entry.action)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     def _emit_feedback_event(self, entry: FeedbackEntry) -> None:
         """Emit feedback event on state event bus."""
@@ -237,8 +237,8 @@ class FeedbackLoop:
                 },
                 trace_id=entry.task_id,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # ── Query ──
 

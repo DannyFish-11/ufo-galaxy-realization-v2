@@ -61,7 +61,8 @@ def _node_95_url() -> str:
     try:
         from urllib.parse import urlparse
         scheme = urlparse(raw).scheme.lower()
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         scheme = ""
     if scheme not in _ALLOWED_SCHEMES:
         logger.warning(

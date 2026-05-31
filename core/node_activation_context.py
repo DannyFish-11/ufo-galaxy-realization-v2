@@ -604,8 +604,8 @@ def get_activation_policy_kind_for_node(node_info: Any) -> NodeActivationPolicyK
         field_val = getattr(node_info, "activation_policy", None)
         if field_val is not None:
             raw_policy = str(field_val)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)
 
     # Fall back to metadata dict
     if raw_policy is None:
@@ -614,8 +614,8 @@ def get_activation_policy_kind_for_node(node_info: Any) -> NodeActivationPolicyK
             raw_policy = metadata.get("activation_policy")
             if raw_policy is not None:
                 raw_policy = str(raw_policy)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed: %s", exc)
 
     if raw_policy is None:
         return NodeActivationPolicyKind.ALWAYS_ACTIVE

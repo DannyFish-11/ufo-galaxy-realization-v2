@@ -883,7 +883,8 @@ try:
         DelegatedFlowReadinessVerdict as _ReadinessVerdict,
     )
     _READINESS_GATE_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _READINESS_GATE_AVAILABLE = False
     _get_readiness_gate = None  # type: ignore[assignment]
     _ReadinessVerdict = None  # type: ignore[assignment]
@@ -895,7 +896,8 @@ try:
         DelegatedFlowAcceptanceVerdict as _AcceptanceVerdict,
     )
     _ACCEPTANCE_GATE_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _ACCEPTANCE_GATE_AVAILABLE = False
     _get_acceptance_gate = None  # type: ignore[assignment]
     _AcceptanceVerdict = None  # type: ignore[assignment]
@@ -907,7 +909,8 @@ try:
         GovernanceVerdict as _GovernanceVerdict,
     )
     _GOVERNANCE_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _GOVERNANCE_AVAILABLE = False
     _get_governance_evaluator = None  # type: ignore[assignment]
     _GovernanceVerdict = None  # type: ignore[assignment]
@@ -918,7 +921,8 @@ try:
         build_recovery_readiness_snapshot as _build_recovery_snapshot,
     )
     _RECOVERY_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _RECOVERY_AVAILABLE = False
     _build_recovery_snapshot = None  # type: ignore[assignment]
 
@@ -932,7 +936,8 @@ try:
         AndroidParticipantStatus as _AndroidParticipantStatus,
     )
     _ANDROID_EVIDENCE_INGRESS_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _ANDROID_EVIDENCE_INGRESS_AVAILABLE = False
     _ingest_android_evidence = None  # type: ignore[assignment]
     _AndroidParticipantStatus = None  # type: ignore[assignment]
@@ -945,7 +950,8 @@ try:
         get_android_delegated_audit_recorder as _get_android_delegated_audit_recorder,
     )
     _ANDROID_AUDIT_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _ANDROID_AUDIT_AVAILABLE = False
     _get_android_delegated_audit_recorder = None  # type: ignore[assignment]
 
@@ -958,7 +964,8 @@ try:
         HistoryEvidenceStatus as _HistoryEvidenceStatus,
     )
     _DECISION_HISTORY_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _DECISION_HISTORY_AVAILABLE = False
     _get_decision_history = None  # type: ignore[assignment]
     _HistoryEvidenceStatus = None  # type: ignore[assignment]
@@ -971,7 +978,8 @@ try:
         RecoveryTruthStatus as _RecoveryTruthStatus,
     )
     _RECOVERY_TRUTH_SURFACE_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _RECOVERY_TRUTH_SURFACE_AVAILABLE = False
     _build_recovery_truth_report = None  # type: ignore[assignment]
     _RecoveryTruthStatus = None  # type: ignore[assignment]
@@ -985,7 +993,8 @@ try:
         CANONICAL_CROSS_REPO_EVIDENCE_PIPELINE_AUTHORITY as _CROSS_REPO_AUTHORITY,
     )
     _CROSS_REPO_PIPELINE_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _CROSS_REPO_PIPELINE_AVAILABLE = False
     _build_cross_repo_report = None  # type: ignore[assignment]
     _PipelineVerdict = None  # type: ignore[assignment]
@@ -1000,7 +1009,8 @@ try:
         MultiDeviceGovernanceVerdict as _MDGovernanceVerdict,
     )
     _MD_GOVERNANCE_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _MD_GOVERNANCE_AVAILABLE = False
     _build_md_governance_report = None  # type: ignore[assignment]
     _MDGovernanceVerdict = None  # type: ignore[assignment]
@@ -1016,7 +1026,8 @@ try:
         CONVERSATION_CONTINUITY_TRUTH_AUTHORITY as _CONV_CONTINUITY_AUTHORITY,
     )
     _CONVERSATION_CONTINUITY_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _CONVERSATION_CONTINUITY_AVAILABLE = False
     _build_conversation_continuity_verdict = None  # type: ignore[assignment]
     _ConversationContinuityClass = None  # type: ignore[assignment]
@@ -1035,7 +1046,8 @@ try:
         INFLIGHT_TASK_CONTINUITY_TAXONOMY_IS_AUTHORITY as _TASK_CONTINUITY_AUTHORITY,
     )
     _TASK_CONTINUITY_TAXONOMY_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _TASK_CONTINUITY_TAXONOMY_AVAILABLE = False
     _build_task_continuity_verdict = None  # type: ignore[assignment]
     _InFlightTaskContinuityClass = None  # type: ignore[assignment]
@@ -1054,7 +1066,8 @@ try:
         HUMAN_INTERVENTION_TAXONOMY_AUTHORITY as _HUMAN_INTERVENTION_AUTHORITY,
     )
     _HUMAN_INTERVENTION_TAXONOMY_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _HUMAN_INTERVENTION_TAXONOMY_AVAILABLE = False
     _build_human_intervention_verdict = None  # type: ignore[assignment]
     _HumanInterventionClass = None  # type: ignore[assignment]
@@ -1074,7 +1087,8 @@ try:
         OFFLINE_OPERATIONAL_CONTRACT_AUTHORITY as _OFFLINE_OPERATIONAL_AUTHORITY,
     )
     _OFFLINE_OPERATIONAL_CONTRACT_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _OFFLINE_OPERATIONAL_CONTRACT_AVAILABLE = False
     _build_offline_operational_verdict = None  # type: ignore[assignment]
     _build_baseline_offline_verdict = None  # type: ignore[assignment]
@@ -1095,7 +1109,8 @@ try:
         VERIFICATION_EVIDENCE_CLOSURE_CONTRACT_AUTHORITY as _VERIFICATION_CLOSURE_AUTHORITY,
     )
     _VERIFICATION_EVIDENCE_CLOSURE_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _VERIFICATION_EVIDENCE_CLOSURE_AVAILABLE = False
     _build_verification_closure_verdict = None  # type: ignore[assignment]
     _build_baseline_verification_closure_verdict = None  # type: ignore[assignment]
@@ -1116,7 +1131,8 @@ try:
         TELEMETRY_FRESHNESS_CONTRACT_AUTHORITY as _TELEMETRY_FRESHNESS_AUTHORITY,
     )
     _TELEMETRY_FRESHNESS_CONTRACT_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _TELEMETRY_FRESHNESS_CONTRACT_AVAILABLE = False
     _build_telemetry_freshness_verdict = None  # type: ignore[assignment]
     _build_baseline_telemetry_freshness_verdict = None  # type: ignore[assignment]
@@ -1137,7 +1153,8 @@ try:
         RESOURCE_PRESSURE_CAPACITY_CONTRACT_AUTHORITY as _CAPACITY_CONTRACT_AUTHORITY,
     )
     _RESOURCE_PRESSURE_CAPACITY_CONTRACT_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _RESOURCE_PRESSURE_CAPACITY_CONTRACT_AVAILABLE = False
     _build_capacity_verdict = None  # type: ignore[assignment]
     _build_baseline_capacity_verdict = None  # type: ignore[assignment]
@@ -1159,7 +1176,8 @@ try:
         CONCURRENT_MUTATION_CONFLICT_CONTRACT_AUTHORITY as _MUTATION_CONFLICT_CONTRACT_AUTHORITY,
     )
     _CONCURRENT_MUTATION_CONFLICT_CONTRACT_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _CONCURRENT_MUTATION_CONFLICT_CONTRACT_AVAILABLE = False
     _build_mutation_conflict_verdict = None  # type: ignore[assignment]
     _build_baseline_mutation_conflict_verdict = None  # type: ignore[assignment]
@@ -1180,7 +1198,8 @@ try:
         TEMPORAL_SEMANTICS_CONTRACT_AUTHORITY as _TEMPORAL_SEMANTICS_AUTHORITY,
     )
     _TEMPORAL_SEMANTICS_CONTRACT_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _TEMPORAL_SEMANTICS_CONTRACT_AVAILABLE = False
     _build_temporal_verdict = None  # type: ignore[assignment]
     _build_baseline_temporal_verdict = None  # type: ignore[assignment]
@@ -1202,7 +1221,8 @@ try:
         IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AUTHORITY as _IDENTITY_BINDING_AUTHORITY,
     )
     _IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AVAILABLE = False
     _build_identity_binding_verdict = None  # type: ignore[assignment]
     _build_baseline_identity_binding_verdict = None  # type: ignore[assignment]
@@ -1463,8 +1483,8 @@ class SystemFinalAcceptanceEvaluator:
                     h_status_value = h_report.evidence_status.value
                     structure_present = h_report.structure_present
                     runtime_closure = h_report.runtime_closure_established
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
@@ -1505,8 +1525,8 @@ class SystemFinalAcceptanceEvaluator:
                     structure_present = h_report.structure_present
                     runtime_closure = h_report.runtime_closure_established
                     h_gap_description = h_report.gap_description
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
             base_linkage: Dict[str, Any] = {
                 "acceptance_gate_verdict": verdict_value,

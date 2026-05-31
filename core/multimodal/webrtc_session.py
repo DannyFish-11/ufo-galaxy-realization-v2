@@ -26,8 +26,8 @@ try:
     from aiortc import RTCPeerConnection, RTCSessionDescription  # noqa: F401
 
     _AIORTC_AVAILABLE = True
-except Exception:  # pragma: no cover
-    pass
+except Exception as exc:
+    logger.debug("Suppressed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +152,7 @@ class WebRTCCameraSession:
             return self._pc.localDescription.sdp
 
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             self._state = WebRTCSessionState.FAILED
             self._quality = SignalQuality.degraded(str(exc))
             logger.warning("WebRTC connect error: %s", exc)

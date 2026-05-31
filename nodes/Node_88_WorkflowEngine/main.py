@@ -33,7 +33,8 @@ import uvicorn
 try:
     from core.port_config import get_node_port
     _port_from_config = get_node_port("Node_88_WorkflowEngine")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _port_from_config = None
 
 try:
@@ -319,6 +320,7 @@ class WorkflowEngine:
                             idx = next((i for i, s in enumerate(step_list) if s["id"] == current_id), None)
                             current_id = step_list[idx + 1]["id"] if idx is not None and idx + 1 < len(step_list) else None
                     except Exception as e:
+                        logger.debug("Fallback triggered: %s", e)
                         step_log["error"] = str(e)
                         step_log["completed_at"] = datetime.now().isoformat()
                         raise RuntimeError(f"Step '{current_id}' failed: {e}") from e
@@ -331,6 +333,7 @@ class WorkflowEngine:
             execution["status"] = "timeout"
             execution["error"] = f"Execution exceeded timeout ({WORKFLOW_TIMEOUT}s)"
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             execution["status"] = "failed"
             execution["error"] = str(e)
         finally:
@@ -386,7 +389,8 @@ class WorkflowEngine:
                 resp.raise_for_status()
                 try:
                     ctx[output_key] = resp.json()
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Fallback triggered: %s", exc)
                     ctx[output_key] = resp.text
             return None
 

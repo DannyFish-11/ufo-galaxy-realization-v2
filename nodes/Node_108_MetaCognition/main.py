@@ -97,7 +97,8 @@ class MetaCognitionEngine:
             try:
                 from core.llm_manager import LLMManager
                 self._llm_manager = LLMManager()
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 self._llm_manager = False  # Mark as unavailable
         return self._llm_manager if self._llm_manager is not False else None
 
@@ -110,7 +111,7 @@ class MetaCognitionEngine:
             result = await llm.simple_chat(prompt)
             parsed = json.loads(result.strip())
             return parsed
-        except Exception:
+        except Exception as exc:
             return fallback
         
     async def perceive(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -300,8 +301,8 @@ class MetaCognitionEngine:
                     if result and "score" in result:
                         llm_score = float(result["score"])
                         return max(0.0, min(1.0, (rule_score + llm_score) / 2))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return rule_score
     
     def _determine_attention(self, data: Dict) -> bool:
@@ -347,8 +348,8 @@ class MetaCognitionEngine:
                     result = loop.run_until_complete(self._llm_analyze(prompt, None))
                     if isinstance(result, list) and len(result) > 0:
                         return result
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return default
     
     def _create_scenarios(self, comprehension: Dict) -> List[Dict]:
@@ -401,8 +402,8 @@ class MetaCognitionEngine:
                     result = loop.run_until_complete(self._llm_analyze(prompt, None))
                     if result and "insights" in result and len(result["insights"]) > 0:
                         return result["insights"]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return rule_insights if rule_insights else ["Continue monitoring"]
 
     def _generate_action_items(self, insights: List[str]) -> List[str]:
@@ -429,8 +430,8 @@ class MetaCognitionEngine:
                     result = loop.run_until_complete(self._llm_analyze(prompt, None))
                     if result and "actions" in result and len(result["actions"]) > 0:
                         return result["actions"]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return rule_actions if rule_actions else ["Continue monitoring"]
     
     def _update_meta_knowledge(self, reflection: ReflectionRecord):

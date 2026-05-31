@@ -1306,6 +1306,7 @@ def build_recovery_closure_report() -> RecoveryClosureReport:
         try:
             entry = builder()
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             scenario_name = getattr(builder, "__name__", str(builder))
             logger.warning(
                 "RecoveryClosureValidator: builder %r raised: %s",

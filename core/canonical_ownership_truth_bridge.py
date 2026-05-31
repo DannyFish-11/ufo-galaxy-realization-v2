@@ -514,20 +514,20 @@ def record_participant_truth_with_ownership(
     ownership_context: Dict[str, Any] = {}
     try:
         ownership_context = dict(outcome.ownership_context or {})
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Exception suppressed: %s", exc)
 
     session_id = ""
     try:
         session_id = str(outcome.envelope.session_id or "")
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Exception suppressed: %s", exc)
 
     trace_id = None
     try:
         trace_id = outcome.envelope.trace_id or None
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Exception suppressed: %s", exc)
 
     boundary = extract_ownership_boundary(ownership_context)
     _logger.debug(

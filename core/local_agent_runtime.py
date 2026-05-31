@@ -229,6 +229,7 @@ class LocalAgentRuntime:
                     step.observation = json.dumps(result, ensure_ascii=False)[:500]
                     step.success = result.get("success", True) if isinstance(result, dict) else True
                 except Exception as e:
+                    logger.debug("Fallback triggered: %s", e)
                     step.observation = f"Error: {e}"
                     step.success = False
             else:
@@ -285,6 +286,7 @@ class LocalAgentRuntime:
             try:
                 llm_result = await self._llm_chat(messages, tool_defs)
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 step.thought = f"LLM call failed: {e}"
                 step.success = False
                 steps.append(step.to_dict())
@@ -323,6 +325,7 @@ class LocalAgentRuntime:
                         result = await self._tool_executor(tc_name, tc_args)
                         observation = json.dumps(result, ensure_ascii=False)[:1000]
                     except Exception as e:
+                        logger.debug("Fallback triggered: %s", e)
                         observation = f"Tool execution error: {e}"
                 else:
                     observation = f"Tool '{tc_name}' called but no executor available"

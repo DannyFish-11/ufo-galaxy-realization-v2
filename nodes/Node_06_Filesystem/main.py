@@ -85,8 +85,8 @@ class FilesystemManager:
         for item in full_path.iterdir():
             try:
                 items.append(self._get_file_info(item))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         return sorted(items, key=lambda x: (x.type != "directory", x.name.lower()))
 
@@ -178,8 +178,8 @@ class FilesystemManager:
         for item in full_path.rglob(f"*{pattern}*"):
             try:
                 results.append(self._get_file_info(item))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         return results
 

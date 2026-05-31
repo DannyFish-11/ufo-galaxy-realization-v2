@@ -1333,8 +1333,8 @@ def build_platform_closure_audit_report() -> PlatformClosureAuditReport:
                         blocking_issues.append(
                             f"P0 gap OPEN: {g.gap_id} — {g.title}"
                         )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
     logger.info(
         "PlatformClosureAuditReport built: %d gaps, %d open, "

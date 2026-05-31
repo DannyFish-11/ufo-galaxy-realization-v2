@@ -219,6 +219,7 @@ class ConnectionManager:
                 return False
                 
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             conn_info.state = ConnectionState.ERROR
             conn_info.last_error = str(e)
             logger.error(f"连接失败 {connection_id}: {e}")

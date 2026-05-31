@@ -51,8 +51,8 @@ def _try_emit_event(event_type_name: str, data: dict) -> None:
         et = getattr(EventType, event_type_name, None)
         if et is not None:
             event_bus.publish_sync(et, "agentic_os", data)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
 
 class AntiCorruptionLayer:
@@ -266,7 +266,8 @@ class AntiCorruptionLayer:
         if raw_input is not None:
             try:
                 result["raw_input"] = raw_input if isinstance(raw_input, dict) else str(raw_input)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 result["raw_input"] = "<unserializable>"
         return result
 

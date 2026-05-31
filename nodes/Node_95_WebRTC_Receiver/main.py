@@ -75,8 +75,8 @@ def _is_data_channel_bridge_enabled() -> bool:
                 webrtc_cfg = flat.get("webrtc", {})
                 if isinstance(webrtc_cfg, dict) and webrtc_cfg.get("enable_data_channel", False):
                     return True
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
     return False
 
 # C方案: 数据通道桥接开关（默认关闭）

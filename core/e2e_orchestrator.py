@@ -124,8 +124,8 @@ async def compile_and_run_dag(
         _get = cfg.get if hasattr(cfg, "get") else lambda k, d: getattr(cfg, k, d)
         max_retries = int(_get("task_dag_default_max_retries", 1))
         retry_delay = float(_get("task_dag_retry_delay_seconds", 1.0))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     policy = RetryPolicy(max_retries=max_retries, retry_delay_seconds=retry_delay)
 

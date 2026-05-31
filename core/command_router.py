@@ -754,7 +754,8 @@ class CommandRouter:
                     initial_limit=max_concurrent,
                     max_limit=max(max_concurrent * 3, 50),
                 )
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 self._adaptive_sem = None
         else:
             self._adaptive_sem = None
@@ -764,7 +765,8 @@ class CommandRouter:
             from core.resilience.metrics import get_resilience_metrics
 
             self._resilience_metrics: Optional[Any] = get_resilience_metrics()
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             self._resilience_metrics = None
 
         # 请求存储（内存，可扩展到 Redis）
@@ -820,7 +822,7 @@ class CommandRouter:
                 device_id=device_id,
                 payload=payload or {},
             )
-        except Exception:
+        except Exception as exc:
             return None
 
     # ------------------------------------------------------------------
@@ -836,7 +838,7 @@ class CommandRouter:
                 from core.resilience.circuit_breaker import CircuitBreaker
 
                 self._circuit_breakers[target] = CircuitBreaker(target=target)
-            except Exception:
+            except Exception as exc:
                 return None
         return self._circuit_breakers.get(target)
 
@@ -874,22 +876,22 @@ class CommandRouter:
         if self._resilience_metrics is not None:
             try:
                 metrics = self._resilience_metrics.snapshot()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         cb_states = {}
         for tgt, cb in self._circuit_breakers.items():
             try:
                 cb_states[tgt] = cb.snapshot()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         adaptive = {}
         if self._adaptive_sem is not None:
             try:
                 adaptive = self._adaptive_sem.snapshot()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         return {
             "metrics": metrics,
@@ -976,16 +978,16 @@ class CommandRouter:
         if self._resilience_metrics is not None:
             try:
                 self._resilience_metrics.set_queue_depth(active)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         if active >= self._max_queue_depth:
             self._stats["total_rejected"] += 1
             if self._resilience_metrics is not None:
                 try:
                     self._resilience_metrics.record_rejected()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             logger.warning(
                 "CommandRouter.dispatch: queue depth %d >= limit %d; rejecting %s",
                 active,
@@ -999,8 +1001,8 @@ class CommandRouter:
         if self._resilience_metrics is not None:
             try:
                 self._resilience_metrics.record_accepted()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # 初始化结果
         cmd_result = CommandResult(
@@ -1148,7 +1150,8 @@ class CommandRouter:
                 from core.schemas.task_envelope import TaskEnvelope as _TE
 
                 is_canonical = isinstance(payload, _TE)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 is_canonical = False
 
             if not is_canonical:
@@ -1503,8 +1506,8 @@ class CommandRouter:
                         posture=str(_constraint_chain_trace.get("posture_value") or ""),
                         eligible=bool(_constraint_chain_trace.get("posture_eligible", True)),
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
         # ── Gate B: Admissibility chain for device targets ───────────────────
         # Validates envelope targets via the canonical admissibility chain
@@ -1551,7 +1554,7 @@ class CommandRouter:
                             )
                         else:
                             _adm_validated.append(_adm_t)
-                    except Exception:
+                    except Exception as exc:
                         # Include by default on per-target error (graceful).
                         _adm_validated.append(_adm_t)
 
@@ -1602,8 +1605,8 @@ class CommandRouter:
                         validated=list(_constraint_chain_trace.get("admissibility_validated") or []),
                         excluded=_adm_excl_pairs,
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
         # ── PR-5 Cap 1: lifecycle transition created → running ───────────────
         try:
@@ -1747,6 +1750,7 @@ class CommandRouter:
                     )
 
             except Exception as _wrtc_exc:
+                logger.debug("Fallback triggered: %s", _wrtc_exc)
                 _wrtc_elapsed = (time.monotonic() - _wrtc_t0) * 1000
                 logger.warning(
                     "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: "
@@ -2015,8 +2019,8 @@ class CommandRouter:
                         unconfirmed=list(_cap_unconfirmed_targets or []),
                         required_caps=_cap_query_caps,
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # ── PR-V3: Canonical dispatch slot legality gate ──────────────────────
         # V3 canonical_dispatch_slot_authority is the single canonical pre-dispatch
@@ -2173,16 +2177,16 @@ class CommandRouter:
                         _v3_blocked_result["lifecycle_state"] = _ELS_v3.FAILED.value
                         if envelope.remote_execution_mode is not None:
                             _v3_blocked_result["lifecycle_via_waiting_remote"] = True
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                     # Stamp failure domain from V3_SLOT_BLOCKED error code
                     try:
                         from core.failure_domains import classify_from_error_code as _cfe_v3
                         _fd_v3 = _cfe_v3(GatewayErrorCode.V3_SLOT_BLOCKED.value)
                         _v3_blocked_result["failure_domain"] = _fd_v3.domain.value
                         _v3_blocked_result["failure_is_retryable"] = _fd_v3.is_retryable
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                     # Stamp introspection snapshot
                     _v3_blocked_result["introspection_snapshot"] = {
                         "authority_role": "execution_substrate",
@@ -2199,6 +2203,7 @@ class CommandRouter:
                     return _v3_blocked_result
 
             except Exception as _v3_exc:
+                logger.debug("Fallback triggered: %s", _v3_exc)
                 _v3_block_reason = f"slot_authority_unavailable:{_v3_exc}"
                 if _v3_authority_mode == "strict":
                     logger.warning(
@@ -2243,8 +2248,8 @@ class CommandRouter:
                     blocked=_v3_blocked_targets,
                     block_reason=_v3_block_reason,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # Stamp V3 slot gate result into constraint chain trace for end-to-end
         # reviewability.
@@ -2314,8 +2319,8 @@ class CommandRouter:
             try:
                 _pre_dispatch_expl = _live_expl_builder.build()
                 _pre_dispatch_expl_str = _expl_to_str(_pre_dispatch_expl)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         try:
             from core.replay_foundation import (
                 record_route_decision as _record_route,
@@ -2411,7 +2416,8 @@ class CommandRouter:
         if _explicit_target_type is not None:
             try:
                 from core.schemas.remote_execution import ExecutorTargetType as _ETT
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 _ETT = None  # type: ignore[assignment]
 
             if _ETT is not None and _explicit_target_type in (
@@ -2430,8 +2436,8 @@ class CommandRouter:
                                 "→ cross-device substrate (DeviceRouter)"
                             ),
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                 result = await self._route_cross_device_envelope(
                     envelope=envelope,
                     command_id=command_id,
@@ -2450,8 +2456,8 @@ class CommandRouter:
                                 "→ MasterBrain worker domain"
                             ),
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                 result = await self._route_worker_envelope(
                     envelope=envelope,
                     command_id=command_id,
@@ -2470,8 +2476,8 @@ class CommandRouter:
                                 "→ local runtime execution"
                             ),
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                 result = await self._execute_command(
                     device_id=envelope.target,
                     command=envelope.tool_name,
@@ -2513,8 +2519,8 @@ class CommandRouter:
                         getattr(_tsp_cd, "policy_kind", None),
                         envelope.task_id,
                     )
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed: %s", exc)
             # PR-H: record heuristic cross-device path selection
             if _live_expl_builder is not None:
                 try:
@@ -2523,8 +2529,8 @@ class CommandRouter:
                         selected_target=envelope.target,
                         reason="metadata cross_device=true → cross-device substrate (DeviceRouter)",
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             result = await self._route_cross_device_envelope(
                 envelope=envelope,
                 command_id=command_id,
@@ -2539,8 +2545,8 @@ class CommandRouter:
                         selected_target=None,
                         reason="metadata parallel_fanout=true → canonical parallel fan-out",
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             result = await self._route_parallel_fanout_envelope(
                 envelope=envelope,
                 command_id=command_id,
@@ -2566,8 +2572,8 @@ class CommandRouter:
                                 or getattr(_r, "status", None)
                                 or "unknown"
                             )
-                    except Exception:  # noqa: BLE001
-                        pass
+                    except Exception as exc:
+                        logger.debug("Suppressed: %s", exc)
 
                 _ps_decision = _apply_tsp_local(
                     executor_target_type=None,
@@ -2597,8 +2603,8 @@ class CommandRouter:
                             }
                         }
                     )
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed: %s", exc)
             # PR-H: record local path selection
             if _live_expl_builder is not None:
                 try:
@@ -2610,8 +2616,8 @@ class CommandRouter:
                             "dispatching via local execution runtime"
                         ),
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             result = await self._execute_command(
                 device_id=envelope.target,
                 command=envelope.tool_name,
@@ -2876,8 +2882,8 @@ class CommandRouter:
                     "directly for canonical ingress."
                 ),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
 
@@ -3043,6 +3049,7 @@ class CommandRouter:
                 "latency_ms": round(_latency_ms, 1),
             }
         except Exception as _exc:
+            logger.debug("Fallback triggered: %s", _exc)
             _latency_ms = (_time_m.monotonic() - _t0) * 1000
             logger.error(
                 "_route_cross_device_envelope failed | task_id=%s error=%s",
@@ -3160,6 +3167,7 @@ class CommandRouter:
             self._copy_execution_truth_fields(result, raw)
             return result
         except Exception as _exc:
+            logger.debug("Fallback triggered: %s", _exc)
             _latency_ms = (_time_m.monotonic() - _t0) * 1000
             logger.error(
                 "_route_worker_envelope failed | task_id=%s error=%s",
@@ -3509,8 +3517,8 @@ class CommandRouter:
                 message=f"Dispatching command '{command}' to device '{device_id}'",
                 payload={"command": command, "command_id": command_id},
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # ── Early HITL gate: _hitl_approved payload flag ─────────────────────
         # Fast-path check: block high-risk commands that lack pre-approval.
@@ -3674,8 +3682,8 @@ class CommandRouter:
                 from core.control_plane._globals import get_health_registry as _get_hreg
 
                 _cb_eligible = _get_hreg().is_eligible(current_device)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             if not _cb_eligible:
                 # Device circuit is OPEN or quarantined – skip to next candidate
@@ -3700,8 +3708,8 @@ class CommandRouter:
                                 "reason": "circuit_open_or_quarantined",
                             },
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                     # ── PR-506: Record fallback event (circuit-breaker bypass) ──
                     try:
                         from core.replay_foundation import (
@@ -3736,8 +3744,8 @@ class CommandRouter:
                             reason="circuit_open_or_quarantined",
                             fallback_task_id=f"{task_id}:cb_fallback:{attempt + 1}",
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                     # ── PR-508: Register fallback in TaskGraphRuntime ─────────
                     try:
                         from core.task_graph_runtime import (
@@ -3761,8 +3769,8 @@ class CommandRouter:
                             reason="circuit_open_or_quarantined",
                             contributor=_WCK_fb.COMMAND_ROUTER,
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                     current_device = next_dev
                     attempt += 1
                     continue
@@ -3795,8 +3803,8 @@ class CommandRouter:
                 _tgr_exec = _get_tgr_exec()
                 _tgr_exec.transition(task_id, _GNS_exec.DISPATCH)
                 _tgr_exec.transition(task_id, _GNS_exec.RUNNING)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
             result = await self._dispatch_to_device(
                 current_device,
                 command,
@@ -3821,8 +3829,8 @@ class CommandRouter:
                         current_device,
                         error=result.get("error_message") or result.get("error_code", ""),
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             if result["success"]:
                 if attempt > 0:
@@ -3838,8 +3846,8 @@ class CommandRouter:
                             message=(f"Retry #{attempt} succeeded on device '{current_device}'"),
                             payload={"attempt": attempt, "original_device": device_id},
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                 return result
 
             # ── Failure: decide whether to retry ────────────────────────
@@ -3867,8 +3875,8 @@ class CommandRouter:
                                 "original_device": device_id,
                             },
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                 return result
 
             # ── Pick next candidate and schedule retry ───────────────────
@@ -3886,8 +3894,8 @@ class CommandRouter:
                         message="No eligible retry candidate available",
                         payload={"attempt": attempt, "original_device": device_id},
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
                 return result
 
             try:
@@ -3906,8 +3914,8 @@ class CommandRouter:
                         "original_device": device_id,
                     },
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             # ── PR-506: Record retry event in ReplayFoundation + AuditEventSemantics ─
             try:
@@ -3952,8 +3960,8 @@ class CommandRouter:
                     attempt_number=attempt + 1,
                     reason=result.get("error_code", "retryable_failure") or "retryable_failure",
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             # ── PR-508: Register retry in TaskGraphRuntime ────────────────────
             try:
@@ -3981,8 +3989,8 @@ class CommandRouter:
                     reason=result.get("error_code", "retryable_failure") or "retryable_failure",
                     contributor=_WCK_retry.COMMAND_ROUTER,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             current_device = next_dev
             attempt += 1
@@ -4107,8 +4115,8 @@ class CommandRouter:
                             message=f"Command '{command}' completed on '{device_id}'",
                             payload={"latency_ms": round(latency_ms, 1)},
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                 else:
                     self._stats["total_failed"] = self._stats.get("total_failed", 0) + 1
                     logger.warning(
@@ -4163,6 +4171,7 @@ class CommandRouter:
                 return result
 
             except Exception as exc:  # pylint: disable=broad-except
+                logger.debug("Fallback triggered: %s", exc)
                 latency_ms = (time.monotonic() - t0) * 1000
                 result = {
                     **trace_base,
@@ -4272,6 +4281,7 @@ class CommandRouter:
             return result
 
         except Exception as exc:  # pylint: disable=broad-except
+            logger.debug("Fallback triggered: %s", exc)
             latency_ms = (time.monotonic() - t0) * 1000
             result = {
                 **trace_base,
@@ -4306,7 +4316,7 @@ class CommandRouter:
                 return None
             best = get_scoring_engine().select_best_device(remaining, required_capabilities)
             return best.device_id if best is not None else None
-        except Exception:
+        except Exception as exc:
             # Fallback: just pick first untried candidate
             for c in candidates:
                 if c.device_id not in tried:
@@ -4747,10 +4757,11 @@ class CommandRouter:
                     if self._resilience_metrics is not None:
                         try:
                             self._resilience_metrics.record_fallback()
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.warning("Exception suppressed: %s", exc)
                     return
                 except Exception as e:
+                    logger.debug("Fallback triggered: %s", e)
                     last_error = f"Fallback failed: {e}"
             else:
                 from core.resilience.circuit_breaker import CircuitOpenError
@@ -4788,8 +4799,8 @@ class CommandRouter:
                 if self._adaptive_sem is not None:
                     try:
                         await self._adaptive_sem.record(elapsed_ms, error=False)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
 
                 target_result.status = CommandStatus.SUCCESS
                 target_result.result = result
@@ -4805,8 +4816,8 @@ class CommandRouter:
                 if self._adaptive_sem is not None:
                     try:
                         await self._adaptive_sem.record(elapsed_ms, error=True)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                 if attempt < max_retries:
                     # 指数退避
                     await asyncio.sleep(min(2**attempt * 0.5, 5.0))
@@ -4818,6 +4829,7 @@ class CommandRouter:
                 raise
 
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 call_error = True
                 last_error = str(e)
                 logger.warning(f"Command error: {target}/{command}: {e} (attempt {attempt + 1})")
@@ -4825,8 +4837,8 @@ class CommandRouter:
                 if self._adaptive_sem is not None:
                     try:
                         await self._adaptive_sem.record(elapsed_ms, error=True)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
                 if attempt < max_retries:
                     await asyncio.sleep(min(2**attempt * 0.5, 5.0))
 
@@ -4886,16 +4898,16 @@ class CommandRouter:
             raw = await self._cache.get(key)
             if raw is not None:
                 return json.loads(raw)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return None
 
     async def _cache_set(self, key: str, value: Any, ttl: int = 60):
         """写入缓存"""
         try:
             await self._cache.set(key, json.dumps(value, default=str), ttl)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # ------------------------------------------------------------------
     # 清理

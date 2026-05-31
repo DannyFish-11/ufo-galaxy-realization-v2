@@ -302,7 +302,7 @@ class HotReloadConfigManager:
                     f.flush()
                     os.fsync(f.fileno())
                 os.replace(tmp_path, path)  # 原子替换
-            except Exception:
+            except Exception as exc:
                 # 清理临时文件
                 try:
                     os.unlink(tmp_path)
@@ -373,6 +373,7 @@ class HotReloadConfigManager:
                     except RuntimeError:
                         pass  # 没有事件循环时跳过异步回调
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 failed += 1
                 logger.warning(f"配置变更通知回调异常: {e}")
         if failed:

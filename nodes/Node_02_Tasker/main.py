@@ -146,6 +146,7 @@ class TaskManager:
             task.result = result
             task.status = TaskStatus.COMPLETED
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             task.retry_count += 1
             if task.retry_count < task.max_retries:
                 task.status = TaskStatus.PENDING

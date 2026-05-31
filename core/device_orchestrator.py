@@ -98,7 +98,7 @@ def _resolve_device_type(raw: str):
     try:
         from core.device_types import resolve_device_type
         return resolve_device_type(raw)
-    except Exception:
+    except Exception as exc:
         return None
 
 
@@ -275,8 +275,8 @@ class DeviceOrchestrator:
                 {"device_id": device_id, "command": command, "params": params},
                 reason="DeviceOrchestrator.send_command → execution facade → spine",
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # PR-B: Attempt canonical spine routing via CommandRouter.route_envelope()
         # before falling back to the NodeRegistry path.  This ensures that
@@ -285,7 +285,8 @@ class DeviceOrchestrator:
         try:
             from core.command_router import get_command_router as _gcr_do
             _cmd_router_do = _gcr_do()
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             _cmd_router_do = None
 
         if _cmd_router_do is not None:
@@ -345,6 +346,7 @@ class DeviceOrchestrator:
                     "execution_time_ms": round(elapsed_ms, 2),
                 }
             except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 elapsed_ms = (time.monotonic() - start) * 1000
                 logger.error(f"send_command 失败 [{device_id}:{command}]: {exc}")
                 return {

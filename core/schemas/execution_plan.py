@@ -120,7 +120,8 @@ try:
         LifecycleTransition as _LT,
     )
     _LIFECYCLE_OK = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _ELS = None  # type: ignore[assignment,misc]
     _LT = None   # type: ignore[assignment,misc]
     _LIFECYCLE_OK = False
@@ -436,7 +437,7 @@ def _stamp_plan_lifecycle(plan: "ExecutionPlan") -> None:
             )
             step.lifecycle_state = _ELS.CREATED.value
             step.lifecycle_trail = [step_transition]
-    except Exception:
+    except Exception as exc:
         pass  # lifecycle stamping is always additive / non-breaking
 
 

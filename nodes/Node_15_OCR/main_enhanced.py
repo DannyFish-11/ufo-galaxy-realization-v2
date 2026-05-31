@@ -442,8 +442,8 @@ async def list_languages() -> Dict[str, Any]:
     if pytesseract:
         try:
             languages["tesseract"] = pytesseract.get_languages()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     
     return {
         "success": True,

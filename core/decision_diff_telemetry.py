@@ -278,8 +278,8 @@ def _emit_record(record: DecisionDiffRecord) -> None:
             },
             trace_id=record.request_id or "",
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
 
 # ---------------------------------------------------------------------------

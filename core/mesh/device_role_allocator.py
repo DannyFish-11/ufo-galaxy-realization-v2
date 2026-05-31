@@ -267,7 +267,8 @@ class DeviceRoleAllocator:
         try:
             from core.unified.device_health import DeviceHealthScorer
             scorer = DeviceHealthScorer()
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             scorer = None
 
         for device in devices:
@@ -275,8 +276,8 @@ class DeviceRoleAllocator:
             if scorer is not None:
                 try:
                     health = scorer.score(device.device_id).total_score
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
             result = self.allocate(
                 device_id=device.device_id,

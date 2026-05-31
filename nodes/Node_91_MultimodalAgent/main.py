@@ -369,7 +369,8 @@ async def health():
             response = await client.get(f"{NODE_90_VISION_URL}/health")
             if response.status_code == 200:
                 node_90_status = "healthy"
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         node_90_status = "unhealthy"
     
     try:
@@ -377,7 +378,8 @@ async def health():
             response = await client.get(f"{NODE_92_CONTROL_URL}/health")
             if response.status_code == 200:
                 node_92_status = "healthy"
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         node_92_status = "unhealthy"
     
     return {

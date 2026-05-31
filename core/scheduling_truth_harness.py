@@ -318,8 +318,8 @@ class SchedulingTruthHarness:
                         "ensure_task_registered: task %s already registered", task_id
                     )
                     return True
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             # Register the task
             try:

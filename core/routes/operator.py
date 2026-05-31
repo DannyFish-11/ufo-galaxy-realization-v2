@@ -215,7 +215,8 @@ try:
     from core.final_acceptance_surface_boundary import (
         build_final_acceptance_surface_boundary as _build_final_acceptance_surface_boundary,
     )
-except Exception:  # pragma: no cover
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _build_final_acceptance_surface_boundary = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
@@ -743,15 +744,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             try:
                 from core.llm_manager import get_llm_manager
                 llm_router = get_llm_manager()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             if llm_router is None:
                 try:
                     from core.multi_llm_router import MultiLLMRouter
                     llm_router = MultiLLMRouter()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
             if llm_router is None:
                 return JSONResponse(content={
@@ -1208,8 +1209,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     session_id=result.runtime_session_id,
                     runtime_result=_build_roundtrip_runtime_result(result),
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
             status = 200 if result.accepted else 422
             return JSONResponse(
                 content={**result.to_dict(), "authority": "OPERATOR_ROUTES_V1"},
@@ -1303,8 +1304,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     session_id=result.runtime_session_id,
                     runtime_result=_build_roundtrip_runtime_result(result),
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
             status = 200 if result.accepted else 422
             return JSONResponse(
                 content={**result.to_dict(), "authority": "OPERATOR_ROUTES_V1"},
@@ -1384,8 +1385,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     session_id=result.runtime_session_id,
                     runtime_result=_build_roundtrip_runtime_result(result),
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
             if not result.accepted and "not found" in result.error:
                 return JSONResponse(
                     content={

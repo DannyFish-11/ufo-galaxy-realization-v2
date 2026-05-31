@@ -179,8 +179,8 @@ class MergeSummary:
         if isinstance(rec_data, dict):
             try:
                 recovery_recommendation = RecoveryRecommendation.from_dict(rec_data)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         return cls(
             merge_status=MergeStatus(

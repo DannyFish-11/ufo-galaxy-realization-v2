@@ -363,7 +363,8 @@ def _normalize_cross_repo_truth_report(raw_report: Any) -> Dict[str, Any]:
     elif hasattr(raw_report, "to_dict"):
         try:
             report_dict = dict(raw_report.to_dict())  # type: ignore[union-attr]
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             report_dict = {}
 
     normalized_sources: List[Dict[str, Any]] = []
@@ -1216,7 +1217,7 @@ def build_unified_governance_state(
             get_execution_runtime_snapshot,
             is_takeover_active,
         )
-    except Exception:
+    except Exception as exc:
         return {
             "devices": [],
             "local_mode_count": 0,
@@ -1244,7 +1245,7 @@ def build_unified_governance_state(
             get_android_evidence_integration_summary,
         )
         android_evidence_integration_summary_fn = get_android_evidence_integration_summary
-    except Exception:
+    except Exception as exc:
         def _fallback_get_android_evidence_integration_summary(  # type: ignore[misc]
             device_id: str,
             execution_id: str = "",
@@ -1273,7 +1274,7 @@ def build_unified_governance_state(
             get_canonical_cross_repo_evidence_report,
         )
         canonical_cross_repo_report_fn = get_canonical_cross_repo_evidence_report
-    except Exception:
+    except Exception as exc:
         def _fallback_get_canonical_cross_repo_evidence_report() -> Dict[str, Any]:  # type: ignore[misc]
             return {
                 "pipeline_verdict": "insufficient",
@@ -1295,7 +1296,8 @@ def build_unified_governance_state(
     if device_ids is None:
         try:
             device_ids = [e.device_id for e in list_active_sessions()]
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             device_ids = []
     # Deduplicate while preserving the previously collected session order.
     device_ids = list(dict.fromkeys(device_ids or []))
@@ -1325,7 +1327,7 @@ def build_unified_governance_state(
             mode_state = build_mode_state_for_device(device_id)
             readiness = evaluate_android_mode_readiness(device_id)
             takeover_active = is_takeover_active(device_id)
-        except Exception:
+        except Exception as exc:
             continue
 
         mode = getattr(mode_state.mode, "value", str(mode_state.mode))
@@ -1409,7 +1411,8 @@ def build_unified_governance_state(
                     )
                     ownership_transfer_proof_degraded = bool(_pq.degraded)
                     ownership_transfer_proof_diagnosis = list(_pq.diagnosis)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 ownership_transfer_proof_diagnosis = [
                     "ownership_transfer_proof_quality_lookup_failed"
                 ]

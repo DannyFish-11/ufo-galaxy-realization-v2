@@ -26,6 +26,7 @@ Usage::
         result = await execute(envelope)
         envelope = mgr.mark_done(envelope, result_summary=str(result))
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         envelope = mgr.mark_failed(envelope, error=str(exc))
 """
 
@@ -65,8 +66,8 @@ def _emit_lifecycle_event(envelope: Any, status: str) -> None:
                 "status": status,
                 "ts": time.time(),
             })
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # PR-8: also emit on the unified StateEventBus
     _emit_state_bus_event(envelope, status)
@@ -102,8 +103,8 @@ def _emit_state_bus_event(envelope: Any, status: str) -> None:
             trace_id=getattr(envelope, "trace_id", None),
             runtime_session_id=getattr(envelope, "session_id", None),
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # PR-1 Block-1: emit unified TaskState object for typed consumers
     try:
@@ -118,8 +119,8 @@ def _emit_state_bus_event(envelope: Any, status: str) -> None:
             entry_path="canonical",
         )
         _seb_emit_state(ts, source="task_lifecycle_manager")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -199,12 +200,13 @@ class TaskLifecycleManager:
         # Use .transition() if the envelope supports it; otherwise mutate lifecycle_status.
         try:
             updated = envelope.transition("cancelled")
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             updated = envelope
             try:
                 object.__setattr__(updated, "lifecycle_status", "cancelled")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         logger.info(
             "task.lifecycle | task_id=%s trace_id=%s status=cancelled tool=%s reason=%r",
@@ -228,12 +230,13 @@ class TaskLifecycleManager:
         """
         try:
             updated = envelope.transition("interrupted")
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             updated = envelope
             try:
                 object.__setattr__(updated, "lifecycle_status", "interrupted")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         logger.info(
             "task.lifecycle | task_id=%s trace_id=%s status=interrupted tool=%s reason=%r",
@@ -298,6 +301,7 @@ class TaskLifecycleManager:
             envelope = self.mark_done(envelope, result_summary=summary)
             return envelope, result
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             envelope = self.mark_failed(envelope, error=str(exc))
             raise
 

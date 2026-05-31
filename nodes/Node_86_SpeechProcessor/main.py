@@ -22,7 +22,8 @@ import uvicorn
 try:
     from core.port_config import get_node_port
     _port_from_config = get_node_port("Node_86_SpeechProcessor")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _port_from_config = None
 
 try:
@@ -263,7 +264,7 @@ class SpeechService:
                         headers={"Metadata-Flavor": "Google"}, timeout=5
                     )
                     access_token = token_resp.json().get("access_token", "")
-                except Exception:
+                except Exception as exc:
                     return {"success": False, "error": "Google Cloud credentials not available. Set GOOGLE_CLOUD_TOKEN env var or run in GCP environment."}
             resp = await client.post(
                 "https://speech.googleapis.com/v1/speech:recognize",

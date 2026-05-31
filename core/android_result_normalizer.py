@@ -107,7 +107,8 @@ try:
     import logging as _logging
 
     _logger = _logging.getLogger(logger_name)
-except Exception:  # pragma: no cover
+except Exception as exc:
+    _logger.debug("Fallback triggered: %s", exc)
     _logger = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
@@ -712,6 +713,7 @@ def normalize_android_result(
                     reject_reason = "handoff_response_ingress_unavailable"
 
     except Exception as exc:  # noqa: BLE001
+        _logger.debug("Fallback triggered: %s", exc)
         was_normalized = False
         reject_reason = f"ingress_exception:{type(exc).__name__}:{exc}"
         _log_debug(
@@ -752,5 +754,5 @@ def _log_debug(msg: str, *args: Any) -> None:
     if _logger is not None:
         try:
             _logger.debug(msg, *args)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            _logger.debug("Suppressed: %s", exc)

@@ -190,6 +190,7 @@ def _check_readiness(device_id: str) -> tuple[bool, List[str]]:
         ready = is_device_cross_device_ready(device_id)
         return ready, []
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         reason = f"readiness layer unavailable for {device_id!r} — {exc}"
         logger.debug("cross_device_candidates: %s", reason)
         return False, [reason]
@@ -206,6 +207,7 @@ def _check_orchestration_eligible(device_id: str) -> tuple[bool, List[str]]:
         eligible = is_device_orchestration_ready(device_id)
         return eligible, []
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         reason = f"participation layer unavailable for {device_id!r} — {exc}"
         logger.debug("cross_device_candidates: %s", reason)
         return False, [reason]
@@ -234,6 +236,7 @@ def _check_capabilities(
             )
         return result.matched, result.sources, result.reasons + extra_reasons
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         reason = f"capability layer unavailable for {device_id!r} — {exc}"
         logger.debug("cross_device_candidates: %s", reason)
         return False, {}, [reason]

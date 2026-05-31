@@ -303,8 +303,8 @@ def _build_v2_consolidation_evidence() -> Dict[str, Any]:
             snap = build_orchestration_review_snapshot()
             orchestration_snapshot_ok = True
             orchestration_partial = snap._partial
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # Continuity coordinator — can it be constructed?
     continuity_coordinator_ok = False
@@ -315,8 +315,8 @@ def _build_v2_consolidation_evidence() -> Dict[str, Any]:
             )
             coord = get_flow_continuity_coordinator()
             continuity_coordinator_ok = coord is not None
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     chain_paths = {
         "ingress": ingress_available,

@@ -294,5 +294,5 @@ class LifecycleManager:
         """
         try:
             plan.status = "completed" if success else "failed"  # type: ignore[union-attr]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)

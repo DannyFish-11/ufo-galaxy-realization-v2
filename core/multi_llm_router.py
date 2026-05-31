@@ -732,16 +732,16 @@ class MultiLLMRouter:
                 val = _cfg.get(f"api_keys.{key_name}", "")
             if val and not str(val).startswith("your-"):
                 return str(val)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         # 2. CredentialVault
         try:
             from core.credential_vault import get_vault
             val = get_vault().get_credential(key_name, actor="llm_router")
             if val:
                 return val
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         # 3. 环境变量（兜底）
         return os.environ.get(key_name.upper() if "_" in key_name else key_name, "")
 
@@ -984,8 +984,8 @@ class MultiLLMRouter:
                 r = httpx.get(f"{ollama_default_url}/api/tags", timeout=2.0)
                 if r.status_code == 200:
                     ollama_url = ollama_default_url
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         if ollama_url and not ollama_url.startswith("your-"):
             # 检测 Ollama 实际可用的模型（包括 VLM）
             detected_models = ["llama3", "mistral", "codellama", "qwen2"]
@@ -996,8 +996,8 @@ class MultiLLMRouter:
                     detected_models = [m["name"] for m in r.json().get("models", [])]
                     if not detected_models:
                         detected_models = ["llama3", "qwen2"]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             cfg = ProviderConfig(
                 name="ollama", api_key="", base_url=ollama_url,
@@ -1836,8 +1836,8 @@ class MultiLLMRouter:
                     break
             if not has_system and identity_text:
                 messages = [{"role": "system", "content": identity_text}] + list(messages)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return messages
 
     # ───────── 统一调用入口 ─────────
@@ -1951,8 +1951,8 @@ class MultiLLMRouter:
                         cost_per_1k_input=prov_cfg.cost_per_1k_input,
                         cost_per_1k_output=prov_cfg.cost_per_1k_output,
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
                 # 记录调用历史（含结构化复杂度）
                 self.call_history.append({
@@ -1978,6 +1978,7 @@ class MultiLLMRouter:
                 return response
 
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 self.providers[prov_name].error_count += 1
                 self.providers[prov_name].last_error = str(e)
                 if cb:
@@ -2083,6 +2084,7 @@ class MultiLLMRouter:
                 self.providers[name].status = ProviderStatus.HEALTHY
                 self.providers[name].error_count = 0
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 results[name] = f"error: {e}"
                 self.providers[name].status = ProviderStatus.DOWN
         return results

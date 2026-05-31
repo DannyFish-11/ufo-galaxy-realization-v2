@@ -57,8 +57,8 @@ except ImportError:
             if self._backend:
                 try:
                     self._backend.add_document(entry_id, content, metadata)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             return entry_id
 
         def search(self, query: str, top_k: int = 5) -> List[KnowledgeEntry]:
@@ -72,8 +72,8 @@ except ImportError:
                         else:
                             out.append(KnowledgeEntry(id=r.doc_id, content=r.content, metadata=r.metadata))
                     return out
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             ql = query.lower()
             return [e for e in self.knowledge_entries.values() if ql in e.content.lower()][:top_k]
 
@@ -97,8 +97,8 @@ except ImportError:
             if self._backend:
                 try:
                     self._backend.add_document(entry_id, new_content)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             return True
 
         def delete_knowledge(self, entry_id: str) -> bool:
@@ -108,8 +108,8 @@ except ImportError:
             if self._backend:
                 try:
                     self._backend.delete_document(entry_id)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             return True
 
         def get_statistics(self) -> Dict[str, Any]:

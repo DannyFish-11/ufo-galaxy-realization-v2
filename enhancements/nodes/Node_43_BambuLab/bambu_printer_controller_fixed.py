@@ -335,8 +335,8 @@ class BambuLabDriver(PrinterDriver):
         if self._client:
             try:
                 self._client.disconnect()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         
         if hasattr(self, '_mqtt_client'):
             self._mqtt_client.loop_stop()

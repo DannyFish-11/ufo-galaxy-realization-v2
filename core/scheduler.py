@@ -371,7 +371,7 @@ class AutonomousScheduler:
                     return line.lstrip("#").strip()[:200]
 
             return f"Node {node_name} - execute actions"
-        except Exception:
+        except Exception as exc:
             return None
 
     def _add_node_tool(self, node_name: str, description: str):
@@ -702,8 +702,8 @@ CROSS-DEVICE:
                     success=True,
                     device_id=context.get("device_id", "") if context else "",
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             return {
                 "success": True,
@@ -724,8 +724,8 @@ CROSS-DEVICE:
                     final_output=str(e),
                     success=False,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             return {
                 "success": False,
@@ -850,7 +850,8 @@ CROSS-DEVICE:
             _corr = _extract_corr(args)
             task_id = _corr.task_id
             trace_id = _corr.trace_id
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             task_id = args.get("task_id") or f"task_{_uuid.uuid4().hex[:16]}"
             trace_id = args.get("trace_id") or f"trace_{_uuid.uuid4().hex[:12]}"
         _canonical = None
@@ -894,8 +895,8 @@ CROSS-DEVICE:
                 {**args, "task_id": task_id, "trace_id": trace_id},
                 reason="scheduler._exec_send_to_device → canonical spine",
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # Register this dispatch task in TaskGraphRuntime before routing/fallback
         # so lifecycle truth covers canonical and compat paths consistently.
@@ -934,7 +935,8 @@ CROSS-DEVICE:
             try:
                 from core.command_router import get_command_router as _gcr
                 cmd_router = _gcr()
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 cmd_router = None
 
         if cmd_router is not None:
@@ -1106,8 +1108,8 @@ CROSS-DEVICE:
                 args,
                 reason="scheduler._exec_broadcast → canonical spine",
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # Stage 10: Register broadcast task in TaskGraphRuntime so broadcast
         # execution is visible to the task graph (mirrors relay/mesh_send paths).
@@ -1173,8 +1175,8 @@ CROSS-DEVICE:
                 args,
                 reason="scheduler._exec_relay (relay_to_device) → canonical spine",
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         _relay_task_id = args.get("task_id")
         if not _relay_task_id:
             _relay_task_id = f"relay_{uuid.uuid4().hex[:16]}"
@@ -1220,7 +1222,8 @@ CROSS-DEVICE:
             try:
                 from core.command_router import get_command_router as _gcr_relay
                 _cmd_router_relay = _gcr_relay()
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 _cmd_router_relay = None
 
         if _cmd_router_relay is not None:
@@ -1351,8 +1354,8 @@ CROSS-DEVICE:
                 args,
                 reason="scheduler._exec_mesh_send (mesh_send) → canonical spine",
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         _mesh_task_id = args.get("task_id")
         if not _mesh_task_id:
             _mesh_task_id = f"mesh_{uuid.uuid4().hex[:16]}"
@@ -1394,7 +1397,8 @@ CROSS-DEVICE:
         try:
             from core.command_router import get_command_router as _gcr_mesh
             _cmd_router_mesh = _gcr_mesh()
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             _cmd_router_mesh = None
 
         if _cmd_router_mesh is not None:

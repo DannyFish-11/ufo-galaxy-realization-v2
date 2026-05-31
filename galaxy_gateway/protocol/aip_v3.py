@@ -202,6 +202,9 @@ class MessageType(str, Enum):
     PROCESS_LIST = "process_list"
     PROCESS_STATUS = "process_status"
 
+    # === AIP_STANDARD: 状态事件 (PR-CROSS-DEVICE-SYNC) ===
+    STATE_EVENT = "state_event"
+
     # === AIP_STANDARD: 协调同步 ===
     COORD_SYNC = "coord_sync"
     COORD_BROADCAST = "coord_broadcast"

@@ -246,6 +246,7 @@ class GalaxyFederation:
                     peer.consecutive_failures = 0
                     peer.backoff_until = 0.0
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             peer.consecutive_failures += 1
             if peer.consecutive_failures >= self._offline_threshold:
                 peer.status = "offline"

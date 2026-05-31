@@ -189,8 +189,8 @@ async def status():
     if GITHUB_TOKEN and HTTPX_AVAILABLE:
         try:
             rate_limit_info = await _get("/rate_limit")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     return {
         "success": True,
         "token_set": bool(GITHUB_TOKEN),

@@ -675,7 +675,8 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
             from core.unified_result_ingress import normalize_status as _normalize_status
 
             return _normalize_status(raw_status)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             _raw = str(raw_status or "").lower().strip()
             if _raw in ("failed", "error"):
                 return "failed"
@@ -1326,5 +1327,5 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
 
         except WebSocketDisconnect:
             connection_manager.unsubscribe_status(websocket)
-        except Exception:
+        except Exception as exc:
             connection_manager.unsubscribe_status(websocket)

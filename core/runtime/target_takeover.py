@@ -165,7 +165,7 @@ def normalize_handoff_envelope(
                 trace_id=str(uuid.uuid4()),
                 task={},
             )
-        except Exception:  # noqa: BLE001
+        except Exception as exc:
             return None
 
 
@@ -237,8 +237,8 @@ def adopt_handoff_session(
             _mesh_sess = _registry.get_mesh_session(mesh_id="default_mesh")
             if _mesh_sess is not None:
                 _mesh_session_id = _mesh_sess.session_id or None
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed: %s", exc)
 
         _adopted = existing_runtime_session_id is not None
         _runtime_session_id = existing_runtime_session_id or str(uuid.uuid4())
@@ -266,7 +266,7 @@ def adopt_handoff_session(
                 session_id=str(uuid.uuid4()),
                 adopted=False,
             )
-        except Exception:  # noqa: BLE001
+        except Exception as exc:
             return None
 
 
@@ -303,8 +303,8 @@ def resolve_or_create_runtime_session(
         _env_session = getattr(envelope, "session_id", None)
         if _env_session:
             return str(_env_session)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)
 
     return str(uuid.uuid4())
 
@@ -457,8 +457,8 @@ def _run_local_execution(
                 _openclawd_instance = OpenClawd.get_instance()
             elif hasattr(OpenClawd, "_instance"):
                 _openclawd_instance = OpenClawd._instance
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed: %s", exc)
 
         if _openclawd_instance is not None and hasattr(_openclawd_instance, "_run_execution"):
             return _openclawd_instance._run_execution(
@@ -498,8 +498,8 @@ def _try_governance_snapshot() -> Optional[Dict[str, Any]]:
                 return snap.to_dict()
             if isinstance(snap, dict):
                 return snap
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)
     return None
 
 
@@ -511,8 +511,8 @@ def _try_policy_alignment() -> Optional[Dict[str, Any]]:
     try:
         from core.routes.projection import _assemble_policy_alignment  # type: ignore[attr-defined]
         return _assemble_policy_alignment()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)
     return None
 
 
@@ -539,8 +539,8 @@ def _extract_envelope_dispatch_contract_metadata(
             return raw
         if raw is not None and hasattr(raw, "to_dict"):
             return raw.to_dict()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)
     return None
 
 
@@ -715,8 +715,8 @@ class TargetTakeoverHandler:
                     _trace_id2 = getattr(envelope, "trace_id", None)
                     _task_id2 = getattr(envelope, "task_id", None)
                     _dcm_fallback = _extract_envelope_dispatch_contract_metadata(envelope)
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed: %s", exc)
             return failure_result(
                 trace_id=_trace_id2,
                 task_id=_task_id2,

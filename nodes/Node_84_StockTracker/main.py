@@ -291,8 +291,8 @@ class StockTrackerService:
             try:
                 quote = await self.get_quote(symbol)
                 quotes.append(quote)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # 排序
         gainers = sorted(quotes, key=lambda x: x.change_percent, reverse=True)[:5]
@@ -446,8 +446,8 @@ async def get_watchlist(name: str):
         try:
             quote = await tracker.get_quote(symbol)
             quotes.append(quote.dict())
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     return {
         "watchlist": watchlist.dict(),

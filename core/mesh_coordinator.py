@@ -589,8 +589,8 @@ class MeshCoordinator:
                     "available": True,
                     "closure_authority": "canonical_result_ingress",
                 }
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         merged_result_summary: Optional[Dict[str, Any]] = None
         if canonical_closure.get("available"):
@@ -621,7 +621,8 @@ class MeshCoordinator:
                     merge_reason="mesh_loop_baseline_single_result",
                 )
                 merged_result_summary = build_result_merge_summary(result=merged).to_dict()
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 merged_result_summary = None
 
         if merged_result_summary is not None:

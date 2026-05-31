@@ -34,7 +34,8 @@ except ImportError:
 try:
     from core.port_config import get_node_port
     _DEFAULT_PORT = get_node_port("Node_94_AudioAnalysis")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _DEFAULT_PORT = 8094
 
 # ── Node identity ──────────────────────────────────────────────────────────────

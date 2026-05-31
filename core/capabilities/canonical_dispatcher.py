@@ -538,8 +538,8 @@ class CanonicalDispatcher:
                 if info.get("id") == node_id:
                     self._node_id_to_key[node_id] = key
                     return key
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return None
 
     # ------------------------------------------------------------------
@@ -698,8 +698,8 @@ class CanonicalDispatcher:
                 trace_id=trace_id or None,
                 runtime_session_id=session_id or None,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     def _emit_failed_event(
         self, tool_name: str, error: str, trace_id: str, session_id: str
@@ -714,8 +714,8 @@ class CanonicalDispatcher:
                 trace_id=trace_id or None,
                 runtime_session_id=session_id or None,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
 
 # ---------------------------------------------------------------------------

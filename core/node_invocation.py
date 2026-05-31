@@ -258,7 +258,8 @@ class UnifiedNodeExecutor:
             try:
                 from core.routes._helpers import nodes_root
                 UnifiedNodeExecutor._nodes_root = nodes_root
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 UnifiedNodeExecutor._nodes_root = os.path.join(
                     os.path.dirname(os.path.dirname(__file__)), "nodes"
                 )
@@ -550,8 +551,8 @@ class UnifiedNodeExecutor:
                 duration_ms=int(result.duration_ms),
                 error_message=result.error or "",
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     def _emit_aip_v3_task_assign(self, envelope: NodeInvocationEnvelope) -> None:
         """Emit TASK_ASSIGN AIP v3 message before local node execution.
@@ -576,8 +577,8 @@ class UnifiedNodeExecutor:
                 asyncio.get_event_loop().create_task(nats.publish_task_assign(msg))
             else:
                 logger.debug("AIPV3-LOCAL TASK_ASSIGN: %s", msg.model_dump_json(exclude_none=True))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     def _emit_aip_v3_task_result(
         self, envelope: NodeInvocationEnvelope, result: NodeInvocationResult
@@ -605,8 +606,8 @@ class UnifiedNodeExecutor:
                 asyncio.get_event_loop().create_task(nats.publish_task_result(msg))
             else:
                 logger.debug("AIPV3-LOCAL TASK_RESULT: %s", msg.model_dump_json(exclude_none=True))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # ------------------------------------------------------------------
     # Helpers

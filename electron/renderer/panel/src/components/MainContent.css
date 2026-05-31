@@ -1,0 +1,153 @@
+/* ============================================================
+   MainContent — 右侧主内容区
+   ============================================================ */
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 36px 32px 28px;
+  overflow: hidden;
+  position: relative;
+  transition: box-shadow 0.6s ease;
+}
+
+/* LIMINAL — 边缘微光 */
+.main-content.phase-liminal {
+  animation: edge-glow 2s ease-in-out infinite;
+}
+
+@keyframes edge-glow {
+  0%, 100% {
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: inset 0 0 40px rgba(255, 255, 255, 0.04);
+  }
+}
+
+/* Header */
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-shrink: 0;
+}
+
+.tab-title {
+  font-size: 20px;
+  font-weight: 300;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.5);
+  transition: color 0.3s ease;
+}
+
+.window-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.win-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s ease;
+}
+
+.win-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Content Body */
+.content-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.content-card {
+  border-radius: 12px;
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.015) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.content-card:hover {
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.025) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.content-card.span-2 {
+  grid-column: span 2;
+}
+
+.card-placeholder {
+  width: 100%;
+  height: 100%;
+  min-height: 80px;
+}
+
+/* Phase Indicator */
+.phase-indicator {
+  position: absolute;
+  top: 36px;
+  right: 100px;
+  z-index: 10;
+}
+
+.phase-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid;
+  transition: all 0.5s ease;
+}
+
+.phase-badge.silent {
+  color: rgba(140, 150, 160, 0.6);
+  border-color: rgba(140, 150, 160, 0.2);
+  background: rgba(140, 150, 160, 0.05);
+}
+
+.phase-badge.liminal {
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+  animation: badge-breathe 2s ease-in-out infinite;
+}
+
+@keyframes badge-breathe {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.phase-badge.manifest {
+  color: rgba(35, 35, 40, 0.8);
+  border-color: rgba(35, 35, 40, 0.3);
+  background: rgba(35, 35, 40, 0.1);
+}

@@ -159,8 +159,8 @@ async def unquarantine_device(device_id: str) -> UnquarantineResponse:
                 message=f"Device '{device_id}' manually unquarantined via API",
                 payload={"was_quarantined": was_quarantined},
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         msg = (
             f"Device '{device_id}' has been unquarantined."

@@ -123,6 +123,7 @@ async def send_message(request: SendMessageRequest):
         stats["error_count"] += 1
         raise HTTPException(status_code=400, detail={"error": str(exc), "success": False})
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         stats["error_count"] += 1
         raise HTTPException(status_code=500, detail={"error": str(exc), "success": False})
 
@@ -147,6 +148,7 @@ async def get_history(
         stats["error_count"] += 1
         raise HTTPException(status_code=400, detail={"error": str(exc), "success": False})
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         stats["error_count"] += 1
         raise HTTPException(status_code=500, detail={"error": str(exc), "success": False})
 
@@ -166,6 +168,7 @@ async def create_channel(request: CreateChannelRequest):
         stats["error_count"] += 1
         raise HTTPException(status_code=400, detail={"error": str(exc), "success": False})
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         stats["error_count"] += 1
         raise HTTPException(status_code=500, detail={"error": str(exc), "success": False})
 
@@ -186,6 +189,7 @@ async def list_channels():
         stats["error_count"] += 1
         raise HTTPException(status_code=400, detail={"error": str(exc), "success": False})
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         stats["error_count"] += 1
         raise HTTPException(status_code=500, detail={"error": str(exc), "success": False})
 
@@ -203,6 +207,7 @@ async def get_user_info(request: UserInfoRequest):
         stats["error_count"] += 1
         raise HTTPException(status_code=400, detail={"error": str(exc), "success": False})
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         stats["error_count"] += 1
         raise HTTPException(status_code=500, detail={"error": str(exc), "success": False})
 
@@ -223,6 +228,7 @@ async def add_reaction(request: AddReactionRequest):
         stats["error_count"] += 1
         raise HTTPException(status_code=400, detail={"error": str(exc), "success": False})
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         stats["error_count"] += 1
         raise HTTPException(status_code=500, detail={"error": str(exc), "success": False})
 

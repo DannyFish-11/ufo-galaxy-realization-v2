@@ -391,8 +391,8 @@ class DeviceRegistry:
                             "DeviceRegistry.get: unrecognised UDM status for %s — %s",
                             device_id, _ve,
                         )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return local
     
     async def get_or_create(self, device_id: str, **kwargs) -> Device:
@@ -481,8 +481,8 @@ class DeviceRegistry:
                             self.devices[did].status = DeviceStatus(udm_dev.status.value if hasattr(udm_dev.status, "value") else str(udm_dev.status).lower())
                         except ValueError:
                             pass
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         results = list(self.devices.values())
         

@@ -524,6 +524,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except ImportError:
             status["mcp"]["error"] = "模块未安装"
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             status["mcp"]["error"] = str(e)
 
         # Skill 状态
@@ -541,6 +542,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except ImportError:
             status["skills"]["error"] = "模块未安装"
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             status["skills"]["error"] = str(e)
 
         # 整体健康判断
@@ -575,8 +577,8 @@ def _find_mcp_server_id(name: str) -> Optional[str]:
             if server.name == name:
                 return server_id
 
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
     return None
 
 
@@ -594,6 +596,6 @@ def _find_skill_id(name: str) -> Optional[str]:
             if skill.name == name:
                 return skill_id
 
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
     return None

@@ -325,6 +325,7 @@ class GalaxyMainLoopL4:
                 await self.run_cycle()
                 await asyncio.sleep(self.cycle_interval)
             except Exception as e:
+                _logger.debug("Fallback triggered: %s", e)
                 self.logger.error(f"主循环错误: {e}", exc_info=True)
                 await asyncio.sleep(10.0)
     
@@ -391,6 +392,7 @@ class GalaxyMainLoopL4:
             self.logger.info(f"L4 周期 #{self.cycle_count} 完成")
             
         except Exception as e:
+            _logger.debug("Fallback triggered: %s", e)
             result.state = CycleState.ERROR
             result.success = False
             result.errors.append(str(e))

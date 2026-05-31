@@ -209,6 +209,7 @@ class ActionExecutor:
             )
         
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             end_time = time.time()
             duration = end_time - start_time
             logger.error(f"动作执行失败: {action.id}, 错误: {e}")

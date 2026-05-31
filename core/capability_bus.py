@@ -377,8 +377,8 @@ class CapabilityBus:
                 logger.debug(
                     "AIPV3-CAP CAPABILITY_REPORT: %s", msg.model_dump_json(exclude_none=True)
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # ── Canonical bridge ─────────────────────────────────────────────────────
 

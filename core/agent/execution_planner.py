@@ -174,7 +174,7 @@ def _collect_team_providers(team_result: Any) -> Optional[List[str]]:
                 if entry and entry not in providers:
                     providers.append(entry)
         return providers or None
-    except Exception:
+    except Exception as exc:
         return None
 
 
@@ -607,8 +607,8 @@ class ExecutionPlanner:
                         duration_ms=(time.monotonic() - t0) * 1000,
                         session_id=plan.session_id,
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             return ExecutionResult(
                 success=False,
                 mode=strategy,
@@ -623,6 +623,7 @@ class ExecutionPlanner:
                 ),
             )
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             duration_ms = (time.monotonic() - t0) * 1000
             logger.exception("ExecutionPlanner: 执行异常: %s", exc)
             return ExecutionResult(
@@ -908,6 +909,7 @@ class ExecutionPlanner:
             )
 
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             step.success = False
             step.error = str(exc)
             step.duration_ms = (time.monotonic() - t0) * 1000
@@ -1000,6 +1002,7 @@ class ExecutionPlanner:
             )
 
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             step.success = False
             step.error = str(exc)
             step.duration_ms = (time.monotonic() - t0) * 1000
@@ -1072,6 +1075,7 @@ class ExecutionPlanner:
             )
 
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             step.success = False
             step.error = str(exc)
             step.duration_ms = (time.monotonic() - t0) * 1000

@@ -247,6 +247,7 @@ class OrchestratorService:
             )
         
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             
@@ -284,6 +285,7 @@ class OrchestratorService:
             )
         
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             
@@ -326,6 +328,7 @@ class OrchestratorService:
             )
         
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             
@@ -452,6 +455,7 @@ class OrchestratorService:
             return workflow_result
         
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             

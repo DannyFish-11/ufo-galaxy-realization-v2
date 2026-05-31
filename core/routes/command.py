@@ -66,7 +66,8 @@ def _get_node71_url() -> str:
     try:
         from core.port_config import get_node_port
         port = get_node_port("Node_71_MultiDeviceCoordination")
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         port = 8071
     host = os.getenv("NODE_71_HOST", "localhost")
     return f"http://{host}:{port}"

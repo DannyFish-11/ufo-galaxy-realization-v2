@@ -297,22 +297,22 @@ class VoiceWakeModule:
             try:
                 self._stream.stop_stream()
                 self._stream.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
             self._stream = None
 
         if self._audio is not None:
             try:
                 self._audio.terminate()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
             self._audio = None
 
         if self._porcupine is not None:
             try:
                 self._porcupine.delete()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
             self._porcupine = None
 
         logger.info("VoiceWake: stopped")

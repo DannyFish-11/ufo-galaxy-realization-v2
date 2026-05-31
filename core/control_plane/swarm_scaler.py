@@ -334,8 +334,8 @@ class SwarmScaler:
                 agent_factory.agents.pop(aid, None)
                 try:
                     agent_factory.message_bus.unregister(aid)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
         tracked = self._managed_workers.get(team_id, [])
         for aid in retired:

@@ -342,8 +342,8 @@ def _compile_continuum() -> Optional[Dict[str, Any]]:
             state = engine.get_continuum_state()
             if state is not None:
                 return _safe_continuum_dict(state)
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Exception suppressed: %s", exc)
 
     # Fallback: DesktopPresenceRuntime
     try:
@@ -354,8 +354,8 @@ def _compile_continuum() -> Optional[Dict[str, Any]]:
             state = dpr._continuum_state
             if state is not None:
                 return _safe_continuum_dict(state)
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Exception suppressed: %s", exc)
 
     # Fallback: minimal silent state
     try:
@@ -385,8 +385,8 @@ def _safe_continuum_dict(state: Any) -> Dict[str, Any]:
                 "collapse_tendency": raw.get("collapse_tendency"),
                 "retreat_tendency": raw.get("retreat_tendency"),
             }
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Exception suppressed: %s", exc)
     try:
         phase_val = getattr(state, "phase", None) or getattr(state, "tri_state_phase", None)
         domain_val = getattr(state, "runtime_domain", None) or getattr(state, "domain", None)
@@ -468,8 +468,8 @@ def _compile_oneapi() -> Dict[str, Any]:
         summary = build_oneapi_integration_summary()
         summary.setdefault("system_layer", ONEAPI_SYSTEM_LAYER)
         return summary
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Exception suppressed: %s", exc)
 
     # Minimal safe fallback
     try:

@@ -278,8 +278,8 @@ def normalize_ingress_to_envelope(
         from core.schemas.task_envelope import TaskEnvelope as _TE
         if isinstance(payload, _TE):
             return payload
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # ── Delegate to PR-2 message interop layer ─────────────────────────────
     try:
@@ -296,8 +296,8 @@ def normalize_ingress_to_envelope(
     elif hasattr(payload, "to_dict"):
         try:
             raw = payload.to_dict()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     task_id = str(raw.get("task_id") or _new_task_id())
     trace_id = str(raw.get("trace_id") or _new_trace_id())
@@ -326,7 +326,7 @@ def normalize_ingress_to_envelope(
             args=raw.get("args") or raw.get("payload") or raw.get("params") or {},
             metadata={"ingress_source": src_val},
         )
-    except Exception:
+    except Exception as exc:
         # pydantic / TaskEnvelope unavailable — return lightweight fallback
         return _FallbackEnvelope(
             task_id=task_id,
@@ -390,7 +390,8 @@ async def route_via_spine(
     try:
         from core.schemas.task_envelope import TaskEnvelope as _TE
         is_canonical = isinstance(payload, _TE)
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         is_canonical = False
 
     rec = IngressRecord(
@@ -467,8 +468,8 @@ def record_legacy_ingress(
     elif hasattr(payload, "to_dict"):
         try:
             raw = payload.to_dict()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     rec = IngressRecord(
         source=source,

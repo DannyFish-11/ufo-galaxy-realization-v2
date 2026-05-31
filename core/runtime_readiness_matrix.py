@@ -597,6 +597,7 @@ def evaluate_readiness_matrix() -> ReadinessMatrix:
         try:
             status, detail = evaluator()
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             status = DimensionStatus.UNKNOWN
             detail = f"Evaluator raised unexpected exception: {exc}"
 

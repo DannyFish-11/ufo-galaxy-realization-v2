@@ -269,8 +269,8 @@ class CachingMiddleware(BaseHTTPMiddleware):
                     headers=headers,
                     media_type=data.get("media_type", "application/json"),
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # 缓存未命中，执行请求
         response = await call_next(request)
@@ -293,8 +293,8 @@ class CachingMiddleware(BaseHTTPMiddleware):
                     "media_type": response.media_type,
                 })
                 await self._cache.set(cache_key, cache_data, ttl)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             headers = dict(response.headers)
             headers["X-Cache"] = "MISS"

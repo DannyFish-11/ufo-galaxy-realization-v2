@@ -456,8 +456,8 @@ class UnifiedConnectionManager:
                             "online": True,
                             "source": "gateway_ws",
                         }
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # 合并 device_router 设备
         try:
@@ -470,8 +470,8 @@ class UnifiedConnectionManager:
                 else:
                     result[did]["online"] = True
                     result[did]["status"] = "online"
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         return result
 

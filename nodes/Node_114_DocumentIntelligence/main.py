@@ -21,14 +21,15 @@ from pydantic import BaseModel
 
 try:
     from nodes.common.cors_config import get_cors_origins
-except Exception:
+except Exception as exc:
     def get_cors_origins():
         return ["*"]
 
 try:
     from core.port_config import get_node_port
     _DEFAULT_PORT = get_node_port("Node_114_DocumentIntelligence")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _DEFAULT_PORT = 8114
 
 logging.basicConfig(level=logging.INFO)
@@ -267,7 +268,8 @@ async def _extract_info(text: str, fields: List[str]) -> Dict[str, Any]:
     try:
         json_match = re.search(r"\{.*\}", raw, re.DOTALL)
         result = json.loads(json_match.group(0)) if json_match else {}
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         result = {"raw": raw}
     return result
 
@@ -305,7 +307,8 @@ async def _classify(text: str, categories: List[str]) -> Dict[str, Any]:
     try:
         json_match = re.search(r"\{.*\}", raw, re.DOTALL)
         result = json.loads(json_match.group(0)) if json_match else {"category": raw, "confidence": 1.0}
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         result = {"category": raw.strip(), "confidence": 1.0, "reasoning": ""}
     return result
 

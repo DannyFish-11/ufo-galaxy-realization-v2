@@ -791,6 +791,7 @@ class UnifiedPanelAggregationService:
             )
             payload.outward_truth["truth_surface_semantics"] = dict(payload.truth_surface_semantics)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             payload.outward_truth = {
                 "compiled_at": time.time(),
                 "authority": "core.outward_runtime_truth.compile_outward_truth",
@@ -926,7 +927,8 @@ class UnifiedPanelAggregationService:
                     # expose it directly.
                     cs = _get_continuum_state_fallback()
                 continuum_state = cs
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 continuum_state = _get_continuum_state_fallback()
 
             if continuum_state is None:
@@ -1457,13 +1459,13 @@ def _get_continuum_state_fallback() -> Optional[Any]:
             cs = getattr(cfe, "continuum_state", None) or getattr(cfe, "_state", None)
             if cs is not None and isinstance(cs, ContinuumState):
                 return cs
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # Construct a minimal silent-phase fallback so downstream consumers
         # always receive a valid (though empty) projection.
         return ContinuumState(phase=ContinuumPhase.SILENT)
-    except Exception:
+    except Exception as exc:
         return None
 
 

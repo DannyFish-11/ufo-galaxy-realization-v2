@@ -695,8 +695,8 @@ class NetworkTopologyRuntime:
                 asyncio.get_event_loop().create_task(nats.publish_state_event(msg))
             else:
                 logger.debug("AIPV3-TOPO STATE_EVENT: %s", msg.model_dump_json(exclude_none=True))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # ── Node management ───────────────────────────────────────────────────
 
@@ -1788,8 +1788,8 @@ def build_grounded_runtime_topology(*, max_allocation_records: int = 128) -> Gro
                     ),
                 )
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     try:
         from core.canonical_task import get_canonical_task_runtime
@@ -1819,7 +1819,8 @@ def build_grounded_runtime_topology(*, max_allocation_records: int = 128) -> Gro
                     truth_grade=TRUTH_GRADE_DURABLE,
                 )
             )
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         allocation_records = []
 
     root_children: List[str] = []
@@ -1879,6 +1880,6 @@ def reset_network_topology_runtime(*, clear_durable_state: bool = False) -> None
     if clear_durable_state and NetworkTopologyRuntime._instance is not None:
         try:
             NetworkTopologyRuntime._instance.clear_durable_state()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     NetworkTopologyRuntime._instance = None

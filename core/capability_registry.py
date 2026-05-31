@@ -209,7 +209,7 @@ def _guard_routing_context_usage(
 
     try:
         stack = inspect.stack()
-    except Exception:
+    except Exception as exc:
         return
 
     for frameinfo in stack[2:]:
@@ -269,6 +269,7 @@ def _collect_from_device_registry(device_id: str) -> Dict[str, Any]:
         cap_names = [cap.name for cap in getattr(device, "capabilities", []) if cap.name is not None and cap.name != ""]
         result["caps"] = cap_names
     except Exception as exc:  # pragma: no cover — defensive
+        logger.debug("Fallback triggered: %s", exc)
         result["reason"] = f"device_registry: import/access error — {exc}"
         logger.debug(
             "capability_registry: device_registry source unavailable for %s — %s",
@@ -294,6 +295,7 @@ def _collect_from_capability_bus(device_id: str) -> Dict[str, Any]:
         caps = [e.name[len(prefix):] for e in entries if e.name[len(prefix):] != ""]
         result["caps"] = caps
     except Exception as exc:  # pragma: no cover — defensive
+        logger.debug("Fallback triggered: %s", exc)
         result["reason"] = f"capability_bus: import/access error — {exc}"
         logger.debug(
             "capability_registry: capability_bus source unavailable for %s — %s",
@@ -318,6 +320,7 @@ def _collect_from_gateway_registry(device_id: str) -> Dict[str, Any]:
         caps = [s.action for s in schemas if s.action]
         result["caps"] = caps
     except Exception as exc:  # pragma: no cover — defensive
+        logger.debug("Fallback triggered: %s", exc)
         result["reason"] = f"gateway_capability_projection: import/access error — {exc}"
         logger.debug(
             "capability_registry: gateway_capability_projection source unavailable for %s — %s",

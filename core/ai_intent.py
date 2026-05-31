@@ -696,8 +696,8 @@ class SemanticSearch:
         if vb is not None:
             try:
                 return vb.document_count
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return len(self._index)
 
     @property

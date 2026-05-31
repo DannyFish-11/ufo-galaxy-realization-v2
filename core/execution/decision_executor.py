@@ -488,8 +488,8 @@ def _extract_action_level(state_continuum: Optional[Dict[str, Any]]) -> str:
         decision = state_continuum.get("decision") or {}
         if isinstance(decision, dict):
             return str(decision.get("action_level", "observe"))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
     return "observe"
 
 
@@ -505,8 +505,8 @@ def _extract_execution_target(state_continuum: Optional[Dict[str, Any]]) -> Opti
         meta = state_continuum.get("metadata") or {}
         if isinstance(meta, dict):
             return meta.get("execution_target") or None
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
     return None
 
 
@@ -522,6 +522,6 @@ def _extract_trace_id(state_continuum: Optional[Dict[str, Any]]) -> str:
         meta = state_continuum.get("metadata") or {}
         if isinstance(meta, dict):
             return str(meta.get("trace_id") or "")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
     return ""

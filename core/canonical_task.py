@@ -1198,8 +1198,8 @@ def project_to_task_envelope(task: CanonicalTask) -> Any:
                     env = env.model_copy(
                         update={"remote_execution_mode": RemoteExecutionMode(mode_val)}
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return env
     except Exception as exc:
         logger.debug("project_to_task_envelope: TaskEnvelope unavailable (%s); using fallback", exc)
@@ -1243,8 +1243,8 @@ def apply_result_envelope(task: CanonicalTask, result: Any) -> CanonicalTask:
     elif hasattr(result, "to_dict"):
         try:
             raw = result.to_dict()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     elif hasattr(result, "__dict__"):
         raw = {k: v for k, v in result.__dict__.items() if not k.startswith("_")}
 

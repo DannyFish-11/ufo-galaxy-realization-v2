@@ -371,6 +371,7 @@ class NodeRegistry:
             return {"success": False, "error": _TIMEOUT_ERROR}
 
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             node.metadata.call_count += 1
             node.metadata.status = NodeStatus.ERROR
             node.metadata.error_message = str(e)

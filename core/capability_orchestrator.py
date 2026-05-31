@@ -205,7 +205,8 @@ class CapabilityOrchestrator:
                 node_name = node_info.get("name", node_key)
                 try:
                     port = get_node_port(node_key)
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Fallback triggered: %s", exc)
                     port = 0
                 is_ready = node_info.get("production_ready", True)
                 self._register_canonical_contract(
@@ -234,7 +235,8 @@ class CapabilityOrchestrator:
                 for node_key, node_info in config.get("nodes", {}).items():
                     try:
                         port = get_node_port(node_key)
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug("Fallback triggered: %s", exc)
                         port = 0
                     if port <= 0:
                         continue
@@ -556,13 +558,13 @@ class CapabilityOrchestrator:
                                               allow_failover=False)
             if result.get("success") is not False or "error" not in result:
                 return result
-        except Exception:
+        except Exception as exc:
             pass  # fall through to HTTP
 
         # 2. Resolve port from canonical port config (not 8000+id)
         try:
             port = get_node_port(node_name)
-        except Exception:
+        except Exception as exc:
             # Last-resort fallback: parse numeric id from node name
             try:
                 node_num = int(node_name.replace("Node_", "").split("_")[0])

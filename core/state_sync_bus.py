@@ -221,8 +221,8 @@ class StateSynchronizationBus:
             nats = get_nats_bus()
             if nats.is_connected():
                 asyncio.get_event_loop().create_task(nats.publish_state_event(msg))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # ── Built-in cross-standard sync handlers ──
 

@@ -341,6 +341,7 @@ class NodeCapabilityLoader:
                 "duration_ms": timeout_ms,
             }
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             duration_ms = int((time.time() - t0) * 1000)
             return {
                 "success": False,
@@ -367,8 +368,8 @@ class NodeCapabilityLoader:
                 asyncio.get_event_loop().create_task(nats.publish_capability_report(msg))
             else:
                 logger.debug("AIPV3-NODE CAPABILITY_REPORT: %s", msg.model_dump_json(exclude_none=True))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     # ── 5-key-node capability profiles (PR-AIPV3) ──
 

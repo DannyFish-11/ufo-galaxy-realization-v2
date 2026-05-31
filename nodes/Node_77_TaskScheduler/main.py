@@ -16,7 +16,8 @@ from nodes.common.cors_config import get_cors_origins
 try:
     from core.port_config import get_node_port
     PORT = get_node_port("Node_77_TaskScheduler")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     PORT = int(os.getenv("PORT", "8077"))
 
 SCHEDULER_TIMEZONE = os.getenv("SCHEDULER_TIMEZONE", "UTC")
@@ -138,6 +139,7 @@ async def _run_job(job: Dict[str, Any]) -> None:
             run_record["success"] = True
             job["run_count"] = job.get("run_count", 0) + 1
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             run_record["error"] = str(e)
             logger.error(f"Job {job['id']} failed: {e}")
         finally:

@@ -593,6 +593,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._recover_mesh_sessions(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"MeshSession recovery failed: {exc}"
             logger.exception("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -603,6 +604,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._recover_body_mesh(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"BodyMesh recovery failed: {exc}"
             logger.exception("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -613,6 +615,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._recover_node_registry(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"Node registry recovery failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -623,6 +626,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._recover_network_graph(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"Network graph recovery failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -633,6 +637,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._recover_network_topology(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"Network topology recovery failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -643,6 +648,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._clear_webrtc_bindings(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"WebRTC binding clear failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -655,6 +661,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._recover_hybrid_orchestration(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"Hybrid orchestration recovery failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -666,6 +673,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._recover_inflight_tasks(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"In-flight task lifecycle recovery failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -681,6 +689,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._recover_session_truth(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"Session truth recovery failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -697,6 +706,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._reconcile_continuation_waiters(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"Continuation waiter reconciliation failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -710,6 +720,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._verify_durable_truth_convergence(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"Durable truth authority convergence check failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -723,6 +734,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._consolidate_multi_participant_recovery(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"Multi-participant recovery consolidation failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -736,6 +748,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._verify_result_continuity_guard(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"Result continuity guard verification failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -753,6 +766,7 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             self._evaluate_task_continuity(report)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             err = f"In-flight task continuity evaluation failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
@@ -851,8 +865,8 @@ class RuntimeRestartRecoveryCoordinator:
             # But list_recoverable() only returns non-terminal ones, so skipped is unknown
             # without a separate "list_all" API.  Leave at 0 for now.
             report.mesh_sessions_skipped = 0
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         logger.info(
             "RuntimeRestartRecovery: recovered %d mesh sessions",

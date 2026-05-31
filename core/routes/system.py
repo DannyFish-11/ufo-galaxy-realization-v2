@@ -152,6 +152,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "max_agents": getattr(factory, 'MAX_AGENTS', None),
             }
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             subsystems["agent_factory"] = {"status": "error", "error": str(e)}
 
         # LLM Router
@@ -164,6 +165,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "details": router_status,
             }
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             subsystems["llm_router"] = {"status": "error", "error": str(e)}
 
         # Node Registry — canonical runtime authority only.
@@ -177,6 +179,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "registry_authority": "canonical:NodeFabricRegistry",
             }
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             subsystems["node_registry"] = {"status": "error", "error": str(e)}
 
         # Monitoring
@@ -188,6 +191,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "details": mon.get_status() if hasattr(mon, 'get_status') else {},
             }
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             subsystems["monitoring"] = {"status": "error", "error": str(e)}
 
         # Cache
@@ -198,6 +202,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "status": "running" if instance else "not_initialized",
             }
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             subsystems["cache"] = {"status": "error", "error": str(e)}
 
         return JSONResponse({
@@ -299,8 +304,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         "health_score": round(n.health_score(), 4),
                         "source": "canonical",
                     })
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             # Sort: ERROR nodes first, then by node_id
             node_list.sort(key=lambda n: (0 if str(n["status"]).lower() == "error" else 1, n["node_id"]))
@@ -511,8 +516,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             from galaxy_gateway.cross_device_switch import is_cross_device_enabled
             cross_device_on = is_cross_device_enabled()
-        except Exception:  # pragma: no cover
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed: %s", exc)
 
         # Count connected Android devices from the active connection manager
         android_online = 0
@@ -522,8 +527,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 if did in registered_devices
                 and registered_devices[did].get("device_type", "").startswith("android")
             ])
-        except Exception:  # pragma: no cover
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed: %s", exc)
 
         return JSONResponse({
             "mode": current_mode,

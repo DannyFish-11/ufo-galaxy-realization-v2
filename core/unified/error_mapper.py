@@ -17,6 +17,7 @@ Usage::
     try:
         await some_device_operation()
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         payload = ErrorMapper.from_exception(exc, trace_id="t-123")
         if payload.retryable:
             schedule_retry(payload)

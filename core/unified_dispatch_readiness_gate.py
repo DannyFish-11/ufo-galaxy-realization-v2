@@ -636,8 +636,8 @@ def _check_udm_registration(device_id: str) -> Dict[str, Any]:
             result["online"] = bool(device.get("online", False))
             result["device_type"] = device.get("device_type") or device.get("platform")
         return result
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
     # Fallback: try device_readiness (composes UDM internally)
     try:
         from core.device_readiness import get_device_readiness
@@ -804,8 +804,8 @@ def _check_capabilities(
                 device_caps = [str(c).lower() for c in caps_raw]
             elif isinstance(caps_raw, dict):
                 device_caps = [str(k).lower() for k, v in caps_raw.items() if v]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         if not device_caps:
             # If capability list is empty, treat as satisfied (no info = don't block)
             return result

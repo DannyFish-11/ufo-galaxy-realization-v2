@@ -213,8 +213,8 @@ class CapabilityRegistry:
                         "contract_created_at": item.created_at,
                     },
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         self._normalize_capability_plane_metadata(item)
         self._annotate_unified_capability_plane(item, mutation_source="capability_registry.register")
         if not self._validate_via_contract(item):
@@ -440,6 +440,7 @@ class CapabilityRegistry:
             validate_capability_contract(contract)
             return True
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             violations = getattr(exc, "violations", [str(exc)])
             msg = f"capability_contract validation failed for '{item.name}': {violations}"
             logger.warning(msg)
@@ -562,8 +563,8 @@ class CapabilityRegistry:
                 from core.capability_runtime.capability_registry_runtime import CapabilityRuntimeRegistry
 
                 CapabilityRuntimeRegistry.get_instance().deregister(name, _sync_authority=False)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
             logger.debug("能力已从总线移除: %s", name)
 
     def inject_item(self, item: CapabilityItem) -> None:

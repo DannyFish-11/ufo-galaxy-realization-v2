@@ -85,6 +85,7 @@ def build_dual_repo_progress_report(*, force_rebuild: bool = True) -> Dict[str, 
         status = get_system_completion_status(force_rebuild=force_rebuild)
         payload["system_completion_status"] = status.to_dict()
     except Exception as exc:  # pragma: no cover
+        logger.debug("Fallback triggered: %s", exc)
         payload["system_completion_status_error"] = str(exc)
 
     try:
@@ -102,6 +103,7 @@ def build_dual_repo_progress_report(*, force_rebuild: bool = True) -> Dict[str, 
             "domain_count": len(review.domain_statuses),
         }
     except Exception as exc:  # pragma: no cover
+        logger.debug("Fallback triggered: %s", exc)
         payload["complete_joint_system_review_error"] = str(exc)
 
     try:
@@ -118,6 +120,7 @@ def build_dual_repo_progress_report(*, force_rebuild: bool = True) -> Dict[str, 
             "next_prs": [entry.pr_key for entry in plan.pr_sequence[:10]],
         }
     except Exception as exc:  # pragma: no cover
+        logger.debug("Fallback triggered: %s", exc)
         payload["closure_phase_execution_plan_error"] = str(exc)
 
     payload["summary_zh"] = _build_summary_zh(payload)

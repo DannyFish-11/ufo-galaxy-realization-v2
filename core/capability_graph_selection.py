@@ -391,7 +391,8 @@ def score_provider(
     """
     try:
         from core.capability_assimilation import AssimilationPresenceState
-    except Exception:  # pragma: no cover
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         AssimilationPresenceState = None  # type: ignore[assignment]
 
     required: List[str] = list(required_capabilities or [])

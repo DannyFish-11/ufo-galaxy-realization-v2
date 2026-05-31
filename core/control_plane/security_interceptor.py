@@ -494,7 +494,8 @@ class SecurityInterceptor:
         try:
             from core.routes.security_policy import evaluate_policy
             evaluation = evaluate_policy(action=action, tool=tool)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             evaluation = {"risk_level": "high", "require_hitl": True, "matched_rule": None}
 
         risk_str: str = evaluation.get("risk_level", "medium")

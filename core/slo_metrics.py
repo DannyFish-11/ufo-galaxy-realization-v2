@@ -247,8 +247,8 @@ class SLOMetrics:
                 "projection_stale_snapshot_rate": round(stale_rate, 6),
                 "projection_window_samples_total": samples_total,
             }
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return {
             "startup": {
                 "duration_ms": self._startup_duration_ms,

@@ -23,14 +23,15 @@ from pydantic import BaseModel
 
 try:
     from nodes.common.cors_config import get_cors_origins
-except Exception:
+except Exception as exc:
     def get_cors_origins():
         return ["*"]
 
 try:
     from core.port_config import get_node_port
     _DEFAULT_PORT = get_node_port("Node_119_BenchmarkEval")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _DEFAULT_PORT = 8119
 
 logging.basicConfig(level=logging.INFO)
@@ -225,7 +226,7 @@ def _list_results() -> List[Dict[str, Any]]:
                 "created_at": data.get("created_at", ""),
                 "sample_count": data.get("sample_count", 0),
             })
-        except Exception:
+        except Exception as exc:
             continue
     return results
 
@@ -344,7 +345,8 @@ async def llm_eval(req: LLMEvalRequest):
     try:
         json_match = re.search(r"\{.*\}", raw, re.DOTALL)
         data = json.loads(json_match.group(0)) if json_match else {}
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         data = {"raw": raw}
 
     scores = data.get("scores", {})
@@ -377,6 +379,7 @@ async def batch_eval(req: BatchEvalRequest):
                 resp_data = resp.json()
                 prediction = resp_data.get("output") or resp_data.get("response") or resp_data.get("text", "")
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 prediction = ""
                 logger.warning(f"Task {task.id} request failed: {e}")
 

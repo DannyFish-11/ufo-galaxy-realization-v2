@@ -217,6 +217,7 @@ class CostTracker:
                 f.write(json.dumps(rec.to_dict(), ensure_ascii=False) + "\n")
             self._consecutive_write_failures = 0
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             self._consecutive_write_failures += 1
             self._total_write_failures += 1
             logger.warning(f"Cost record save failed: {e}")

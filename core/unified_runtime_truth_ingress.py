@@ -383,8 +383,8 @@ def _resolve_execution_signal_reconciled(sub_outcome: Any) -> bool:
     if callable(accepted):
         try:
             return bool(accepted())
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     if hasattr(sub_outcome, "was_reconciled"):
         return bool(getattr(sub_outcome, "was_reconciled", False))

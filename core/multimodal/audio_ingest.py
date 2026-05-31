@@ -29,8 +29,8 @@ try:
     import sounddevice as _sd  # noqa: F401
 
     _SOUNDDEVICE_AVAILABLE = True
-except Exception:  # pragma: no cover
-    pass
+except Exception as exc:
+    logger.debug("Suppressed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +176,7 @@ class AudioIngestPipeline:
             self._quality = SignalQuality.permission_denied()
             logger.warning("Microphone permission denied")
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             self._quality = SignalQuality.degraded(str(exc))
             logger.warning("Audio ingest error: %s", exc)
         finally:

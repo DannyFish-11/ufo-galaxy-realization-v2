@@ -290,6 +290,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             posture = evaluate_nats_posture()
             bus_stats = posture.get("bus", {})
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             posture = build_default_posture_snapshot()
             bus_stats = {"error": str(exc)}
 
@@ -302,8 +303,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 brain = get_master_brain()
                 if brain is not None:
                     brain_status = brain.get_status()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         connected = posture.get("connected", bus_stats.get("connected", False))
         noop = posture.get("noop_mode", bus_stats.get("noop_mode", True))
@@ -356,6 +357,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             from core.nats_bus import nats_bus
             result["bus"] = nats_bus.get_stats()
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             result["bus"] = {"error": str(exc)}
 
         try:
@@ -368,6 +370,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     result["topology"] = brain.get_worker_topology()
                     result["master_brain"] = brain.get_status()
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             result["topology"] = {"error": str(exc)}
 
         try:
@@ -375,6 +378,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             nats_exec = get_nats_executor()
             result["nats_executor"] = nats_exec.get_stats()
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             result["nats_executor"] = {"error": str(exc)}
 
         return JSONResponse(result)
@@ -521,7 +525,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     try:
                         ev = normalize_observability_payload(raw)
                         events.append(ev.to_dict())
-                    except Exception:
+                    except Exception as exc:
                         events.append({"raw": raw})
                 first_trace = TraceCorrelation(
                     trace_id=entries[0].get("trace_id", trace_id),

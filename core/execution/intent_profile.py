@@ -355,8 +355,8 @@ def _build_from_continuum(
         decision = sc.get("decision") or {}
         if isinstance(decision, dict):
             action_level = str(decision.get("action_level", "observe"))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # --- confidence ---------------------------------------------------------
     confidence = 0.0
@@ -366,8 +366,8 @@ def _build_from_continuum(
             raw_conf = decision.get("decision_confidence", 0.0)
             confidence = float(raw_conf) if raw_conf is not None else 0.0
             confidence = max(0.0, min(1.0, confidence))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # --- target extraction --------------------------------------------------
     target_ref: Optional[str] = None
@@ -381,8 +381,8 @@ def _build_from_continuum(
             raw_payload = meta.get("target_payload")
             if isinstance(raw_payload, dict):
                 target_payload = raw_payload
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # Infer target_type when absent
     if target_ref and not target_type:
@@ -393,8 +393,8 @@ def _build_from_continuum(
     device_scope: Optional[str] = None
     try:
         runtime_domain = str(sc.get("runtime_domain")) if sc.get("runtime_domain") else None
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     if entry_mode:
         device_scope = _entry_mode_to_device_scope(entry_mode)
@@ -407,8 +407,8 @@ def _build_from_continuum(
         phase = sc.get("phase") or sc.get("tri_state_phase") or None
         if phase:
             origin_state = str(phase)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # --- safety_constraints -------------------------------------------------
     safety_constraints: List[str] = []
@@ -418,8 +418,8 @@ def _build_from_continuum(
             raw_sc = meta.get("safety_constraints")
             if isinstance(raw_sc, list):
                 safety_constraints = [str(c) for c in raw_sc]
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     # --- intent_mode --------------------------------------------------------
     intent_mode = IntentMode.from_action_level(action_level)

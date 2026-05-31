@@ -1064,8 +1064,8 @@ class CenterDistributedAgentSystemReviewer:
                         "importable:core.system_final_acceptance_verdict "
                         "(SystemFinalAcceptanceEvaluator present — top-level verdict)"
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         # Status: governance framework is strong but enforcement is advisory
         if len(importable) >= 4:

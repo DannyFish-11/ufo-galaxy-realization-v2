@@ -104,6 +104,7 @@ class UnifiedKnowledgeBase:
             )
             _mode = getattr(self._backend, "name", "local")
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             _mode = "local"
             logger.warning(f"vector_backend 加载失败: {exc}，使用关键词搜索")
 
@@ -431,6 +432,7 @@ class UnifiedKnowledgeBase:
                 else:
                     answer = f"根据知识库中的 {len(relevant_entries)} 条相关信息：\n\n{context}\n\n（未配置 LLM，无法生成智能答案）"
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 answer = f"根据知识库中的 {len(relevant_entries)} 条相关信息：\n\n{context}\n\n（LLM 调用失败: {str(e)}）"
         
         return {

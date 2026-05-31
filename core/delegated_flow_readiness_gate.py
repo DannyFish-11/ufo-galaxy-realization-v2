@@ -617,7 +617,8 @@ try:
         get_flow_continuity_coordinator as _get_continuity_coordinator,
     )
     _CONTINUITY_AVAILABLE = True
-except Exception:  # pragma: no cover
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _CONTINUITY_AVAILABLE = False
     _get_continuity_coordinator = None  # type: ignore[assignment]
 
@@ -627,7 +628,8 @@ try:
         build_flow_truth_alignment_snapshot as _build_truth_snapshot,
     )
     _TRUTH_AVAILABLE = True
-except Exception:  # pragma: no cover
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _TRUTH_AVAILABLE = False
     _build_truth_snapshot = None  # type: ignore[assignment]
 
@@ -637,7 +639,8 @@ try:
         build_flow_convergence_snapshot as _build_convergence_snapshot,
     )
     _CONVERGENCE_AVAILABLE = True
-except Exception:  # pragma: no cover
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _CONVERGENCE_AVAILABLE = False
     _build_convergence_snapshot = None  # type: ignore[assignment]
 
@@ -647,7 +650,8 @@ try:
         get_flow_level_operator_surface as _get_operator_surface,
     )
     _OPERATOR_SURFACE_AVAILABLE = True
-except Exception:  # pragma: no cover
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _OPERATOR_SURFACE_AVAILABLE = False
     _get_operator_surface = None  # type: ignore[assignment]
 
@@ -657,7 +661,8 @@ try:
         build_blocking_canonicalization_snapshot as _build_blocking_snapshot,
     )
     _COMPAT_AVAILABLE = True
-except Exception:  # pragma: no cover
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _COMPAT_AVAILABLE = False
     _build_blocking_snapshot = None  # type: ignore[assignment]
 
@@ -1023,8 +1028,8 @@ class DelegatedFlowReadinessGate:
                 all_names = getattr(_flos_mod, "__all__", None)
                 evidence["__all___present"] = all_names is not None
                 evidence["__all___count"] = len(all_names) if all_names else 0
-            except Exception:  # pragma: no cover
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed: %s", exc)
 
             return DimensionReadinessResult(
                 dimension=dimension,
@@ -1243,8 +1248,8 @@ _DEFAULT_GATE_LOCK = None
 try:
     import threading as _threading
     _DEFAULT_GATE_LOCK = _threading.Lock()
-except Exception:  # pragma: no cover
-    pass
+except Exception as exc:
+    logger.debug("Suppressed: %s", exc)
 
 
 def get_readiness_gate() -> DelegatedFlowReadinessGate:

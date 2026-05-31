@@ -57,8 +57,8 @@ async def disconnect(connection_id: str):
             connections[connection_id].close()
             del connections[connection_id]
             return {"success": True}
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     return {"success": False, "error": "Connection not found"}
 
 @app.post("/arm")

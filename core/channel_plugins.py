@@ -283,6 +283,7 @@ class ChannelPluginLoader:
             try:
                 results[pid] = await info.adapter.health()
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 results[pid] = {"healthy": False, "details": str(e)}
         return results
 

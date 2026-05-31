@@ -171,7 +171,8 @@ class CapabilityResolver:
         raw = None
         try:
             raw = registry.get(contract.name)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             raw = None
         if raw is None:
             return contract
@@ -260,7 +261,7 @@ class CapabilityResolver:
         raw = None
         try:
             raw = registry.get(name)
-        except Exception:
+        except Exception as exc:
             return None
         if raw is None:
             return None

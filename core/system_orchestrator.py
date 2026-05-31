@@ -352,6 +352,7 @@ class SystemOrchestrator:
             if router is None:
                 issues.append("command_router_unavailable")
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             diagnostics["checks"]["command_router_available"] = False
             issues.append(f"command_router_error:{exc}")
 
@@ -367,6 +368,7 @@ class SystemOrchestrator:
                 issues.append("dispatch_plan_not_ready")
                 issues.extend(readiness_notes)
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             diagnostics["checks"]["dispatch_plan_ready"] = False
             issues.append(f"dispatch_plan_error:{exc}")
 
@@ -385,6 +387,7 @@ class SystemOrchestrator:
                 )
                 hard_failures.append(str(reason))
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             diagnostics["checks"]["nats_posture_assertion_ok"] = False
             diagnostics["nats_posture"] = {"error": str(exc)}
             hard_failures.append(f"nats_posture_error:{exc}")
@@ -403,6 +406,7 @@ class SystemOrchestrator:
                 len(_recovered),
             )
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             diagnostics["checks"]["mesh_sessions_recovered"] = 0
             logger.debug("[Phase 4] Multi-device session recovery skipped — %s", exc)
 
@@ -453,6 +457,7 @@ class SystemOrchestrator:
                     _recovery_report.inflight_tasks_terminal,
                 )
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             diagnostics["checks"]["startup_recovery_completed"] = False
             diagnostics["startup_recovery"] = {"error": str(exc)}
             logger.warning("[Phase 4] Startup recovery skipped — %s", exc)
@@ -473,6 +478,7 @@ class SystemOrchestrator:
                 _restored_count,
             )
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             diagnostics["checks"]["lifecycle_registry_restored"] = False
             diagnostics["lifecycle_registry_restored_count"] = 0
             logger.debug("[Phase 4] Lifecycle registry restore skipped — %s", exc)
@@ -643,8 +649,8 @@ class SystemOrchestrator:
                 if line:
                     # Log at DEBUG to avoid spamming INFO
                     logger.debug("[Electron] %s", line)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     def _run_phase_7_readiness_summary(self, summary: StartupSummary) -> PhaseResult:
         """Phase 7 — Final readiness summary / status report.
@@ -715,6 +721,7 @@ class SystemOrchestrator:
                     f"degraded_domains={boundary_report.degraded_domains}"
                 )
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             authority_boundary_status = "error"
             authority_boundary_data = {"error": str(exc)}
             logger.debug("[Phase 7] V6 center authority boundary check skipped — %s", exc)
@@ -755,6 +762,7 @@ class SystemOrchestrator:
                     f"violations={quasi_platform_state_boundary_data.get('violations')}"
                 )
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             quasi_platform_state_boundary_status = "error"
             quasi_platform_state_boundary_data = {"error": str(exc)}
             logger.debug(

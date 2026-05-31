@@ -348,6 +348,7 @@ class SmartOrchestrator:
             result.status = OrchestrationStatus.FAILED
             result.error = f"编排超时（{request.timeout_seconds}秒）"
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             result.status = OrchestrationStatus.FAILED
             result.error = f"编排异常: {e}"
             logger.exception("编排执行异常")
@@ -484,6 +485,7 @@ class SmartOrchestrator:
             subtask.status = SubTaskStatus.FAILED
             subtask.error = f"子任务超时（{subtask.timeout_seconds}秒）"
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             subtask.status = SubTaskStatus.FAILED
             subtask.error = f"子任务执行异常: {e}"
             logger.exception("子任务 %s 执行异常", subtask.name)

@@ -174,8 +174,8 @@ class DeviceHealthRegistry:
         if self._on_event:
             try:
                 self._on_event(event_name, device_id, **kwargs)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
     def _purge_old_failures(self, state: DeviceHealthState) -> None:
         """Remove failure timestamps outside the quarantine window."""

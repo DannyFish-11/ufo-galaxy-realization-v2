@@ -405,7 +405,8 @@ _FALSY = {"0", "false", "no", "off", "none", ""}
 # Fall back to a local copy if the import fails (e.g. during isolated testing).
 try:
     from core.credential_vault import PLACEHOLDER_PREFIXES as _PLACEHOLDER_PREFIXES
-except Exception:  # pragma: no cover
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _PLACEHOLDER_PREFIXES = ("your_", "your-", "change_me", "todo", "<", "example", "xxx")
 
 

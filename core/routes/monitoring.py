@@ -97,8 +97,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             lines.append(f"# HELP galaxy_connected_devices Number of connected devices")
             lines.append(f"# TYPE galaxy_connected_devices gauge")
             lines.append(f"galaxy_connected_devices {status.get('devices_connected', 0)}")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         try:
             import resource
@@ -110,22 +110,22 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             lines.append(f"# HELP process_cpu_seconds_total Total CPU time")
             lines.append(f"# TYPE process_cpu_seconds_total counter")
             lines.append(f"process_cpu_seconds_total {usage.ru_utime + usage.ru_stime:.2f}")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # PR-G2: SLO metrics (startup, heartbeat, reconnect, command latency)
         try:
             from core.slo_metrics import get_slo_metrics
             lines.append(get_slo_metrics().prometheus_text().rstrip("\n"))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # PR-I: Operational SLO metrics (dispatch, recovery, fallback, audit persistence)
         try:
             from core.operational_slo_metrics import get_operational_slo_metrics
             lines.append(get_operational_slo_metrics().prometheus_text().rstrip("\n"))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         return Response(content="\n".join(lines) + "\n", media_type="text/plain; charset=utf-8")
 

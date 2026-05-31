@@ -21,14 +21,15 @@ from pydantic import BaseModel
 
 try:
     from nodes.common.cors_config import get_cors_origins
-except Exception:
+except Exception as exc:
     def get_cors_origins():
         return ["*"]
 
 try:
     from core.port_config import get_node_port
     _DEFAULT_PORT = get_node_port("Node_99_EmbeddingService")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _DEFAULT_PORT = 8099
 
 logging.basicConfig(level=logging.INFO)
@@ -71,7 +72,8 @@ def _get_redis():
         _redis_client = redis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2)
         _redis_client.ping()
         logger.info("✅ Redis cache connected")
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         _redis_client = None
     return _redis_client
 
@@ -87,8 +89,8 @@ def _cache_get(key: str) -> Optional[List[float]]:
             raw = r.get(f"emb:{key}")
             if raw:
                 return json.loads(raw)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     return _local_cache.get(key)
 
 
@@ -98,8 +100,8 @@ def _cache_set(key: str, vector: List[float]) -> None:
         try:
             r.setex(f"emb:{key}", 86400, json.dumps(vector))
             return
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
     _local_cache[key] = vector
 
 # ---------------------------------------------------------------------------
@@ -202,8 +204,8 @@ async def status():
     try:
         r = _get_redis()
         redis_ok = r is not None
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
     return {
         "node_id": NODE_ID,
         "node_name": NODE_NAME,

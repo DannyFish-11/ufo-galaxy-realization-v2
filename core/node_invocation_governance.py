@@ -402,7 +402,8 @@ def evaluate_invocation_governance(
                     "posture": getattr(memory_bias, "posture", "unknown"),
                     "influenced_by_memory": bool(getattr(memory_bias, "influenced_by_memory", False)),
                 }
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 _memory_bias_hint = None
     # ------------------------------------------------------------------
     if override == NodeInvocationGovernanceOverride.COMPAT_INTERNAL:
@@ -495,8 +496,8 @@ def evaluate_invocation_governance(
                 memory_bias_hint=_memory_bias_hint,
                 task_hint=task_hint,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=True,
@@ -514,8 +515,8 @@ def evaluate_invocation_governance(
     if governor is not None:
         try:
             governor_record = governor.get_record(node_id)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed: %s", exc)
 
     # ------------------------------------------------------------------
     # Evaluate governance eligibility via PR-6 function
@@ -649,8 +650,8 @@ def evaluate_invocation_governance(
                 memory_bias_hint=_memory_bias_hint,
                 task_hint=task_hint,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=True,
@@ -683,8 +684,8 @@ def evaluate_invocation_governance(
                 memory_bias_hint=_memory_bias_hint,
                 task_hint=task_hint,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=False,

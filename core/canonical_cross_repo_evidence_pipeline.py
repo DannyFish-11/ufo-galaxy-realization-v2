@@ -708,7 +708,8 @@ try:
         AndroidParticipantStatus as _AndroidParticipantStatus,
     )
     _REAL_DEVICE_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _REAL_DEVICE_AVAILABLE = False
     _ingest_real_device_evidence = None  # type: ignore[assignment]
     _REAL_DEVICE_AUTHORITY_SENTINEL = ""
@@ -722,7 +723,8 @@ try:
         AndroidEvaluatorArtifactKind as _ArtifactKind,
     )
     _EVALUATOR_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _EVALUATOR_AVAILABLE = False
     _get_evaluator_registry = None  # type: ignore[assignment]
     _EVALUATOR_AUTHORITY_SENTINEL = ""
@@ -734,7 +736,8 @@ try:
         get_participant_session_registry as _get_session_registry,
     )
     _SESSION_REGISTRY_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _SESSION_REGISTRY_AVAILABLE = False
     _get_session_registry = None  # type: ignore[assignment]
 
@@ -744,7 +747,8 @@ try:
         ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY as _RECONCILER_AUTHORITY_SENTINEL,
     )
     _RECONCILER_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _RECONCILER_AVAILABLE = False
     _RECONCILER_AUTHORITY_SENTINEL = ""
 
@@ -755,7 +759,8 @@ try:
         ANDROID_DELEGATED_RUNTIME_AUDIT_AUTHORITY as _AUDIT_AUTHORITY_SENTINEL,
     )
     _AUDIT_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _AUDIT_AVAILABLE = False
     _android_audit_snapshot = None  # type: ignore[assignment]
     _AUDIT_AUTHORITY_SENTINEL = ""

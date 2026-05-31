@@ -940,7 +940,7 @@ class OpenClawd:
                 agent_id=agent_id,
                 payload=payload or {},
             )
-        except Exception:
+        except Exception as exc:
             return None
 
     def _select_device_via_scheduler(
@@ -1005,7 +1005,7 @@ class OpenClawd:
                                 required_mode,
                             )
                             continue
-                    except Exception:
+                    except Exception as exc:
                         pass  # non-fatal: admit the device
 
                 candidates.append(
@@ -1038,8 +1038,8 @@ class OpenClawd:
                             "candidates_count": len(candidates),
                         },
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _logger.warning("Exception suppressed: %s", exc)
                 return best.device_id
         except Exception as e:
             logger.debug("_select_device_via_scheduler failed (non-fatal): %s", e)
@@ -1168,7 +1168,8 @@ class OpenClawd:
                     "continuum_max_tick_ms": _cfg.get("continuum_max_tick_ms", 0),
                     "continuum_sampling_rate": _cfg.get("continuum_sampling_rate", 1.0),
                 }
-            except Exception:
+            except Exception as exc:
+                _logger.debug("Fallback triggered: %s", exc)
                 extra_flags = {}
             try:
                 from core.continuum.orchestrator import ContinuumOrchestrator
@@ -1224,7 +1225,7 @@ class OpenClawd:
                     from core.multimodal.ingress_bus import MultimodalIngressBus
 
                     frame = MultimodalIngressBus().build_frame()
-            except Exception:
+            except Exception as exc:
                 pass  # orchestrator will construct a minimal default
 
             continuum_state = orch.run(
@@ -1456,7 +1457,7 @@ class OpenClawd:
                 from core.execution.intent_profile import ExecutionIntentProfile  # noqa: PLC0415
 
                 return ExecutionIntentProfile(source="openclawd")
-            except Exception:
+            except Exception as exc:
                 # Absolute last resort — return a minimal stub that matches the
                 # compact_summary() contract from ExecutionIntentProfile.
                 class _Stub:  # noqa: SIM115
@@ -2185,7 +2186,7 @@ class OpenClawd:
                 _running_bus = _get_ib()
                 if _running_bus is not None:
                     _frame = _running_bus.build_frame()
-            except Exception:
+            except Exception as exc:
                 pass  # continuous perception unavailable; degrade gracefully
 
             _cps = _build_cps(
@@ -2273,8 +2274,8 @@ class OpenClawd:
 
                 _bridge = get_webrtc_ingress_bridge()
                 _webrtc_dc_active = _bridge.is_enabled and _bridge.total_frames_ingested > 0
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning("Exception suppressed: %s", exc)
 
             _android_present = bool(_android_perception_ingress) or _webrtc_dc_active
             # ── C方案结束 ─────────────────────────────────────────────────
@@ -2349,8 +2350,8 @@ class OpenClawd:
                 webrtc_dc_active = (
                     webrtc_dc_enabled and bridge.total_frames_ingested > 0
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning("Exception suppressed: %s", exc)
 
             families["webrtc_data_channel_stream"] = {
                 "is_present": webrtc_dc_active,
@@ -2742,8 +2743,8 @@ class OpenClawd:
                     task_hint=task_type,
                     task_semantic_influenced=False,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning("Exception suppressed: %s", exc)
             return result
 
         # ── PR-27: Eligibility gate — degrade if confidence is too low ───────
@@ -2886,8 +2887,8 @@ class OpenClawd:
                     task_hint=task_type,
                     task_semantic_influenced=_pr20_task_semantic_influenced,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning("Exception suppressed: %s", exc)
             return result
 
         # Tier 2 — native multimodal unavailable; degrade to text-capable provider
@@ -2920,8 +2921,8 @@ class OpenClawd:
                 task_hint=task_type,
                 task_semantic_influenced=_pr20_task_semantic_influenced,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("Exception suppressed: %s", exc)
         return result
 
     @staticmethod
@@ -3679,7 +3680,7 @@ class OpenClawd:
                     or "action blocked by runtime safety/permission constraints"
                 )
                 metadata["minimal_necessary_explanation"] = f"Action blocked: {reason}"
-        except Exception:
+        except Exception as exc:
             return result_payload
         return result_payload
 
@@ -3832,8 +3833,8 @@ class OpenClawd:
                     "routed_at": t0,
                 }
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("Exception suppressed: %s", exc)
 
         # PR-8: store trace/session on self so _dispatch_tool_call can read them.
         self._current_trace_id = trace_id
@@ -3866,8 +3867,8 @@ class OpenClawd:
                     _ceh_budget,
                     trace_id,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning("Exception suppressed: %s", exc)
 
         # PR-001: Sync dispatcher context so per-call dispatch() calls inherit
         # the current request's device/session/trace without needing explicit kwargs.
@@ -3926,8 +3927,8 @@ class OpenClawd:
             if multimodal_context is not None:
                 try:
                     _mm_context_dict = multimodal_context.model_dump()
-                except Exception:  # model_dump may raise AttributeError / ValidationError
-                    pass
+                except Exception as exc:
+                    _logger.debug("Suppressed: %s", exc)
         # Keep the original message/fusion text byte-for-byte and use an explicit
         # separator so fused context is readable in the canonical kernel path.
         _kernel_message: str = f"{message}\n\n{_fusion_suffix}" if _fusion_suffix else message
@@ -4177,8 +4178,8 @@ class OpenClawd:
                 device_id=device_id,
                 status="received",
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("Exception suppressed: %s", exc)
 
         # ── Audit ledger: TASK_CREATED ────────────────────────────────────────
         task_id_for_trace = f"task_{uuid.uuid4().hex[:12]}"
@@ -4194,14 +4195,14 @@ class OpenClawd:
                 message="Intent received",
                 payload={"message_preview": message[:120]},
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("Exception suppressed: %s", exc)
 
         # 同步新设备能力（确保 OpenClawd 始终感知最新设备）
         try:
             self.sync_device_capabilities()
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("Exception suppressed: %s", exc)
 
         try:
             # ── Audit ledger: TASK_STARTED ────────────────────────────────────
@@ -4216,8 +4217,8 @@ class OpenClawd:
                     device_id=device_id,
                     message="Processing started",
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning("Exception suppressed: %s", exc)
 
             # Step 1: 通过内嵌 AgentKernel 进行认知/规划（OpenClawd 持有并调用 Kernel）
             # AgentKernel 作为认知层返回 KernelResponse（认知产物），
@@ -4245,8 +4246,8 @@ class OpenClawd:
                                 "model": kernel_result.model or router.get_default_model(),
                                 "available_providers": [p for p in getattr(router, "providers", {}).keys()],
                             }
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            _logger.warning("Exception suppressed: %s", exc)
                     logger.info(
                         "OpenClawd request | request_id=%s session=%s mode=%s " "provider=%s model=%s",
                         request_id,
@@ -4284,8 +4285,8 @@ class OpenClawd:
                             message="AgentKernel completed",
                             payload={"latency_ms": round(latency_ms, 1), "handler": "agent_kernel"},
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        _logger.warning("Exception suppressed: %s", exc)
                     # ── Persona / Spirit Engine update (PR-3) ─────────────────
                     try:
                         from core.persona.state_store import get_state_store as _get_store2
@@ -4346,8 +4347,8 @@ class OpenClawd:
                                     "source": "openclawd.process.kernel_path",
                                 },
                             )
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            _logger.warning("Exception suppressed: %s", exc)
                     # ── Decision Execution (PR-8 / PR-4) ─────────────────────
                     _exec_result_k = self._run_execution(_continuum_state_dict, entry_mode=_entry_mode)
                     _cross_device_k = bool(
@@ -4765,8 +4766,8 @@ class OpenClawd:
                         "provider": getattr(router, "_last_provider", ""),
                         "model": router.get_default_model(),
                     }
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _logger.warning("Exception suppressed: %s", exc)
             logger.info(
                 "OpenClawd request | request_id=%s session=%s intent=%s " "provider=%s model=%s",
                 request_id,
@@ -4810,8 +4811,8 @@ class OpenClawd:
                     message="Handler completed",
                     payload={"latency_ms": round(latency_ms, 1), "handler": handler_name, "intent": intent_type},
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning("Exception suppressed: %s", exc)
 
             # ── Persona / Spirit Engine update (PR-3) ─────────────────────────
             try:
@@ -4877,8 +4878,8 @@ class OpenClawd:
                             "source": "openclawd.process.direct_path",
                         },
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _logger.warning("Exception suppressed: %s", exc)
             # ── Decision Execution (PR-8 / PR-4) ─────────────────────────────
             _exec_result2 = self._run_execution(_continuum_state_dict2, entry_mode=_entry_mode)
             # Detect whether a cross-device dispatch occurred (set by handlers).
@@ -5093,6 +5094,7 @@ class OpenClawd:
             )
 
         except Exception as e:
+            _logger.debug("Fallback triggered: %s", e)
             self._error_count += 1
             latency_ms = (time.monotonic() - t0) * 1000
             logger.error(f"OpenClawd.process 失败: {e}", exc_info=True)
@@ -5112,8 +5114,8 @@ class OpenClawd:
                     device_id=device_id,
                     payload={"error": str(e)},
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning("Exception suppressed: %s", exc)
             return _finalize_response(
                 {
                     "success": False,
@@ -5367,8 +5369,8 @@ class OpenClawd:
                             **_orch_dispatch_meta,
                         },
                     }
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            _logger.debug("Suppressed: %s", exc)
 
         result = await self._dispatch_remote_agent(
             message=message,
@@ -5486,7 +5488,7 @@ class OpenClawd:
                     }
                 # Orchestrator ran but did not produce a successful staged_mesh
                 # result — fall through to the SwarmCoordinator path below.
-        except Exception:  # noqa: BLE001
+        except Exception as exc:
             # Any import or runtime error must not interrupt existing dispatch.
             pass
 
@@ -5619,8 +5621,8 @@ class OpenClawd:
 
                     _all_devices = _cm.get_all_devices()
                     _device_info = _all_devices.get(device_id, {}) if device_id else {}
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _logger.warning("Exception suppressed: %s", exc)
                 _exec_profile = build_profile_from_device_info(_device_info, device_id=device_id)
                 _mode_result = _resolve_mode(
                     profile=_exec_profile,
@@ -6252,6 +6254,7 @@ class OpenClawd:
                         continue
                     return
                 except Exception as exc:
+                    _logger.debug("Fallback triggered: %s", exc)
                     sub_latency_ms = (time.monotonic() - t_sub) * 1000
                     err_result = {
                         "success": False,
@@ -6572,7 +6575,8 @@ class OpenClawd:
             )
 
             _compat_active = _is_compat_enabled()
-        except Exception:
+        except Exception as exc:
+            _logger.debug("Fallback triggered: %s", exc)
             _compat_active = False
 
         if _compat_active:
@@ -6747,8 +6751,8 @@ class OpenClawd:
                 trace_id=_pr8_trace_id,
                 runtime_session_id=_pr8_session_id,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("Exception suppressed: %s", exc)
 
         # Phase 9: 工具调用权限检查
         if self._tool_permission_checker:
@@ -6945,8 +6949,8 @@ class OpenClawd:
                     trace_id=_pr8_trace_id,
                     runtime_session_id=_pr8_session_id,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning("Exception suppressed: %s", exc)
             return {"success": False, "error": str(e)}
 
     # ========================================================================
@@ -7423,7 +7427,7 @@ class OpenClawd:
 
             if not _is_compat_enabled():
                 return None
-        except Exception:
+        except Exception as exc:
             return None
         try:
             import json, os
@@ -7435,8 +7439,8 @@ class OpenClawd:
                 if info.get("id") == node_id:
                     self._node_id_to_key[node_id] = key
                     return key
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("Exception suppressed: %s", exc)
         return None
 
     def _discover_node_actions(self, node_id: str, node_key: str) -> Dict[str, str]:
@@ -7485,7 +7489,7 @@ class OpenClawd:
                                 return asyncio.run(method(action))
                         else:
                             return method(action)
-                except Exception:
+                except Exception as exc:
                     return None
 
             _skip = {"status", "help"}
@@ -7497,8 +7501,8 @@ class OpenClawd:
                     actions_map = help_result.get("actions", {})
                     if isinstance(actions_map, dict) and actions_map:
                         return {k: str(v) for k, v in actions_map.items() if k not in _skip}
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning("Exception suppressed: %s", exc)
 
             # 退化到 status → 获取 available_actions 列表
             try:
@@ -7509,8 +7513,8 @@ class OpenClawd:
                         return {k: str(v) for k, v in actions.items() if k not in _skip}
                     if isinstance(actions, list):
                         return {a: f"Execute {a}" for a in actions if isinstance(a, str) and a not in _skip}
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning("Exception suppressed: %s", exc)
 
             return {}
         except Exception as e:
@@ -7764,15 +7768,16 @@ class OpenClawd:
                             "role": "system",
                             "content": "[Long-term memory — user preferences]\n" + "\n".join(_pref_lines),
                         })
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _logger.warning("Exception suppressed: %s", exc)
                 # Fallback short-term
                 try:
                     from core.session_memory_facade import get_session_context
                     _wm_entries = get_session_context(session_id, max_turns=10)
                     for turn in _wm_entries:
                         messages.append({"role": turn["role"], "content": turn["content"]})
-                except Exception:
+                except Exception as exc:
+                    _logger.debug("Fallback triggered: %s", exc)
                     session_history = self._session_memory.get(session_id, [])
                     for turn in session_history[-10:]:
                         messages.append(turn)
@@ -8349,6 +8354,7 @@ class OpenClawd:
             else:
                 status["llm_router"] = {"available": False, "error": "router not initialized"}
         except Exception as e:
+            _logger.debug("Fallback triggered: %s", e)
             status["llm_router"] = {"available": False, "error": str(e)}
 
         # Agent Factory 状态
@@ -8363,6 +8369,7 @@ class OpenClawd:
                 "templates": factory_status.get("templates", []),
             }
         except Exception as e:
+            _logger.debug("Fallback triggered: %s", e)
             status["agent_factory"] = {"total_agents": 0, "error": str(e)}
 
         # MCP 状态
@@ -8378,6 +8385,7 @@ class OpenClawd:
                 "total_tools": total_tools,
             }
         except Exception as e:
+            _logger.debug("Fallback triggered: %s", e)
             status["mcp"] = {"server_count": 0, "error": str(e)}
 
         # Skill 状态
@@ -8392,6 +8400,7 @@ class OpenClawd:
                 "failed_executions": stats.get("failed_executions", 0),
             }
         except Exception as e:
+            _logger.debug("Fallback triggered: %s", e)
             status["skills"] = {"loaded_skills": 0, "error": str(e)}
 
         # 意图解析器状态
@@ -8404,6 +8413,7 @@ class OpenClawd:
                 "supported_intents": list(parser.RULE_PATTERNS.keys()),
             }
         except Exception as e:
+            _logger.debug("Fallback triggered: %s", e)
             status["intent_parser"] = {"error": str(e)}
 
         return status
@@ -8449,8 +8459,8 @@ class OpenClawd:
                     "record_origin": "openclawd",
                 },
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("Exception suppressed: %s", exc)
 
     async def clear_session(self, session_id: str):
         """清除会话记忆"""
@@ -8460,8 +8470,8 @@ class OpenClawd:
 
             memory = get_conversation_memory()
             await memory.clear_session(session_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("Exception suppressed: %s", exc)
 
     def get_session_history(self, session_id: str, max_turns: int = 20) -> List[Dict]:
         """获取会话历史"""
@@ -8824,6 +8834,7 @@ class OpenClawd:
                 }
             )
         except Exception as e:
+            _logger.debug("Fallback triggered: %s", e)
             latency_ms = (time.monotonic() - t0) * 1000
             result.update(
                 {

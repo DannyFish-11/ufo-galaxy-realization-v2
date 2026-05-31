@@ -238,7 +238,7 @@ class WindowsSystemAPI:
             try:
                 from core.system_api import get_system_api  # type: ignore[import]
                 self._adapter = get_system_api()
-            except Exception:
+            except Exception as exc:
                 from core.system_api.platform_api import NoOpSystemAPI
                 self._adapter = NoOpSystemAPI()
         return self._adapter
@@ -250,7 +250,7 @@ class WindowsSystemAPI:
             return False
         try:
             return bool(self._get_adapter().is_available)
-        except Exception:
+        except Exception as exc:
             return False
 
     # ------------------------------------------------------------------
@@ -504,7 +504,8 @@ def get_windows_system_api(enabled: Optional[bool] = None) -> WindowsSystemAPI:
                 with open(_cfg_path) as _f:
                     _cfg = json.load(_f)
                 enabled = bool(_cfg.get("enable_windows_system_api", True))
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 enabled = True
         _facade_instance = WindowsSystemAPI(enabled=enabled)
     return _facade_instance

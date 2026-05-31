@@ -643,8 +643,8 @@ class AndroidNetworkParticipationState:
         try:
             from core.device_lifecycle_state import stage_for_participation_tier  # noqa: PLC0415
             result["lifecycle_stage"] = stage_for_participation_tier(self.tier.value).value
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return result
 
 

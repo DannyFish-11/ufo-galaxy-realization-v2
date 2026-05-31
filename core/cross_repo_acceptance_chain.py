@@ -158,13 +158,15 @@ def _build_registration_stage(device_id: Optional[str]) -> Dict[str, Any]:
 
             lifecycle_record = get_lifecycle_record(str(device_id))
             lifecycle_stage = getattr(getattr(lifecycle_record, "stage", None), "value", "unregistered")
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             lifecycle_stage = "unregistered"
         try:
             from galaxy_gateway.android.handlers.registration import get_registration_gaps
 
             gaps = list(get_registration_gaps(str(device_id)) or [])
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             gaps = []
 
     passed = bool(device_id) and lifecycle_stage in _REGISTERED_LIFECYCLE_STAGES
@@ -195,7 +197,8 @@ def _build_participation_stage(device_id: Optional[str]) -> Dict[str, Any]:
 
             lifecycle_record = get_lifecycle_record(str(device_id))
             lifecycle_stage = getattr(getattr(lifecycle_record, "stage", None), "value", "unregistered")
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             lifecycle_stage = "unregistered"
     passed = bool(device_id) and lifecycle_stage in _READY_LIFECYCLE_STAGES
     summary = (
@@ -263,7 +266,8 @@ def _build_result_backflow_stage(device_id: Optional[str]) -> Dict[str, Any]:
             )
 
             evidence = dict(get_latest_device_acceptance_evidence_dict(str(device_id)) or {})
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             evidence = {}
     passed = bool(device_id) and bool(
         evidence.get("acceptance_tag")
@@ -363,8 +367,8 @@ def _resolve_device_id(
         evidence_records = list_device_acceptance_evidence_dicts()
         if evidence_records:
             return str(evidence_records[-1].get("device_id") or "") or None
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     try:
         from core.mesh.android_mesh_lifecycle_store import get_android_mesh_lifecycle_store
@@ -373,8 +377,8 @@ def _resolve_device_id(
         if sessions:
             latest_session = sorted(sessions, key=_session_timestamp_key)[-1]
             return str(getattr(latest_session, "device_id", "") or "") or None
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
     return None
 
 
@@ -390,8 +394,8 @@ def _resolve_mesh_session(
             record = get_android_mesh_lifecycle_store().get_session(str(explicit_session_id))
             if record is not None:
                 return record.to_dict()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         return {"session_id": explicit_session_id}
 
     if not device_id:
@@ -405,7 +409,7 @@ def _resolve_mesh_session(
             return {}
         latest = sorted(sessions, key=_session_timestamp_key)[-1]
         return latest.to_dict()
-    except Exception:
+    except Exception as exc:
         return {}
 
 

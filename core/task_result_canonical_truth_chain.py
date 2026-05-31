@@ -353,6 +353,7 @@ def _run_truth_ingress(
         )
         outcome.truth_ingress_status = StepStatus.COMPLETED
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         outcome.truth_ingress_status = StepStatus.FAILED_EXCEPTION
         outcome._truth_ingress_exc = exc
         logger.warning(
@@ -391,6 +392,7 @@ def _run_reconcile(
         )
         outcome.reconcile_status = StepStatus.COMPLETED
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         outcome.reconcile_status = StepStatus.FAILED_EXCEPTION
         outcome._reconcile_exc = exc
         logger.warning(
@@ -466,6 +468,7 @@ def _run_authority_state_update(
         # ran successfully — not every task_result maps to a tracked task.
         outcome.authority_update_status = StepStatus.COMPLETED
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         outcome.authority_update_status = StepStatus.FAILED_EXCEPTION
         outcome._authority_update_exc = exc
         logger.warning(
@@ -517,6 +520,7 @@ def _run_completion_linkage(
         outcome.completion_linkage_resolved = bool(resolved_notify or resolved_direct)
         outcome.completion_linkage_status = StepStatus.COMPLETED
     except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         outcome.completion_linkage_status = StepStatus.FAILED_EXCEPTION
         outcome._completion_linkage_exc = exc
         logger.warning(

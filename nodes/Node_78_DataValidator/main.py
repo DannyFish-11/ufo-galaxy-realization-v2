@@ -13,7 +13,8 @@ from nodes.common.cors_config import get_cors_origins
 try:
     from core.port_config import get_node_port
     PORT = get_node_port("Node_78_DataValidator")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     PORT = int(os.getenv("PORT", "8078"))
 
 STRICT_MODE = os.getenv("VALIDATOR_STRICT_MODE", "false").lower() == "true"

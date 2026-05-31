@@ -132,8 +132,8 @@ class OpenCodeEngine:
                 )
                 if result.returncode == 0:
                     runtime.version = result.stdout.strip().split('\n')[0]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
     
     def create_sandbox(self) -> str:
         """创建沙箱环境"""
@@ -269,6 +269,7 @@ class OpenCodeEngine:
                 execution.status = ExecutionStatus.FAILED
             
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             execution.status = ExecutionStatus.FAILED
             execution.stderr = str(e)
             logger.error(f"Execution failed: {e}")

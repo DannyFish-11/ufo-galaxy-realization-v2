@@ -461,6 +461,7 @@ class RetryPolicy:
             try:
                 return await coro_factory(*args, **kwargs)
             except Exception as e:
+                logger.debug("Fallback triggered: %s", e)
                 last_error = e
                 if attempt < self.max_retries:
                     delay = self.get_delay(attempt)

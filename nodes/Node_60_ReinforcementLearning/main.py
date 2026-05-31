@@ -16,7 +16,8 @@ from nodes.common.cors_config import get_cors_origins
 try:
     from core.port_config import get_node_port
     PORT = get_node_port("Node_60_ReinforcementLearning")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     PORT = int(os.getenv("NODE_PORT", os.getenv("PORT", "8160")))
 
 LEARNING_RATE = float(os.getenv("RL_LEARNING_RATE", "0.01"))

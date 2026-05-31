@@ -532,8 +532,8 @@ class UnifiedDeviceManager:
                 loop.create_task(dwc.on_device_heartbeat(device_id))
             except RuntimeError:
                 pass
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed: %s", exc)
 
     # ------------------------------------------------------------------
     # 状态更新
@@ -716,8 +716,8 @@ class UnifiedDeviceManager:
         try:
             from core.unified.device_health import get_device_health_scorer
             get_device_health_scorer().heartbeat(device_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         if device is not None:
             self._sync_capabilities_to_authority(device)
 
@@ -813,7 +813,7 @@ class UnifiedDeviceManager:
         try:
             from core.unified.device_health import get_device_health_scorer
             return get_device_health_scorer().score(device_id)
-        except Exception:
+        except Exception as exc:
             return None
 
     def get_online_devices_by_health(self) -> List[UnifiedDevice]:
@@ -833,7 +833,7 @@ class UnifiedDeviceManager:
                 key=lambda d: scorer.score(d.device_id).total_score,
                 reverse=True,
             )
-        except Exception:
+        except Exception as exc:
             return devices
 
     def get_autonomous_devices(self) -> List[UnifiedDevice]:

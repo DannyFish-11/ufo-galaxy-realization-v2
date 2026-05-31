@@ -104,6 +104,7 @@ class FusionNode:
                 self.vision_pipeline = pipeline_module.get_vision_pipeline()
                 logger.info(f"✅ {self.node_id} 已接入 VisionPipeline 融合管线")
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             self.vision_pipeline = None
             logger.warning(f"⚠️ {self.node_id} VisionPipeline 未接入: {e}")
 

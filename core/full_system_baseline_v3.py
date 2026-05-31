@@ -636,7 +636,7 @@ class FullSystemBaselineV3Evaluator:
         for attr in attrs:
             try:
                 cur = getattr(cur, attr)
-            except Exception:  # noqa: BLE001
+            except Exception as exc:
                 return None
         return cur
 
@@ -889,6 +889,7 @@ class FullSystemBaselineV3Evaluator:
                     report.to_dict() if hasattr(report, "to_dict") else dict(getattr(report, "__dict__", {}))
                 )
             except Exception as exc:  # noqa: BLE001
+                logger.debug("Fallback triggered: %s", exc)
                 release_report = {"probe_error": str(exc)}
         grounding = {
             "release_gate_overall_verdict": str(release_report.get("overall_verdict", "")),

@@ -225,8 +225,8 @@ class MeshNATSConvergence:
         if sub and self.is_available():
             try:
                 await self._nats.unsubscribe(sub)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
     # -- internal --------------------------------------------------------------
 

@@ -241,6 +241,7 @@ class HealthAggregator:
             comp.last_check = time.time()
 
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             comp.status = "unhealthy"
             comp.error = str(e)
             comp.consecutive_failures += 1

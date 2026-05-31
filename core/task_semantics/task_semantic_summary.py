@@ -107,8 +107,8 @@ class ClassifiedStep:
         if isinstance(policy_data, dict):
             try:
                 policy = StepSemanticPolicy.from_dict(policy_data)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         return cls(
             step_id=str(data.get("step_id") or ""),
@@ -231,8 +231,8 @@ class TaskSemanticSummary:
             if isinstance(raw, dict):
                 try:
                     classified_steps.append(ClassifiedStep.from_dict(raw))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
         return cls(
             task_id=str(data.get("task_id") or ""),

@@ -571,7 +571,7 @@ def resolve_continuity_legality_mode(
     def _parse(raw: Any) -> Optional[ContinuityLegalityMode]:
         try:
             return ContinuityLegalityMode(str(raw).strip().lower())
-        except Exception:
+        except Exception as exc:
             return None
 
     if explicit_mode is not None:
@@ -719,6 +719,7 @@ class UnifiedContinuityLegalityAuthority:
                 lookup_session_by_device,
             )
         except Exception as _import_err:
+            logger.debug("Fallback triggered: %s", _import_err)
             evidence["registry_unavailable"] = str(_import_err)
             return DimensionLegalityOutcome(
                 dimension=dim,
@@ -744,8 +745,8 @@ class UnifiedContinuityLegalityAuthority:
                     entry = registry.get_by_runtime_attachment_session_id(
                         ctx.runtime_attachment_session_id, active_only=False
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
             if entry is None:
                 # No registry entry — cannot assert illegality
@@ -827,6 +828,7 @@ class UnifiedContinuityLegalityAuthority:
             )
 
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             evidence["check_error"] = str(exc)
             return DimensionLegalityOutcome(
                 dimension=dim,
@@ -856,6 +858,7 @@ class UnifiedContinuityLegalityAuthority:
                 get_flow_continuity_coordinator,
             )
         except Exception as _imp:
+            logger.debug("Fallback triggered: %s", _imp)
             evidence["coordinator_unavailable"] = str(_imp)
             return DimensionLegalityOutcome(
                 dimension=dim,
@@ -910,6 +913,7 @@ class UnifiedContinuityLegalityAuthority:
             )
 
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             evidence["check_error"] = str(exc)
             return DimensionLegalityOutcome(
                 dimension=dim,
@@ -937,6 +941,7 @@ class UnifiedContinuityLegalityAuthority:
                 lookup_session_by_device,
             )
         except Exception as _imp:
+            logger.debug("Fallback triggered: %s", _imp)
             evidence["registry_unavailable"] = str(_imp)
             return DimensionLegalityOutcome(
                 dimension=dim,
@@ -957,8 +962,8 @@ class UnifiedContinuityLegalityAuthority:
                     entry = registry.get_by_runtime_attachment_session_id(
                         ctx.runtime_attachment_session_id, active_only=False
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
 
             if entry is None:
                 evidence["registry_entry"] = "absent"
@@ -1017,6 +1022,7 @@ class UnifiedContinuityLegalityAuthority:
             )
 
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             evidence["check_error"] = str(exc)
             return DimensionLegalityOutcome(
                 dimension=dim,
@@ -1053,6 +1059,7 @@ class UnifiedContinuityLegalityAuthority:
             )
             evidence["max_epoch_seen"] = max_epoch_seen
         except Exception as _exc:
+            logger.debug("Fallback triggered: %s", _exc)
             evidence["coordinator_error"] = str(_exc)
             # Cannot assert ordering without coordinator — pass through
             return DimensionLegalityOutcome(
@@ -1104,6 +1111,7 @@ class UnifiedContinuityLegalityAuthority:
                 check_signal_guard,
             )
         except Exception as _imp:
+            logger.debug("Fallback triggered: %s", _imp)
             evidence["guard_unavailable"] = str(_imp)
             return DimensionLegalityOutcome(
                 dimension=dim,
@@ -1186,6 +1194,7 @@ class UnifiedContinuityLegalityAuthority:
             )
 
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             evidence["check_error"] = str(exc)
             return DimensionLegalityOutcome(
                 dimension=dim,
@@ -1225,6 +1234,7 @@ class UnifiedContinuityLegalityAuthority:
                 get_flow_continuity_coordinator,
             )
         except Exception as _imp:
+            logger.debug("Fallback triggered: %s", _imp)
             evidence["coordinator_unavailable"] = str(_imp)
             return DimensionLegalityOutcome(
                 dimension=dim,
@@ -1278,6 +1288,7 @@ class UnifiedContinuityLegalityAuthority:
             )
 
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             evidence["check_error"] = str(exc)
             return DimensionLegalityOutcome(
                 dimension=dim,

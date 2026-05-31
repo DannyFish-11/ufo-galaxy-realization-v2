@@ -333,7 +333,8 @@ class OpenCodeEngine:
             if result.returncode == 0:
                 self.is_installed = True
                 self.opencode_path = result.stdout.strip()
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             self.is_installed = False
     
     def _build_command(
@@ -422,5 +423,5 @@ class OpenCodeEngine:
                 json.dump(config_data, f, indent=2)
             
             return True
-        except Exception:
+        except Exception as exc:
             return False

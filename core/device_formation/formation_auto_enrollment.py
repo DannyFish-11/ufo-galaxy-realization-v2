@@ -413,8 +413,8 @@ class FormationAutoEnrollmentManager:
             if self._coordinator is not None:
                 try:
                     coord_snap = self._coordinator.snapshot().to_dict()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             return {
                 "formation_id": self._formation_id,
                 "participants": {

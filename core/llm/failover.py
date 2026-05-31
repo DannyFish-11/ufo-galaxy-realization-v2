@@ -181,6 +181,7 @@ class FailoverStrategy:
                 return result
 
             except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 last_exc = exc
                 if cb is not None:
                     cb.record_failure()

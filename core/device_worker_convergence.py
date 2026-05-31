@@ -119,8 +119,8 @@ class DeviceWorkerConvergence:
                     "worker_id": worker_id,
                     "capabilities": capabilities,
                 })
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
     async def on_device_heartbeat(self, device_id: str) -> None:
         """Called when a device sends a heartbeat.

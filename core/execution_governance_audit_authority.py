@@ -338,7 +338,8 @@ def _normalize_cross_repo_truth_report(raw_report: Any) -> Dict[str, Any]:
     elif hasattr(raw_report, "to_dict"):
         try:
             report_dict = dict(raw_report.to_dict())  # type: ignore[union-attr]
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             report_dict = {}
 
     normalized_sources: List[Dict[str, Any]] = []
@@ -806,7 +807,8 @@ def get_governance_audit_summary(
         cross_repo_truth_report = _normalize_cross_repo_truth_report(
             get_canonical_cross_repo_evidence_report()
         )
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         cross_repo_truth_report = _normalize_cross_repo_truth_report(
             {
                 "pipeline_verdict": "insufficient",

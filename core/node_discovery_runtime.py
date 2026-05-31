@@ -668,7 +668,8 @@ def get_discovery_participation_summary(
         summary["discovery_total"] = len(disc_nodes)
         try:
             summary["discovery_healthy"] = len(discovery.get_healthy_nodes())
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             summary["discovery_healthy"] = sum(
                 1 for n in disc_nodes.values()
                 if getattr(n, "state", None) is not None

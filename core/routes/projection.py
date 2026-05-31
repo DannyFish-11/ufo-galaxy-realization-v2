@@ -123,7 +123,8 @@ try:
     from core.final_acceptance_surface_boundary import (
         build_final_acceptance_surface_boundary as _build_final_acceptance_surface_boundary,
     )
-except Exception:  # pragma: no cover
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     _build_final_acceptance_surface_boundary = None  # type: ignore[assignment]
 
 # PR-4 (post-533 dual-repo runtime host unification): Canonical Session Truth
@@ -2922,6 +2923,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 "memberships": [m.to_dict() for m in memberships],
             }
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             payload = {
                 "mesh_id": "default_mesh",
                 "total": 0,
@@ -2981,6 +2983,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 payload = session.to_dict()
                 payload["error"] = str(exc)
             except Exception as inner_exc:
+                logger.debug("Fallback triggered: %s", inner_exc)
                 payload = {
                     "session_id": "",
                     "status": "unknown",
@@ -3063,6 +3066,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 )
                 result_dict = result.to_dict()
             except Exception as inner_exc:
+                logger.debug("Fallback triggered: %s", inner_exc)
                 result_dict = {
                     "success": False,
                     "status": "failed",
@@ -3438,8 +3442,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                             from contracts.registered_runtime_device import from_udm_device
 
                             runtime_devices.append(from_udm_device(dev).to_dict())
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.warning("Exception suppressed: %s", exc)
             except Exception as exc:
                 logger.debug("multi-device projection: devices unavailable: %s", exc)
 
@@ -3451,8 +3455,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 for dev_dict in runtime_devices:
                     try:
                         runtime_hosts.append(host_from_device(dev_dict).to_dict())
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
             except Exception as exc:
                 logger.debug("multi-device projection: hosts unavailable: %s", exc)
 
@@ -3464,8 +3468,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     try:
                         d = m.to_dict() if hasattr(m, "to_dict") else dict(m)
                         mesh_memberships.append(d)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Exception suppressed: %s", exc)
             except Exception as exc:
                 logger.debug("multi-device projection: memberships unavailable: %s", exc)
 
@@ -4620,8 +4624,8 @@ def _get_continuum_state_with_source() -> Tuple[Optional["ContinuumState"], str,
             state = engine.get_continuum_state()
             if state is not None:
                 return state, "cognitive_field_engine", True
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     try:
         # Fallback: desktop presence runtime if available.
@@ -4632,15 +4636,15 @@ def _get_continuum_state_with_source() -> Tuple[Optional["ContinuumState"], str,
             state = runtime.get_continuum_state()
             if state is not None:
                 return state, "desktop_presence_runtime", True
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     try:
         # Final fallback: minimal silent state so the board always renders.
         from core.continuum.types import ContinuumPhase, ContinuumState
 
         return ContinuumState(phase=ContinuumPhase.FORMLESS), "synthetic_formless_fallback", False
-    except Exception:
+    except Exception as exc:
         return None, "unavailable", False
 
 
@@ -4654,7 +4658,7 @@ def _get_route_plan(continuum_state):
         router = TopologyRouter(inventory)
         domain = continuum_state.runtime_domain or RuntimeDomain.LOCAL
         return router.route(continuum_state.tri_state_phase, domain)
-    except Exception:
+    except Exception as exc:
         return None
 
 
@@ -4672,9 +4676,9 @@ def _get_execution_summary() -> Optional[Any]:
             online = udm.get_online_devices() if hasattr(udm, "get_online_devices") else []
             device_ids = [d.device_id for d in online] if online else []
             return ExecutionSummary(active_device_ids=device_ids)
-        except Exception:
+        except Exception as exc:
             return None
-    except Exception:
+    except Exception as exc:
         return None
 
 
@@ -4774,8 +4778,8 @@ def _assemble_canonical_routing_payload() -> Dict[str, Any]:
                         for p in (inventory.providers or [])
                     ]
                 }
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         if model_supply:
             provider_status_summary = extract_provider_status_summary(model_supply)
@@ -4920,8 +4924,8 @@ def _assemble_projection_with_execution_policy() -> Dict[str, Any]:
             from core.orchestration_authority import AuthorityRole
 
             authority_role = AuthorityRole.AUTHORITATIVE_ENTRYPOINT
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         policy = resolve_policy(
             phase=phase_str,
@@ -4969,8 +4973,8 @@ def _assemble_projection_with_cross_device_routing() -> Dict[str, Any]:
             from core.orchestration_authority import AuthorityRole
 
             authority_role = AuthorityRole.AUTHORITATIVE_ENTRYPOINT
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         summary = resolve_routing_summary(
             runtime_domain=domain_str,
@@ -4985,7 +4989,8 @@ def _assemble_projection_with_cross_device_routing() -> Dict[str, Any]:
             from core.cross_device_policy import IDLE_ASSIGNMENT_SUMMARY
 
             base["cross_device_routing"] = IDLE_ASSIGNMENT_SUMMARY.to_dict()
-        except Exception:
+        except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             base["cross_device_routing"] = {"posture": "undecided", "is_cross_device": False}
         return base
 
@@ -5576,8 +5581,8 @@ def _assemble_server_canonicalization_status() -> Dict[str, Any]:
 
         _test_proj = DesktopStatusProjection()
         oneapi_integration_present = hasattr(_test_proj, "oneapi_integration")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     return {
         "canonicalization_stage": "pr5_server_side",
@@ -6006,7 +6011,8 @@ def _build_operational_state_board_from_contract(
         board["android_observability_alignment"] = dict(
             pr5.get("android_integration_expectations") or {}
         )
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         board["pr5_reliability_metrics"] = {}
         board["android_observability_alignment"] = {}
     return board
@@ -6023,8 +6029,8 @@ def _attach_operational_state_board(result: Dict[str, Any], route_paths: Any = N
             from core.operational_slo_metrics import get_operational_slo_metrics
 
             get_operational_slo_metrics().ingest_unified_state_contract(state_contract)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
         result["operational_readiness"] = {
             "authority": report.authority,
             "contract_version": report.contract_version,

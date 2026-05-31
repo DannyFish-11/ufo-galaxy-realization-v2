@@ -245,8 +245,8 @@ def _emit_aip_v3_webrtc_bind(binding: "WebRTCTaskBinding") -> None:
             asyncio.get_event_loop().create_task(nats.publish_webrtc_bind(msg))
         else:
             logger.debug("AIPV3-WEBRTC BIND: %s", msg.model_dump_json(exclude_none=True))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
 
 def _emit_aip_v3_webrtc_transport_state(
@@ -273,8 +273,8 @@ def _emit_aip_v3_webrtc_transport_state(
             asyncio.get_event_loop().create_task(nats.publish_webrtc_transport_state(msg))
         else:
             logger.debug("AIPV3-WEBRTC STATE: %s", msg.model_dump_json(exclude_none=True))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
 
 def _emit_aip_v3_webrtc_unbind(binding: "WebRTCTaskBinding") -> None:
@@ -297,8 +297,8 @@ def _emit_aip_v3_webrtc_unbind(binding: "WebRTCTaskBinding") -> None:
             asyncio.get_event_loop().create_task(nats.publish_webrtc_unbind(msg))
         else:
             logger.debug("AIPV3-WEBRTC UNBIND: %s", msg.model_dump_json(exclude_none=True))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
 
 # ---------------------------------------------------------------------------

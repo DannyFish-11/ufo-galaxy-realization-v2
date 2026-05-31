@@ -209,7 +209,8 @@ def get_capability_runtime_snapshot() -> Dict[str, Any]:
         from .capability_registry_runtime import CapabilityRuntimeRegistry
         registry = CapabilityRuntimeRegistry.get_instance()
         summaries = registry.list_summaries()
-    except Exception:  # pragma: no cover
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         summaries = []
 
     caps_dict: Dict[str, Any] = {}
@@ -248,7 +249,8 @@ def attach_runtime_summary_to_projection(
         from .capability_registry_runtime import CapabilityRuntimeRegistry
         registry = CapabilityRuntimeRegistry.get_instance()
         summary = registry.get_summary(capability_name)
-    except Exception:  # pragma: no cover
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         summary = UNKNOWN_CAPABILITY_SUMMARY
 
     result = dict(projection)

@@ -418,6 +418,7 @@ def create_audit_middleware(app, audit_logger: Optional[AuditLogger] = None):
 
                 return response
             except Exception as e:
+                _logger.debug("Fallback triggered: %s", e)
                 entry.status_code = 500
                 entry.error = str(e)[:200]
                 entry.latency_ms = (time.time() - start_time) * 1000

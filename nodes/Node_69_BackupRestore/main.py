@@ -576,6 +576,7 @@ class BackupService:
                     data = json.load(f)
             readable = True
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             readable = False
         
         return {

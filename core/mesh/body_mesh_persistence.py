@@ -315,8 +315,8 @@ class BodyMeshPersistenceStore:
             try:
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
 
 # ---------------------------------------------------------------------------

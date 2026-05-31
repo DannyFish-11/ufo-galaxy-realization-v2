@@ -307,6 +307,7 @@ class NodeFactory:
                 return True
 
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             instance.state = NodeState.ERROR
             instance.health_status = f"error: {str(e)[:100]}"
             logger.error(f"Failed to start instance {instance_id}: {e}")
@@ -338,6 +339,7 @@ class NodeFactory:
             return True
             
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             instance.state = NodeState.ERROR
             logger.error(f"Failed to stop instance {instance_id}: {e}")
             return False

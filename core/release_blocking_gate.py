@@ -556,6 +556,7 @@ def evaluate_release_gate(raise_on_failure: bool = False) -> ReleaseGateDecision
         try:
             status, detail = evaluator()
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             status = CriterionStatus.UNKNOWN
             detail = f"Evaluator raised: {exc}"
         results.append(

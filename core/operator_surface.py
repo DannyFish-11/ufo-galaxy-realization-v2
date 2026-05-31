@@ -117,7 +117,7 @@ try:
         AndroidCanonicalExecutionEvent,
         FlowOperatorProjection,
     )
-except Exception:  # pragma: no cover
+except Exception as exc:
     pass  # graceful degradation if module is unavailable
 
 # PR-3: Operator action contract re-exports — lazy so callers that only need
@@ -132,7 +132,7 @@ try:
         OPERATOR_ACTION_ENTRY_MODE,
         build_operator_action_result_from_runtime_result,
     )
-except Exception:  # pragma: no cover
+except Exception as exc:
     pass  # graceful degradation if module is unavailable
 
 __all__ = [
@@ -930,21 +930,23 @@ class OperatorSurface:
             origin_val = ""
             try:
                 origin_val = task.intent.origin.value
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 origin_val = str(getattr(task.intent, "origin", ""))
 
             lifecycle_val = ""
             try:
                 lifecycle_val = task.lifecycle.value
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 lifecycle_val = str(task.lifecycle)
 
             failure_domain_val = ""
             try:
                 fd = task.result.failure_domain
                 failure_domain_val = fd.value if hasattr(fd, "value") else str(fd)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             return TaskInspection(
                 task_id=task.identity.task_id,
@@ -1028,12 +1030,14 @@ class OperatorSurface:
             kind_val = ""
             try:
                 kind_val = exec_profile.participant_kind.value
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 kind_val = str(getattr(exec_profile, "participant_kind", ""))
             presence_val = ""
             try:
                 presence_val = presence.presence_state.value
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 presence_val = str(getattr(presence, "presence_state", ""))
             return ExecutorInspection(
                 node_id=record.node_id,
@@ -1070,13 +1074,14 @@ class OperatorSurface:
             try:
                 fd = task.result.failure_domain
                 failure_domain_val = fd.value if hasattr(fd, "value") else str(fd)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             lifecycle_val = ""
             try:
                 lifecycle_val = task.lifecycle.value
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 lifecycle_val = str(task.lifecycle)
 
             # Retry / fallback count from task graph runtime
@@ -1094,8 +1099,8 @@ class OperatorSurface:
                     fallback_triggered = True
                     last_fb = fallback_chain[-1]
                     fallback_target = last_fb.fallback_task_id
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
             return FailureDomainInspection(
                 task_id=task.identity.task_id,
@@ -1138,8 +1143,8 @@ class OperatorSurface:
             retry_chain = [r.retry_task_id for r in tgr.get_retry_lineage(task_id)]
             fallback_chain = [fb.fallback_task_id for fb in tgr.get_fallback_lineage(task_id)]
             tgr_node = tgr.get_node_by_task_id(task_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # ── Try canonical task for rich timeline/ancestry data ────────────
         try:
@@ -1189,7 +1194,8 @@ class OperatorSurface:
                                 "source": "replay_foundation",
                             })
                     timeline.sort(key=lambda e: e["ts"])
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Fallback triggered: %s", exc)
                     timeline.sort(key=lambda e: e["ts"])
 
                 return LineageInspection(
@@ -1202,8 +1208,8 @@ class OperatorSurface:
                     fallback_chain=fallback_chain,
                     timeline=timeline,
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
         # ── PR-508: Fall back to TaskGraphRuntime-only lineage ────────────
         if tgr_node is not None:
@@ -1249,7 +1255,7 @@ class OperatorSurface:
         """
         try:
             from core.task_envelope_lifecycle_registry import get_lifecycle_registry
-        except Exception:
+        except Exception as exc:
             return None
 
         trace_id = ""
@@ -1316,8 +1322,8 @@ class OperatorSurface:
                 ct = get_canonical_task_runtime().get_by_task_id(task_id)
                 if ct is not None:
                     trace_id = ct.identity.trace_id
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
 
         if not recovery_note and current_owner:
             recovery_note = f"Task currently pending under owner={current_owner!r}."
@@ -1348,7 +1354,7 @@ class OperatorSurface:
             from core.hybrid_orchestration_continuity import (
                 get_continuity_registry,
             )
-        except Exception:
+        except Exception as exc:
             return None
 
         try:
@@ -1362,7 +1368,8 @@ class OperatorSurface:
             lifecycle_val = ""
             try:
                 lifecycle_val = rec.lifecycle_state.value
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fallback triggered: %s", exc)
                 lifecycle_val = str(rec.lifecycle_state)
             return PartialResultInspection(
                 task_id=task_id,
@@ -1421,7 +1428,7 @@ class OperatorSurface:
         insp = AuditEvidenceInspection(task_id=task_id)
         try:
             from core.replay_audit_persistence import get_replay_audit_store
-        except Exception:
+        except Exception as exc:
             return insp
 
         try:

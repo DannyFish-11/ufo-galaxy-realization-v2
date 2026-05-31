@@ -708,7 +708,7 @@ def _get_governance_evaluator():  # type: ignore[return]
         )
 
         return get_governance_evaluator()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
         return None
 
 
@@ -722,7 +722,7 @@ def _get_acceptance_gate():  # type: ignore[return]
         from core.delegated_flow_acceptance_gate import get_acceptance_gate
 
         return get_acceptance_gate()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
         return None
 
 
@@ -736,7 +736,7 @@ def _get_readiness_gate():  # type: ignore[return]
         from core.delegated_flow_readiness_gate import get_readiness_gate
 
         return get_readiness_gate()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
         return None
 
 
@@ -750,7 +750,7 @@ def _get_truth_ownership():  # type: ignore[return]
         from core.flow_level_truth_ownership import get_truth_ownership
 
         return get_truth_ownership()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
         return None
 
 
@@ -764,7 +764,7 @@ def _get_result_convergence():  # type: ignore[return]
         from core.flow_aware_result_convergence import get_result_convergence
 
         return get_result_convergence()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
         return None
 
 
@@ -778,7 +778,7 @@ def _get_continuity_coordinator():  # type: ignore[return]
         from core.flow_continuity_coordinator import get_continuity_coordinator
 
         return get_continuity_coordinator()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
         return None
 
 
@@ -794,7 +794,7 @@ def _get_compat_blocking():  # type: ignore[return]
         )
 
         return get_compat_blocking()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
         return None
 
 
@@ -927,7 +927,7 @@ class DelegatedFlowStrategyEvaluator:
             report = gov_evaluator.evaluate()
             report_id: str = getattr(report, "report_id", "")
             return report, report_id
-        except Exception:  # noqa: BLE001
+        except Exception as exc:
             return None, ""
 
     def _fetch_acceptance_report(
@@ -948,7 +948,7 @@ class DelegatedFlowStrategyEvaluator:
             report = acceptance_gate.evaluate()
             report_id: str = getattr(report, "report_id", "")
             return report, report_id
-        except Exception:  # noqa: BLE001
+        except Exception as exc:
             return None, ""
 
     # ------------------------------------------------------------------
@@ -1012,8 +1012,8 @@ class DelegatedFlowStrategyEvaluator:
             if hasattr(acceptance_report, "to_dict"):
                 try:
                     evidence["acceptance_report"] = acceptance_report.to_dict()
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as exc:
+                    logger.debug("Suppressed: %s", exc)
 
         # Check governance for truth/result violations
         if governance_report is not None:
@@ -1035,8 +1035,8 @@ class DelegatedFlowStrategyEvaluator:
             if hasattr(governance_report, "to_dict"):
                 try:
                     evidence["governance_report"] = governance_report.to_dict()
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as exc:
+                    logger.debug("Suppressed: %s", exc)
 
         # Check FlowLevelTruthOwnership directly
         truth_obj = _get_truth_ownership()
@@ -1050,8 +1050,8 @@ class DelegatedFlowStrategyEvaluator:
                         "FlowLevelTruthOwnership reports unresolved truth "
                         "contracts (contract stability at risk)."
                     )
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed: %s", exc)
 
         if at_risk:
             return DimensionStrategyResult(
@@ -1099,8 +1099,8 @@ class DelegatedFlowStrategyEvaluator:
         if hasattr(governance_report, "to_dict"):
             try:
                 evidence = governance_report.to_dict()
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed: %s", exc)
 
         verdict = getattr(governance_report, "verdict", None)
         if verdict is None:
@@ -1195,8 +1195,8 @@ class DelegatedFlowStrategyEvaluator:
             if hasattr(acceptance_report, "to_dict"):
                 try:
                     evidence["acceptance_report"] = acceptance_report.to_dict()
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as exc:
+                    logger.debug("Suppressed: %s", exc)
 
         # Check readiness gate
         readiness_gate = _get_readiness_gate()
@@ -1214,10 +1214,10 @@ class DelegatedFlowStrategyEvaluator:
                 if hasattr(readiness_report, "to_dict"):
                     try:
                         evidence["readiness_report"] = readiness_report.to_dict()
-                    except Exception:  # noqa: BLE001
-                        pass
-            except Exception:  # noqa: BLE001
-                pass
+                    except Exception as exc:
+                        logger.debug("Suppressed: %s", exc)
+            except Exception as exc:
+                logger.debug("Suppressed: %s", exc)
 
         # Check governance for compat_bypass violation
         if governance_report is not None:
@@ -1296,8 +1296,8 @@ class DelegatedFlowStrategyEvaluator:
         if hasattr(governance_report, "to_dict"):
             try:
                 evidence = governance_report.to_dict()
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed: %s", exc)
 
         violations = getattr(governance_report, "violations", None)
         if violations is None:
@@ -1401,8 +1401,8 @@ class DelegatedFlowStrategyEvaluator:
             if hasattr(governance_report, "to_dict"):
                 try:
                     evidence["governance_report"] = governance_report.to_dict()
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as exc:
+                    logger.debug("Suppressed: %s", exc)
 
         # Check result convergence for quarantined results
         convergence_obj = _get_result_convergence()
@@ -1417,8 +1417,8 @@ class DelegatedFlowStrategyEvaluator:
                         "FlowAwareResultConvergence reports quarantined "
                         "results; cross-subsystem result/truth coupling risk."
                     )
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed: %s", exc)
 
         # Check continuity coordinator for replay contract gaps
         continuity_obj = _get_continuity_coordinator()
@@ -1433,8 +1433,8 @@ class DelegatedFlowStrategyEvaluator:
                         "FlowContinuityCoordinator reports a replay contract "
                         "gap; continuity/execution coupling risk."
                     )
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed: %s", exc)
 
         # Check compat blocking for active bypass
         compat_obj = _get_compat_blocking()
@@ -1450,8 +1450,8 @@ class DelegatedFlowStrategyEvaluator:
                         "active bypass; compat leakage can affect multiple "
                         "subsystems (cross-subsystem coupling risk)."
                     )
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed: %s", exc)
 
         if not any_signal:
             return DimensionStrategyResult(

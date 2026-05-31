@@ -12,7 +12,8 @@ from nodes.common.cors_config import get_cors_origins
 try:
     from core.port_config import get_node_port
     PORT = get_node_port("Node_44_NFC")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     PORT = int(os.getenv("PORT", "8044"))
 
 try:
@@ -67,8 +68,8 @@ async def list_devices():
                 clf = nfc.ContactlessFrontend(name)
                 clf.close()
                 devices.append(name)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return {"success": True, "devices": devices}
     except Exception as e:
         return {"success": False, "error": str(e)}

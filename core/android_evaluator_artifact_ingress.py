@@ -102,7 +102,8 @@ try:
     import logging as _logging
 
     _logger = _logging.getLogger(logger_name)
-except Exception:  # pragma: no cover
+except Exception as exc:
+    _logger.debug("Fallback triggered: %s", exc)
     _logger = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
@@ -640,6 +641,7 @@ def ingest_android_evaluator_artifact(
                     f" was_reconciled={truth_reconcile_outcome.was_reconciled}"
                 )
         except Exception as exc:  # noqa: BLE001
+            _logger.debug("Fallback triggered: %s", exc)
             reject_reason = f"truth_ingress_error:{exc}"
             if _logger:
                 _logger.warning(

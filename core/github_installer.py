@@ -233,8 +233,8 @@ class _ManifestStore:
         if self._path.exists():
             try:
                 return json.loads(self._path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
         return {"addons": {}}
 
     def _save(self, data: Dict[str, Any]) -> None:
@@ -498,6 +498,7 @@ def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[s
             return {"success": False, "error": "mcp_tool.json missing 'entrypoint' field"}
         contract = None  # type: ignore[assignment]
     except Exception as exc:  # MCPAddonContractError or TypeError
+        logger.debug("Fallback triggered: %s", exc)
         violations = getattr(exc, "violations", [str(exc)])
         addon_name = tool_manifest.get("name", "")
         logger.warning(
@@ -733,7 +734,8 @@ def _verify_callable_skill_install(
     try:
         validate_skill_package_contract(skill_manifest)
         contract_valid = True
-    except Exception:
+    except Exception as exc:
+        logger.debug("Fallback triggered: %s", exc)
         contract_valid = False
 
     loaded = skill_loader.get_skill(skill_id) or {}
@@ -810,8 +812,8 @@ def _publish_install_truth(payload: Dict[str, Any]) -> None:
         from core.state_event_bus import emit, StateEventType
 
         emit(StateEventType.GENERIC, "github_installer", {"event": "github_install_result", **payload})
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
     try:
         from core.routes._shared import broadcast_event
@@ -826,8 +828,8 @@ def _publish_install_truth(payload: Dict[str, Any]) -> None:
             asyncio.run(_do_broadcast())
             return
         loop.create_task(_do_broadcast())
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
 
 def _unregister_mcp_tool(name: str) -> bool:
@@ -978,6 +980,7 @@ class GitHubInstaller:
                 from core.mcp_addon_contract import validate_mcp_addon_contract, MCPAddonContractError
                 validate_mcp_addon_contract(tool_manifest)
             except Exception as contract_exc:
+                logger.debug("Fallback triggered: %s", contract_exc)
                 violations = getattr(contract_exc, "violations", [str(contract_exc)])
                 logger.warning(
                     "MCP addon contract validation failed for %s/%s: %s",
@@ -1516,7 +1519,8 @@ class GitHubRepoIngester:
             if text:
                 try:
                     manifests[mfile] = json.loads(text)
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Fallback triggered: %s", exc)
                     manifests[mfile] = text
         for mfile in ("pyproject.toml", "setup.cfg"):
             text = _fetch_file_content_api(owner, repo, mfile, effective_ref)

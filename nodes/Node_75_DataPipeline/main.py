@@ -16,7 +16,8 @@ from nodes.common.cors_config import get_cors_origins
 try:
     from core.port_config import get_node_port
     PORT = get_node_port("Node_75_DataPipeline")
-except Exception:
+except Exception as exc:
+    logger.debug("Fallback triggered: %s", exc)
     PORT = int(os.getenv("PORT", "8075"))
 
 MAX_WORKERS = int(os.getenv("PIPELINE_MAX_WORKERS", "4"))
@@ -162,6 +163,7 @@ async def _execute_pipeline(pipeline_id: str) -> None:
             pipeline["completed_at"] = datetime.now().isoformat()
             pipeline["output_rows"] = len(data)
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             pipeline["status"] = PipelineStatus.FAILED
             pipeline["error"] = str(e)
             pipeline["completed_at"] = datetime.now().isoformat()

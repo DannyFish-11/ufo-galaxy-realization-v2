@@ -139,7 +139,7 @@ def _get_lan_ip() -> str:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
-    except Exception:
+    except Exception as exc:
         return ""
 
 
@@ -151,8 +151,8 @@ def _try_emit_event(event_type_name: str, data: dict) -> None:
         et = getattr(EventType, event_type_name, None)
         if et is not None:
             event_bus.publish_sync(et, "agentic_os", data)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -333,7 +333,7 @@ class NATSBus:
             for name, cfg in _STREAMS.items():
                 try:
                     await self._js.find_stream_name_by_subject(cfg["subjects"][0].replace(">", "*"))
-                except Exception:
+                except Exception as exc:
                     from nats.js.api import StreamConfig
 
                     await self._js.add_stream(
@@ -358,6 +358,7 @@ class NATSBus:
             return {"success": True}
 
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             self._stats["errors"] += 1
             if self._auto_local:
                 # Auto-local default failed — try embedded server as fallback
@@ -391,8 +392,8 @@ class NATSBus:
             for sub in self._subscriptions:
                 try:
                     await sub.unsubscribe()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
             self._subscriptions.clear()
             self._subscription_metadata.clear()
             await self._nc.drain()
@@ -963,7 +964,7 @@ class NATSBus:
         """
         try:
             from core.aip_v3_nats_adapter import from_aip_to_legacy  # noqa: PLC0415
-        except Exception:
+        except Exception as exc:
             # Adapter unavailable — return callback as-is
             return callback
 
@@ -1038,6 +1039,7 @@ class NATSBus:
             logger.debug(f"NATSBus: published to {subject} (seq={ack.seq})")
             return {"success": True, "seq": ack.seq}
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             self._stats["errors"] += 1
             logger.error(f"NATSBus: publish failed on {subject} — {exc}")
             return {"success": False, "error": str(exc)}
@@ -1086,6 +1088,7 @@ class NATSBus:
                 result["subscription"] = sub
             return result
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             self._stats["errors"] += 1
             logger.error(f"NATSBus: subscribe failed on {subject} — {exc}")
             return {"success": False, "error": str(exc)}
@@ -1110,6 +1113,7 @@ class NATSBus:
             self._subscription_metadata.pop(id(subscription), None)
             return {"success": True}
         except Exception as exc:
+            logger.debug("Fallback triggered: %s", exc)
             self._stats["errors"] += 1
             return {"success": False, "error": str(exc)}
 
@@ -1177,5 +1181,5 @@ def _absorb_nats_state(is_connected: bool, url: str = "") -> None:
 
         from core.capability_network_runtime_policy import absorb_nats_connectivity_event
         absorb_nats_connectivity_event(is_connected=is_connected, host=host, port=port)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Exception suppressed: %s", exc)

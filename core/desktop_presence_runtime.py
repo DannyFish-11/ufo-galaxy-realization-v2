@@ -222,8 +222,8 @@ class RuntimeSession:
                     trace_id=self.trace_id,
                     runtime_session_id=self.runtime_session_id,
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Phase change notification failed: %s", exc)
 
         # PR-CROSS-DEVICE-SYNC: proactively push phase change to all connected Android devices.
         # This is fire-and-forget: failures are logged and swallowed.
@@ -237,8 +237,8 @@ class RuntimeSession:
                 source=self.source,
                 trace_id=self.trace_id,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Runtime session cleanup failed: %s", exc)
 
     def elapsed_ms(self) -> float:
         """Return elapsed milliseconds since session creation."""
@@ -763,7 +763,8 @@ class DesktopPresenceRuntime:
                 V2_AUTHORITY as _v2_authority,
                 V2_SEMANTIC_AUTHORITY as _v2_semantic_authority,
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("Authority boundary import failed (%s), using defaults", exc)
             _v2_semantic_authority = "v2_openclawd"
             _v2_authority = "v2_authority"
             _android_authority_boundary = "android_participation_under_v2_authority"

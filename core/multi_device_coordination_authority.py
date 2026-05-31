@@ -680,5 +680,5 @@ def record_coordination_role(rec: CoordinationRoleRecord) -> None:
         return
     try:
         get_coordination_role_runtime().record(rec)
-    except Exception:  # pragma: no cover
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed: %s", exc)

@@ -145,6 +145,7 @@ class RecoveryStrategy:
             await handler(context)
             result.status = RecoveryStatus.SUCCESS
         except Exception as e:
+            logger.debug("Fallback triggered: %s", e)
             result.status = RecoveryStatus.FAILED
             result.error_message = str(e)
         finally:
