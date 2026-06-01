@@ -32,7 +32,8 @@ class EmbeddedNATSServer:
         if not shutil.which("nats-server"):
             logger.info("nats-server not found, attempting auto-install...")
             if not await self._install():
-                logger.error("Failed to install nats-server")
+                logger.warning("nats-server not available — cross-device bus disabled. "
+                               "Install nats-server manually or set GALAXY_NATS_ENABLED=false")
                 return False
 
         # 启动

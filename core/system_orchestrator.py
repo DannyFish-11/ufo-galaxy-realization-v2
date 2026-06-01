@@ -585,11 +585,11 @@ class SystemOrchestrator:
                         status=PhaseStatus.DEGRADED,
                         detail=f"npm install failed: {npm_result.stderr[:200]}",
                     )
-            except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+            except (subprocess.TimeoutExpired, FileNotFoundError):
                 return PhaseResult(
                     phase=StartupPhase.DESKTOP_SURFACE,
                     status=PhaseStatus.DEGRADED,
-                    detail=f"npm install unavailable: {exc}",
+                    detail="Electron GUI skipped (Node.js not installed)",
                 )
 
         # Launch Electron as detached subprocess

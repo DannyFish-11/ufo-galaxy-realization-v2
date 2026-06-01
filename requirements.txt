@@ -146,3 +146,8 @@ paramiko>=3.0
 # Publishes _galaxy._tcp so Wear OS / Android can discover the gateway
 # on the same LAN without manual IP entry.
 zeroconf>=0.132.0
+
+# ============================================================================
+# Optional: RSS feed parsing (silently ignored if not installed)
+# ============================================================================
+feedparser>=6.0.0
