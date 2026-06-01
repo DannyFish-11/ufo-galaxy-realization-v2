@@ -139,3 +139,10 @@ protobuf>=4.25.0
 # Remote SSH (Linux Agent node)
 # ============================================================================
 paramiko>=3.0
+
+# ============================================================================
+# Local Network Auto-Discovery (mDNS / Zeroconf)
+# ============================================================================
+# Publishes _galaxy._tcp so Wear OS / Android can discover the gateway
+# on the same LAN without manual IP entry.
+zeroconf>=0.132.0
