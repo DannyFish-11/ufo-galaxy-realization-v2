@@ -616,7 +616,11 @@ async def handle_command(connection_id: str, aip_msg):
     """处理命令（设备发起的命令，接受 AIPMessage 对象）"""
     try:
         command_text = aip_msg.payload.get("command", "")
-        result = await device_router.route_task(command_text)
+        # PR-WEAROS: pass full payload (voice text, source device) so the router
+        # can access the actual user transcript, not just the command name.
+        _payload = aip_msg.payload.get("payload", {})
+        context = {"payload": _payload, "device_id": aip_msg.device_id}
+        result = await device_router.route_task(command_text, context)
 
         # 发送 AIP v3 命令结果响应
         response = {
