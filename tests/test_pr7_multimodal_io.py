@@ -186,7 +186,7 @@ class TestAudioCaptureService:
                 pass
 
             with patch.object(svc._pipeline, "run", side_effect=_noop):
-                asyncio.get_event_loop().run_until_complete(svc.start())
+                asyncio.get_running_loop().run_until_complete(svc.start())
 
         started = [e for e in received if e.event_type == MultimodalEventType.AUDIO_STREAM_STARTED]
         assert len(started) >= 1
@@ -196,7 +196,7 @@ class TestAudioCaptureService:
         received: List[MultimodalEvent] = _collect_events(svc)
 
         with patch.object(type(svc), "is_available", new_callable=PropertyMock, return_value=False):
-            asyncio.get_event_loop().run_until_complete(svc.start())
+            asyncio.get_running_loop().run_until_complete(svc.start())
 
         started = [e for e in received if e.event_type == MultimodalEventType.AUDIO_STREAM_STARTED]
         assert len(started) == 0
@@ -204,7 +204,7 @@ class TestAudioCaptureService:
     def test_stop_emits_stopped_event(self):
         svc = AudioCaptureService()
         received: List[MultimodalEvent] = _collect_events(svc)
-        asyncio.get_event_loop().run_until_complete(svc.stop())
+        asyncio.get_running_loop().run_until_complete(svc.stop())
         stopped = [e for e in received if e.event_type == MultimodalEventType.AUDIO_STREAM_STOPPED]
         assert len(stopped) >= 1
 
@@ -259,7 +259,7 @@ class TestAudioCaptureService:
         )
         svc = AudioCaptureService(config=cfg)
         received: List[MultimodalEvent] = _collect_events(svc)
-        asyncio.get_event_loop().run_until_complete(svc.stop())
+        asyncio.get_running_loop().run_until_complete(svc.stop())
         for event in received:
             assert event.trace_id == "trace-abc"
             assert event.runtime_session_id == "sess-xyz"
@@ -281,7 +281,7 @@ class TestAudioCaptureService:
                     assert task1 is task2
                     await svc.stop()
 
-                asyncio.get_event_loop().run_until_complete(_double_start())
+                asyncio.get_running_loop().run_until_complete(_double_start())
 
 
 # ===========================================================================
@@ -323,7 +323,7 @@ class TestWebRTCSessionManager:
         received: List[MultimodalEvent] = _collect_events(mgr)
 
         with patch.object(type(mgr), "is_available", new_callable=PropertyMock, return_value=False):
-            result = asyncio.get_event_loop().run_until_complete(mgr.connect("fake-sdp"))
+            result = asyncio.get_running_loop().run_until_complete(mgr.connect("fake-sdp"))
 
         assert result is None
         errors = [e for e in received if e.event_type == MultimodalEventType.WEBRTC_SESSION_ERROR]
@@ -333,7 +333,7 @@ class TestWebRTCSessionManager:
     def test_close_emits_stopped_event(self):
         mgr = WebRTCSessionManager()
         received: List[MultimodalEvent] = _collect_events(mgr)
-        asyncio.get_event_loop().run_until_complete(mgr.close())
+        asyncio.get_running_loop().run_until_complete(mgr.close())
         stopped = [e for e in received if e.event_type == MultimodalEventType.WEBRTC_SESSION_STOPPED]
         assert len(stopped) >= 1
 
@@ -346,7 +346,7 @@ class TestWebRTCSessionManager:
             with patch.object(
                 mgr._session, "connect", new_callable=AsyncMock, return_value="answer-sdp"
             ):
-                answer = asyncio.get_event_loop().run_until_complete(mgr.connect("offer"))
+                answer = asyncio.get_running_loop().run_until_complete(mgr.connect("offer"))
 
         assert answer == "answer-sdp"
         started = [e for e in received if e.event_type == MultimodalEventType.WEBRTC_SESSION_STARTED]
@@ -361,7 +361,7 @@ class TestWebRTCSessionManager:
             with patch.object(
                 mgr._session, "connect", new_callable=AsyncMock, return_value=None
             ):
-                result = asyncio.get_event_loop().run_until_complete(mgr.connect("offer"))
+                result = asyncio.get_running_loop().run_until_complete(mgr.connect("offer"))
 
         assert result is None
         errors = [e for e in received if e.event_type == MultimodalEventType.WEBRTC_SESSION_ERROR]
@@ -369,7 +369,7 @@ class TestWebRTCSessionManager:
 
     def test_reconnect_without_prior_offer_returns_none(self):
         mgr = WebRTCSessionManager()
-        result = asyncio.get_event_loop().run_until_complete(mgr.reconnect())
+        result = asyncio.get_running_loop().run_until_complete(mgr.reconnect())
         assert result is None
 
     def test_reconnect_emits_reconnecting_event(self):
@@ -382,7 +382,7 @@ class TestWebRTCSessionManager:
         with patch.object(
             mgr._session, "connect", new_callable=AsyncMock, return_value="answer"
         ):
-            asyncio.get_event_loop().run_until_complete(mgr.reconnect())
+            asyncio.get_running_loop().run_until_complete(mgr.reconnect())
 
         reconnecting = [
             e for e in received if e.event_type == MultimodalEventType.WEBRTC_RECONNECTING
@@ -398,7 +398,7 @@ class TestWebRTCSessionManager:
         mgr._reconnect_attempts = 2  # already at max
         received: List[MultimodalEvent] = _collect_events(mgr)
 
-        result = asyncio.get_event_loop().run_until_complete(mgr.reconnect())
+        result = asyncio.get_running_loop().run_until_complete(mgr.reconnect())
 
         assert result is None
         stopped = [e for e in received if e.event_type == MultimodalEventType.WEBRTC_SESSION_STOPPED]
@@ -411,7 +411,7 @@ class TestWebRTCSessionManager:
         )
         mgr = WebRTCSessionManager(config=cfg)
         received: List[MultimodalEvent] = _collect_events(mgr)
-        asyncio.get_event_loop().run_until_complete(mgr.close())
+        asyncio.get_running_loop().run_until_complete(mgr.close())
         for event in received:
             assert event.trace_id == "trace-xyz"
             assert event.runtime_session_id == "sess-abc"
@@ -455,7 +455,7 @@ class TestTransportRouterFallback:
             with patch.object(router, "_is_method_available", return_value=False):
                 return await router.route(req)
 
-        resp = asyncio.get_event_loop().run_until_complete(_run())
+        resp = asyncio.get_running_loop().run_until_complete(_run())
         assert resp.success
 
         fallbacks = [e for e in received if e.event_type == MultimodalEventType.TRANSPORT_FALLBACK]
@@ -477,7 +477,7 @@ class TestTransportRouterFallback:
 
         req = TransportRequest(device_id="dev-2", task_type="interactive")
 
-        asyncio.get_event_loop().run_until_complete(router.route(req))
+        asyncio.get_running_loop().run_until_complete(router.route(req))
         fallbacks = [e for e in received if e.event_type == MultimodalEventType.TRANSPORT_FALLBACK]
         assert len(fallbacks) == 0
 
@@ -502,7 +502,7 @@ class TestTransportRouterFallback:
             with patch.object(router, "_is_method_available", return_value=True):
                 return await router.route(req)
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.get_running_loop().run_until_complete(_run())
         fallbacks = [e for e in received if e.event_type == MultimodalEventType.TRANSPORT_FALLBACK]
         assert len(fallbacks) == 0
 

@@ -713,7 +713,7 @@ class TestIntegrationWithRuntimeLayers:
     """Verify arch_layer_id hooks in key module response dicts."""
 
     def _run(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.get_running_loop().run_until_complete(coro)
 
     def test_desktop_presence_runtime_stamps_arch_layer_id(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime, TriState
@@ -886,7 +886,7 @@ class TestBackwardCompatibility:
 
         with patch("core.desktop_presence_runtime.DesktopPresenceRuntime._create_session",
                    return_value=mock_session):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.get_running_loop().run_until_complete(
                 runtime.handle_request("hello", source="test")
             )
 

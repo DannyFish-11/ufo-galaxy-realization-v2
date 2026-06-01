@@ -197,7 +197,7 @@ class TestOpenClawdRemoteCommandMode:
                     payload={},
                 )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
 
         assert len(captured) == 1
         env = captured[0]
@@ -244,7 +244,7 @@ class TestOpenClawdRemoteAgentMode:
                 )
             return result
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
 
         assert result.get("metadata", {}).get("remote_execution_mode") == "agent_runtime"
 
@@ -287,7 +287,7 @@ class TestOpenClawdRemoteAgentMode:
                     device_id="dev_003",
                 )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
 
         assert len(captured_envelopes) >= 1
         modes = [
@@ -354,7 +354,7 @@ class TestCommandRouterPreservesMode:
                         ):
                             return await cr.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result.get("remote_execution_mode") == "agent_runtime"
 
     def test_command_only_appears_in_result(self):
@@ -393,7 +393,7 @@ class TestCommandRouterPreservesMode:
                         ):
                             return await cr.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result.get("remote_execution_mode") == "command_only"
 
     def test_none_mode_not_added_to_result(self):
@@ -431,7 +431,7 @@ class TestCommandRouterPreservesMode:
                         ):
                             return await cr.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         # When mode is None, route_envelope must NOT inject the key
         assert "remote_execution_mode" not in result
 
@@ -480,7 +480,7 @@ class TestCommandRouterDispatchAgent:
                             task_id="task_001",
                         )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result.get("remote_execution_mode") == "agent_runtime"
 
     def test_deploy_then_execute_result_carries_agent_runtime(self):
@@ -537,7 +537,7 @@ class TestCommandRouterDispatchAgent:
                                 task_id="task_002",
                             )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result.get("remote_execution_mode") == "agent_runtime"
 
 
@@ -613,6 +613,6 @@ class TestBackwardCompatibility:
                     task_id="task_001",
                 )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
         assert len(captured) == 1
         assert captured[0].remote_execution_mode is None

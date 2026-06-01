@@ -543,7 +543,7 @@ class HostLLMInteractionStrategy(BaseProcessingStrategy):
             try:
                 # 🔧 FIX: Run synchronous LLM call in thread executor to avoid blocking event loop
                 # This prevents WebSocket ping/pong timeout during long LLM responses
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 response_text, cost = await loop.run_in_executor(
                     None,  # Use default ThreadPoolExecutor
                     host_agent.get_response,

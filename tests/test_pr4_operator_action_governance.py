@@ -967,7 +967,7 @@ class TestOperatorSurfacePR4Integration:
         from core.operator_surface import get_operator_surface
         request = OperatorActionRequest(action_kind=action_kind, **kwargs)
         surface = get_operator_surface()
-        return asyncio.get_event_loop().run_until_complete(
+        return asyncio.get_running_loop().run_until_complete(
             surface.execute_operator_action(request)
         )
 

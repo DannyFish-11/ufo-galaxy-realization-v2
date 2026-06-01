@@ -1017,7 +1017,7 @@ class TestIntegrationWithRealModules:
             return await oc.process("hello", session_id="test-int-16")
 
         try:
-            response = asyncio.get_event_loop().run_until_complete(_run())
+            response = asyncio.get_running_loop().run_until_complete(_run())
         except Exception:
             # If LLM is unavailable, we can't get a live response — skip live test
             return

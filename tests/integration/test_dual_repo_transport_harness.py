@@ -332,7 +332,7 @@ class TestDispatchResultWaiterUnblock:
         )
 
         # Step 2: install a Future that represents the V2 dispatch waiter
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         bridge._pending_responses[task_id] = future
 

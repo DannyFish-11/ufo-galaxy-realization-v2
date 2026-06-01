@@ -76,7 +76,7 @@ class TestRequireAuth:
         import asyncio
         monkeypatch.delenv("GALAXY_AUTH_ENABLED", raising=False)
         from core.auth import require_auth
-        result = asyncio.get_event_loop().run_until_complete(require_auth())
+        result = asyncio.get_running_loop().run_until_complete(require_auth())
         assert result["authenticated"] is True
         assert result["auth_enabled"] is False
 

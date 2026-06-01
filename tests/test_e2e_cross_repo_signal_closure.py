@@ -149,7 +149,7 @@ _skip_delegated_ingress = pytest.mark.skipif(
 def _run(coro):
     import asyncio
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         if loop.is_closed():
             raise RuntimeError("closed")
         return loop.run_until_complete(coro)

@@ -247,7 +247,7 @@ def _make_websocket() -> MagicMock:
 
 class TestHandoffV2ResultGateEnforcement:
     def _run(self, coro: Any) -> Any:
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.get_running_loop().run_until_complete(coro)
 
     def test_handoff_result_missing_schema_version_rejected(self) -> None:
         from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
@@ -340,7 +340,7 @@ class TestHandoffV2ResultGateEnforcement:
 
 class TestTaskResultGateEnforcement:
     def _run(self, coro: Any) -> Any:
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.get_running_loop().run_until_complete(coro)
 
     def test_task_result_missing_schema_version_degrades_to_truth_chain(self) -> None:
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_result
@@ -456,7 +456,7 @@ class TestTaskResultGateEnforcement:
 
 class TestDeviceStateSnapshotGateEnforcement:
     def _run(self, coro: Any) -> Any:
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.get_running_loop().run_until_complete(coro)
 
     def test_snapshot_missing_schema_version_includes_evidence_in_ack(self) -> None:
         from galaxy_gateway.android.handlers.device_state_snapshot import (
@@ -527,7 +527,7 @@ class TestDeviceStateSnapshotGateEnforcement:
 
 class TestReconciliationSignalGateEnforcement:
     def _run(self, coro: Any) -> Any:
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.get_running_loop().run_until_complete(coro)
 
     def test_reconciliation_signal_missing_schema_includes_evidence(self) -> None:
         from galaxy_gateway.android.handlers.reconciliation_signal import (
@@ -605,7 +605,7 @@ class TestReconciliationSignalGateEnforcement:
 
 class TestGoalExecutionResultGateEnforcement:
     def _run(self, coro: Any) -> Any:
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.get_running_loop().run_until_complete(coro)
 
     def test_goal_execution_result_missing_schema_degrades_to_truth_chain(self) -> None:
         from galaxy_gateway.android.handlers.goal_execution import handle_goal_execution_result

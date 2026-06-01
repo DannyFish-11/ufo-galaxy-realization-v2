@@ -493,7 +493,7 @@ class TestOrchestrationAboveSubstrate:
                 device_candidates=candidates,
             )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
 
         # The substrate (CommandRouter.dispatch_agent_remote) was called
         assert len(substrate_calls) == 1, "Substrate dispatch_agent_remote was not called"
@@ -624,7 +624,7 @@ class TestOpenClawdDelegationBoundary:
                 trace_id="tr_del",
             )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result["metadata"]["delegation_point"] == "multi_device_orchestration"
 
     def test_single_remote_delegation_point_is_different(self):
@@ -649,7 +649,7 @@ class TestOpenClawdDelegationBoundary:
                 trace_id="tr_sr",
             )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result["metadata"]["delegation_point"] == "single_remote"
         assert result["metadata"]["delegation_point"] != "multi_device_orchestration"
 

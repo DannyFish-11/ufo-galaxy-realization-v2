@@ -177,7 +177,7 @@ class TestGroupB_Proto002Closure:
         }
         ws = MagicMock()
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.get_running_loop().run_until_complete(
             handle_task_cancel(bridge, ws, message)
         )
         assert isinstance(result, dict), "handle_task_cancel must return a dict"
@@ -206,7 +206,7 @@ class TestGroupB_Proto002Closure:
         }
         ws = MagicMock()
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.get_running_loop().run_until_complete(
             handle_task_status(bridge, ws, message)
         )
         assert isinstance(result, dict), "handle_task_status must return a dict"

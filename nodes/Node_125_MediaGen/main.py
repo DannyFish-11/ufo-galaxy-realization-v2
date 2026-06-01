@@ -124,7 +124,7 @@ class MediaGenService:
         return {
             "node_id": self.config.node_id,
             "status": self.status.value,
-            "timestamp": asyncio.get_event_loop().time()
+            "timestamp": asyncio.get_running_loop().time()
         }
 
     def get_status(self, task_id: Optional[str] = None) -> Dict[str, Any]:

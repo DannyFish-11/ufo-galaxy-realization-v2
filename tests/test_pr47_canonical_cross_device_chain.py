@@ -723,7 +723,7 @@ class TestStoreResultEnvelope:
         env = ResultEnvelope(task_id="t_bf1", device_id="d1", success=True)
 
         with patch("core.openclawd_memory_backflow.get_task_memory", return_value=None):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.get_running_loop().run_until_complete(
                 store_result_envelope(env)
             )
 
@@ -736,7 +736,7 @@ class TestStoreResultEnvelope:
         env = ResultEnvelope(task_id="t_chain_rec", device_id="d2", success=True)
 
         with patch("core.openclawd_memory_backflow.get_task_memory", return_value=None):
-            asyncio.get_event_loop().run_until_complete(store_result_envelope(env))
+            asyncio.get_running_loop().run_until_complete(store_result_envelope(env))
 
         snap = get_cross_device_chain().snapshot()
         assert snap.total_executions == 1
@@ -750,7 +750,7 @@ class TestStoreResultEnvelope:
         env = ResultEnvelope(task_id="t_mem", device_id="d3", success=True)
 
         with patch("core.openclawd_memory_backflow.get_task_memory", return_value=mock_mem):
-            asyncio.get_event_loop().run_until_complete(store_result_envelope(env))
+            asyncio.get_running_loop().run_until_complete(store_result_envelope(env))
 
         assert mock_mem.record_task.called
 
@@ -762,7 +762,7 @@ class TestStoreResultEnvelope:
         env = ResultEnvelope(task_id="t_mark", success=True)
 
         with patch("core.openclawd_memory_backflow.get_task_memory", return_value=mock_mem):
-            asyncio.get_event_loop().run_until_complete(store_result_envelope(env))
+            asyncio.get_running_loop().run_until_complete(store_result_envelope(env))
 
         assert env.memory_backflow_stored is True
 
@@ -772,7 +772,7 @@ class TestStoreResultEnvelope:
 
         env = ResultEnvelope(task_id="t_meta", success=True)
         with patch("core.openclawd_memory_backflow.get_task_memory", return_value=None):
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.get_running_loop().run_until_complete(
                 store_result_envelope(env, chain_metadata={"authority_role": "subject_core"})
             )
 
@@ -799,7 +799,7 @@ class TestStoreResultEnvelopeGracefulDegradation:
         try:
             env = MagicMock()
             env.task_id = "t_unavail"
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.get_running_loop().run_until_complete(
                 bf_mod.store_result_envelope(env)
             )
             assert result is False

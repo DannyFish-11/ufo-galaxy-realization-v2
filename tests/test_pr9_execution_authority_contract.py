@@ -539,7 +539,7 @@ class TestDesktopPresenceRuntimeAuthority:
     """DesktopPresenceRuntime stamps authority_metadata in handle_request()."""
 
     def _run(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.get_running_loop().run_until_complete(coro)
 
     def test_authority_metadata_in_result(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime

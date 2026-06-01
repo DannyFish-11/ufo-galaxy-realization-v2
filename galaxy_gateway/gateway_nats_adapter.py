@@ -434,7 +434,7 @@ class GatewayNATSAdapter:
         if self._websocket_manager and target_device:
             # PR-S5: register with the canonical lifecycle registry so that
             # pending-future ownership and timeout semantics are unified.
-            fut: asyncio.Future = asyncio.get_event_loop().create_future()
+            fut: asyncio.Future = asyncio.get_running_loop().create_future()
             # Compat surface: also update the local _pending dict so that
             # legacy callers of resolve_task() continue to work.
             self._pending[task_id] = fut

@@ -78,7 +78,7 @@ async def send_online_bot_notification_async(
 
     try:
         # Run the potentially blocking notification in a thread pool
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(
             None,
             lambda: online_bot(

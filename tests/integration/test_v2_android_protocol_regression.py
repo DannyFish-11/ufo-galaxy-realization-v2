@@ -310,7 +310,7 @@ class TestOfflineQueueReplaySemantics:
         await bridge.handle_message(
             ws1, _v3("device_register", device_id, platform="android")
         )
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         bridge._pending_responses[task_id] = future
 
@@ -364,7 +364,7 @@ class TestDuplicateResultDelivery:
         )
 
         # Install Future
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         bridge._pending_responses[task_id] = future
 
@@ -398,7 +398,7 @@ class TestDuplicateResultDelivery:
             ws, _v3("device_register", device_id, platform="android")
         )
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         bridge._pending_responses[task_id] = future
 
@@ -431,7 +431,7 @@ class TestDuplicateResultDelivery:
             ws, _v3("device_register", device_id, platform="android")
         )
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         task_id_a = str(uuid.uuid4())
         task_id_b = str(uuid.uuid4())
         future_a: asyncio.Future = loop.create_future()

@@ -114,7 +114,7 @@ class TestGatewayNATSAdapter:
         from galaxy_gateway.gateway_nats_adapter import GatewayNATSAdapter
 
         adapter = GatewayNATSAdapter()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         adapter._pending["task-abc"] = fut
 
@@ -344,7 +344,7 @@ class TestNATSExecutor:
         async def _publish_and_resolve(worker_id, task):
             task_id = task.task_id
             # Simulate result arriving from NATS
-            asyncio.get_event_loop().call_soon(
+            asyncio.get_running_loop().call_soon(
                 lambda: executor._pending[task_id].set_result(
                     {"success": True, "result": "ok", "task_id": task_id}
                 )
@@ -417,7 +417,7 @@ class TestNATSExecutor:
         from core.command_router import NATSExecutor
 
         executor = NATSExecutor()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         executor._pending["task-xyz"] = fut
 
@@ -1906,7 +1906,7 @@ class TestPR3NATSEnvelopeAlignment:
         import asyncio
 
         executor = NATSExecutor()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut = loop.create_future()
         executor._pending["task-env-res-001"] = fut
 
@@ -1934,7 +1934,7 @@ class TestPR3NATSEnvelopeAlignment:
         import asyncio
 
         executor = NATSExecutor()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut = loop.create_future()
         executor._pending["task-legacy-res-001"] = fut
 

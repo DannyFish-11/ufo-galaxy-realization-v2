@@ -415,7 +415,7 @@ class AdaptiveBalancer(LoadBalancer):
         if isinstance(balancer, RoundRobinBalancer):
             # RoundRobinBalancer uses async method
             import asyncio
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             return loop.run_until_complete(
                 balancer.select_device(task, available_devices, device_metrics)
             )

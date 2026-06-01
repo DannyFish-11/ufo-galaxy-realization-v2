@@ -209,7 +209,7 @@ class TestTaskResult:
     @pytest.mark.asyncio
     async def test_task_result_resolves_pending_future(self):
         """task_result should resolve a pending Future registered for that task_id."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         task_id = "task-future-001"
         future = loop.create_future()
         self.bridge._pending_responses[task_id] = future

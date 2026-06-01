@@ -222,7 +222,7 @@ class TestC_CoordinatorSubstrateGuard(unittest.TestCase):
             with self.assertLogs(
                 "galaxy_gateway.cross_device_coordinator", level="WARNING"
             ) as cm:
-                asyncio.get_event_loop().run_until_complete(
+                asyncio.get_running_loop().run_until_complete(
                     coord.execute_cross_device_task("test command")
                 )
             self.assertTrue(
@@ -247,7 +247,7 @@ class TestC_CoordinatorSubstrateGuard(unittest.TestCase):
             with self.assertNoLogs(
                 "galaxy_gateway.cross_device_coordinator", level="WARNING"
             ):
-                asyncio.get_event_loop().run_until_complete(
+                asyncio.get_running_loop().run_until_complete(
                     coord.execute_cross_device_task(
                         "test command",
                         _substrate_caller="device_router.route_task",
@@ -273,7 +273,7 @@ class TestC_CoordinatorSubstrateGuard(unittest.TestCase):
             "core.multi_device_control_integrity.record_integrity_event",
             side_effect=_fake_record,
         ):
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.get_running_loop().run_until_complete(
                 coord.execute_cross_device_task("test command")
             )
 
@@ -304,7 +304,7 @@ class TestC_CoordinatorSubstrateGuard(unittest.TestCase):
             with self.assertNoLogs(
                 "galaxy_gateway.cross_device_coordinator", level="WARNING"
             ):
-                asyncio.get_event_loop().run_until_complete(
+                asyncio.get_running_loop().run_until_complete(
                     coord.execute_cross_device_task(
                         "test command",
                         context={_SUBSTRATE_CALLER_CTX_KEY: "command_router.route_envelope"},
@@ -326,7 +326,7 @@ class TestC_CoordinatorSubstrateGuard(unittest.TestCase):
             coord, "_execute_generic_cross_device_task",
             new_callable=AsyncMock, return_value={"success": True},
         ):
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.get_running_loop().run_until_complete(
                 coord.execute_cross_device_task("test command")
             )
 
@@ -367,7 +367,7 @@ class TestD_DeviceRouterSubstrateGuard(unittest.TestCase):
             new_callable=AsyncMock, return_value={"success": True},
         ):
             with self.assertLogs("galaxy_gateway.device_router", level="WARNING") as cm:
-                asyncio.get_event_loop().run_until_complete(
+                asyncio.get_running_loop().run_until_complete(
                     router._dispatch_cross_device_task(task, [dev])
                 )
             self.assertTrue(
@@ -392,7 +392,7 @@ class TestD_DeviceRouterSubstrateGuard(unittest.TestCase):
             new_callable=AsyncMock, return_value={"success": True},
         ):
             with self.assertLogs("galaxy_gateway.device_router", level="WARNING") as cm:
-                asyncio.get_event_loop().run_until_complete(
+                asyncio.get_running_loop().run_until_complete(
                     router._dispatch_cross_device_task(
                         task, [dev],
                         _substrate_caller="device_router.route_task",
@@ -431,7 +431,7 @@ class TestD_DeviceRouterSubstrateGuard(unittest.TestCase):
             router, "dispatch_task",
             new_callable=AsyncMock, return_value={"success": True},
         ):
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.get_running_loop().run_until_complete(
                 router._dispatch_cross_device_task(task, [dev])
             )
 

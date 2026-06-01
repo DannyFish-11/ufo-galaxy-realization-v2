@@ -502,7 +502,7 @@ class TestResilienceRoutes:
                 data = resp.json()
                 assert "resilience_metrics" in data
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
 
     def test_metrics_json_schema_keys(self):
         import asyncio
@@ -517,7 +517,7 @@ class TestResilienceRoutes:
                 for key in ("queue_depth", "total_rejected", "total_fallbacks"):
                     assert key in m, f"Missing key: {key}"
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
 
     def test_prometheus_endpoint_returns_200_text_plain(self):
         import asyncio
@@ -530,7 +530,7 @@ class TestResilienceRoutes:
                 assert resp.status_code == 200
                 assert "text/plain" in resp.headers.get("content-type", "")
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
 
     def test_prometheus_endpoint_contains_expected_metric(self):
         import asyncio
@@ -542,7 +542,7 @@ class TestResilienceRoutes:
                 resp = await client.get("/api/v1/resilience/metrics/prom")
                 assert b"galaxy_resilience_queue_depth" in resp.content
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
 
     def test_circuit_breakers_list_returns_200(self):
         import asyncio
@@ -556,7 +556,7 @@ class TestResilienceRoutes:
                 data = resp.json()
                 assert "circuit_breakers" in data
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
 
     def test_reset_unknown_target_returns_404(self):
         import asyncio
@@ -568,7 +568,7 @@ class TestResilienceRoutes:
                 resp = await client.post("/api/v1/resilience/circuit-breakers/unknown_target/reset")
                 assert resp.status_code == 404
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
 
     def test_reset_known_target_returns_200(self):
         import asyncio
@@ -590,7 +590,7 @@ class TestResilienceRoutes:
                 data = resp.json()
                 assert data["state"] == "closed"
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
 
 
 # ===========================================================================

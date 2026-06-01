@@ -1962,7 +1962,7 @@ class IntegratedSystemController:
         if fused is not None:
             try:
                 import asyncio
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 if loop.is_running():
                     loop.create_task(fused.process_event(event))
                 else:

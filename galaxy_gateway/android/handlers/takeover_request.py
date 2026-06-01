@@ -138,7 +138,7 @@ def _emit_aip_v3_takeover_request(
         )
         nats = get_nats_bus()
         if nats.is_connected():
-            asyncio.get_event_loop().create_task(nats.publish_takeover_request(msg))
+            asyncio.get_running_loop().create_task(nats.publish_takeover_request(msg))
         else:
             logger.debug("AIPV3 takeover_request: %s", msg.model_dump_json(exclude_none=True))
     except Exception:

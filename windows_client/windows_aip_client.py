@@ -310,7 +310,7 @@ class WindowsAIPClient:
             task_type = data.get("task_type", "")
             payload = data.get("payload", {})
             logger.info(f"收到任务: {task_id} type={task_type}")
-            result = await asyncio.get_event_loop().run_in_executor(
+            result = await asyncio.get_running_loop().run_in_executor(
                 None, _execute_command, task_type, payload
             )
             await self._send(self._task_result_msg(task_id, result))
@@ -334,13 +334,13 @@ class WindowsAIPClient:
                     f"task_id={agent_payload.get('task_id')} "
                     f"trace_id={agent_payload.get('trace_id')}"
                 )
-                result = await asyncio.get_event_loop().run_in_executor(
+                result = await asyncio.get_running_loop().run_in_executor(
                     None, _execute_agent_task, agent_payload
                 )
                 await self._send(self._agent_execute_result_msg(cmd_id, agent_payload, result))
                 return
             logger.info(f"收到命令: {cmd_id} cmd={command}")
-            result = await asyncio.get_event_loop().run_in_executor(
+            result = await asyncio.get_running_loop().run_in_executor(
                 None, _execute_command, command, params
             )
             await self._send(self._command_result_msg(cmd_id, result))

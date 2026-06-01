@@ -1952,7 +1952,7 @@ def _try_android_bridge_dispatch(
                 # No running loop — create a dedicated event loop that we own,
                 # run the coroutine, then close it.  We deliberately avoid
                 # asyncio.run() (which resets the thread's event loop to None
-                # in Python 3.12) and asyncio.get_event_loop() (deprecated
+                # in Python 3.12) and asyncio.get_running_loop() (deprecated
                 # in Python 3.12).  Using new_event_loop() + explicit close()
                 # leaves the caller's event-loop state untouched.
                 _loop = asyncio.new_event_loop()

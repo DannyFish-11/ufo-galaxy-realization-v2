@@ -83,7 +83,7 @@ class TestSubstrateRootUnification:
                     payload={},
                 )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
         assert len(captured) == 1
         assert captured[0].remote_execution_mode == RemoteExecutionMode.command_only
 
@@ -126,7 +126,7 @@ class TestSubstrateRootUnification:
                         task_id="task_01",
                     )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
 
         # route_envelope must have been called
         assert len(captured_envelopes) == 1, "route_envelope was not called"
@@ -176,7 +176,7 @@ class TestSubstrateRootUnification:
                             result = await cr.route_envelope(envelope)
                             return result
 
-            result = asyncio.get_event_loop().run_until_complete(run())
+            result = asyncio.get_running_loop().run_until_complete(run())
             assert result.get("remote_execution_mode") == mode.value, (
                 f"route_envelope did not propagate mode={mode.value} into result"
             )
@@ -220,7 +220,7 @@ class TestAgentDispatchUsesRouteEnvelope:
                         task_id="tk",
                     )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
         assert captured, "route_envelope was not called"
         assert captured[0].remote_execution_mode == RemoteExecutionMode.agent_runtime
 
@@ -251,7 +251,7 @@ class TestAgentDispatchUsesRouteEnvelope:
                         task_id="tk",
                     )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result.get("remote_execution_mode") == "agent_runtime"
 
     def test_envelope_tool_name_is_agent_execute(self):
@@ -283,7 +283,7 @@ class TestAgentDispatchUsesRouteEnvelope:
                         task_id="tid",
                     )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
         assert captured[0].tool_name == "agent_execute"
 
     def test_envelope_source_is_dispatch_agent_remote(self):
@@ -315,7 +315,7 @@ class TestAgentDispatchUsesRouteEnvelope:
                         task_id="tid",
                     )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
         assert "dispatch_agent_remote" in (captured[0].source or "")
 
 
@@ -370,7 +370,7 @@ class TestDeployThenExecuteUsesRouteEnvelope:
                         context={},
                     )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
         assert captured, "route_envelope was not called in _deploy_agent_then_execute"
         assert captured[0].remote_execution_mode == RemoteExecutionMode.agent_runtime
 
@@ -410,7 +410,7 @@ class TestDeployThenExecuteUsesRouteEnvelope:
                         context={},
                     )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result.get("remote_execution_mode") == "agent_runtime"
 
 
@@ -449,7 +449,7 @@ class TestModeMetadataPropagation:
                         )
                         return await cr.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result.get("remote_execution_mode") == "agent_runtime"
 
     def test_command_only_propagated(self):
@@ -479,7 +479,7 @@ class TestModeMetadataPropagation:
                         )
                         return await cr.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result.get("remote_execution_mode") == "command_only"
 
     def test_no_mode_not_propagated(self):
@@ -505,7 +505,7 @@ class TestModeMetadataPropagation:
                         )
                         return await cr.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         # Mode must not be injected when envelope had none
         assert "remote_execution_mode" not in result or result.get("remote_execution_mode") is None
 
@@ -583,7 +583,7 @@ class TestNATSBusRemoteExecutionModeField:
                     remote_execution_mode="agent_runtime",
                 )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
         assert len(captured_calls) == 1
         assert captured_calls[0]["remote_execution_mode"] == "agent_runtime"
 
@@ -639,7 +639,7 @@ class TestGatewayNATSAdapterModePreservation:
                 with patch("galaxy_gateway.gateway_nats_adapter._publish_m2_event_safe"):
                     await adapter._handle_task_dispatch(nats_data)
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
         assert forwarded_mode, "_forward_to_device was not called"
         assert forwarded_mode[0] == "agent_runtime", (
             f"Expected agent_runtime, got {forwarded_mode[0]!r}"
@@ -673,7 +673,7 @@ class TestGatewayNATSAdapterModePreservation:
                 with patch("galaxy_gateway.gateway_nats_adapter._publish_m2_event_safe"):
                     await adapter._handle_task_dispatch(nats_data)
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
         assert forwarded_mode, "_forward_to_device was not called"
         assert forwarded_mode[0] == "command_only"
 
@@ -701,7 +701,7 @@ class TestGatewayNATSAdapterModePreservation:
                 with patch("galaxy_gateway.gateway_nats_adapter._publish_m2_event_safe"):
                     await adapter._handle_task_dispatch(legacy_data)
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
         assert len(forwarded_mode) > 0, "_forward_to_device was not called"
         # Legacy dispatch has no mode — should pass empty string (not crash)
         assert forwarded_mode[0] == ""
@@ -754,7 +754,7 @@ class TestOpenClawdAgentDispatchAlwaysAgentRuntime:
                     )
             return result
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
 
         # Find the internal _remote_envelope (from openclawd._dispatch_remote_agent)
         agent_envelopes = [
@@ -792,7 +792,7 @@ class TestOpenClawdAgentDispatchAlwaysAgentRuntime:
                     trace_id="trace",
                 )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result.get("metadata", {}).get("remote_execution_mode") == "agent_runtime"
 
 
@@ -825,7 +825,7 @@ class TestBackwardCompatibility:
                         )
                         return await cr.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result["success"] is True
 
     def test_route_command_compat_shim_still_works(self):
@@ -850,7 +850,7 @@ class TestBackwardCompatibility:
                 task_id="task_001",
             )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert len(route_envelope_called) == 1, "route_command did not call route_envelope"
         assert result["success"] is True
 
@@ -874,6 +874,6 @@ class TestBackwardCompatibility:
                 trace_id="tr_compat",
             )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
         assert published, "publish was not called"
         assert "galaxy.task." in published[0]["subject"]

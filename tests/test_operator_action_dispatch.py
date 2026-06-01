@@ -183,7 +183,7 @@ class TestOperatorSurfaceIsActionCapable:
         from core.operator_surface import OperatorSurface
         surface = OperatorSurface()
         req = OperatorActionRequest(action_kind="__nonexistent__", message="x")
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.get_running_loop().run_until_complete(
             surface.execute_operator_action(req)
         )
         assert isinstance(result, OperatorActionResult)
@@ -197,7 +197,7 @@ class TestOperatorSurfaceIsActionCapable:
             action_kind=OperatorActionKind.flow_cancel.value,
             flow_id="",
         )
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.get_running_loop().run_until_complete(
             surface.execute_operator_action(req)
         )
         assert result.accepted is False
@@ -210,7 +210,7 @@ class TestOperatorSurfaceIsActionCapable:
             action_kind=OperatorActionKind.flow_cancel.value,
             flow_id="nonexistent_flow_999",
         )
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.get_running_loop().run_until_complete(
             surface.execute_operator_action(req)
         )
         assert result.accepted is False
@@ -355,7 +355,7 @@ class TestOperatorActionEndpoint:
             "get_operator_action_availability",
             return_value=mock_availability,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.get_running_loop().run_until_complete(
                 surface.execute_operator_action(req)
             )
         assert result.accepted is True
@@ -390,10 +390,10 @@ class TestOperatorActionEndpoint:
             "get_operator_action_availability",
             return_value=mock_availability,
         ):
-            first = asyncio.get_event_loop().run_until_complete(
+            first = asyncio.get_running_loop().run_until_complete(
                 surface.execute_operator_action(req)
             )
-            duplicate = asyncio.get_event_loop().run_until_complete(
+            duplicate = asyncio.get_running_loop().run_until_complete(
                 surface.execute_operator_action(req)
             )
         assert first.runtime_result.get("continuity_adjudication_classification") == "current-accepted"
@@ -558,7 +558,7 @@ class TestNoParallelActionPath:
             "core.desktop_presence_runtime.get_desktop_presence_runtime",
             return_value=fake_runtime,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.get_running_loop().run_until_complete(
                 surface.execute_operator_action(req)
             )
 
@@ -598,7 +598,7 @@ class TestNoParallelActionPath:
             "core.desktop_presence_runtime.get_desktop_presence_runtime",
             return_value=fake_runtime,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.get_running_loop().run_until_complete(
                 surface.execute_operator_action(req)
             )
 
@@ -628,7 +628,7 @@ class TestNoParallelActionPath:
             action_kind=OperatorActionKind.flow_cancel.value,
             flow_id="nonexistent_flow_for_test",
         )
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.get_running_loop().run_until_complete(
             surface.execute_operator_action(req)
         )
         # Must fail because flow does not exist — but must NOT involve DPR
@@ -762,7 +762,7 @@ class TestAndroidCompatibleDispatch:
             "core.desktop_presence_runtime.get_desktop_presence_runtime",
             return_value=fake_runtime,
         ):
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.get_running_loop().run_until_complete(
                 surface.execute_operator_action(req)
             )
 

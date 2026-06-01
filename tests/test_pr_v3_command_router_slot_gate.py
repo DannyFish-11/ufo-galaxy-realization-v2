@@ -194,7 +194,7 @@ class TestRouteEnvelopeConsultsV3:
                     ):
                         return await router.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(_run())
+        result = asyncio.get_running_loop().run_until_complete(_run())
         assert len(call_log) >= 1, (
             "get_canonical_dispatch_slots must be called at least once during route_envelope"
         )
@@ -241,7 +241,7 @@ class TestRouteEnvelopeConsultsV3:
                         ):
                             return await router.route_envelope(env)
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.get_running_loop().run_until_complete(_run())
         assert len(call_log) >= 1, "V3 must be consulted for multi-target dispatch"
         all_target_ids = call_log[0].get("device_ids", [])
         for dev in ["dev_a", "dev_b", "dev_c"]:
@@ -308,7 +308,7 @@ class TestSlotApprovedFiltering:
                     with patch.object(router, "_route_cross_device_envelope", side_effect=mock_cross):
                         return await router.route_envelope(env)
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.get_running_loop().run_until_complete(_run())
         assert "dev_blocked" not in dispatched_to, (
             "dev_blocked is not SLOT_APPROVED and must not be dispatched"
         )
@@ -345,7 +345,7 @@ class TestAllTargetsBlocked:
             ):
                 return await router.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(_run())
+        result = asyncio.get_running_loop().run_until_complete(_run())
         assert result["success"] is False, "Dispatch must fail when all targets are V3-blocked"
         assert result["error_code"] == GatewayErrorCode.V3_SLOT_BLOCKED.value, (
             f"error_code must be V3_SLOT_BLOCKED, got {result['error_code']!r}"
@@ -371,7 +371,7 @@ class TestAllTargetsBlocked:
             ):
                 return await router.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(_run())
+        result = asyncio.get_running_loop().run_until_complete(_run())
         assert result["success"] is False
         assert "device occupancy conflict" in result.get("error_message", ""), (
             "Block reason must appear in error_message for diagnostics"
@@ -397,7 +397,7 @@ class TestAllTargetsBlocked:
             ):
                 return await router.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(_run())
+        result = asyncio.get_running_loop().run_until_complete(_run())
         assert "v3_slot_gate" in result, "Result must include v3_slot_gate for observability"
         gate_info = result["v3_slot_gate"]
         assert gate_info.get("applied") is True
@@ -436,7 +436,7 @@ class TestAllTargetsBlocked:
                     with patch.object(router, "_route_cross_device_envelope", side_effect=mock_cross):
                         return await router.route_envelope(env)
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.get_running_loop().run_until_complete(_run())
         assert not exec_called, "_execute_command must NOT be called when all targets are V3-blocked"
         assert not cross_called, "_route_cross_device_envelope must NOT be called when all V3-blocked"
 
@@ -484,7 +484,7 @@ class TestExistingGatesPreserved:
                     # If ACL module unavailable, skip ACL gate test
                     return await router.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(_run())
+        result = asyncio.get_running_loop().run_until_complete(_run())
         # ACL must block OR dispatch must proceed (if ACL module unavailable)
         # Key invariant: the router should not crash
         assert "success" in result
@@ -507,7 +507,7 @@ class TestExistingGatesPreserved:
             ):
                 return await router.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(_run())
+        result = asyncio.get_running_loop().run_until_complete(_run())
         # V3 should NOT be called for empty targets (targets empty before V3 gate)
         assert not v3_called, "V3 gate must not be called when targets list is empty"
         assert result["success"] is False
@@ -560,7 +560,7 @@ class TestExistingGatesPreserved:
                         ):
                             return await router.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(_run())
+        result = asyncio.get_running_loop().run_until_complete(_run())
         # Must not crash; must return a result dict
         assert isinstance(result, dict), "route_envelope must return dict even when V3 fails"
         assert "success" in result
@@ -577,7 +577,7 @@ class TestExistingGatesPreserved:
                 ):
                     return await router.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(_run())
+        result = asyncio.get_running_loop().run_until_complete(_run())
         assert result["success"] is False
         assert result["error_code"] == GatewayErrorCode.V3_SLOT_BLOCKED.value
         assert "strict mode" in str(result.get("error_message", "")).lower()
@@ -621,7 +621,7 @@ class TestMultiDeviceDelegatedCompatibility:
                 with patch.object(router, "_route_parallel_fanout_envelope", side_effect=mock_fanout):
                     return await router.route_envelope(env)
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.get_running_loop().run_until_complete(_run())
         if fanout_targets_seen:
             targets_used = fanout_targets_seen[-1]
             assert "fan_b" not in targets_used, (
@@ -666,7 +666,7 @@ class TestMultiDeviceDelegatedCompatibility:
                 ):
                     return await router.route_envelope(env)
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.get_running_loop().run_until_complete(_run())
         assert len(v3_call_args) >= 1, (
             "V3 must be consulted for delegated/cross_device dispatch"
         )
@@ -694,7 +694,7 @@ class TestMultiDeviceDelegatedCompatibility:
             ):
                 return await router.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(_run())
+        result = asyncio.get_running_loop().run_until_complete(_run())
         assert result["success"] is False
         assert result["error_code"] == GatewayErrorCode.V3_SLOT_BLOCKED.value
 
@@ -751,7 +751,7 @@ class TestConstraintChainTrace:
                         return await router.route_envelope(env)
 
         # V3 gate applied → must not raise
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.get_running_loop().run_until_complete(_run())
 
     def test_v3_gate_blocked_result_carries_diagnostic_info(self) -> None:
         """V3_SLOT_BLOCKED result must include enough info to diagnose the rejection."""
@@ -773,7 +773,7 @@ class TestConstraintChainTrace:
             ):
                 return await router.route_envelope(env)
 
-        result = asyncio.get_event_loop().run_until_complete(_run())
+        result = asyncio.get_running_loop().run_until_complete(_run())
         assert result["error_code"] == GatewayErrorCode.V3_SLOT_BLOCKED.value
         # Diagnostic: must have error_message with detail
         msg = result.get("error_message", "")

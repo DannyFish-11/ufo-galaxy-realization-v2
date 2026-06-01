@@ -686,7 +686,7 @@ class AgentBridge:
                 with _urllib.urlopen(req, timeout=self._config.timeout) as resp:  # noqa: S310
                     return _json.loads(resp.read())
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             return await loop.run_in_executor(None, _sync_post)
 
     async def _run_local_fallback(

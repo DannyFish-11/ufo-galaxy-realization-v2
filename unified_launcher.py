@@ -855,7 +855,7 @@ class GalaxyUnified:
 
         # 优雅关闭核心子系统（事件桥 → 监控 → 缓存）
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             if loop.is_running():
                 asyncio.ensure_future(async_shutdown())
             else:

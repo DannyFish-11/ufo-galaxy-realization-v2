@@ -773,7 +773,7 @@ class TestSecurityInterceptorWithPolicy:
             req = pending[0]
             registry.ack(req.request_id, req.ack_token, operator="test_operator")
 
-        asyncio.get_event_loop().create_task(_operator_ack())
+        asyncio.get_running_loop().create_task(_operator_ack())
 
         result = await interceptor.check_and_intercept(
             action="delete_database",

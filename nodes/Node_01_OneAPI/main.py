@@ -108,7 +108,7 @@ async def _probe_local_llm_once() -> bool:
     """在事件循环中以非阻塞方式探测本地 LLM，带退避重试（最多 3 次）。"""
     for attempt in range(1, 4):
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             resp = await loop.run_in_executor(
                 None,
                 lambda: requests.get(f"{LOCAL_LLM_URL}/health", timeout=1.5),

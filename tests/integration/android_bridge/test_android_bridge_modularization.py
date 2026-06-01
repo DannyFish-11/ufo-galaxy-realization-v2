@@ -716,7 +716,7 @@ class TestStandaloneHandlers:
 
         bridge = self._make_bridge()
         ws = _make_ws()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future = loop.create_future()
         bridge._pending_responses[task_id] = future
         msg = {
@@ -810,7 +810,7 @@ class TestStandaloneHandlers:
         with patch.object(bridge, "_write_registration_to_udm"):
             await handle_device_register(bridge, ws, _make_reg_msg("tc_sa_01"))
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         task_id = "cancel_task_001"
         bridge._pending_responses[task_id] = fut
@@ -860,7 +860,7 @@ class TestStandaloneHandlers:
         bridge = self._make_bridge()
         ws = _make_ws()
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         fut.set_result({"status": "completed"})
         task_id = "done_task_001"
@@ -884,7 +884,7 @@ class TestStandaloneHandlers:
         bridge = self._make_bridge()
         ws = _make_ws()
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         task_id = "status_task_001"
         bridge._pending_responses[task_id] = fut
@@ -908,7 +908,7 @@ class TestStandaloneHandlers:
         bridge = self._make_bridge()
         ws = _make_ws()
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         fut.set_result({"status": "completed"})
         task_id = "status_task_002"
@@ -931,7 +931,7 @@ class TestStandaloneHandlers:
         bridge = self._make_bridge()
         ws = _make_ws()
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         fut.cancel()
         task_id = "status_task_003"

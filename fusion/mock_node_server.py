@@ -103,7 +103,7 @@ class MockNodeServer:
                     "capabilities_used": params.get("capabilities", []),
                     "data": {
                         "processed": True,
-                        "timestamp": asyncio.get_event_loop().time()
+                        "timestamp": asyncio.get_running_loop().time()
                     }
                 }
             }

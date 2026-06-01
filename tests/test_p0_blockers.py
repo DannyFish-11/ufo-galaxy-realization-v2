@@ -145,7 +145,7 @@ class TestMDCEDispatch:
 
         # Point to an unreachable port
         with patch("core.routes.command._get_node71_url", return_value="http://localhost:19999"):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.get_running_loop().run_until_complete(
                 _delegate_to_mdce("req-123", req, "2026-01-01T00:00:00Z")
             )
         assert result is None

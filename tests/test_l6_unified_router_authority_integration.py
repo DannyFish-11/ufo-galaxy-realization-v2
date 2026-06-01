@@ -406,7 +406,7 @@ def test_31_chat_calls_enrich_l3_context():
     from core.unified.models import LLMRequest
 
     req = LLMRequest(messages=[{"role": "user", "content": "hi"}])
-    asyncio.get_event_loop().run_until_complete(r.chat(req))
+    asyncio.get_running_loop().run_until_complete(r.chat(req))
 
     assert "messages" in called_with
     assert called_with["task_type"] == "general"
@@ -430,7 +430,7 @@ def test_32_chat_calls_consult_l1_route():
     from core.unified.models import LLMRequest
 
     req = LLMRequest(messages=[{"role": "user", "content": "hi"}])
-    asyncio.get_event_loop().run_until_complete(r.chat(req))
+    asyncio.get_running_loop().run_until_complete(r.chat(req))
 
     assert "task_type" in called
 
@@ -453,7 +453,7 @@ def test_33_chat_calls_consult_l2_supply():
     from core.unified.models import LLMRequest
 
     req = LLMRequest(messages=[{"role": "user", "content": "hi"}])
-    asyncio.get_event_loop().run_until_complete(r.chat(req))
+    asyncio.get_running_loop().run_until_complete(r.chat(req))
 
     assert called.get("invoked") is True
 
@@ -473,7 +473,7 @@ def test_34_chat_with_tools_calls_enrich_l3_context():
     r._enrich_l3_context = spy  # type: ignore[method-assign]
 
     messages = [{"role": "user", "content": "use tools"}]
-    asyncio.get_event_loop().run_until_complete(
+    asyncio.get_running_loop().run_until_complete(
         r.chat_with_tools(messages, task_type="general")
     )
 
@@ -495,7 +495,7 @@ def test_35_chat_with_tools_calls_consult_l1_route():
     r._consult_l1_route = spy  # type: ignore[method-assign]
 
     messages = [{"role": "user", "content": "use tools"}]
-    asyncio.get_event_loop().run_until_complete(
+    asyncio.get_running_loop().run_until_complete(
         r.chat_with_tools(messages, task_type="coding")
     )
 
@@ -517,7 +517,7 @@ def test_36_chat_with_tools_calls_consult_l2_supply():
     r._consult_l2_supply = spy  # type: ignore[method-assign]
 
     messages = [{"role": "user", "content": "use tools"}]
-    asyncio.get_event_loop().run_until_complete(
+    asyncio.get_running_loop().run_until_complete(
         r.chat_with_tools(messages)
     )
 
@@ -552,7 +552,7 @@ def test_37_l2_satisfied_provider_used_in_chat():
     from core.unified.models import LLMRequest
 
     req = LLMRequest(messages=[{"role": "user", "content": "test"}])
-    asyncio.get_event_loop().run_until_complete(r.chat(req))
+    asyncio.get_running_loop().run_until_complete(r.chat(req))
 
     # The effective provider passed to _get_provider_order must be "anthropic"
     assert any("anthropic" in p for p in effective_providers_seen)
@@ -578,7 +578,7 @@ def test_38_l2_satisfied_provider_used_in_chat_with_tools():
     r._get_provider_order = spy_get_provider_order  # type: ignore[method-assign]
 
     messages = [{"role": "user", "content": "test"}]
-    asyncio.get_event_loop().run_until_complete(r.chat_with_tools(messages))
+    asyncio.get_running_loop().run_until_complete(r.chat_with_tools(messages))
 
     assert any("openai" in p for p in effective_providers_seen)
 
@@ -643,7 +643,7 @@ def test_41_chat_raises_when_no_backend():
     r = _fresh_router(stub_backend=None)
 
     with pytest.raises(NoAvailableProviderError):
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.get_running_loop().run_until_complete(
             r.chat(LLMRequest(messages=[{"role": "user", "content": "hi"}]))
         )
 
@@ -654,7 +654,7 @@ def test_42_chat_with_tools_raises_when_no_backend():
     r = _fresh_router(stub_backend=None)
 
     with pytest.raises(NoAvailableProviderError):
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.get_running_loop().run_until_complete(
             r.chat_with_tools([{"role": "user", "content": "hi"}])
         )
 
@@ -702,7 +702,7 @@ def test_44_l3_enriched_messages_passed_to_backend_in_chat():
 
     # L3 enrichment should add a system message even when none was present.
     req = LLMRequest(messages=[{"role": "user", "content": "enrichment test"}])
-    asyncio.get_event_loop().run_until_complete(r.chat(req))
+    asyncio.get_running_loop().run_until_complete(r.chat(req))
 
     roles = [m.get("role") for m in backend_messages_received]
     assert "system" in roles, (

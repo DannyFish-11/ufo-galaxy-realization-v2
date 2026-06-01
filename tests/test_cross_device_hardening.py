@@ -418,7 +418,7 @@ class TestTaskLifecycle:
         await bridge.handle_message(ws, _msg("device_register", device_id))
 
         # Manually insert a pending future as assign_task would
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         bridge._pending_responses[task_id] = future
 
@@ -495,7 +495,7 @@ class TestTaskLifecycle:
 
         await bridge.handle_message(ws, _msg("device_register", device_id))
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         bridge._pending_responses[task_id] = future
 

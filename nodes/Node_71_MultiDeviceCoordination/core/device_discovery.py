@@ -197,7 +197,7 @@ class BroadcastDiscovery:
     
     async def _listen_loop(self) -> None:
         """监听循环"""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         
         while self._running:
             try:
@@ -589,7 +589,7 @@ class UPNPDiscovery:
     
     async def _listen_loop(self) -> None:
         """监听循环"""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         
         while self._running:
             try:

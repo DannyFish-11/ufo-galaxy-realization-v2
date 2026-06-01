@@ -256,7 +256,7 @@ class TaskOrchestrator:
             "type": "command",
             "source_node": "Node_50_Transformer",
             "target_node": device.device_id,
-            "timestamp": int(asyncio.get_event_loop().time()),
+            "timestamp": int(asyncio.get_running_loop().time()),
             "payload": {
                 "action": step.action,
                 "parameters": step.parameters

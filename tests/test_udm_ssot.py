@@ -50,7 +50,7 @@ class TestDeviceRegistryWritesToUDM:
         DeviceRegistry._instance = None
         reg = DeviceRegistry()
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.get_running_loop().run_until_complete(
             reg.register(device_id="dr_test_001", device_type="android", name="Test")
         )
 
@@ -62,10 +62,10 @@ class TestDeviceRegistryWritesToUDM:
         DeviceRegistry._instance = None
         reg = DeviceRegistry()
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.get_running_loop().run_until_complete(
             reg.register(device_id="dr_test_002", device_type="android", name="Test")
         )
-        asyncio.get_event_loop().run_until_complete(reg.unregister("dr_test_002"))
+        asyncio.get_running_loop().run_until_complete(reg.unregister("dr_test_002"))
 
         assert udm.get_device("dr_test_002") is None, "UDM must NOT contain the unregistered device"
 
@@ -75,10 +75,10 @@ class TestDeviceRegistryWritesToUDM:
         DeviceRegistry._instance = None
         reg = DeviceRegistry()
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.get_running_loop().run_until_complete(
             reg.register(device_id="dr_test_003", device_type="android", name="Test")
         )
-        asyncio.get_event_loop().run_until_complete(reg.heartbeat("dr_test_003"))
+        asyncio.get_running_loop().run_until_complete(reg.heartbeat("dr_test_003"))
 
         dev = udm.get_device("dr_test_003")
         assert dev is not None
@@ -90,10 +90,10 @@ class TestDeviceRegistryWritesToUDM:
         DeviceRegistry._instance = None
         reg = DeviceRegistry()
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.get_running_loop().run_until_complete(
             reg.register(device_id="dr_test_004", device_type="android", name="Test")
         )
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.get_running_loop().run_until_complete(
             reg.update_status("dr_test_004", status=DeviceStatus.OFFLINE)
         )
 
@@ -142,7 +142,7 @@ class TestDeviceRegistryReadsFromUDM:
         DeviceRegistry._instance = None
         reg = DeviceRegistry()
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.get_running_loop().run_until_complete(
             reg.register(device_id="dr_list_001", device_type="android", name="Test")
         )
 
@@ -280,7 +280,7 @@ class TestDeviceAgentManagerStrictUDM:
             mock_udm.register_device.side_effect = RuntimeError("UDM unavailable")
             mock_udm_fn.return_value = mock_udm
 
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.get_running_loop().run_until_complete(
                 mgr.register_device(device_info)
             )
 
@@ -299,7 +299,7 @@ class TestDeviceAgentManagerStrictUDM:
             mock_udm.register_device.side_effect = RuntimeError("UDM unavailable")
             mock_udm_fn.return_value = mock_udm
 
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.get_running_loop().run_until_complete(
                 mgr.register_device(device_info, ignore_udm_failure=True)
             )
 
@@ -313,7 +313,7 @@ class TestDeviceAgentManagerStrictUDM:
         device_info = self._make_device_info("dam_unreg_001")
 
         # First register successfully (ignore UDM to bypass init)
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.get_running_loop().run_until_complete(
             mgr.register_device(device_info, ignore_udm_failure=True)
         )
         assert "dam_unreg_001" in mgr._agents
@@ -324,7 +324,7 @@ class TestDeviceAgentManagerStrictUDM:
             mock_udm.unregister_device.side_effect = RuntimeError("UDM unavailable")
             mock_udm_fn.return_value = mock_udm
 
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.get_running_loop().run_until_complete(
                 mgr.unregister_device("dam_unreg_001")
             )
 

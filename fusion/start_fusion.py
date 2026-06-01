@@ -180,7 +180,7 @@ async def run_interactive():
         logger.info("Type a task description and press Enter. Type 'quit' to exit.")
         logger.info("="*80)
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         while True:
             try:
                 description = await loop.run_in_executor(None, lambda: input("task> "))

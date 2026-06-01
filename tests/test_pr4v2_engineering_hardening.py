@@ -165,7 +165,7 @@ class TestStrictPreflightMode:
 
 
 class TestAsyncIoBoundaryHardening:
-    """关键模块必须使用 ``asyncio.get_running_loop()`` 而非 ``asyncio.get_event_loop()``。"""
+    """关键模块必须使用 ``asyncio.get_running_loop()`` 而非 ``asyncio.get_running_loop()``。"""
 
     def _read_source(self, rel_path: str) -> str:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -181,7 +181,7 @@ class TestAsyncIoBoundaryHardening:
         )
 
     def test_llm_manager_does_not_use_deprecated_get_event_loop_in_reload(self):
-        """``core/llm_manager.py`` 的 ``reload()`` 方法不应使用已弃用的 ``asyncio.get_event_loop()``。"""
+        """``core/llm_manager.py`` 的 ``reload()`` 方法不应使用已弃用的 ``asyncio.get_running_loop()``。"""
         import ast
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         full_path = os.path.join(repo_root, "core/llm_manager.py")
@@ -204,7 +204,7 @@ class TestAsyncIoBoundaryHardening:
             if isinstance(node, ast.Attribute) and node.attr == "get_event_loop"
         ]
         assert not deprecated_calls, (
-            "llm_manager.py reload() must not use deprecated asyncio.get_event_loop()"
+            "llm_manager.py reload() must not use deprecated asyncio.get_running_loop()"
         )
 
     def test_async_queue_uses_get_running_loop(self):

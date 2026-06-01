@@ -165,7 +165,7 @@ class GoalDecomposer:
         # llm_client 可能是 MultiLLMRouter 或其他有 chat() 的对象
         if asyncio.iscoroutinefunction(getattr(self.llm_client, 'chat', None)):
             # 在同步上下文中调用异步方法
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             if loop.is_running():
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as pool:

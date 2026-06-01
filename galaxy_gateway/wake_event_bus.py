@@ -121,7 +121,7 @@ class WakeEventBus:
         同步接口（兼容非异步调用方），内部使用 asyncio.create_task 异步处理
         """
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             if loop.is_running():
                 loop.create_task(self.publish(raw_event))
             else:

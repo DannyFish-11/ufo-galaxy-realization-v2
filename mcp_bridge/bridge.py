@@ -126,7 +126,7 @@ class MCPBridgeProcess:
             "params": params,
         }
 
-        fut: asyncio.Future = asyncio.get_event_loop().create_future()
+        fut: asyncio.Future = asyncio.get_running_loop().create_future()
         self._pending[req_id] = fut
 
         try:

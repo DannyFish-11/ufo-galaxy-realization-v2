@@ -91,7 +91,7 @@ def _make_bridge() -> Any:
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.get_running_loop().run_until_complete(coro)
 
 
 def _make_reconciliation_message(device_id: str = "device-test") -> Dict[str, Any]:

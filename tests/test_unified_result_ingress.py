@@ -1152,7 +1152,7 @@ class TestBridgePendingResolution:
         from core.unified_result_ingress import UnifiedResultIngress
 
         tid = _make_task_id()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
 
         bridge = MagicMock()
@@ -1181,7 +1181,7 @@ class TestBridgePendingResolution:
         from core.unified_result_ingress import UnifiedResultIngress
 
         tid = _make_task_id()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         future.set_result({"already": "done"})  # pre-resolve
 
@@ -1511,7 +1511,7 @@ class TestCanonicalGoalExecutionResultCompletion:
         ws = MagicMock()
 
         tid = _make_task_id()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         bridge._pending_responses = {tid: future}
 

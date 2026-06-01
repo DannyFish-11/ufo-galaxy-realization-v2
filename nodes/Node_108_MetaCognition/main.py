@@ -295,7 +295,7 @@ class MetaCognitionEngine:
                     f"Reply with ONLY a JSON object: {{\"score\": 0.X}}\n\n"
                     f"Input: {text[:500]}"
                 )
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 if not loop.is_running():
                     result = loop.run_until_complete(self._llm_analyze(prompt, None))
                     if result and "score" in result:
@@ -343,7 +343,7 @@ class MetaCognitionEngine:
                     f"Each item: {{\"prediction\": \"...\", \"probability\": 0.X}}\n\n"
                     f"Context: {json.dumps(comprehension)[:800]}\n\nJSON array:"
                 )
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 if not loop.is_running():
                     result = loop.run_until_complete(self._llm_analyze(prompt, None))
                     if isinstance(result, list) and len(result) > 0:
@@ -397,7 +397,7 @@ class MetaCognitionEngine:
                     f"Reply as JSON: {{\"insights\": [\"...\", ...]}}\n\n"
                     f"Observations: {json.dumps(observations)[:500]}"
                 )
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 if not loop.is_running():
                     result = loop.run_until_complete(self._llm_analyze(prompt, None))
                     if result and "insights" in result and len(result["insights"]) > 0:
@@ -425,7 +425,7 @@ class MetaCognitionEngine:
                     f"Reply as JSON: {{\"actions\": [\"...\", ...]}}\n\n"
                     f"Insights: {json.dumps(insights)[:500]}"
                 )
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 if not loop.is_running():
                     result = loop.run_until_complete(self._llm_analyze(prompt, None))
                     if result and "actions" in result and len(result["actions"]) > 0:

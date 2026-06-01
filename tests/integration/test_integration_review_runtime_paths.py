@@ -376,7 +376,7 @@ class TestTaskResultFailureStatus:
 
         await bridge.handle_message(ws, _v3("device_register", device_id))
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         bridge._pending_responses[task_id] = future
 
@@ -412,7 +412,7 @@ class TestTaskResultFailureStatus:
 
         await bridge.handle_message(ws, _v3("device_register", device_id))
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         bridge._pending_responses[task_id] = future
 
@@ -442,7 +442,7 @@ class TestTaskResultFailureStatus:
 
         await bridge.handle_message(ws, _v3("device_register", device_id))
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         bridge._pending_responses[task_id] = future
 

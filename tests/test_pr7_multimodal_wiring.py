@@ -167,7 +167,7 @@ class TestAudioPipelineToBusWiring:
 
         pipeline = AudioIngestPipeline()
         with patch.object(mod, "_SOUNDDEVICE_AVAILABLE", False):
-            asyncio.get_event_loop().run_until_complete(pipeline.run())
+            asyncio.get_running_loop().run_until_complete(pipeline.run())
         # No exception raised, quality is device_unavailable
         _, quality = pipeline.get_latest()
         assert quality.flag == QualityFlag.DEVICE_UNAVAILABLE
@@ -184,7 +184,7 @@ class TestAudioPipelineToBusWiring:
 
         with patch.object(mod, "_SOUNDDEVICE_AVAILABLE", True), \
              patch.dict("sys.modules", {"sounddevice": mock_sd}):
-            asyncio.get_event_loop().run_until_complete(pipeline.run())
+            asyncio.get_running_loop().run_until_complete(pipeline.run())
 
         _, quality = pipeline.get_latest()
         assert quality.flag == QualityFlag.PERMISSION_DENIED
@@ -297,7 +297,7 @@ class TestFullIngressBusWiring:
                 frames.append(q.get_nowait())
             return frames
 
-        frames = asyncio.get_event_loop().run_until_complete(_run())
+        frames = asyncio.get_running_loop().run_until_complete(_run())
         assert len(frames) >= 1
         for f in frames:
             assert isinstance(f, PerceptionFrame)
@@ -314,7 +314,7 @@ class TestFullIngressBusWiring:
             bus.stop()
             await task
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.get_running_loop().run_until_complete(_run())
         assert len(received) >= 1
 
 

@@ -97,7 +97,7 @@ async def _send_email(to: str, subject: str, body: str) -> Dict[str, Any]:
                     server.login(SMTP_USER, SMTP_PASSWORD)
                 server.sendmail(SMTP_USER, [to], msg.as_string())
 
-        await asyncio.get_event_loop().run_in_executor(None, _send)
+        await asyncio.get_running_loop().run_in_executor(None, _send)
         return {"success": True, "channel": "email", "recipient": to}
     except Exception as e:
         return {"success": False, "error": str(e)}

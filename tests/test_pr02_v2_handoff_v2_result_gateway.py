@@ -163,7 +163,7 @@ def _make_envelope_v2_result_message(
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.get_running_loop().run_until_complete(coro)
 
 
 # ============================================================================

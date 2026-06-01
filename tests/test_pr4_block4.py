@@ -489,7 +489,7 @@ class TestTaskGraphCancellation:
             result = await graph.execute()
             return graph, result
 
-        graph, result = asyncio.get_event_loop().run_until_complete(run())
+        graph, result = asyncio.get_running_loop().run_until_complete(run())
         statuses = {n.status for n in graph._nodes.values()}
         assert NodeStatus.CANCELLED in statuses or NodeStatus.INTERRUPTED in statuses
 
@@ -506,7 +506,7 @@ class TestTaskGraphCancellation:
             result = await graph.execute()
             return graph, result
 
-        graph, result = asyncio.get_event_loop().run_until_complete(run())
+        graph, result = asyncio.get_running_loop().run_until_complete(run())
         # All pending nodes should be interrupted
         for nid, node in graph._nodes.items():
             if node.status != "done":

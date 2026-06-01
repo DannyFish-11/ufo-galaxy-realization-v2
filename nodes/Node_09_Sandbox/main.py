@@ -111,7 +111,7 @@ async def lifespan(app: FastAPI):
     """启动时预计算可用语言列表并缓存，后续健康检查直接返回缓存结果。"""
     global _available_languages
     import concurrent.futures, asyncio
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     logger.info("Node_09_Sandbox: 正在探测可用语言运行时 …")
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         futs = {

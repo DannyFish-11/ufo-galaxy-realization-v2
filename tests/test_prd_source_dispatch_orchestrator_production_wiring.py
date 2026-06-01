@@ -108,7 +108,7 @@ class TestStagedMeshProductionPath:
                     session_id="sess_001",
                 )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
 
         assert result["success"] is True
         assert result["metadata"]["delegation_point"] == "multi_device_orchestration"
@@ -144,7 +144,7 @@ class TestStagedMeshProductionPath:
                     trace_id="trace_prd_02",
                 )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result["response"] == "staged_mesh_coordinated"
 
 
@@ -178,7 +178,7 @@ class TestFallbackNoMeshSession:
                     trace_id="trace_prd_03",
                 )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
 
         assert parallel_called, "_dispatch_parallel_goal was not called as fallback"
         assert result["metadata"]["delegation_point"] == "multi_device_orchestration"
@@ -210,7 +210,7 @@ class TestFallbackNoMeshSession:
                     trace_id="trace_prd_04",
                 )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert parallel_called
 
 
@@ -258,7 +258,7 @@ class TestFallbackNonStagedMeshResult:
                     trace_id="trace_prd_05",
                 )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert parallel_called, "Expected fallback to _dispatch_parallel_goal"
         assert result["metadata"]["delegation_point"] == "multi_device_orchestration"
 
@@ -296,7 +296,7 @@ class TestFallbackNonStagedMeshResult:
                     trace_id="trace_prd_06",
                 )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert parallel_called
 
 
@@ -334,7 +334,7 @@ class TestFallbackOnOrchestratorException:
                     trace_id="trace_prd_07",
                 )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert parallel_called, "Fallback was not triggered after orchestrator exception"
         assert result["metadata"]["delegation_point"] == "multi_device_orchestration"
 
@@ -382,7 +382,7 @@ class TestDelegationPointAlwaysSet:
                     message="test", trace_id="trace_dp"
                 )
 
-        return asyncio.get_event_loop().run_until_complete(run())
+        return asyncio.get_running_loop().run_until_complete(run())
 
     def test_delegation_point_set_no_mesh(self):
         result = self._run_with_parallel_stub(mesh_dict=None)
@@ -428,7 +428,7 @@ class TestDelegationPointAlwaysSet:
                     message="staged mesh", trace_id="trace_dp2"
                 )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
         assert result["metadata"]["delegation_point"] == "multi_device_orchestration"
 
 
@@ -560,7 +560,7 @@ class TestStagedMeshReachable:
                     session_id="sess_e2e",
                 )
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
 
         assert result["success"] is True
         assert result["metadata"]["dispatch_mode"] == "staged_mesh"
@@ -594,7 +594,7 @@ class TestStagedMeshReachable:
                     trace_id="trace_thin",
                 )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.get_running_loop().run_until_complete(run())
         assert not staged_mesh_triggered, (
             "orchestrate_source_runtime_dispatch was called with only 1 active "
             "participant — staged_mesh threshold not enforced"

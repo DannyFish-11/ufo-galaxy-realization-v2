@@ -172,7 +172,7 @@ class TestV3TypeRouting:
     @pytest.mark.asyncio
     async def test_command_result_resolves_pending_future(self, comm):
         """v3 'command_result' resolves the matching pending_requests future."""
-        fut = asyncio.get_event_loop().create_future()
+        fut = asyncio.get_running_loop().create_future()
         correlation_id = "corr-xyz"
         comm.connections[DEVICE_ID].pending_requests[correlation_id] = fut
 
@@ -244,7 +244,7 @@ class TestLegacyTypesNormalisedBeforeRouting:
     @pytest.mark.asyncio
     async def test_response_normalised_to_command_result(self, comm):
         """'response' (v2) is normalised to 'command_result'; resolves future."""
-        fut = asyncio.get_event_loop().create_future()
+        fut = asyncio.get_running_loop().create_future()
         correlation_id = "corr-abc"
         comm.connections[DEVICE_ID].pending_requests[correlation_id] = fut
 

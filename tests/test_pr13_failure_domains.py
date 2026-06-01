@@ -970,7 +970,7 @@ class TestCommandRouterFailureDomainStamp:
                 router = CommandRouter()
                 return await router.route_envelope(envelope)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
 
         assert "failure_domain" in result
         assert result["failure_domain"] == "remote_device_unavailable"
@@ -1013,7 +1013,7 @@ class TestCommandRouterFailureDomainStamp:
                 router = CommandRouter()
                 return await router.route_envelope(envelope)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
 
         assert result.get("failure_domain") is None
 
@@ -1048,7 +1048,7 @@ class TestCommandRouterFailureDomainStamp:
                 router = CommandRouter()
                 return await router.route_envelope(envelope)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
 
         assert result.get("failure_is_retryable") is True
 
@@ -1085,7 +1085,7 @@ class TestSwarmCoordinatorFailureDomain:
             ):
                 return await coord._dispatch_one(manifest)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
 
         assert result["success"] is False
         assert result.get("failure_domain") == "remote_device_unavailable"
@@ -1117,7 +1117,7 @@ class TestSwarmCoordinatorFailureDomain:
                  patch.object(coord, "_get_ledger", return_value=mock_ledger):
                 return await coord._dispatch_one(manifest)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
 
         assert result["success"] is False
         assert result.get("failure_domain") == "substrate_dispatch_failure"
@@ -1155,7 +1155,7 @@ class TestSwarmCoordinatorFailureDomain:
                  patch.object(coord, "_get_ledger", return_value=mock_ledger):
                 return await coord._dispatch_one(manifest)
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.get_running_loop().run_until_complete(run())
 
         assert result["success"] is False
         assert result.get("failure_domain") == "gateway_transport_failure"

@@ -232,7 +232,7 @@ class SSHExecutor:
         except ImportError:
             raise HTTPException(500, "paramiko not installed. Run: pip install paramiko")
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             None, self._execute_sync, command, timeout
         )
@@ -279,7 +279,7 @@ class SSHExecutor:
             client.close()
 
     async def read_file(self, path: str, max_size: int = 50000) -> str:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._read_file_sync, path, max_size)
 
     def _read_file_sync(self, path: str, max_size: int) -> str:
@@ -295,7 +295,7 @@ class SSHExecutor:
             client.close()
 
     async def write_file(self, path: str, content: str, mode: str = "644") -> bool:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._write_file_sync, path, content, mode)
 
     def _write_file_sync(self, path: str, content: str, mode: str) -> bool:
@@ -313,7 +313,7 @@ class SSHExecutor:
             client.close()
 
     async def get_system_info(self) -> Dict:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._get_system_info_sync)
 
     def _get_system_info_sync(self) -> Dict:
@@ -358,7 +358,7 @@ class SSHExecutor:
         client.connect(**connect_kwargs)
 
     async def list_dir(self, path: str) -> List[str]:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._list_dir_sync, path)
 
     def _list_dir_sync(self, path: str) -> List[str]:

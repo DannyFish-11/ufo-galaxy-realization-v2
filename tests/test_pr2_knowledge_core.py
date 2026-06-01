@@ -552,7 +552,7 @@ class TestNoParallelPrimaryAuthority:
         sys.modules["nodes.Node_105_UnifiedKnowledgeBase.main"] = mock_node105_module
         try:
             rag = _make_rag()
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.get_running_loop().run_until_complete(
                 rag.query_knowledge("test query", top_k=1)
             )
             # Node_105 returned 1 result (= top_k), so Node_72 should NOT be called

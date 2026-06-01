@@ -636,7 +636,7 @@ class TestGroupL_FailPendingDispatch:
             with pytest.raises(RuntimeError, match="restart_recovery"):
                 await fut
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.get_running_loop().run_until_complete(_run())
 
     def test_L02_fail_pending_dispatch_by_task_id(self):
         from core.canonical_completion_ingress import CanonicalCompletionIngress
@@ -650,7 +650,7 @@ class TestGroupL_FailPendingDispatch:
             with pytest.raises(RuntimeError):
                 await fut
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.get_running_loop().run_until_complete(_run())
 
     def test_L03_fail_pending_dispatch_no_match_returns_false(self):
         from core.canonical_completion_ingress import CanonicalCompletionIngress
@@ -670,7 +670,7 @@ class TestGroupL_FailPendingDispatch:
             exc = RuntimeError("second resolve")
             assert ingress.fail_pending_dispatch("tid_3", exc) is False
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.get_running_loop().run_until_complete(_run())
 
     def test_L05_fail_pending_dispatch_module_level_shortcut_importable(self):
         from core.canonical_completion_ingress import fail_pending_dispatch
@@ -722,7 +722,7 @@ class TestGroupM_ReconcileContinuationWaiters:
                 with pytest.raises(RuntimeError, match="restart_recovery"):
                     fut.result()
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.get_running_loop().run_until_complete(_run())
 
     def test_M02_empty_store_reconciles_zero_futures(self):
         from core.runtime_restart_recovery import (

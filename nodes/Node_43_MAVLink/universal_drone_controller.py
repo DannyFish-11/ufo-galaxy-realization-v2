@@ -215,7 +215,7 @@ class UniversalDroneController:
         return {
             "status": "success",
             "message": "拍照成功",
-            "photo_path": f"/drone_photos/photo_{int(asyncio.get_event_loop().time())}.jpg"
+            "photo_path": f"/drone_photos/photo_{int(asyncio.get_running_loop().time())}.jpg"
         }
     
     async def start_recording(self) -> Dict[str, Any]:
@@ -240,7 +240,7 @@ class UniversalDroneController:
         return {
             "status": "success",
             "message": "录像已停止",
-            "video_path": f"/drone_videos/video_{int(asyncio.get_event_loop().time())}.mp4"
+            "video_path": f"/drone_videos/video_{int(asyncio.get_running_loop().time())}.mp4"
         }
     
     async def execute_waypoint_mission(self, waypoints: List[Dict[str, float]]) -> Dict[str, Any]:

@@ -104,7 +104,7 @@ class TestSOULInheritance:
         parent.task_queue = [{"task": "sub1"}, {"task": "sub2"}]
         f.agents["parent_001"] = parent
 
-        children = asyncio.get_event_loop().run_until_complete(
+        children = asyncio.get_running_loop().run_until_complete(
             f.split_agent("parent_001", num_children=2)
         )
         assert len(children) == 2
@@ -230,7 +230,7 @@ class TestToolGuardian:
         async def ok_fn():
             return "ok"
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.get_running_loop().run_until_complete(
             call_with_guardian(
                 fn=ok_fn,
                 tool_name="list_files",

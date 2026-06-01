@@ -1247,7 +1247,7 @@ class AndroidBridge:
 
             if wait_response:
                 message_id = message.get("message_id") or message.get("task_id")
-                future = asyncio.get_event_loop().create_future()
+                future = asyncio.get_running_loop().create_future()
                 self._pending_responses[message_id] = future
 
                 try:
