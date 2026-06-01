@@ -54,6 +54,7 @@ import logging
 import time
 
 _startup_time = time.time()
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 

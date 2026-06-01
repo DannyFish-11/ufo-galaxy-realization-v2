@@ -1,13 +1,23 @@
 #!/usr/bin/env python3
-# PR-D7: Set process priority (Windows only)
-try:
-    import sys
-    if sys.platform == "win32":
+# PR-WIN-ENCODING: Force UTF-8 on Windows to prevent UnicodeEncodeError in logs
+import sys
+import os
+if sys.platform == "win32":
+    # Set console to UTF-8 mode (Python 3.7+)
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+    # Also set environment variable for subprocesses
+    os.environ["PYTHONIOENCODING"] = "utf-8:replace"
+    # PR-D7: Set process priority (Windows only)
+    try:
         import psutil
         p = psutil.Process()
         p.nice(psutil.HIGH_PRIORITY_CLASS)
-except Exception:
-    pass
+    except Exception:
+        pass
 
 """
 Galaxy-Nexus 星枢 — System Orchestrator
