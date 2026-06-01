@@ -517,7 +517,7 @@ class SwarmCoordinator:
             import asyncio
 
             nats = get_nats_bus()
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             for manifest in manifests:
                 device_id = getattr(manifest, "target_device_id", None) or ""
                 if not device_id:
@@ -555,7 +555,7 @@ class SwarmCoordinator:
             import asyncio
 
             nats = get_nats_bus()
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             for manifest, result in zip(manifests, raw_results):
                 device_id = getattr(manifest, "target_device_id", None) or ""
                 if isinstance(result, Exception):

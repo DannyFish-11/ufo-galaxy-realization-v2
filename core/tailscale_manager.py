@@ -172,7 +172,7 @@ class TailscaleManager:
             )
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_event_loop().create_task(nats.publish_state_event(msg))
+                asyncio.get_running_loop().create_task(nats.publish_state_event(msg))
             else:
                 logger.debug("AIPV3-TAILSCALE STATE_EVENT: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:

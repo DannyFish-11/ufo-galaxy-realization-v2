@@ -359,7 +359,7 @@ class SkillRegistry:
                     raw_result = await entry.handler(**req.inputs)
             else:
                 # Sync handler – run in executor to avoid blocking the loop
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 timeout = req.timeout_s
 
                 def _call() -> Any:

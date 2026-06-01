@@ -199,7 +199,7 @@ class HardwareComputeProfiler:
         except ImportError:
             # fallback: 尝试通过 /proc/cpuinfo
             try:
-                with open("/proc/cpuinfo") as f:
+                with open("/proc/cpuinfo", encoding="utf-8") as f:
                     flags = f.read()
                 if "avx512" in flags:
                     self._avx_support = "avx512"

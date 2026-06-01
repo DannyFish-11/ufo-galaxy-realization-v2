@@ -131,7 +131,7 @@ class CanonicalCompletionIngress:
             # No running loop: fall back to get_event_loop() which may return the
             # default loop or create one.  Callers in sync context are responsible
             # for setting the event loop before registering dispatches.
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
         fut: asyncio.Future = loop.create_future()
 

@@ -372,7 +372,7 @@ class CapabilityBus:
             from core.nats_bus import get_nats_bus  # noqa: PLC0415
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_event_loop().create_task(nats.publish_capability_report(msg))
+                asyncio.get_running_loop().create_task(nats.publish_capability_report(msg))
             else:
                 logger.debug(
                     "AIPV3-CAP CAPABILITY_REPORT: %s", msg.model_dump_json(exclude_none=True)

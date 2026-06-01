@@ -311,7 +311,7 @@ class GalaxyMainLoopL4:
         """设置信号处理器"""
         if sys.platform != "win32":
             for sig in (signal.SIGINT, signal.SIGTERM):
-                asyncio.get_event_loop().add_signal_handler(
+                asyncio.get_running_loop().add_signal_handler(
                     sig,
                     lambda: asyncio.create_task(self.stop())
                 )

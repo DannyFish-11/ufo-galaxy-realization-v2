@@ -108,7 +108,7 @@ class StateSynchronizationBus:
             return
         self._subscribers: Dict[str, List[Callable[[StateChangeEvent], None]]] = {}
         self._global_subscribers: List[Callable[[StateChangeEvent], None]] = []
-        self._lock = asyncio.Lock() if asyncio.get_event_loop().is_running() else None
+        self._lock = asyncio.Lock() if asyncio.get_event_loop_policy().get_event_loop().is_running() else None
         self._initialized = True
 
     # ── Subscription ──
@@ -220,7 +220,7 @@ class StateSynchronizationBus:
             )
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_event_loop().create_task(nats.publish_state_event(msg))
+                asyncio.get_running_loop().create_task(nats.publish_state_event(msg))
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 

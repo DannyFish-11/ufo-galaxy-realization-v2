@@ -5094,7 +5094,7 @@ class NATSExecutor:
         )
 
         # Register future before publish to avoid race condition
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         self._pending[task_id] = fut
 

@@ -492,7 +492,7 @@ class NodeRegistry:
             cap_status = CapabilityStatus.OFFLINE if "超时" in error else CapabilityStatus.ERROR
             # 使用 fire-and-forget 模式，不 await
             import asyncio as _asyncio
-            loop = _asyncio.get_event_loop()
+            loop = _asyncio.get_running_loop()
             if loop.is_running():
                 loop.create_task(capability_manager.update_node_status(node_id, cap_status))
         except Exception as e:

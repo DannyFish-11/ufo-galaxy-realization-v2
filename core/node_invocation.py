@@ -574,7 +574,7 @@ class UnifiedNodeExecutor:
             )
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_event_loop().create_task(nats.publish_task_assign(msg))
+                asyncio.get_running_loop().create_task(nats.publish_task_assign(msg))
             else:
                 logger.debug("AIPV3-LOCAL TASK_ASSIGN: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:
@@ -603,7 +603,7 @@ class UnifiedNodeExecutor:
             )
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_event_loop().create_task(nats.publish_task_result(msg))
+                asyncio.get_running_loop().create_task(nats.publish_task_result(msg))
             else:
                 logger.debug("AIPV3-LOCAL TASK_RESULT: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:

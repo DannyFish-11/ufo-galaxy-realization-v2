@@ -692,7 +692,7 @@ class NetworkTopologyRuntime:
             )
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_event_loop().create_task(nats.publish_state_event(msg))
+                asyncio.get_running_loop().create_task(nats.publish_state_event(msg))
             else:
                 logger.debug("AIPV3-TOPO STATE_EVENT: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:

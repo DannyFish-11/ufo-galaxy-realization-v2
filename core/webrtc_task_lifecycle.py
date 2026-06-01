@@ -242,7 +242,7 @@ def _emit_aip_v3_webrtc_bind(binding: "WebRTCTaskBinding") -> None:
         )
         nats = get_nats_bus()
         if nats.is_connected():
-            asyncio.get_event_loop().create_task(nats.publish_webrtc_bind(msg))
+            asyncio.get_running_loop().create_task(nats.publish_webrtc_bind(msg))
         else:
             logger.debug("AIPV3-WEBRTC BIND: %s", msg.model_dump_json(exclude_none=True))
     except Exception as exc:
@@ -270,7 +270,7 @@ def _emit_aip_v3_webrtc_transport_state(
         )
         nats = get_nats_bus()
         if nats.is_connected():
-            asyncio.get_event_loop().create_task(nats.publish_webrtc_transport_state(msg))
+            asyncio.get_running_loop().create_task(nats.publish_webrtc_transport_state(msg))
         else:
             logger.debug("AIPV3-WEBRTC STATE: %s", msg.model_dump_json(exclude_none=True))
     except Exception as exc:
@@ -294,7 +294,7 @@ def _emit_aip_v3_webrtc_unbind(binding: "WebRTCTaskBinding") -> None:
         )
         nats = get_nats_bus()
         if nats.is_connected():
-            asyncio.get_event_loop().create_task(nats.publish_webrtc_unbind(msg))
+            asyncio.get_running_loop().create_task(nats.publish_webrtc_unbind(msg))
         else:
             logger.debug("AIPV3-WEBRTC UNBIND: %s", msg.model_dump_json(exclude_none=True))
     except Exception as exc:

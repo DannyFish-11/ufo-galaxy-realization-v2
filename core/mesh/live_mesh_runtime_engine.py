@@ -271,7 +271,7 @@ def _emit_aip_v3_mesh_events(
         device_ids = [getattr(p, "device_id", "") for p in participants if getattr(p, "device_id", "")]
 
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         if event_type == "mesh_join":
             for did in device_ids:
@@ -452,7 +452,7 @@ def _emit_mesh_heartbeat_leave(coordinator_state: Any, device_id: str) -> None:
         )
         nats = get_nats_bus()
         if nats.is_connected():
-            asyncio.get_event_loop().create_task(nats.publish_mesh_leave(msg))
+            asyncio.get_running_loop().create_task(nats.publish_mesh_leave(msg))
             _logger.info(
                 "[MeshHeartbeat] Participant %s timed out, MESH_LEAVE emitted",
                 device_id,

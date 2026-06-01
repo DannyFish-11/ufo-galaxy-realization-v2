@@ -367,7 +367,7 @@ class TaskGraph:
             from core.nats_bus import get_nats_bus  # noqa: PLC0415
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_event_loop().create_task(nats.publish_task_assign(msg))
+                asyncio.get_running_loop().create_task(nats.publish_task_assign(msg))
             else:
                 # Log the AIP v3 message for local debugging / tracing
                 logger.debug("AIPV3-DAG TASK_ASSIGN: %s", msg.model_dump_json(exclude_none=True))
@@ -403,7 +403,7 @@ class TaskGraph:
             from core.nats_bus import get_nats_bus  # noqa: PLC0415
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_event_loop().create_task(nats.publish_task_result(msg))
+                asyncio.get_running_loop().create_task(nats.publish_task_result(msg))
             else:
                 logger.debug("AIPV3-DAG TASK_RESULT: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:

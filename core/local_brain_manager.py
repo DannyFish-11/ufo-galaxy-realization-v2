@@ -725,7 +725,7 @@ class LocalBrainManager:
             logger.debug("psutil memory detection failed: %s", exc)
             # fallback: 读取 /proc/meminfo
             try:
-                with open("/proc/meminfo") as f:
+                with open("/proc/meminfo", encoding="utf-8") as f:
                     for line in f:
                         if line.startswith("MemTotal:"):
                             profile.system_ram_mb = int(line.split()[1]) // 1024

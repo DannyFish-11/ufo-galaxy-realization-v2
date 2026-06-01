@@ -501,7 +501,7 @@ def get_windows_system_api(enabled: Optional[bool] = None) -> WindowsSystemAPI:
                     _os.path.dirname(_os.path.dirname(_os.path.dirname(__file__))),
                     "config.json",
                 )
-                with open(_cfg_path) as _f:
+                with open(_cfg_path, encoding="utf-8") as _f:
                     _cfg = json.load(_f)
                 enabled = bool(_cfg.get("enable_windows_system_api", True))
             except Exception as exc:

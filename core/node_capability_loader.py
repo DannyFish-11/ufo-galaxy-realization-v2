@@ -365,7 +365,7 @@ class NodeCapabilityLoader:
             )
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_event_loop().create_task(nats.publish_capability_report(msg))
+                asyncio.get_running_loop().create_task(nats.publish_capability_report(msg))
             else:
                 logger.debug("AIPV3-NODE CAPABILITY_REPORT: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:
