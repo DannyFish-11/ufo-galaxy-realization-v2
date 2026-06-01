@@ -554,6 +554,16 @@ class SystemOrchestrator:
         If Electron is not available (npm/node missing or electron dir absent)
         the phase returns DEGRADED and the system continues without the GUI.
         """
+        # PR-DAEMON: respect GALAXY_DESKTOP_GUI_ENABLED env var so that
+        # galaxy_daemon.py can skip the GUI entirely without needing Node.js.
+        if os.environ.get("GALAXY_DESKTOP_GUI_ENABLED", "").lower() in ("false", "0", "no"):
+            logger.info("[Phase 6] Desktop GUI disabled by GALAXY_DESKTOP_GUI_ENABLED=false (daemon mode)")
+            return PhaseResult(
+                phase=StartupPhase.DESKTOP_SURFACE,
+                status=PhaseStatus.DEGRADED,
+                detail="Desktop GUI disabled — running in daemon/service mode",
+            )
+
         logger.info("[Phase 6] Desktop surface bring-up (Electron three-state GUI) ...")
 
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

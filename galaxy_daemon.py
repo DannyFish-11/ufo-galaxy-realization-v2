@@ -38,8 +38,8 @@ RESTART_COOLDOWN = 60      # 崩溃后等待秒数
 # 环境变量（内嵌默认值，不需要 .env）
 DEFAULT_ENV = {
     "GALAXY_API_TOKEN": "",
-    "GALAXY_AUTH_ENABLED": "true",
-    "GALAXY_NATS_ENABLED": "false",
+    "GALAXY_AUTH_ENABLED": "false",         # 默认关闭认证（无token时不报CRITICAL）
+    "GALAXY_NATS_ENABLED": "false",         # 守护模式不启动NATS
     "GALAXY_DESKTOP_GUI_ENABLED": "false",  # 守护模式不启动 GUI
     "GALAXY_LOG_LEVEL": "INFO",
     "PYTHONIOENCODING": "utf-8",
@@ -109,8 +109,8 @@ class GalaxyDaemon:
 
         # 检查关键配置
         if not os.environ.get("GALAXY_API_TOKEN"):
-            self.logger.warning("GALAXY_API_TOKEN 未设置，认证功能不可用")
-            self.logger.info("  解决方法: $env:GALAXY_API_TOKEN=\"your_token\"")
+            self.logger.info("GALAXY_API_TOKEN 未设置，认证已自动禁用 (daemon模式安全默认值)")
+            self.logger.info("  如需启用认证: 编辑 .env → GALAXY_AUTH_ENABLED=true + GALAXY_API_TOKEN=your_token")
 
     def _check_dependencies(self) -> bool:
         """检查核心依赖是否已安装。"""

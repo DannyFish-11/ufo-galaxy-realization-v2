@@ -50,10 +50,16 @@ Write-Host ""
 Write-Host "[5/6] 配置文件..." -ForegroundColor Yellow
 $EnvFile = "$ProjectRoot\.env"
 if (-not (Test-Path $EnvFile)) {
-    $Token = Read-Host "  输入 GALAXY_API_TOKEN (回车跳过)"
+    $Token = Read-Host "  输入 GALAXY_API_TOKEN (回车跳过，跳过则关闭认证)"
+    if ($Token) {
+        $AuthEnabled = "true"
+    } else {
+        $AuthEnabled = "false"
+        Write-Host "  未输入 Token，认证已关闭 (守护模式安全默认值)" -ForegroundColor Yellow
+    }
     @"
 GALAXY_API_TOKEN=$Token
-GALAXY_AUTH_ENABLED=true
+GALAXY_AUTH_ENABLED=$AuthEnabled
 GALAXY_NATS_ENABLED=false
 GALAXY_DESKTOP_GUI_ENABLED=false
 "@ | Out-File -FilePath $EnvFile -Encoding UTF8
