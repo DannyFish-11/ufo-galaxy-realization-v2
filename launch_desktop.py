@@ -37,6 +37,8 @@ import time
 import urllib.request
 from pathlib import Path
 
+from core.ascii_art import print_banner, print_section_header, print_status_row
+
 # ---------------------------------------------------------------------------
 # 常量配置
 # ---------------------------------------------------------------------------
@@ -89,9 +91,8 @@ def run(cmd: list, cwd: Path = None, timeout: float = 120, capture: bool = True)
 
 
 def banner(title: str):
-    logger.info("=" * 56)
-    logger.info("  %s", title)
-    logger.info("=" * 56)
+    """使用标准 Galaxy ASCII 横幅。"""
+    print_banner(title)
 
 
 def check_phase(name: str) -> bool:
@@ -329,28 +330,18 @@ def _signal_handler(signum, frame):
     sys.exit(0)
 
 
-def start_gateway_backend(docker_mode: bool) -> subprocess.Popen:
-    if docker_mode:
-        logger.info("  启动 Galaxy Gateway (Docker)...")
-        cmd = ["docker", "compose", "up", "-d", "galaxy-gateway"]
-    else:
-        logger.info("  启动 Galaxy Gateway (Python)...")
-        cmd = [sys.executable, str(PROJECT_ROOT / "main.py")]
-
+def start_gateway_backend():
+    """委托 main.py 启动后端。"""
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
-
-    if docker_mode:
-        # Docker 模式：日志直接输出
-        stdout = None
-    else:
-        # Python 模式：Gateway 日志写入文件，启动器只显示状态
-        gateway_log = LOGS_DIR / "gateway.log"
-        gateway_log.parent.mkdir(exist_ok=True)
-        stdout = open(gateway_log, "w", encoding="utf-8")
-
-    return subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), env=env,
-                            stdout=stdout, stderr=subprocess.STDOUT)
+    gateway_log = LOGS_DIR / "gateway.log"
+    gateway_log.parent.mkdir(exist_ok=True)
+    stdout = open(gateway_log, "w", encoding="utf-8")
+    return subprocess.Popen(
+        [sys.executable, str(PROJECT_ROOT / "main.py")],
+        cwd=str(PROJECT_ROOT), env=env,
+        stdout=stdout, stderr=subprocess.STDOUT,
+    )
 
 
 def start_electron_frontend() -> subprocess.Popen:
@@ -405,10 +396,10 @@ def main():
 
     # ── 模式：只启动后端 ──
     if args.backend:
-        global _proc_gateway
-        _proc_gateway = start_gateway_backend(args.docker)
-        _proc_gateway.wait()
-        return
+        logger.info("正在启动 Gateway（委托 main.py）...")
+        _proc_gateway = start_gateway_backend()
+        returncode, _, _ = _proc_gateway
+        sys.exit(returncode)
 
     # ═══════════════════════════════════════════════════════════════════
     # 完整模式：系统化一体化启动
@@ -431,9 +422,9 @@ def main():
         logger.error("依赖修复失败，请手动检查后重试。")
         sys.exit(1)
 
-    # Phase 2: 启动 Gateway
-    banner("Phase 2: 启动 Galaxy Gateway")
-    _proc_gateway = start_gateway_backend(args.docker)
+    # 启动后端（委托 main.py）
+    logger.info("正在启动 Gateway（委托 main.py）...")
+    _proc_gateway = start_gateway_backend()
     logger.info("  Gateway PID=%d | 日志: logs/gateway.log", _proc_gateway.pid)
 
     # Phase 3: 健康检查

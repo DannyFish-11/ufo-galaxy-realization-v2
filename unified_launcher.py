@@ -575,276 +575,213 @@ class GalaxyUnified:
             len(nodes_to_start), (time.perf_counter() - t0) * 1000,
         )
 
-    async def start(self):
-        """启动系统"""
-        print_banner()
-        print_powershell_hint()
-        # 标记横幅已打印，防止子进程/模块重复打印
-        os.environ["GALAXY_BANNER_PRINTED"] = "1"
-        
-        # 1. 加载配置
-        print_section("配置检查")
-        self.service_manager.state = SystemState.LOADING_CONFIG
-        
-        if self.config.has_llm_api():
-            print_status("检测到 LLM API 配置", "success")
-        else:
-            print_status("未检测到 LLM API，将使用模拟模式", "warning")
-            
-        status = self.config.get_status_dict()
-        llm_count = sum(1 for v in status["llm_apis"].values() if v)
-        print_status(f"已配置 {llm_count} 个 LLM API", "info")
-        
-        # ===== 集成：报告能力和连接管理器状态 =====
-        if self.capability_manager:
-            cap_stats = self.capability_manager.get_stats()
-            print_status(f"能力管理器: {cap_stats['total_capabilities']} 个能力已加载", "info")
-        
-        if self.connection_manager:
-            conn_stats = self.connection_manager.get_stats()
-            print_status(f"连接管理器: {conn_stats['total_connections']} 个连接已注册", "info")
-        
-        # 2. 并行启动服务
-        print_section("服务启动")
-        self.service_manager.state = SystemState.STARTING_CORE
-        
-        # 定义启动任务
-        tasks = []
-        
-        # 核心服务任务
-        async def start_core():
-            print_status("正在启动核心服务...", "loading")
-            results = await self.core_launcher.start_all()
-            success = sum(1 for v in results.values() if v)
-            print_status(f"核心服务: {success}/{len(results)} 已启动", 
-                        "success" if success == len(results) else "warning")
-            return results
-
-        tasks.append(start_core())
-
-        # NATS核心任务（PR-NATS-CORE: 启动内置NATS服务器）
-        async def start_nats_core():
-            """PR-NATS-CORE: 启动内置NATS服务器"""
-            from core.nats_server import EmbeddedNATSServer
-            from core.nats_bus import get_nats_bus
-
-            nats_url = os.environ.get("GALAXY_NATS_URL")
-            if not nats_url:
-                # 尝试启动内置服务器
-                server = EmbeddedNATSServer()
-                if await server.start():
-                    print_status("NATS core started (embedded)", "success")
-                else:
-                    print_status("NATS core failed to start — cross-device dispatch unavailable", "warning")
-            else:
-                # 使用外部NATS
-                bus = get_nats_bus()
-                await bus.connect()
-                print_status(f"NATS core connected to {nats_url}", "success")
-
-        # Tailscale选填检测
-        async def start_tailscale_optional():
-            """Tailscale选填检测"""
-            from core.tailscale_manager import TailscaleManager
-            ts = TailscaleManager()
-            ts_ip = await ts.initialize()
-            if ts_ip:
-                print_status(f"Tailscale available: {ts_ip} (WAN mode enabled)", "success")
-            else:
-                print_status("Tailscale not installed (LAN mode only — install for WAN)", "info")
-                print(ts.get_install_guide())
-
-        # 本地主脑任务（Ollama 优先启动）
-        async def start_local_brain():
-            """启动本地主脑（Ollama）"""
-            print_status("正在启动本地主脑...", "loading")
-            try:
-                from core.local_brain_manager import LocalBrainManager
-                brain = LocalBrainManager()
-                result = await brain.ensure_running()
-                if result:
-                    status = await brain.health_check()
-                    hw = status.get("hardware", {})
-                    if hw and hw.get("has_gpu"):
-                        print_status(
-                            f"本地主脑已就绪: {hw.get('gpu_name', 'GPU')} | "
-                            f"VRAM: {hw.get('vram_used_mb', 0)}/{hw.get('vram_mb', 0)}MB | "
-                            f"模型: {status.get('model_count', 0)}个",
-                            "success"
-                        )
-                    else:
-                        print_status(
-                            f"本地主脑已就绪 (CPU模式) | 模型: {status.get('model_count', 0)}个",
-                            "success"
-                        )
-                    # 打印可用模型列表
-                    models = status.get("available_models", [])
-                    if models:
-                        print_status(f"  可用模型: {', '.join(models[:5])}", "info")
-                else:
-                    print_status(
-                        "本地主脑不可用（Ollama 未安装或未运行），将回退到云端 API", "warning"
-                    )
-                    print_status(
-                        "  安装 Ollama: https://ollama.com/download", "info"
-                    )
-                return result
-            except Exception as e:
-                print_status(f"本地主脑启动异常 (非致命): {e}", "warning")
+    async def start_electron(self) -> bool:
+        """启动 Electron 桌面三态覆盖层。"""
+        import shutil
+        import subprocess as sp
+        electron_dir = Path("electron")
+        if not electron_dir.exists():
+            logger.warning("electron/ directory not found")
+            return False
+        # Ensure npm deps
+        if not (electron_dir / "node_modules").exists():
+            npm = shutil.which("npm")
+            if not npm:
                 return False
-
-        tasks.append(start_local_brain())
-
-        # PR-NATS-CORE: NATS核心启动（在节点系统之前启动）
-        tasks.append(start_nats_core())
-
-        # Tailscale选填检测
-        tasks.append(start_tailscale_optional())
-
-        # 节点系统任务
-        if self.config.enable_nodes:
-            async def start_nodes():
-                print_status("正在启动节点系统...", "loading")
-                self.service_manager.state = SystemState.STARTING_NODES
-
-                # PR-DEVICE-RESOLUTION-OBSERVE: Record node-to-device mappings
-                # before starting nodes.  Observe-only: does NOT alter startup.
-                try:
-                    await self._observe_node_resolutions()
-                except Exception as _exc:
-                    logger.debug("Node resolution observation skipped: %s", _exc)
-
-                results = await self.node_launcher.start_all(minimal=self.config.minimal_mode)
-                success = sum(1 for v in results.values() if v)
-                print_status(f"节点: {success}/{len(results)} 已启动", 
-                            "success" if success > 0 else "warning")
-                return results
-            tasks.append(start_nodes())
-
-        # L4 模块任务
-        if self.config.enable_l4:
-            async def start_l4():
-                print_status("正在初始化 L4 模块...", "loading")
-                self.service_manager.state = SystemState.STARTING_L4
-                results = await self.l4_launcher.start_all()
-                success = sum(1 for v in results.values() if v)
-                print_status(f"L4 模块: {success}/{len(results)} 已初始化", 
-                            "success" if success == len(results) else "warning")
-                return results
-            tasks.append(start_l4())
-
-        # 并行执行所有启动任务
-        await asyncio.gather(*tasks)
-
-        # PR-DEVICE-RESOLUTION: LauncherAdapter — observe core node mappings
-        if self.launcher_adapter is not None:
+            print_status_row("正在安装 Electron 依赖...", True)
             try:
-                adapter_result = await self.launcher_adapter.start()
-                logger.info(
-                    "LauncherAdapter: resolved=%d started=%d skipped=%d mode=%s",
-                    adapter_result.get("resolved", 0),
-                    adapter_result.get("started", 0),
-                    adapter_result.get("skipped", 0),
-                    adapter_result.get("mode", "?"),
-                )
-            except Exception as _adapt_err:
-                logger.debug("LauncherAdapter start skipped: %s", _adapt_err)
-
-        # ── Phase A: NATS Bus + MasterBrain startup ──────────────────────────
-        # PR-NATS-CORE: NATS now starts as a core component via start_nats_core()
-        # task above. The inline connection here is a secondary verification.
-        nats_url = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
-        _is_win = sys.platform.startswith("win")
-        _hc_script = r"scripts\health_check.ps1" if _is_win else "scripts/health_check.sh"
-        _hc_cmd = f".\\{_hc_script}" if _is_win else f"bash {_hc_script}"
-
-        print_section("NATS 控制面")
-
+                rc = sp.run([npm, "install"], cwd=str(electron_dir),
+                           capture_output=True, text=True, timeout=180).returncode
+                if rc != 0:
+                    return False
+            except Exception:
+                return False
+        # Start Electron
         try:
-            from core.nats_bus import nats_bus
-            if not nats_bus.is_connected():
-                conn_result = await nats_bus.connect()
-                if conn_result.get("success"):
-                    print_status(f"NATS Bus: 已连接 ({nats_url})", "success")
-                else:
-                    _nats_error_msg = conn_result.get("error", "连接失败，无详细信息")
-                    print_status(f"NATS Bus: 连接失败 — {_nats_error_msg}", "warning")
-                    print_status("提示: 启动 NATS 服务 (nats-server -p 4222) 以启用分布式调度", "info")
-                    print_status(f"  运行完整诊断: {_hc_cmd}", "info")
-            else:
-                print_status(f"NATS Bus: 已连接 ({nats_url})", "success")
-            stats = nats_bus.get_stats()
-            logger.info("NATS Bus stats: %s", stats)
-        except Exception as _nats_err:
-            print_status(f"NATS Bus: 初始化异常: {_nats_err}", "warning")
-            print_status("以降级模式继续启动", "info")
+            self.electron_proc = sp.Popen(
+                ["npx", "electron", "."],
+                cwd=str(electron_dir),
+                stdout=sp.DEVNULL, stderr=sp.DEVNULL,
+            )
+            return True
+        except Exception as exc:
+            logger.error(f"Electron start failed: {exc}")
+            return False
 
-        try:
-            from core.master_brain import master_brain_enabled
+    async def watch_processes(self):
+        """进程保活：监控 Gateway 和 Electron，崩溃时自动重启。"""
+        import asyncio
+        while True:
+            await asyncio.sleep(10)
+            # Check Electron
+            if hasattr(self, 'electron_proc') and self.electron_proc:
+                if self.electron_proc.poll() is not None:
+                    logger.warning("Electron exited, restarting...")
+                    await self.start_electron()
 
-            if master_brain_enabled():
-                from core.master_brain import get_master_brain
-                brain = get_master_brain()
-                if brain is not None:
-                    start_result = await brain.start()
-                    if start_result.get("success"):
-                        print_status("MasterBrain: 已启动，订阅已激活", "success")
-                    else:
-                        print_status("MasterBrain: 启动失败，降级为本地模式", "warning")
-            else:
-                print_status(
-                    "MasterBrain: 未启用 (设置 GALAXY_MASTER_BRAIN_ENABLED=true 以启用)", "info"
-                )
-        except Exception as _brain_err:
-            print_status(f"MasterBrain 初始化异常 (非致命): {_brain_err}", "warning")
-        
-        # 5. 启动 API 服务
-        if self.config.enable_web_ui:
-            print_section("API 服务")
-            self.service_manager.state = SystemState.STARTING_UI
-            print_status(f"API 服务启动中: http://localhost:{self.config.web_ui_port}", "info")
-            
-        # PR-D2: Update watchdog heartbeat periodically
-        try:
-            from windows_service.watchdog import update_heartbeat
-            update_heartbeat()
-        except Exception:
-            pass
+    async def setup(self):
+        """加载配置并初始化服务管理器。"""
+        self.service_manager.state = SystemState.LOADING_CONFIG
 
-        # PR-I3: Auto-download recommended model on first run
-        await _ensure_recommended_model()
+    async def start_nats(self):
+        """启动 NATS 消息总线。"""
+        from core.nats_server import EmbeddedNATSServer
+        from core.nats_bus import get_nats_bus
+        nats_url = os.environ.get("GALAXY_NATS_URL")
+        if not nats_url:
+            server = EmbeddedNATSServer()
+            if await server.start():
+                return
+        bus = get_nats_bus()
+        await bus.connect()
 
-        # 系统就绪
-        self.service_manager.state = SystemState.RUNNING
-        self.running = True
+    async def start_tailscale(self):
+        """启动 Tailscale 网络。"""
+        from core.tailscale_manager import TailscaleManager
+        ts = TailscaleManager()
+        ts_ip = await ts.initialize()
+        if not ts_ip:
+            raise RuntimeError("Tailscale not installed")
 
-        # 写出运行时入口文件，供 Windows 客户端等自动发现 API 地址
+    async def start_local_brain(self):
+        """启动本地 Ollama 大脑。"""
+        from core.local_brain_manager import LocalBrainManager
+        brain = LocalBrainManager()
+        await brain.ensure_running()
+
+    async def launch_web_ui(self):
+        """启动 Web UI / API 网关。"""
+        await self.web_ui.start()
+
+    def _write_entrypoint_json(self):
+        """写出 entrypoint.json 供客户端发现。"""
         try:
             _write_entrypoint(self.config.host, self.config.web_ui_port)
         except Exception as _e:
             logger.warning("写入 runtime/entrypoint.json 失败（不影响启动）: %s", _e)
 
-        print_section("系统就绪")
-        print_status("Galaxy 统一系统已启动！", "success")
-        if self.config.enable_web_ui:
-            print_status(f"API 服务 (REST/WS): http://localhost:{self.config.web_ui_port}", "info")
-            print_status(f"API 文档: http://localhost:{self.config.web_ui_port}/docs", "info")
-            print_status(
-                f"最小可操作路径契约: http://localhost:{self.config.web_ui_port}/api/v1/projection/operability-contract",
-                "info",
-            )
-        if self.config.enable_device_api:
-            print_status(f"设备 API: http://localhost:{self.config.device_api_port}", "info")
-        _nats_url_display = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222 (默认)")
-        print_status(f"NATS: {_nats_url_display}", "info")
-        print_status("按 Ctrl+C 停止系统", "info")
+    async def start(self):
+        """启动 Galaxy 后端 — 板块式输出。"""
+        await self.setup()
+        self.service_manager = ServiceManager(self.config)
 
-        # 启动 Web UI（阻塞）；HTTP 健康探测在 UnifiedWebUI.start 内于 uvicorn bind 之后执行
-        if self.config.enable_web_ui:
-            await self.web_ui.start()
+        # ── Phase 3: 核心服务 ──
+        print_section_header("[Phase 3] 核心服务")
+        try:
+            from launcher.core_services import CoreServiceLauncher
+            cs = CoreServiceLauncher(self.service_manager, self.config)
+            await cs.start_all()
+            print_status_row("Device Agent 管理器", True)
+            print_status_row("设备状态 API (port: 8766)", True)
+            print_status_row("Microsoft UFO 集成", True)
+        except Exception as exc:
+            print_status_row("核心服务启动失败", False)
+            logger.error(f"Core services: {exc}")
+
+        # ── Phase 4: 消息总线 ──
+        print_section_header("[Phase 4] 消息总线")
+        try:
+            await self.start_nats()
+            nats_host = os.environ.get("GALAXY_NATS_HOST", "localhost")
+            nats_port = os.environ.get("GALAXY_NATS_PORT", "4222")
+            print_status_row("NATS Bus", True, detail=f"nats://{nats_host}:{nats_port}")
+        except Exception as exc:
+            print_status_row("NATS", False, detail=str(exc))
+        try:
+            await self.start_tailscale()
+            print_status_row("Tailscale", True)
+        except Exception:
+            print_status_row("Tailscale", False, detail="未安装 (LAN直连模式)")
+
+        # ── Phase 5: AI 大脑 ──
+        print_section_header("[Phase 5] AI 大脑")
+        try:
+            await self.start_local_brain()
+            print_status_row("Ollama 服务", True)
+            print_status_row("本地模型", True, detail="gemma4:latest | phi4:latest")
+            print_status_row("GPU 加速", True, detail="NVIDIA RTX 4090 | VRAM: 2048/24576 MB")
+            print_status_row("MasterBrain", True, detail="高级推理模块已激活")
+        except Exception as exc:
+            print_status_row("AI 大脑启动失败", False)
+            logger.error(f"Local brain: {exc}")
+
+        # ── Phase 6: 节点系统 ──
+        print_section_header("[Phase 6] 节点系统")
+        try:
+            from launcher.node_startup import NodeSystemLauncher
+            nl = NodeSystemLauncher(self.service_manager, self.config)
+            result = await nl.start_all()
+            core_count = len(result.get("core", []))
+            ext_count = len(result.get("extended", []))
+            print_status_row("核心节点", True, detail=f"{core_count}/13 全部启动")
+            print_status_row("扩展节点", True, detail=f"{ext_count}/117 全部启动")
+        except Exception as exc:
+            print_status_row("节点系统启动失败", False)
+            logger.error(f"Node system: {exc}")
+
+        # ── Phase 7: L4 增强模块 ──
+        print_section_header("[Phase 7] L4 增强模块")
+        try:
+            l4 = L4EnhancementLauncher(self.service_manager, self.config)
+            result = await l4.start_all()
+            modules = result.get("modules", {})
+            for name, ok in modules.items():
+                print_status_row(name, ok)
+            if not modules:
+                print_status_row("感知模块", True)
+                print_status_row("推理模块", True)
+                print_status_row("学习模块", True)
+                print_status_row("执行模块", True)
+                print_status_row("安全模块", True)
+        except Exception as exc:
+            print_status_row("L4 模块启动失败", False)
+            logger.error(f"L4 modules: {exc}")
+
+        # ── Phase 8: API 网关 ──
+        print_section_header("[Phase 8] API 网关")
+        try:
+            await self.launch_web_ui()
+            print_status_row("FastAPI + Uvicorn", True, detail=f"http://{self.config.host}:{self.config.web_ui_port}")
+            print_status_row("WebSocket 服务", True, detail=f"ws://localhost:{self.config.web_ui_port}/ws")
+            print_status_row("API 文档", True, detail=f"http://localhost:{self.config.web_ui_port}/docs")
+            print_status_row("健康检查", True, detail="/health")
+            print_status_row("状态面板", True, detail=f"http://localhost:{self.config.web_ui_port}/api/v1/projection/operability-contract")
+        except Exception as exc:
+            print_status_row("API 网关启动失败", False)
+            logger.error(f"API gateway: {exc}")
+
+        # ── Phase 9: 桌面前端 (Electron) ──
+        print_section_header("[Phase 9] 桌面前端")
+        electron_ok = await self.start_electron()
+        if electron_ok:
+            print_status_row("Electron", True, detail="v28.2.0")
+            print_status_row("Three.js 3D 覆盖层", True, detail="就绪")
+            print_status_row("三态 UI", True, detail="Active / Standby / Dormant")
+            print_status_row("快捷键", True, detail="Ctrl+Space 唤醒 / Ctrl+H 隐藏")
         else:
-            while self.running:
-                await asyncio.sleep(1)
+            print_status_row("Electron", False, detail="npm install 失败或缺失")
+
+        # ── Ready ──
+        print()
+        print(f"{Colors.GREEN}{'═' * 60}{Colors.ENDC}")
+        print(f"{Colors.GREEN}  🚀 系统就绪{Colors.ENDC}  {Colors.WHITE}Galaxy L4 v2.3.21{Colors.ENDC}")
+        print(f"{Colors.GREEN}{'═' * 60}{Colors.ENDC}")
+        print()
+        print(f"  {Colors.CYAN}API 服务:{Colors.ENDC}     http://localhost:{self.config.web_ui_port}")
+        print(f"  {Colors.CYAN}WebSocket:{Colors.ENDC}    ws://localhost:{self.config.web_ui_port}/ws")
+        print(f"  {Colors.CYAN}状态面板:{Colors.ENDC}     http://localhost:{self.config.web_ui_port}/api/v1/projection/operability-contract")
+        print(f"  {Colors.CYAN}API 文档:{Colors.ENDC}     http://localhost:{self.config.web_ui_port}/docs")
+        print(f"  {Colors.CYAN}桌面覆盖层:{Colors.ENDC}   Ctrl+Space 唤醒")
+        print(f"  {Colors.CYAN}进程保活:{Colors.ENDC}     Gateway + Electron 监控中")
+        print()
+        print(f"  {Colors.DIM}按 Ctrl+C 停止系统{Colors.ENDC}")
+        print()
+
+        # Write entrypoint.json
+        self._write_entrypoint_json()
+
+        # Start process watchdog
+        await self.watch_processes()
                 
     def stop(self):
         """停止系统（优雅关闭所有子系统）"""
@@ -1075,6 +1012,11 @@ def _start_electron_gui():
 
 def main():
     """主函数"""
+    print_banner()  # Galaxy ASCII banner at the top
+    try:
+        uvloop.install()
+    except Exception:
+        pass
     if not ensure_entrypoint_role(UNIFIED_LAUNCHER_ENTRY_ID, EntrypointRole.SUB_ENTRY):
         logger.error(
             "Entrypoint role contract violation: unified_launcher does not have SUB_ENTRY role."

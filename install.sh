@@ -110,11 +110,11 @@ install_deps() {
 
     ok "Python dependencies installed"
 
-    # Optional: voice wake dependencies
-    info "Checking voice wake dependencies (optional)"
+    # Voice dependencies (required)
+    info "Installing voice dependencies (required)"
     pip install --quiet pvporcupine webrtcvad faster-whisper pyaudio 2>/dev/null && \
-        ok "Voice wake dependencies installed" || \
-        warn "Voice wake dependencies skipped (microphone support unavailable)"
+        ok "Voice dependencies installed" || \
+        warn "Voice dependencies failed — microphone support may be limited"
 
     echo ""
 }

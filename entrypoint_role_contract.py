@@ -30,7 +30,6 @@ ENTRYPOINT_ROLE_CONTRACT_SENTINEL: str = (
 
 MAIN_ENTRY_ID: str = "main.py:main"
 UNIFIED_LAUNCHER_ENTRY_ID: str = "unified_launcher.py:main"
-LEGACY_DOCKER_LAUNCHER_ENTRY_ID: str = "scripts.launcher_v2:main"
 LEGACY_WINDOWS_RUN_UI_ENTRY_ID: str = (
     "enhancements.clients.windows_client.run_ui:module_import"
 )
@@ -115,13 +114,6 @@ ENTRYPOINT_ROLE_REGISTRY: Dict[str, EntrypointRecord] = {
         module_path="dashboard/backend/main.py",
         trigger_boundary="legacy dashboard surface",
         non_main_reason="legacy compatibility surface",
-    ),
-    LEGACY_DOCKER_LAUNCHER_ENTRY_ID: EntrypointRecord(
-        entry_id=LEGACY_DOCKER_LAUNCHER_ENTRY_ID,
-        role=EntrypointRole.COMPAT_FALLBACK_LEGACY,
-        module_path="scripts/launcher_v2.py",
-        trigger_boundary="legacy Docker/container orchestration helper",
-        non_main_reason="legacy deployment helper only",
     ),
     LEGACY_WINDOWS_RUN_UI_ENTRY_ID: EntrypointRecord(
         entry_id=LEGACY_WINDOWS_RUN_UI_ENTRY_ID,
