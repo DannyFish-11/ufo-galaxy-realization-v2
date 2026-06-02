@@ -3,142 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UFO Galaxy Desktop Presence</title>
+    <title>Galaxy V2 Desktop Presence</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Three.js (local, installed via npm) -->
-    <script src="../node_modules/three/build/three.min.js"></script>
 </head>
 <body>
-    <!-- Three.js canvas container -->
-    <div id="canvas-container"></div>
-
     <!-- ============================================
-         SILENT STATE - 潜藏态
-         屏幕四边微光环 + 四角角标 + 边缘粒子
+         桌面层
          ============================================ -->
-    <div id="silent-overlay" class="hidden">
-        <!-- 四边光晕条（CSS渐变实现） -->
-        <div id="silent-edge-top" class="silent-edge"></div>
-        <div id="silent-edge-bottom" class="silent-edge"></div>
-        <div id="silent-edge-left" class="silent-edge"></div>
-        <div id="silent-edge-right" class="silent-edge"></div>
-
-        <!-- 四角角标装饰 -->
-        <div id="silent-corner-tl" class="silent-corner">
-            <div class="corner-line-h"></div>
-            <div class="corner-line-v"></div>
-        </div>
-        <div id="silent-corner-tr" class="silent-corner">
-            <div class="corner-line-h"></div>
-            <div class="corner-line-v"></div>
-        </div>
-        <div id="silent-corner-bl" class="silent-corner">
-            <div class="corner-line-h"></div>
-            <div class="corner-line-v"></div>
-        </div>
-        <div id="silent-corner-br" class="silent-corner">
-            <div class="corner-line-h"></div>
-            <div class="corner-line-v"></div>
-        </div>
-
-        <!-- 中央呼吸点（几乎不可见） -->
-        <div id="silent-breath-core"></div>
+    <div class="desktop" id="desk">
+        <div class="bg"></div>
+        <!-- 桌面图标或其他内容可放在此处 -->
     </div>
 
     <!-- ============================================
-         LIMINAL STATE - 阈限态
-         单点透视空间容器
+         SILENT 静默态
+         三层光晕 + 屏幕边缘氛围灯
          ============================================ -->
-    <div id="liminal-overlay" class="hidden">
-        <!-- 透视消失点标记（极淡） -->
-        <div id="liminal-vanishing-point"></div>
-        <!-- 透视深度指示（极淡的文字提示） -->
-        <div id="liminal-depth-hint">
-            <span class="liminal-hint-text">AWAKENING</span>
-        </div>
+    <div class="s on" id="sLayer">
+        <div class="s-glow"></div>
+        <div class="s-bezel"></div>
     </div>
 
     <!-- ============================================
-         MANIFEST STATE - 显现态
-         现代暗色科技面板（毛玻璃效果）
+         LIMINAL 阈限态
+         大气雾效 + 消失点光晕 + "正在理解"文字
          ============================================ -->
-    <div id="manifest-overlay" class="hidden">
-        <div id="manifest-panel">
-            <!-- 面板顶部发光边框 -->
-            <div id="manifest-panel-glow"></div>
-
-            <!-- 顶部：任务信息 -->
-            <div id="manifest-header">
-                <div id="manifest-task-info">
-                    <span id="manifest-task-label">TASK</span>
-                    <span id="manifest-task-name">Waiting...</span>
-                </div>
-                <!-- 阶段进度条 -->
-                <div id="manifest-phase-bar">
-                    <div class="phase-step" data-phase="planning">
-                        <div class="phase-dot"></div>
-                        <span class="phase-label">PLAN</span>
-                    </div>
-                    <div class="phase-connector"></div>
-                    <div class="phase-step" data-phase="grounding">
-                        <div class="phase-dot"></div>
-                        <span class="phase-label">GROUND</span>
-                    </div>
-                    <div class="phase-connector"></div>
-                    <div class="phase-step" data-phase="execution">
-                        <div class="phase-dot"></div>
-                        <span class="phase-label">EXEC</span>
-                    </div>
-                    <div class="phase-connector"></div>
-                    <div class="phase-step" data-phase="replan">
-                        <div class="phase-dot"></div>
-                        <span class="phase-label">REPLAN</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 中部：节点响应状态 -->
-            <div id="manifest-nodes">
-                <div id="manifest-nodes-header">
-                    <span class="nodes-label">MESH NODES</span>
-                    <span class="nodes-status" id="nodes-status-indicator">
-                        <span class="status-pulse"></span>
-                        ACTIVE
-                    </span>
-                </div>
-                <div id="manifest-nodes-list">
-                    <!-- 节点动态添加 -->
-                </div>
-            </div>
-
-            <!-- 底部：执行结果输出 -->
-            <div id="manifest-output">
-                <div id="manifest-output-header">
-                    <span class="output-label">OUTPUT STREAM</span>
-                    <span class="output-cursor" id="output-cursor-blink">_</span>
-                </div>
-                <div id="manifest-output-content">
-                    <div id="manifest-result-text"></div>
-                </div>
-            </div>
-
-            <!-- 底部信息栏 -->
-            <div id="manifest-footer">
-                <span id="manifest-timestamp">--:--:--</span>
-                <span id="manifest-phase-display">SILENT</span>
-                <span id="manifest-version">GALAXY V2</span>
-            </div>
-        </div>
+    <div class="l" id="lLayer">
+        <div class="l-haze"></div>
+        <div class="vanish"></div>
+        <div class="l-text">正在理解</div>
     </div>
 
-    <!-- WebSocket status indicator -->
+    <!-- ============================================
+         MANIFEST 显现态
+         极简空壳 — 视觉由外部承载
+         ============================================ -->
+    <div class="m" id="mLayer"></div>
+
+    <!-- ============================================
+         WebSocket 状态指示器
+         ============================================ -->
     <div id="ws-status" class="ws-disconnected">
         <div class="ws-dot"></div>
         <span id="ws-status-text">OFFLINE</span>
     </div>
 
-    <!-- Module scripts -->
-    <script src="three-scene.js"></script>
+    <!-- 模块脚本 -->
     <script src="silent-state.js"></script>
     <script src="liminal-state.js"></script>
     <script src="manifest-state.js"></script>

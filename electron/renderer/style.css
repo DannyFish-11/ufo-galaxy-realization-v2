@@ -1,9 +1,11 @@
 /* =============================================
-   Galaxy V2 Desktop Presence - Global Styles
-   Three-state system: Silent / Liminal / Manifest
+   Galaxy V2 Desktop Presence — 三态视觉系统
+   Silent / Liminal / Manifest
+   纯 CSS 实现，不使用 Three.js
    ============================================= */
 
-* {
+/* ---------- 全局重置 ---------- */
+*, *::before, *::after {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
@@ -13,466 +15,249 @@ html, body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: transparent;
+    background: #080C18; /* 极暗蓝黑 */
     font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
     cursor: none;
 }
 
-/* Three.js canvas container - always present */
-#canvas-container {
+/* ---------- 桌面层 ---------- */
+.desktop {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 1;
-    pointer-events: none;
+    inset: 0;
+    z-index: 0;
+    transform-origin: center center;
+    transition: none;
 }
 
-#canvas-container canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
+.desktop .bg {
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse at 20% 30%, rgba(12, 16, 28, 0.8) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 70%, rgba(17, 24, 40, 0.6) 0%, transparent 55%),
+        linear-gradient(180deg, #0C101C 0%, #111828 100%);
+    /* 桌面背景：深蓝灰渐变 */
 }
 
 /* =============================================
-   UTILITY
+   SILENT 静默态
    ============================================= */
-.hidden {
-    display: none !important;
-}
 
-/* =============================================
-   SILENT STATE - 潜藏态
-   Three.js handles edge glow + corner brackets.
-   CSS overlay provides optional hints.
-   ============================================= */
-#silent-overlay {
+/* Silent 覆盖层 — 默认隐藏，.on 时显示 */
+.s {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
+    inset: 0;
     z-index: 10;
-    display: none;
-    align-items: center;
-    justify-content: center;
     pointer-events: none;
+    opacity: 0;
+    display: none;
+    transition: opacity 400ms ease-out;
 }
 
-/* Center breath core — nearly invisible */
-#silent-breath-core {
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: rgba(0, 225, 255, 0.03);
-    box-shadow: 0 0 12px rgba(0, 225, 255, 0.02);
-    animation: silentBreath 6s ease-in-out infinite;
+.s.on {
+    display: block;
 }
 
-@keyframes silentBreath {
+/* ---------- 三层光晕 ---------- */
+.s-glow {
+    position: absolute;
+    inset: 0;
+    background:
+        /* 底部中央光晕 */
+        radial-gradient(ellipse 80% 55% at 50% 95%, rgba(40, 75, 180, 0.10), transparent 50%),
+        /* 右上光晕 */
+        radial-gradient(ellipse 50% 40% at 85% 10%, rgba(55, 95, 200, 0.06), transparent 45%),
+        /* 左下光晕 */
+        radial-gradient(ellipse 55% 45% at 15% 85%, rgba(45, 80, 175, 0.07), transparent 45%);
+    animation: sBreath 8s ease-in-out infinite;
+    transform-origin: center center;
+}
+
+/* 8 秒呼吸：opacity 0.4→1→0.4, scale 1→1.015→1 */
+@keyframes sBreath {
     0%, 100% {
-        opacity: 0.3;
+        opacity: 0.4;
         transform: scale(1);
     }
     50% {
-        opacity: 0.8;
-        transform: scale(1.5);
+        opacity: 1;
+        transform: scale(1.015);
+    }
+}
+
+/* ---------- 屏幕边缘氛围灯 ---------- */
+.s-bezel {
+    position: absolute;
+    inset: 0;
+    /* 三层 inset box-shadow 叠加 */
+    box-shadow:
+        inset 0 0 100px rgba(40, 75, 180, 0.03),
+        inset 0 0 50px rgba(55, 95, 200, 0.04),
+        inset 0 0 25px rgba(45, 80, 175, 0.05);
+    animation: sBezelBreath 8s ease-in-out infinite;
+    pointer-events: none;
+}
+
+@keyframes sBezelBreath {
+    0%, 100% {
+        box-shadow:
+            inset 0 0 100px rgba(40, 75, 180, 0.02),
+            inset 0 0 50px rgba(55, 95, 200, 0.03),
+            inset 0 0 25px rgba(45, 80, 175, 0.04);
+    }
+    50% {
+        box-shadow:
+            inset 0 0 100px rgba(40, 75, 180, 0.05),
+            inset 0 0 50px rgba(55, 95, 200, 0.06),
+            inset 0 0 25px rgba(45, 80, 175, 0.07);
     }
 }
 
 /* =============================================
-   LIMINAL STATE - 阈限态
-   Three.js handles perspective tunnel.
-   CSS overlay provides minimal hints.
+   LIMINAL 阈限态
    ============================================= */
-#liminal-overlay {
+
+/* Liminal 覆盖层 — 默认隐藏，.on 时显示 */
+.l {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
+    inset: 0;
     z-index: 20;
-    display: none;
-    align-items: center;
-    justify-content: center;
     pointer-events: none;
-}
-
-/* Vanishing point marker — extremely faint */
-#liminal-vanishing-point {
-    width: 2px;
-    height: 2px;
-    border-radius: 50%;
-    background: rgba(0, 225, 255, 0.06);
-    box-shadow: 0 0 20px rgba(0, 225, 255, 0.03);
-}
-
-/* Depth hint text — barely visible */
-#liminal-depth-hint {
-    position: absolute;
-    bottom: 80px;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
-.liminal-hint-text {
-    color: rgba(0, 225, 255, 0.06);
-    font-size: 9px;
-    letter-spacing: 8px;
-    font-family: 'Courier New', monospace;
-    text-shadow: 0 0 8px rgba(0, 225, 255, 0.04);
-}
-
-/* =============================================
-   MANIFEST STATE - 显现态
-   Holographic HUD panel with sci-fi terminal
-   ============================================= */
-#manifest-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 30;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    /* Semi-transparent dark overlay behind the panel */
-    background: rgba(0, 0, 0, 0.4);
-}
-
-/* --- Main Panel --- */
-#manifest-panel {
-    position: relative;
-    width: 70vw;
-    max-width: 900px;
-    max-height: 70vh;
-    background: rgba(10, 14, 23, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(0, 225, 255, 0.2);
-    border-radius: 4px;
-    box-shadow:
-        0 0 40px rgba(0, 225, 255, 0.1),
-        inset 0 1px 0 rgba(0, 225, 255, 0.05),
-        0 20px 60px rgba(0, 0, 0, 0.5);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    /* Will be animated via JS for scale + opacity */
-    transform-origin: center center;
     opacity: 0;
-    transform: scale(0.5);
+    display: none;
+    transition: opacity 800ms ease-out;
 }
 
-/* Panel top glow line */
-#manifest-panel-glow {
-    position: absolute;
-    top: 0;
-    left: 10%;
-    right: 10%;
-    height: 1px;
-    background: linear-gradient(
-        90deg,
-        transparent 0%,
-        rgba(0, 225, 255, 0.4) 30%,
-        rgba(0, 225, 255, 0.6) 50%,
-        rgba(0, 225, 255, 0.4) 70%,
-        transparent 100%
-    );
-    box-shadow: 0 0 12px rgba(0, 225, 255, 0.3);
-    pointer-events: none;
-    z-index: 10;
-}
-
-/* --- HUD Corner Brackets --- */
-#manifest-panel::before,
-#manifest-panel::after {
-    content: '';
-    position: absolute;
-    width: 20px;
-    height: 20px;
-    border-color: rgba(0, 225, 255, 0.35);
-    pointer-events: none;
-    z-index: 10;
-}
-
-/* Top-left ┐ */
-#manifest-panel::before {
-    top: -1px;
-    left: -1px;
-    border-top: 2px solid rgba(0, 225, 255, 0.35);
-    border-left: 2px solid rgba(0, 225, 255, 0.35);
-}
-
-/* Bottom-right └ */
-#manifest-panel::after {
-    bottom: -1px;
-    right: -1px;
-    border-bottom: 2px solid rgba(0, 225, 255, 0.35);
-    border-right: 2px solid rgba(0, 225, 255, 0.35);
-}
-
-/* Additional corner brackets via child elements */
-.corner-bracket {
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    pointer-events: none;
-    z-index: 10;
-}
-
-.corner-bracket.tr {
-    top: -1px;
-    right: -1px;
-    border-top: 2px solid rgba(0, 225, 255, 0.35);
-    border-right: 2px solid rgba(0, 225, 255, 0.35);
-}
-
-.corner-bracket.bl {
-    bottom: -1px;
-    left: -1px;
-    border-bottom: 2px solid rgba(0, 225, 255, 0.35);
-    border-left: 2px solid rgba(0, 225, 255, 0.35);
-}
-
-/* --- Header --- */
-#manifest-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 14px 20px;
-    border-bottom: 1px solid rgba(0, 225, 255, 0.12);
-    background: rgba(0, 225, 255, 0.03);
-    flex-shrink: 0;
-}
-
-#manifest-task-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-#manifest-task-label {
-    color: rgba(0, 225, 255, 0.7);
-    font-size: 10px;
-    letter-spacing: 3px;
-    font-weight: bold;
-}
-
-#manifest-task-name {
-    color: rgba(200, 220, 240, 0.9);
-    font-size: 12px;
-    letter-spacing: 1px;
-}
-
-/* Phase progress bar */
-#manifest-phase-bar {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.phase-step {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    opacity: 0.35;
-    transition: opacity 0.3s ease;
-}
-
-.phase-step.active {
+.l.on {
+    display: block;
     opacity: 1;
 }
 
-.phase-step.completed {
-    opacity: 0.7;
-}
-
-.phase-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: rgba(0, 225, 255, 0.5);
-    box-shadow: 0 0 6px rgba(0, 225, 255, 0.3);
-}
-
-.phase-step.active .phase-dot {
-    background: rgba(0, 225, 255, 0.9);
-    box-shadow: 0 0 10px rgba(0, 225, 255, 0.6);
-    animation: phaseDotPulse 2s ease-in-out infinite;
-}
-
-@keyframes phaseDotPulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.3); }
-}
-
-.phase-label {
-    color: rgba(0, 225, 255, 0.6);
-    font-size: 8px;
-    letter-spacing: 2px;
-}
-
-.phase-connector {
-    width: 16px;
-    height: 1px;
-    background: rgba(0, 225, 255, 0.15);
-}
-
-/* --- Nodes Section --- */
-#manifest-nodes {
-    padding: 12px 20px;
-    border-bottom: 1px solid rgba(0, 225, 255, 0.08);
-    flex-shrink: 0;
-}
-
-#manifest-nodes-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
-.nodes-label {
-    color: rgba(0, 225, 255, 0.5);
-    font-size: 9px;
-    letter-spacing: 3px;
-}
-
-.nodes-status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: rgba(100, 220, 180, 0.8);
-    font-size: 9px;
-    letter-spacing: 2px;
-}
-
-.status-pulse {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: rgba(100, 220, 180, 0.8);
-    box-shadow: 0 0 8px rgba(100, 220, 180, 0.5);
-    animation: statusPulse 2s ease-in-out infinite;
-}
-
-@keyframes statusPulse {
-    0%, 100% { opacity: 0.5; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.2); }
-}
-
-#manifest-nodes-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-/* --- Output Section --- */
-#manifest-output {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    min-height: 0;
-}
-
-#manifest-output-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 20px;
-    background: rgba(0, 0, 0, 0.2);
-    border-bottom: 1px solid rgba(0, 225, 255, 0.06);
-    flex-shrink: 0;
-}
-
-.output-label {
-    color: rgba(0, 225, 255, 0.45);
-    font-size: 9px;
-    letter-spacing: 3px;
-}
-
-.output-cursor {
-    color: rgba(0, 225, 255, 0.6);
-    font-size: 12px;
-    animation: cursorBlink 1s step-end infinite;
-}
-
-@keyframes cursorBlink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
-}
-
-#manifest-output-content {
-    flex: 1;
-    padding: 16px 20px;
-    overflow-y: auto;
-    min-height: 0;
-}
-
-#manifest-output-content::-webkit-scrollbar {
-    width: 4px;
-}
-
-#manifest-output-content::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-#manifest-output-content::-webkit-scrollbar-thumb {
-    background: rgba(0, 225, 255, 0.15);
-    border-radius: 2px;
-}
-
-#manifest-result-text {
-    color: rgba(220, 230, 245, 0.95);
-    font-size: 13px;
-    line-height: 1.8;
-    letter-spacing: 0.3px;
-    font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
-    white-space: pre-wrap;
-    word-break: break-word;
+/* ---------- 大气雾效 ---------- */
+.l-haze {
+    position: absolute;
+    inset: 0;
+    /* 桌面边缘淡入虚空的 radial-gradient */
+    background:
+        radial-gradient(ellipse 90% 80% at 50% 50%, transparent 30%, rgba(8, 12, 24, 0.6) 70%, rgba(8, 12, 24, 0.95) 100%);
     opacity: 0;
-    transition: opacity 0.4s ease-out;
+    transition: opacity 2s ease-out 0.3s;
 }
 
-/* --- Footer --- */
-#manifest-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 20px;
-    border-top: 1px solid rgba(0, 225, 255, 0.1);
-    background: rgba(0, 0, 0, 0.25);
-    flex-shrink: 0;
+.l.on .l-haze {
+    opacity: 1;
 }
 
-#manifest-timestamp {
-    color: rgba(0, 225, 255, 0.4);
-    font-size: 10px;
-    letter-spacing: 2px;
-    font-family: 'Courier New', monospace;
+/* ---------- 消失点光晕 ---------- */
+.vanish {
+    position: absolute;
+    top: 34%;
+    left: 50%;
+    width: 55vw;
+    height: 30vw; /* 约 16:9 比例，自适应 */
+    transform: translate(-50%, -50%);
+    background:
+        radial-gradient(ellipse at center, rgba(40, 75, 180, 0.25) 0%, rgba(65, 100, 210, 0.15) 35%, rgba(90, 120, 200, 0.05) 60%, transparent 70%);
+    filter: blur(55px);
+    border-radius: 50%;
+    animation: vanishBreath 6s ease-in-out infinite;
+    opacity: 0;
+    transition: opacity 1.5s ease-out 0.6s;
 }
 
-#manifest-phase-display {
-    color: rgba(0, 225, 255, 0.7);
-    font-size: 10px;
-    letter-spacing: 4px;
-    font-weight: bold;
-    text-shadow: 0 0 10px rgba(0, 225, 255, 0.3);
+.l.on .vanish {
+    opacity: 1;
 }
 
-#manifest-version {
-    color: rgba(139, 92, 246, 0.4);
-    font-size: 9px;
-    letter-spacing: 3px;
+/* 6 秒呼吸 */
+@keyframes vanishBreath {
+    0%, 100% {
+        opacity: 0.7;
+        transform: translate(-50%, -50%) scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1.05);
+    }
+}
+
+/* ---------- "正在理解" 文字 ---------- */
+.l-text {
+    position: absolute;
+    top: 34%;
+    left: 50%;
+    transform: translate(-50%, calc(-50% + 18vw));
+    color: rgba(155, 180, 215, 0.32);
+    font-size: 13px;
+    letter-spacing: 6px;
+    font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+    text-align: center;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 1.5s ease-out 1.2s;
+    /* 极淡的文字光晕 */
+    text-shadow: 0 0 12px rgba(65, 100, 210, 0.15);
+}
+
+.l.on .l-text {
+    opacity: 1;
+}
+
+/* ---------- 桌面推入深度（body 上的 perspective-mode） ---------- */
+body.perspective-mode .desktop {
+    transform: perspective(1200px) rotateX(6deg) scale(0.80) translateY(-2%);
+    filter: brightness(0.42) saturate(0.48) contrast(0.88);
+    transition: transform 2.6s cubic-bezier(0.16, 1, 0.3, 1),
+                filter 2.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 退出 perspective-mode 时的恢复过渡 */
+.desktop {
+    transition: transform 1.5s cubic-bezier(0.16, 1, 0.3, 1),
+                filter 1.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* =============================================
-   WEBSOCKET STATUS
+   MANIFEST 显现态
+   ============================================= */
+
+/* Manifest 层 — 极简空壳 */
+.m {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    pointer-events: none;
+    display: none;
+    opacity: 0;
+}
+
+.m.on {
+    display: block;
+    opacity: 1;
+}
+
+/* =============================================
+   辅助样式
+   ============================================= */
+
+/* 内容淡化 */
+.content-fade-in {
+    animation: contentFadeIn 0.4s ease-out 0.3s both;
+}
+
+@keyframes contentFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* =============================================
+   WEBSOCKET 状态指示器
    ============================================= */
 #ws-status {
     position: fixed;
@@ -505,10 +290,10 @@ html, body {
 .ws-connecting .ws-dot {
     background: rgba(200, 180, 80, 0.8);
     box-shadow: 0 0 6px rgba(200, 180, 80, 0.5);
-    animation: dotPulse 1s ease-in-out infinite;
+    animation: wsDotPulse 1s ease-in-out infinite;
 }
 
-@keyframes dotPulse {
+@keyframes wsDotPulse {
     0%, 100% { opacity: 0.5; transform: scale(1); }
     50% { opacity: 1; transform: scale(1.3); }
 }
@@ -520,39 +305,12 @@ html, body {
     font-family: 'Courier New', monospace;
 }
 
-/* =============================================
-   PHASE TRANSITION ANIMATIONS
-   ============================================= */
-.fade-in {
-    animation: fadeIn 0.8s ease forwards;
+/* 光标闪烁 */
+.cursor-blink {
+    animation: cursorBlink 1s step-end infinite;
 }
 
-.fade-out {
-    animation: fadeOut 0.5s ease forwards;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-@keyframes fadeOut {
-    from { opacity: 1; }
-    to { opacity: 0; }
-}
-
-/* Content fade-in animation (used by manifest) */
-.content-fade-in {
-    animation: contentFadeIn 0.4s ease-out 0.3s both;
-}
-
-@keyframes contentFadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(6px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+@keyframes cursorBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
 }
