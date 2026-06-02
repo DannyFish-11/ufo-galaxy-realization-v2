@@ -68,6 +68,10 @@ _MAX_SUMMARY_LENGTH = 300  # 结果摘要最大存储长度（字符）
 _DEFAULT_DRIFT_THRESHOLD = 0.5   # Jaccard 相似度低于此值视为漂移
 _DEFAULT_DRIFT_ACTION = "human_review"  # "rerun" | "human_review" | "none"
 
+# PR-25/26/27: 认知进化系统默认配置
+_REFLECTION_AUTO_TRIGGER = True   # 是否在 record_task 后自动触发回顾反思
+_ADAPTIVE_PREDICTION_ENABLED = True  # 是否启用自适应预测
+
 
 # ============================================================================
 # 数据模型
@@ -91,6 +95,9 @@ class TaskSummary:
     extra: Dict[str, Any] = field(default_factory=dict)
     # G6: 任务类型（向后兼容，旧记录反序列化时默认为空字符串）
     task_type: str = ""
+    # PR-25: 认知反思记录（执行后生成的反思文本，可选）
+    reflection: Dict[str, Any] = field(default_factory=dict)
+    """反思记录，格式: {"type": "retrospective|prospective", "text": "...", "timestamp": float}"""
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -109,6 +116,7 @@ class TaskSummary:
             tags=data.get("tags", []),
             extra=data.get("extra", {}),
             task_type=data.get("task_type", ""),  # G6: 旧记录兼容
+            reflection=data.get("reflection", {}),  # PR-25: 向后兼容
         )
 
     def to_text(self) -> str:
@@ -252,6 +260,28 @@ class TaskMemory:
             self._records = self._records[-self._hot_limit:]
         # 持久化
         self._append_to_file(entry)
+        # PR-25: 自动触发回顾反思（认知进化系统）
+        if _REFLECTION_AUTO_TRIGGER:
+            try:
+                from core.cognitive.reflection_engine import get_reflection_engine
+                reflection_engine = get_reflection_engine()
+                reflection = reflection_engine.reflect_retrospective(
+                    task=task,
+                    strategy=strategy,
+                    success=success,
+                    duration_ms=duration_ms,
+                    result_summary=result_summary,
+                )
+                if reflection and reflection.reflection_text:
+                    entry.reflection = {
+                        "type": reflection.reflection_type,
+                        "text": reflection.reflection_text,
+                        "activation_score": reflection.activation_score,
+                        "confidence": reflection.confidence,
+                        "timestamp": reflection.timestamp,
+                    }
+            except Exception:
+                pass  # 反思失败不影响主流程
         return entry
 
     # ── 读取 ──

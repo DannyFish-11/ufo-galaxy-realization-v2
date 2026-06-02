@@ -517,16 +517,40 @@ def _derive_memory_bias_impl(
     except Exception as _tm_err:
         logger.debug("derive_memory_bias: TaskMemory read failed — %s", _tm_err)
 
-    # ── 4. Compute normalised scores ─────────────────────────────────────────
+    # ── 4. PatternMiner pattern signals (PR-26) ─────────────────────────────
+    pattern_boost = 0.0
+    pattern_count = 0
+    try:
+        from core.cognitive.pattern_miner import get_pattern_miner as _get_pm
+        _pm = _get_pm()
+        _patterns = _pm.match_patterns(
+            task_type="", hour=None, min_activation=0.2, limit=10,
+        )
+        if _patterns:
+            # High-activation patterns indicate the system has learned about
+            # the user's behavior — this is a continuity signal
+            pattern_boost = min(
+                0.15,  # cap at 0.15 to not overwhelm other signals
+                sum(p.activation_score * p.confidence for p in _patterns)
+                / max(len(_patterns), 1),
+            )
+            pattern_count = len(_patterns)
+    except Exception as _pm_err:
+        logger.debug("derive_memory_bias: PatternMiner read failed — %s", _pm_err)
+
+    # ── 5. Compute normalised scores ─────────────────────────────────────────
     continuity_score = _compute_continuity_score(wm_depth, recent_task_count)
+    continuity_score = min(1.0, continuity_score + pattern_boost)
     retrieval_relevance = _compute_retrieval_relevance(ltm_depth)
     novelty_factor = max(0.0, 1.0 - continuity_score)
 
-    # ── 5. Classify posture ───────────────────────────────────────────────────
+    # ── 6. Classify posture ───────────────────────────────────────────────────
     posture = _classify_posture(continuity_score, retrieval_relevance)
 
-    # ── 6. Determine if memory signals are meaningful ─────────────────────────
-    influenced = (wm_depth > 0 or ltm_depth > 0 or recent_task_count > 0)
+    # ── 7. Determine if memory signals are meaningful ─────────────────────────
+    influenced = (
+        wm_depth > 0 or ltm_depth > 0 or recent_task_count > 0 or pattern_count > 0
+    )
 
     logger.debug(
         "MemoryBiasLayer: session=%s wm_depth=%d ltm_depth=%d recent_tasks=%d "

@@ -1144,6 +1144,9 @@ class DesktopPresenceRuntime:
         This is the primary shell→core handoff.  The ``runtime_session_id``
         is forwarded so OpenClawd can propagate it into every stage:
         ingest → continuum → branch (local / cross-device) → manifest.
+
+        PR-25/26/27: Cognitive evolution integration — pre/post-execution
+        reflection and adaptive prediction are woven into the handoff.
         """
         from core.openclawd import get_openclawd
 
@@ -1152,6 +1155,66 @@ class DesktopPresenceRuntime:
         # OpenClawd retains full execution-path authority.
         cognitive_execution_hint = kwargs.pop("cognitive_execution_hint", None)
 
+        # ── PR-25/27: Pre-execution cognitive preparation ────────────────
+        _adaptive_rec = None
+        _prospective_reflection = None
+        try:
+            # Prospective reflection — predict risks before execution
+            from core.cognitive.reflection_engine import get_reflection_engine
+            reflection_engine = get_reflection_engine()
+            _prospective_reflection = reflection_engine.reflect_prospective(
+                task=message,
+                strategy=entry_mode or "single",
+                trace_id=rsession.runtime_session_id,
+            )
+
+            # Adaptive prediction — get strategy recommendation
+            from core.cognitive.adaptive_predictor import get_adaptive_predictor
+            predictor = get_adaptive_predictor()
+            _adaptive_rec = predictor.recommend(
+                task=message,
+                strategy=entry_mode or "single",
+                trace_id=rsession.runtime_session_id,
+            )
+
+            # If adaptive predictor has a strong strategy recommendation
+            # different from planned, include it in cognitive hint
+            if (
+                _adaptive_rec
+                and _adaptive_rec.strategy
+                and _adaptive_rec.strategy_confidence > 0.75
+                and _adaptive_rec.strategy != (entry_mode or "single")
+            ):
+                if cognitive_execution_hint is None:
+                    cognitive_execution_hint = {}
+                cognitive_execution_hint["adaptive_strategy_suggestion"] = {
+                    "strategy": _adaptive_rec.strategy,
+                    "confidence": _adaptive_rec.strategy_confidence,
+                    "caution": _adaptive_rec.caution,
+                    "source_patterns": _adaptive_rec.pattern_matches,
+                }
+                logger.debug(
+                    "AdaptivePredictor: suggesting strategy '%s' (%.2f conf) for task",
+                    _adaptive_rec.strategy,
+                    _adaptive_rec.strategy_confidence,
+                )
+
+            # Include prospective reflection caution in hint
+            if (
+                _prospective_reflection
+                and "CAUTION" in _prospective_reflection.reflection_text
+            ):
+                if cognitive_execution_hint is None:
+                    cognitive_execution_hint = {}
+                cognitive_execution_hint.setdefault("cautions", []).append(
+                    _prospective_reflection.reflection_text[:200]
+                )
+
+        except Exception as exc:
+            logger.debug("Cognitive pre-execution reflection failed (non-fatal): %s", exc)
+
+        # ── Execute ──────────────────────────────────────────────────────
+        _exec_start_ms = time.time() * 1000
         clawd = get_openclawd()
         result = await clawd.process(
             message=message,
@@ -1171,8 +1234,42 @@ class DesktopPresenceRuntime:
             cognitive_execution_hint=cognitive_execution_hint,
             **kwargs,
         )
+        _exec_duration_ms = time.time() * 1000 - _exec_start_ms
+
         # Normalise the result to always contain "response" (OpenClawd uses it)
         result.setdefault("response", result.get("reply", ""))
+
+        # ── PR-25/27: Post-execution cognitive reflection ────────────────
+        try:
+            _result_text = result.get("response", "") or result.get("reply", "")
+            _success = not result.get("error") and not result.get("failed")
+
+            # Retrospective reflection
+            from core.cognitive.reflection_engine import get_reflection_engine
+            reflection_engine = get_reflection_engine()
+            reflection_engine.reflect_retrospective(
+                task=message,
+                strategy=entry_mode or "single",
+                success=_success,
+                duration_ms=_exec_duration_ms,
+                result_summary=_result_text[:200],
+                trace_id=rsession.runtime_session_id,
+            )
+
+            # Record prediction accuracy for calibration
+            if _adaptive_rec is not None:
+                from core.cognitive.adaptive_predictor import get_adaptive_predictor
+                predictor = get_adaptive_predictor()
+                predictor.record_outcome(
+                    recommendation=_adaptive_rec,
+                    actual_strategy=entry_mode or "single",
+                    success=_success,
+                    duration_ms=_exec_duration_ms,
+                )
+
+        except Exception as exc:
+            logger.debug("Cognitive post-execution reflection failed (non-fatal): %s", exc)
+
         return result
 
     async def _handle_via_e2e(
@@ -1261,45 +1358,11 @@ class DesktopPresenceRuntime:
         try:
             from core.multimodal.ingest_runtime import start_ingest_bus
 
-            # PR-ACTIVE-PERCEPTION: pass autonomous goal submitter to the bus
-            started = start_ingest_bus(
-                runtime_session_id=None,
-                goal_submitter=self._submit_autonomous_goal,
-            )
+            started = start_ingest_bus(runtime_session_id=None)
             if started:
                 logger.info("DesktopPresenceRuntime: multimodal ingest bus started")
         except Exception as _err:
             logger.debug("DesktopPresenceRuntime: ingest bus startup skipped (%s)", _err)
-
-    def _submit_autonomous_goal(self, goal: str) -> None:
-        """PR-ACTIVE-PERCEPTION: callback wired into MultimodalIngressBus.
-
-        When the continuous perception layer detects a high-confidence
-        opportunity (high CPU, memory pressure, time triggers, etc.) it
-        calls this method with a natural-language goal.  The shell then
-        routes it through ``handle_request()`` so the full
-        silent→liminal→manifest→silent lifecycle is respected.
-
-        This keeps autonomous triggers **first-class** — they go through
-        the same OpenClawd cognition / execution path as user requests.
-        """
-        import asyncio
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(self._handle_autonomous_goal(goal))
-        except RuntimeError:
-            pass  # no running loop — skip
-
-    async def _handle_autonomous_goal(self, goal: str) -> None:
-        """Async wrapper: route an autonomous goal through the shell."""
-        try:
-            result = await self.handle_request(
-                message=goal,
-                source="autonomous_perception",
-            )
-            logger.info("Autonomous goal result: %s", result.get("tristate", "unknown"))
-        except Exception as exc:
-            logger.debug("Autonomous goal handling error: %s", exc)
 
     def _try_init_webrtc_session_manager(self) -> None:
         """Initialize WebRTC session manager when the runtime switch is enabled."""
