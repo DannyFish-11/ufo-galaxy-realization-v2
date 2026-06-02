@@ -137,6 +137,8 @@ class DaemonNotifier:
                 ],
                 capture_output=True,
                 timeout=5,
+                encoding="utf-8",
+                errors="replace",
             )
             return True
         except Exception:

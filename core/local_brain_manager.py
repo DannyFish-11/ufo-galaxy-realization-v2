@@ -380,9 +380,9 @@ class LocalBrainManager:
             # 查找并终止 ollama 进程
             try:
                 if sys.platform.startswith("win"):
-                    subprocess.run(["taskkill", "/F", "/IM", "ollama.exe"], capture_output=True, timeout=10)
+                    subprocess.run(["taskkill", "/F", "/IM", "ollama.exe"], capture_output=True, timeout=10, encoding="utf-8", errors="replace")
                 else:
-                    subprocess.run(["pkill", "-f", "ollama"], capture_output=True, timeout=10)
+                    subprocess.run(["pkill", "-f", "ollama"], capture_output=True, timeout=10, encoding="utf-8", errors="replace")
             except Exception as e:
                 logger.debug(f"停止 Ollama 进程时出错: {e}")
 

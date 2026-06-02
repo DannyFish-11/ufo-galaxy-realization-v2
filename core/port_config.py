@@ -47,16 +47,16 @@ _DEFAULT_INFRASTRUCTURE_PORTS: Dict[str, int] = {
     "qdrant": 6333,
     "dashboard": 8080,        # Dashboard Backend Web UI (unified port)
     "oneapi_web": 3001,
-    "api_gateway": 8765,      # Galaxy Gateway (unified port)
-    "state_machine": 8765,
-    "gateway": 8765,           # Galaxy Gateway (unified port — WS + REST + WebRTC proxy)
+    "api_gateway": 9000,      # Galaxy Gateway (unified port)
+    "state_machine": 9000,
+    "gateway": 9000,           # Galaxy Gateway (unified port — WS + REST + WebRTC proxy)
     "dashboard_backend": 8080, # Same as dashboard (unified port)
-    "websocket": 8765,         # WebSocket served through Galaxy Gateway on 8765
+    "websocket": 9000,         # WebSocket served through Galaxy Gateway on 8765
     "websocket_http": 8081,
     "health_monitor": 9100,    # Avoid conflict with gateway
     "device_api": 8766,
     "ufo_api": 8767,
-    "unified_launcher": 8299,  # Unified Launcher Web UI (avoids Node_85_PromptLibrary:8085)
+    "unified_launcher": 9000,  # Unified Launcher Web UI (avoids Node_85_PromptLibrary:8085)
     "openclawd": 8099,           # OpenClawd main API server (Galaxy core)
 }
 

@@ -171,7 +171,7 @@ class BaseDeviceAgent(ABC):
 class AndroidDeviceAgent(BaseDeviceAgent):
     """Android 设备 Agent"""
     
-    def __init__(self, device_info: DeviceInfo, server_url: str = "ws://localhost:8765"):
+    def __init__(self, device_info: DeviceInfo, server_url: str = "ws://localhost:9000"):
         super().__init__(device_info)
         self.server_url = server_url
         self.ws_connection = None
@@ -851,7 +851,7 @@ async def main():
     # 注册设备
     agent = await device_manager.register_device(
         android_device,
-        server_url="ws://localhost:8765"
+        server_url="ws://localhost:9000"
     )
     
     # 获取所有设备状态

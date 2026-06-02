@@ -302,7 +302,7 @@ services:
       dockerfile: Dockerfile.gateway
     container_name: galaxy-gateway
     ports:
-      - "8765:8765"
+      - "9000:9000"
     env_file:
       - .env
     environment:
@@ -327,9 +327,9 @@ services:
       dockerfile: Dockerfile
     container_name: galaxy-launcher
     profiles: [core, full]
-    command: ["python", "unified_launcher.py", "--host", "0.0.0.0", "--port", "8299"]
+    command: ["python", "main.py"]
     ports:
-      - "8299:8299"  # Admin UI only — use galaxy-core:9000 for all API/client connections
+      - "9000:9000"  # Admin UI only — use galaxy-core:9000 for all API/client connections
     env_file:
       - .env
     environment:

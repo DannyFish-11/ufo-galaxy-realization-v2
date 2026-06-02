@@ -370,7 +370,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         "uvicorn": "uvicorn",
         "starlette": "starlette",
         "ollama": "ollama",
-        "nats_py": "nats-py",
+        "nats": "nats-py",
         "websockets": "websockets",
     }
     for mod_name, pip_name in core_modules.items():

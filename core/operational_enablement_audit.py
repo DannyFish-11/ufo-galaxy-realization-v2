@@ -212,21 +212,21 @@ ANDROID_CONFIG_PRECEDENCE: List[AndroidConfigLayer] = [
 Source: UFOGalaxyApplication.kt initConfig() commentary and AppSettings.kt seeding logic.
 """
 
-ANDROID_SERVER_URL_DEFAULT_DEBUG: str = "ws://192.168.1.100:8765"
+ANDROID_SERVER_URL_DEFAULT_DEBUG: str = "ws://192.168.1.100:9000"
 """
 Build-time default for debug APK.
 Source: app/build.gradle buildConfigField "String", "GALAXY_SERVER_URL",
         '"ws://192.168.1.100:8765"'
 """
 
-ANDROID_SERVER_URL_DEFAULT_RELEASE: str = "wss://galaxy.ufo.ai:8765"
+ANDROID_SERVER_URL_DEFAULT_RELEASE: str = "wss://galaxy.ufo.ai:9000"
 """
 Build-time default for release APK.
 Source: app/build.gradle buildTypes.release buildConfigField "String", "GALAXY_SERVER_URL",
         '"wss://galaxy.ufo.ai:8765"'
 """
 
-ANDROID_ASSET_GATEWAY_URL_PLACEHOLDER: str = "ws://100.x.x.x:8765"
+ANDROID_ASSET_GATEWAY_URL_PLACEHOLDER: str = "ws://100.x.x.x:9000"
 """
 Packaged asset default — intentionally a placeholder requiring operator substitution.
 Source: app/src/main/assets/config.properties, key galaxy_gateway_url.

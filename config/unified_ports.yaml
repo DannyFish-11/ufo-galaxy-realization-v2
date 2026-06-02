@@ -1154,12 +1154,12 @@ infrastructure:
       description: "可视化监控面板 (Dashboard Backend)"
       
     unified_launcher:
-      port: 8299
+      port: 9000
       name: "UnifiedLauncher"
       description: "统一启动器 Web UI (端口 8299；避免与 galaxy-core:9000 冲突)"
       
     gateway:
-      port: 8765
+      port: 9000
       name: "Gateway"
       description: "API网关服务 (Galaxy Gateway) — 统一端口，WS + REST + WebRTC proxy 同端口运行"
       
@@ -1286,8 +1286,8 @@ docker_host_ports:
   mappings:
     galaxy_main: 8086
     dashboard: 8080
-    unified_launcher: 8299
-    gateway: 8765
+    unified_launcher: 9000
+    gateway: 9000
     memos: 8180
     agentcpm: 8401
     oneapi: 3001

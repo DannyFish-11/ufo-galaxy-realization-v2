@@ -1051,7 +1051,7 @@ def main():
     parser.add_argument("--status", action="store_true", help="查看系统状态")
     parser.add_argument("--check-only", action="store_true", help="仅检查依赖和配置，不启动服务")
     parser.add_argument("--host", default="0.0.0.0", help="绑定地址 (默认: 0.0.0.0)")
-    parser.add_argument("--port", "-p", type=int, default=8299, help="API 服务端口")
+    parser.add_argument("--port", "-p", type=int, default=9000, help="API 服务端口")
     parser.add_argument(
         "--docker-full",
         action="store_true",

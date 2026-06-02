@@ -79,10 +79,10 @@ class EmbeddedNATSServer:
         try:
             if system == "linux":
                 subprocess.run(["sh", "-c", "curl -sf https://get-nats.io | sh"],
-                             check=True, timeout=120, capture_output=True)
+                             check=True, timeout=120, capture_output=True, encoding="utf-8", errors="replace")
             elif system == "darwin":
                 subprocess.run(["brew", "install", "nats-server"],
-                             check=True, timeout=120, capture_output=True)
+                             check=True, timeout=120, capture_output=True, encoding="utf-8", errors="replace")
             elif system == "windows":
                 import urllib.request
                 nats_dir = Path.home() / ".galaxy" / "bin"

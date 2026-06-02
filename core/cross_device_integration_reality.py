@@ -53,7 +53,7 @@ WS_TRANSPORT_PROTOCOL_ALIGNED: bool = True
 CANONICAL_WS_DEVICE_PATH: str = "/ws/device/{device_id}"
 
 #: Default V2 gateway port (from galaxy_gateway/port_config.py or env).
-CANONICAL_GATEWAY_PORT: int = 8765
+CANONICAL_GATEWAY_PORT: int = 9000
 
 # ============================================================================
 # 2. Android default configuration — ACTIVATION BARRIERS (CRITICAL)

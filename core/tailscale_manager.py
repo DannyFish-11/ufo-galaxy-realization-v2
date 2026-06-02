@@ -198,7 +198,7 @@ class TailscaleManager:
         """检查Tailscale是否可用。"""
         return self._available
 
-    def get_connection_url(self, port: int = 8765) -> Optional[str]:
+    def get_connection_url(self, port: int = 9000) -> Optional[str]:
         """获取Android端应连接的URL。"""
         if self.ts_ip:
             return f"ws://{self.ts_ip}:{port}"

@@ -85,7 +85,7 @@ router = APIRouter(tags=["client-config"])
 # Internal helpers (all read env at call-time so tests can patch os.environ)
 # ---------------------------------------------------------------------------
 
-_DEFAULT_GATEWAY_URL = "http://localhost:8765"
+_DEFAULT_GATEWAY_URL = "http://localhost:9000"
 _DEFAULT_STUN = "stun:stun.l.google.com:19302"
 _DEFAULT_TRANSPORT_PRIORITY = ["tailscale", "intranet", "internet"]
 
