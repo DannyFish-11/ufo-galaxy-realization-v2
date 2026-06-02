@@ -48,6 +48,21 @@ class GalaxyDaemon:
         self.process = None
         self.restart_count = 0
         self.restart_window_start = time.time()
+        self._notifier = None  # lazy init
+
+    def _notify(self, message: str, severity: str = "warning", category: str = "daemon") -> None:
+        """Fire-and-forget notification (best-effort, non-blocking)."""
+        try:
+            import asyncio
+            from galaxy_gateway.daemon_notifier import DaemonNotifier
+            if self._notifier is None:
+                self._notifier = DaemonNotifier()
+            # Run async notify in a new task without blocking
+            asyncio.get_running_loop().create_task(
+                self._notifier.notify(message, severity=severity, category=category)
+            )
+        except Exception:
+            self.logger.info("[NOTIFY] %s: %s", severity.upper(), message)
 
     def _start(self) -> subprocess.Popen:
         main_py = PROJECT_ROOT / "main.py"
@@ -96,6 +111,11 @@ class GalaxyDaemon:
                 self._monitor()
                 code = self.process.wait()
                 self.logger.warning(f"Galaxy exited (code: {code})")
+                self._notify(
+                    f"Galaxy 异常退出 (code {code})，第 {self.restart_count + 1} 次重启",
+                    severity="warning",
+                    category="crash_restart",
+                )
             except KeyboardInterrupt:
                 self.logger.info("Interrupted")
                 if self.process and self.process.poll() is None:
@@ -105,6 +125,11 @@ class GalaxyDaemon:
                 self.logger.error(f"Daemon error: {e}")
 
             if not self._should_restart():
+                self._notify(
+                    f"Galaxy 连续重启超过 {MAX_RESTARTS_PER_HOUR} 次/小时，守护已停止",
+                    severity="critical",
+                    category="too_many_restarts",
+                )
                 return 1
             self.logger.info(f"Restarting in {RESTART_COOLDOWN}s...")
             time.sleep(RESTART_COOLDOWN)
