@@ -1,188 +1,232 @@
 /**
  * silent-state.js
- * Silent State: Static transparent window with central particle avatar
- * - Three.js MeshPhysicalMaterial (metalness 0.95, roughness 0.15)
- * - Titanium gray color (0x8a9ba8)
- * - CSS3D ambient shadow + breathing animation (4s cycle)
+ * Silent State: Static ambient edge glow + HUD corner brackets
+ * Like monitor RGB backlighting (extremely faint) + HUD-style corner markers
+ * Core concept: entity is resting, minimal presence, like deep-sea bioluminescence
  */
 
 class SilentState {
     constructor(threeScene) {
         this.threeScene = threeScene;
         this.scene = threeScene.getScene();
+        this.camera = threeScene.getCamera();
+        this.renderer = threeScene.getRenderer();
         this.isActive = false;
 
-        // Meshes
-        this.particleMesh = null;
-        this.particleGroup = null;
-        this.ambientLight = null;
-        this.pointLight1 = null;
-        this.pointLight2 = null;
+        // Edge glow mesh (fullscreen plane with edge shader)
+        this.edgeGlowMesh = null;
+        this.edgeMaterial = null;
 
-        // Animation
-        this.breathPhase = 0;
-        this.floatPhase = 0;
-        this.originalY = 0;
+        // Corner HUD brackets (LineSegments)
+        this.cornerGroup = null;
+        this.cornerLines = []; // { mesh, material, cornerIndex }
 
-        // Breathing parameters
-        this.breathSpeed = 1.57; // 2*PI / 4 seconds = 1.57 rad/s for 4s cycle
-        this.breathAmplitude = 0.08;
+        // Animation state
+        this.opacity = 0;          // Current overall opacity (0-1)
+        this.targetOpacity = 1;    // Target opacity
+        this.fadeSpeed = 1;        // Opacity change per second
+        this.entering = false;
+        this.exiting = false;
 
-        // Build the scene
+        // Corner bracket config
+        this.cornerSize = 40;      // px
+        this.cornerOffset = 30;    // px from screen edge
+
+        // Galaxy palette
+        this.colorCyan = new THREE.Color(0x00e1ff);
+        this.colorPink = new THREE.Color(0xec4899);
+
         this.build();
     }
 
+    // ============================================
+    // Build
+    // ============================================
     build() {
-        // Create particle group
-        this.particleGroup = new THREE.Group();
+        this.group = new THREE.Group();
 
-        // Main particle sphere - MeshPhysicalMaterial
-        const geometry = new THREE.SphereGeometry(0.25, 64, 64);
-        const material = new THREE.MeshPhysicalMaterial({
-            color: 0x8a9ba8,
-            metalness: 0.95,
-            roughness: 0.15,
-            clearcoat: 0.3,
-            clearcoatRoughness: 0.1,
-            envMapIntensity: 1.0,
-            reflectivity: 0.9
-        });
-        this.particleMesh = new THREE.Mesh(geometry, material);
-        this.originalY = this.particleMesh.position.y;
-        this.particleGroup.add(this.particleMesh);
+        this._buildEdgeGlow();
+        this._buildCornerBrackets();
 
-        // Inner glow core (smaller, emissive sphere)
-        const coreGeometry = new THREE.SphereGeometry(0.08, 32, 32);
-        const coreMaterial = new THREE.MeshBasicMaterial({
-            color: 0xb0c4d0,
-            transparent: true,
-            opacity: 0.15
-        });
-        this.coreMesh = new THREE.Mesh(coreGeometry, coreMaterial);
-        this.particleGroup.add(this.coreMesh);
-
-        // Outer halo ring (torus)
-        const ringGeometry = new THREE.TorusGeometry(0.35, 0.003, 16, 64);
-        const ringMaterial = new THREE.MeshBasicMaterial({
-            color: 0x8a9ba8,
-            transparent: true,
-            opacity: 0.2,
-            side: THREE.DoubleSide
-        });
-        this.ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
-        this.ringMesh.rotation.x = Math.PI / 2;
-        this.particleGroup.add(this.ringMesh);
-
-        // Add lights
-        this.ambientLight = new THREE.AmbientLight(0x404040, 0.5);
-        this.pointLight1 = new THREE.PointLight(0xa0b0c0, 0.8, 10);
-        this.pointLight1.position.set(2, 2, 3);
-        this.pointLight2 = new THREE.PointLight(0x607080, 0.4, 10);
-        this.pointLight2.position.set(-2, -1, 2);
-
-        // PR-VISUAL-AMBIENT: Floating ambient particles
-        this._buildAmbientParticles();
-
-        this.scene.add(this.ambientLight);
-        this.scene.add(this.pointLight1);
-        this.scene.add(this.pointLight2);
-        this.scene.add(this.particleGroup);
-
-        // Initially hidden
+        this.scene.add(this.group);
         this.setVisible(false);
     }
 
-    _buildAmbientParticles() {
-        // PR-VISUAL-AMBIENT: Create floating micro-particles around the avatar
-        const particleCount = 60;
-        const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(particleCount * 3);
-        const velocities = new Float32Array(particleCount * 3);
+    /**
+     * Build fullscreen edge glow using ShaderMaterial on PlaneGeometry
+     * Edge glow only: brightest at screen edges, decays rapidly inward
+     */
+    _buildEdgeGlow() {
+        const { width, height } = this._getVisibleSizeAtZ0();
 
-        for (let i = 0; i < particleCount; i++) {
-            // Distribute in a sphere around the avatar
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.acos(2 * Math.random() - 1);
-            const r = 0.5 + Math.random() * 1.5; // 0.5 to 2.0 units away
+        // Slightly larger than visible area to ensure full coverage
+        const geometry = new THREE.PlaneGeometry(width * 1.05, height * 1.05);
 
-            positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-            positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-            positions[i * 3 + 2] = r * Math.cos(phi);
+        this.edgeMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                uTime: { value: 0.0 },
+                uOpacity: { value: 0.0 },
+                uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform float uTime;
+                uniform float uOpacity;
+                uniform vec2 uResolution;
+                varying vec2 vUv;
 
-            // Slow drift velocities
-            velocities[i * 3] = (Math.random() - 0.5) * 0.1;
-            velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.05 + 0.02; // slight upward drift
-            velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.1;
-        }
+                void main() {
+                    vec2 uv = vUv;
 
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                    // Distance to each edge (0 at edge, 0.5 at center)
+                    float distToLeft = uv.x;
+                    float distToRight = 1.0 - uv.x;
+                    float distToTop = 1.0 - uv.y;
+                    float distToBottom = uv.y;
 
-        const material = new THREE.PointsMaterial({
-            color: 0xa0b8c8,
-            size: 0.015,
+                    // Distance to nearest edge
+                    float edgeDist = min(min(distToLeft, distToRight), min(distToTop, distToBottom));
+
+                    // Edge glow: only within ~8% of edge, smooth falloff
+                    float edgeGlow = 1.0 - smoothstep(0.0, 0.08, edgeDist);
+
+                    // Horizontal gradient: left=cyan, right=pink
+                    vec3 leftColor = vec3(0.0, 0.882, 1.0);   // #00e1ff
+                    vec3 rightColor = vec3(0.925, 0.286, 0.6); // #ec4899
+                    vec3 color = mix(leftColor, rightColor, uv.x);
+
+                    // Breathing animation: slow 6-second cycle
+                    float breath = sin(uTime * 1.047) * 0.3 + 0.7; // 2*PI/6 ≈ 1.047
+
+                    // Final alpha: very faint (0.03-0.08 base)
+                    float alpha = edgeGlow * 0.055 * breath * uOpacity;
+
+                    gl_FragColor = vec4(color, alpha);
+                }
+            `,
             transparent: true,
-            opacity: 0.4,
+            depthWrite: false,
             blending: THREE.AdditiveBlending,
-            depthWrite: false
+            side: THREE.DoubleSide
         });
 
-        this.ambientParticles = new THREE.Points(geometry, material);
-        this.ambientParticleVelocities = velocities;
-        this.particleGroup.add(this.ambientParticles);
+        this.edgeGlowMesh = new THREE.Mesh(geometry, this.edgeMaterial);
+        this.edgeGlowMesh.position.z = 0;
+        this.group.add(this.edgeGlowMesh);
     }
 
-    _updateAmbientParticles(deltaTime) {
-        if (!this.ambientParticles || !this.isActive) return;
+    /**
+     * Build 4 corner HUD brackets using LineSegments
+     * Each bracket: ┌ ┐ └ ┘ style, 40x40px, breathing opacity
+     */
+    _buildCornerBrackets() {
+        this.cornerGroup = new THREE.Group();
 
-        const positions = this.ambientParticles.geometry.attributes.position.array;
-        const count = positions.length / 3;
+        // 4 corners: TL, TR, BL, BR
+        const cornerConfigs = [
+            { id: 'TL', sx: 1, sy: -1 },   // top-left:  ┘  (horizontal right, vertical down)
+            { id: 'TR', sx: -1, sy: -1 },  // top-right: └  (horizontal left, vertical down)
+            { id: 'BL', sx: 1, sy: 1 },    // bottom-left: ┐ (horizontal right, vertical up)
+            { id: 'BR', sx: -1, sy: 1 },   // bottom-right: ┌ (horizontal left, vertical up)
+        ];
 
-        for (let i = 0; i < count; i++) {
-            // Apply velocity
-            positions[i * 3] += this.ambientParticleVelocities[i * 3] * deltaTime;
-            positions[i * 3 + 1] += this.ambientParticleVelocities[i * 3 + 1] * deltaTime;
-            positions[i * 3 + 2] += this.ambientParticleVelocities[i * 3 + 2] * deltaTime;
+        cornerConfigs.forEach((cfg, index) => {
+            const bracket = this._createBracketGeometry(cfg.sx, cfg.sy);
+            const material = new THREE.LineBasicMaterial({
+                color: this.colorCyan,
+                transparent: true,
+                opacity: 0,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
 
-            // Orbit slowly around center
-            const x = positions[i * 3];
-            const z = positions[i * 3 + 2];
-            const orbitSpeed = 0.1 * deltaTime;
-            positions[i * 3] = x * Math.cos(orbitSpeed) - z * Math.sin(orbitSpeed);
-            positions[i * 3 + 2] = x * Math.sin(orbitSpeed) + z * Math.cos(orbitSpeed);
+            const lineSegments = new THREE.LineSegments(bracket, material);
+            this.cornerGroup.add(lineSegments);
 
-            // Respawn if too far
-            const dist = Math.sqrt(x*x + positions[i*3+1]*positions[i*3+1] + z*z);
-            if (dist > 3.0 || dist < 0.3) {
-                const theta = Math.random() * Math.PI * 2;
-                const phi = Math.acos(2 * Math.random() - 1);
-                const r = 0.8 + Math.random() * 1.0;
-                positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-                positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-                positions[i * 3 + 2] = r * Math.cos(phi);
-            }
-        }
+            this.cornerLines.push({
+                mesh: lineSegments,
+                material: material,
+                index: index,
+                phaseOffset: index * 1.5 // Stagger breathing
+            });
+        });
 
-        this.ambientParticles.geometry.attributes.position.needsUpdate = true;
-
-        // Twinkle opacity
-        this.ambientParticles.material.opacity = 0.3 + Math.sin(Date.now() * 0.002) * 0.1;
+        this.group.add(this.cornerGroup);
     }
+
+    /**
+     * Create a single bracket geometry (two lines forming an L corner)
+     * sx, sy: direction multipliers (-1 or 1)
+     */
+    _createBracketGeometry(sx, sy) {
+        const s = this._pxToWorld(this.cornerSize); // bracket arm length in world units
+        const geometry = new THREE.BufferGeometry();
+        // Two lines: horizontal + vertical
+        const vertices = new Float32Array([
+            0, 0, 0,   sx * s, 0, 0,      // horizontal arm
+            0, 0, 0,   0, sy * s, 0       // vertical arm
+        ]);
+        geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+        return geometry;
+    }
+
+    /**
+     * Position corner brackets at screen corners
+     */
+    _positionCornerBrackets() {
+        const offset = this._pxToWorld(this.cornerOffset);
+        const { width, height } = this._getVisibleSizeAtZ0();
+        const halfW = width / 2;
+        const halfH = height / 2;
+
+        const positions = [
+            { x: -halfW + offset, y: halfH - offset },   // TL
+            { x: halfW - offset,  y: halfH - offset },   // TR
+            { x: -halfW + offset, y: -halfH + offset },  // BL
+            { x: halfW - offset,  y: -halfH + offset }   // BR
+        ];
+
+        this.cornerLines.forEach((corner, i) => {
+            corner.mesh.position.set(positions[i].x, positions[i].y, 0);
+        });
+    }
+
+    // ============================================
+    // Helpers: Screen-space to world-space
+    // ============================================
+
+    /**
+     * Get the visible world-space dimensions at z=0 plane
+     */
+    _getVisibleSizeAtZ0() {
+        const vFOV = THREE.MathUtils.degToRad(this.camera.fov);
+        const dist = this.camera.position.z; // z=5
+        const visibleHeight = 2 * Math.tan(vFOV / 2) * dist;
+        const visibleWidth = visibleHeight * this.camera.aspect;
+        return { width: visibleWidth, height: visibleHeight };
+    }
+
+    /**
+     * Convert pixel size to world units at z=0
+     */
+    _pxToWorld(px) {
+        const { height } = this._getVisibleSizeAtZ0();
+        return (px / window.innerHeight) * height;
+    }
+
+    // ============================================
+    // Visibility
+    // ============================================
 
     setVisible(visible) {
-        if (this.particleGroup) {
-            this.particleGroup.visible = visible;
-        }
-        if (this.ambientLight) {
-            this.ambientLight.visible = visible;
-        }
-        if (this.pointLight1) {
-            this.pointLight1.visible = visible;
-        }
-        if (this.pointLight2) {
-            this.pointLight2.visible = visible;
-        }
+        this.group.visible = visible;
 
-        // DOM overlay
         const overlay = document.getElementById('silent-overlay');
         if (overlay) {
             if (visible) {
@@ -195,19 +239,25 @@ class SilentState {
         }
     }
 
+    // ============================================
+    // State Transitions
+    // ============================================
+
     enter() {
         if (this.isActive) return;
         this.isActive = true;
         this.setVisible(true);
 
-        // Reset phases
-        this.breathPhase = 0;
-        this.floatPhase = 0;
+        // Start fade-in
+        this.opacity = 0;
+        this.targetOpacity = 1;
+        this.fadeSpeed = 1 / 1.5; // 1.5 seconds to full
+        this.entering = true;
+        this.exiting = false;
 
-        // Entrance animation - scale up
-        this.particleGroup.scale.set(0.1, 0.1, 0.1);
-        this.entranceStartTime = this.threeScene.getElapsedTime();
-        this.isEntering = true;
+        // Ensure edge glow plane covers current screen
+        this._refreshEdgeGlowSize();
+        this._positionCornerBrackets();
 
         // Disable post-processing in silent state
         this.threeScene.enablePostProcessing(false);
@@ -217,109 +267,97 @@ class SilentState {
         if (!this.isActive) return;
         this.isActive = false;
 
-        // Exit animation - scale down
-        this.isExiting = true;
-        this.exitStartTime = this.threeScene.getElapsedTime();
-
-        // Hide after short delay
-        setTimeout(() => {
-            this.setVisible(false);
-            this.isExiting = false;
-        }, 500);
+        // Start fade-out
+        this.targetOpacity = 0;
+        this.fadeSpeed = 1 / 0.5; // 0.5 seconds to fade out
+        this.entering = false;
+        this.exiting = true;
     }
 
+    // ============================================
+    // Update (called every frame)
+    // ============================================
+
     update(deltaTime) {
-        if (!this.isActive && !this.isEntering && !this.isExiting) return;
+        const needsUpdate = this.isActive || this.entering || this.exiting;
+        if (!needsUpdate) return;
 
         const time = this.threeScene.getElapsedTime();
 
-        // Entrance animation
-        if (this.isEntering) {
-            const elapsed = time - this.entranceStartTime;
-            const progress = Math.min(elapsed / 0.8, 1.0);
-            const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
-            const scale = 0.1 + eased * 0.9;
-            this.particleGroup.scale.set(scale, scale, scale);
-            if (progress >= 1.0) {
-                this.isEntering = false;
-            }
+        // Update opacity (fade in/out)
+        if (this.opacity < this.targetOpacity) {
+            this.opacity = Math.min(this.opacity + this.fadeSpeed * deltaTime, this.targetOpacity);
+        } else if (this.opacity > this.targetOpacity) {
+            this.opacity = Math.max(this.opacity - this.fadeSpeed * deltaTime, this.targetOpacity);
         }
 
-        // Exit animation
-        if (this.isExiting) {
-            const elapsed = time - this.exitStartTime;
-            const progress = Math.min(elapsed / 0.5, 1.0);
-            const eased = progress * progress; // ease-in quadratic
-            const scale = 1.0 - eased * 0.9;
-            this.particleGroup.scale.set(scale, scale, scale);
+        // Check if entrance complete
+        if (this.entering && this.opacity >= 1.0) {
+            this.entering = false;
         }
 
-        if (!this.isActive) return;
+        // Check if exit complete
+        if (this.exiting && this.opacity <= 0) {
+            this.exiting = false;
+            this.setVisible(false);
+        }
 
-        // Breathing animation (4-second cycle)
-        this.breathPhase += deltaTime * this.breathSpeed;
-        const breathValue = Math.sin(this.breathPhase) * 0.5 + 0.5; // 0 to 1
+        // Skip visual updates if fully faded out
+        if (this.opacity <= 0.001) return;
 
-        // Scale breathing
-        const breathScale = 1.0 + breathValue * this.breathAmplitude;
-        this.particleMesh.scale.set(breathScale, breathScale, breathScale);
+        // Update edge glow shader
+        if (this.edgeMaterial) {
+            this.edgeMaterial.uniforms.uTime.value = time;
+            this.edgeMaterial.uniforms.uOpacity.value = this.opacity;
+        }
 
-        // Subtle floating motion
-        this.floatPhase += deltaTime * 0.8;
-        const floatY = Math.sin(this.floatPhase) * 0.03;
-        this.particleGroup.position.y = floatY;
-
-        // Core pulse (synced with breath, slightly offset)
-        const corePulse = Math.sin(this.breathPhase + 0.5) * 0.5 + 0.5;
-        this.coreMesh.scale.setScalar(1.0 + corePulse * 0.3);
-        this.coreMesh.material.opacity = 0.08 + corePulse * 0.12;
-
-        // Ring rotation and pulse
-        this.ringMesh.rotation.z += deltaTime * 0.2;
-        const ringPulse = Math.sin(this.breathPhase * 0.7) * 0.5 + 0.5;
-        this.ringMesh.scale.setScalar(1.0 + ringPulse * 0.05);
-        this.ringMesh.material.opacity = 0.1 + ringPulse * 0.15;
-
-        // Light intensity breathing
-        this.pointLight1.intensity = 0.8 + breathValue * 0.2;
-        this.pointLight2.intensity = 0.4 + (1.0 - breathValue) * 0.15;
-
-        // Subtle particle rotation
-        this.particleMesh.rotation.y += deltaTime * 0.3;
-        this.particleMesh.rotation.x += deltaTime * 0.15;
-
-        // PR-VISUAL-AMBIENT: Update floating ambient particles
-        this._updateAmbientParticles(deltaTime);
+        // Update corner brackets: breathing opacity 0.05-0.15, 6-second cycle
+        this.cornerLines.forEach(corner => {
+            const breath = Math.sin(time * 1.047 + corner.phaseOffset) * 0.5 + 0.5; // 0 to 1
+            const baseOpacity = 0.05 + breath * 0.10; // 0.05 - 0.15
+            corner.material.opacity = baseOpacity * this.opacity;
+        });
     }
 
+    /**
+     * Refresh edge glow plane size on window resize
+     */
+    onResize() {
+        if (!this.isActive && !this.entering && !this.exiting) return;
+        this._refreshEdgeGlowSize();
+        this._positionCornerBrackets();
+
+        // Update resolution uniform
+        if (this.edgeMaterial) {
+            this.edgeMaterial.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+        }
+    }
+
+    _refreshEdgeGlowSize() {
+        if (!this.edgeGlowMesh) return;
+        const { width, height } = this._getVisibleSizeAtZ0();
+        this.edgeGlowMesh.scale.set(width * 1.05 / this.edgeGlowMesh.geometry.parameters.width,
+                                     height * 1.05 / this.edgeGlowMesh.geometry.parameters.height,
+                                     1);
+    }
+
+    // ============================================
+    // Cleanup
+    // ============================================
+
     dispose() {
-        if (this.particleMesh) {
-            this.particleMesh.geometry.dispose();
-            this.particleMesh.material.dispose();
+        if (this.edgeGlowMesh) {
+            this.edgeGlowMesh.geometry.dispose();
+            this.edgeMaterial.dispose();
         }
-        if (this.coreMesh) {
-            this.coreMesh.geometry.dispose();
-            this.coreMesh.material.dispose();
-        }
-        if (this.ringMesh) {
-            this.ringMesh.geometry.dispose();
-            this.ringMesh.material.dispose();
-        }
-        if (this.ambientParticles) {
-            this.ambientParticles.geometry.dispose();
-            this.ambientParticles.material.dispose();
-        }
-        if (this.particleGroup) {
-            this.scene.remove(this.particleGroup);
-        }
-        if (this.ambientLight) {
-            this.scene.remove(this.ambientLight);
-        }
-        if (this.pointLight1) {
-            this.scene.remove(this.pointLight1);
-        }
-        if (this.pointLight2) {
-            this.scene.remove(this.pointLight2);
+
+        this.cornerLines.forEach(corner => {
+            corner.mesh.geometry.dispose();
+            corner.material.dispose();
+        });
+
+        if (this.group) {
+            this.scene.remove(this.group);
         }
     }
 }

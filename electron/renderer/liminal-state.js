@@ -1,410 +1,323 @@
 /**
  * liminal-state.js
- * Liminal State: Perspective tunnel with FOV distortion
- * - Custom Vertex Shader for FOV perspective warp
- * - Vanishing point at screen center
- * - Simplex noise liquid ink flow along perspective lines
+ * Liminal State: Perspective box tunnel — single vanishing point
+ * Inspired by UVA "Vanishing Point" laser installation
+ * Like The Last Supper's perspective composition
  */
 
 class LiminalState {
     constructor(threeScene) {
         this.threeScene = threeScene;
         this.scene = threeScene.getScene();
+        this.camera = threeScene.getCamera();
         this.isActive = false;
 
-        // Tunnel components
-        this.tunnelGroup = null;
-        this.tunnelMesh = null;
-        this.tunnelMaterial = null;
+        // Perspective room group
+        this.roomGroup = null;
+
+        // 12 edge lines of the perspective box
+        this.edgeLines = null;       // LineSegments for the 12 edges
+        this.edgeMaterial = null;
+
+        // Floor grid lines (perspective)
+        this.floorGrid = null;
+        this.ceilingGrid = null;
+
+        // Particle system (flowing toward vanishing point)
         this.particleSystem = null;
-        this.flowLines = [];
+        this.particlePositions = null;     // Float32Array
+        this.particleVelocities = [];      // Array of {speed, angle, depthOffset}
+        this.particleMaterial = null;
 
-        // Animation parameters
-        this.tunnelRotation = 0;
-        this.flowSpeed = 0.6;
-        this.tunnelDepth = 30;
+        // Vanishing point light (deep center glow)
+        this.vanishingLight = null;
 
-        // Load shaders and build
+        // Animation state
+        this.opacity = 0;
+        this.targetOpacity = 1;
+        this.fadeSpeed = 1;
+        this.entering = false;
+        this.exiting = false;
+
+        // Entrance/exit animation
+        this.roomScale = 1;
+        this.targetRoomScale = 1;
+        this.depthProgress = 1;       // 0=flat, 1=full depth
+        this.targetDepthProgress = 1;
+
+        // Rotation
+        this.rotationY = 0;
+
+        // Perspective parameters
+        this.depth = 20;              // Depth of the room
+        this.particleCount = 150;
+
+        // Galaxy palette
+        this.colorCyan = new THREE.Color(0x00e1ff);
+        this.colorPink = new THREE.Color(0xec4899);
+        this.colorBlue = new THREE.Color(0x3b82f6);
+
         this.build();
     }
 
-    async loadShader(url) {
-        try {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`Failed to load ${url}`);
-            return await response.text();
-        } catch (err) {
-            console.warn(`Failed to load shader from ${url}, using fallback`, err);
-            return null;
-        }
-    }
+    // ============================================
+    // Build
+    // ============================================
+    build() {
+        this.roomGroup = new THREE.Group();
 
-    async build() {
-        // Try to load external shaders, use fallbacks if unavailable
-        let vertexShader = await this.loadShader('./shaders/liminal.vert');
-        let fragmentShader = await this.loadShader('./shaders/liminal.frag');
+        this._buildPerspectiveBox();
+        this._buildFloorCeilingGrids();
+        this._buildFlowParticles();
+        this._buildVanishingLight();
 
-        // Fallback vertex shader (FOV distortion)
-        if (!vertexShader) {
-            vertexShader = this.getFallbackVertexShader();
-        }
-
-        // Fallback fragment shader (liquid ink flow)
-        if (!fragmentShader) {
-            fragmentShader = this.getFallbackFragmentShader();
-        }
-
-        // Create tunnel group
-        this.tunnelGroup = new THREE.Group();
-
-        // Main tunnel mesh - high segment count for smooth distortion
-        const tunnelGeometry = new THREE.PlaneGeometry(
-            20,      // width
-            15,      // height
-            80,      // width segments (high for smooth FOV warp)
-            60       // height segments
-        );
-
-        // Create tunnel material with custom shaders
-        this.tunnelMaterial = new THREE.ShaderMaterial({
-            uniforms: {
-                uTime: { value: 0.0 },
-                uTunnelDepth: { value: this.tunnelDepth },
-                uDistortionStrength: { value: 3.5 },
-                uTunnelSpeed: { value: this.flowSpeed },
-                uInkIntensity: { value: 1.2 },
-                uInkColor1: { value: new THREE.Color(0x1a2332) },
-                uInkColor2: { value: new THREE.Color(0x2d3a4a) },
-                uInkColor3: { value: new THREE.Color(0x0d1520) },
-                uResolution: { value: new THREE.Vector2(
-                    window.innerWidth,
-                    window.innerHeight
-                )}
-            },
-            vertexShader: vertexShader,
-            fragmentShader: fragmentShader,
-            transparent: true,
-            side: THREE.DoubleSide,
-            depthWrite: true,
-            depthTest: true,
-            blending: THREE.AdditiveBlending
-        });
-
-        this.tunnelMesh = new THREE.Mesh(tunnelGeometry, this.tunnelMaterial);
-        this.tunnelGroup.add(this.tunnelMesh);
-
-        // Create additional tunnel depth layers
-        this.createDepthLayers();
-
-        // Create flowing particles
-        this.createFlowParticles();
-
-        // Create perspective flow lines
-        this.createFlowLines();
-
-        // Add ambient lighting for the tunnel
-        this.tunnelLight = new THREE.PointLight(0x4a6080, 0.5, 25);
-        this.tunnelLight.position.set(0, 0, 2);
-        this.tunnelGroup.add(this.tunnelLight);
-
-        this.scene.add(this.tunnelGroup);
+        this.scene.add(this.roomGroup);
         this.setVisible(false);
     }
 
-    getFallbackVertexShader() {
-        return `
-            uniform float uTime;
-            uniform float uTunnelDepth;
-            uniform float uDistortionStrength;
-            uniform vec2 uResolution;
+    /**
+     * Build the perspective box: 8 vertices, 12 edges
+     * Near plane (screen) is large, far plane (deep) converges to a point
+     */
+    _buildPerspectiveBox() {
+        const d = this.depth;
 
-            varying vec2 vUv;
-            varying float vDepth;
-            varying vec3 vWorldPosition;
-            varying float vDistortion;
+        // Near plane (at z=0, larger than screen)
+        // Will be scaled to match screen in refreshPerspectiveGeometry
+        const nearW = 12;
+        const nearH = 8;
 
-            float easeInQuad(float t) {
-                return t * t;
-            }
+        // Far plane (deep, nearly a point)
+        const farW = 0.05;
+        const farH = 0.05;
 
-            float easeInOutCubic(float t) {
-                return t < 0.5
-                    ? 4.0 * t * t * t
-                    : 1.0 - pow(-2.0 * t + 2.0, 3.0) / 2.0;
-            }
+        // 8 vertices: 4 near + 4 far
+        // Order: near BL, near BR, near TR, near TL, far BL, far BR, far TR, far TL
+        this.boxVertices = new Float32Array([
+            // Near plane (z=0)
+            -nearW/2, -nearH/2, 0,   // 0: near bottom-left
+             nearW/2, -nearH/2, 0,   // 1: near bottom-right
+             nearW/2,  nearH/2, 0,   // 2: near top-right
+            -nearW/2,  nearH/2, 0,   // 3: near top-left
+            // Far plane (z=-d)
+            -farW/2, -farH/2, -d,    // 4: far bottom-left
+             farW/2, -farH/2, -d,    // 5: far bottom-right
+             farW/2,  farH/2, -d,    // 6: far top-right
+            -farW/2,  farH/2, -d,    // 7: far top-left
+        ]);
 
-            void main() {
-                vUv = uv;
-                vec3 pos = position;
-                vec2 centerOffset = pos.xy;
-                float distFromCenter = length(centerOffset);
-                vec2 screenPos = pos.xy;
-                float zNorm = (pos.z + uTunnelDepth * 0.5) / uTunnelDepth;
-                zNorm = clamp(zNorm, 0.0, 1.0);
-                float depthEasing = easeInQuad(zNorm);
-                vDepth = depthEasing;
-                float pullStrength = depthEasing * uDistortionStrength;
-                vec2 pullDir = normalize(-screenPos + 0.001);
-                float radialFalloff = smoothstep(0.0, 1.0, distFromCenter);
-                pos.xy += pullDir * pullStrength * radialFalloff * 2.0;
-                pos.z = -easeInOutCubic(zNorm) * uTunnelDepth;
-                float wave = sin(distFromCenter * 8.0 - uTime * 2.0) * 0.02 * depthEasing;
-                pos.xy += normalize(screenPos + 0.001) * wave;
-                vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-                vec4 projected = projectionMatrix * mvPosition;
-                vWorldPosition = pos;
-                vDistortion = pullStrength;
-                gl_Position = projected;
-            }
-        `;
+        // 12 edges: 4 near + 4 far + 4 connecting
+        const indices = [
+            // Near plane edges
+            0, 1,  1, 2,  2, 3,  3, 0,
+            // Far plane edges
+            4, 5,  5, 6,  6, 7,  7, 4,
+            // Connecting edges (perspective lines)
+            0, 4,  1, 5,  2, 6,  3, 7
+        ];
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(this.boxVertices.slice(), 3));
+        geometry.setIndex(indices);
+
+        this.edgeMaterial = new THREE.LineBasicMaterial({
+            color: this.colorCyan,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        this.edgeLines = new THREE.LineSegments(geometry, this.edgeMaterial);
+        this.roomGroup.add(this.edgeLines);
     }
 
-    getFallbackFragmentShader() {
-        return `
-            uniform float uTime;
-            uniform float uTunnelSpeed;
-            uniform float uInkIntensity;
-            uniform vec3 uInkColor1;
-            uniform vec3 uInkColor2;
-            uniform vec3 uInkColor3;
-            uniform vec2 uResolution;
+    /**
+     * Build perspective floor and ceiling grid lines
+     * Additional lines for depth perception
+     */
+    _buildFloorCeilingGrids() {
+        const d = this.depth;
+        const nearW = 12;
+        const nearH = 8;
+        const farW = 0.05;
+        const farH = 0.05;
 
-            varying vec2 vUv;
-            varying float vDepth;
-            varying vec3 vWorldPosition;
-            varying float vDistortion;
+        // Floor: 5 lines going from near to far (depth lines)
+        const floorPositions = [];
+        const ceilPositions = [];
+        const numDivisions = 5;
 
-            vec4 permute(vec4 x) {
-                return mod(((x * 34.0) + 1.0) * x, 289.0);
-            }
-            vec4 taylorInvSqrt(vec4 r) {
-                return 1.79284291400159 - 0.85373472095314 * r;
-            }
+        for (let i = 0; i <= numDivisions; i++) {
+            const t = i / numDivisions; // 0 to 1
+            const nearX = -nearW/2 + t * nearW;
+            const farX = -farW/2 + t * farW;
 
-            float snoise(vec3 v) {
-                const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
-                const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
-                vec3 i = floor(v + dot(v, C.yyy));
-                vec3 x0 = v - i + dot(i, C.xxx);
-                vec3 g = step(x0.yzx, x0.xyz);
-                vec3 l = 1.0 - g;
-                vec3 i1 = min(g.xyz, l.zxy);
-                vec3 i2 = max(g.xyz, l.zxy);
-                vec3 x1 = x0 - i1 + C.xxx;
-                vec3 x2 = x0 - i2 + C.yyy;
-                vec3 x3 = x0 - D.yyy;
-                i = mod(i, 289.0);
-                vec4 p = permute(permute(permute(
-                    i.z + vec4(0.0, i1.z, i2.z, 1.0))
-                    + i.y + vec4(0.0, i1.y, i2.y, 1.0))
-                    + i.x + vec4(0.0, i1.x, i2.x, 1.0));
-                float n_ = 1.0 / 7.0;
-                vec3 ns = n_ * D.wyz - D.xzx;
-                vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-                vec4 x_ = floor(j * ns.z);
-                vec4 y_ = floor(j - 7.0 * x_);
-                vec4 x = x_ * ns.x + ns.yyyy;
-                vec4 y = y_ * ns.x + ns.yyyy;
-                vec4 h = 1.0 - abs(x) - abs(y);
-                vec4 b0 = vec4(x.xy, y.xy);
-                vec4 b1 = vec4(x.zw, y.zw);
-                vec4 s0 = floor(b0) * 2.0 + 1.0;
-                vec4 s1 = floor(b1) * 2.0 + 1.0;
-                vec4 sh = -step(h, vec4(0.0));
-                vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
-                vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
-                vec3 p0 = vec3(a0.xy, h.x);
-                vec3 p1 = vec3(a0.zw, h.y);
-                vec3 p2 = vec3(a1.xy, h.z);
-                vec3 p3 = vec3(a1.zw, h.w);
-                vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
-                p0 *= norm.x;
-                p1 *= norm.y;
-                p2 *= norm.z;
-                p3 *= norm.w;
-                vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
-                m = m * m;
-                return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
-            }
+            // Floor line (y = -nearH/2 at near, y = -farH/2 at far)
+            floorPositions.push(
+                nearX, -nearH/2, 0,
+                farX, -farH/2, -d
+            );
 
-            float fbm(vec3 p, int octaves) {
-                float value = 0.0;
-                float amplitude = 0.5;
-                float frequency = 1.0;
-                for (int i = 0; i < 6; i++) {
-                    if (i >= octaves) break;
-                    value += amplitude * snoise(p * frequency);
-                    amplitude *= 0.5;
-                    frequency *= 2.0;
-                }
-                return value;
-            }
-
-            mat2 rotate(float angle) {
-                float c = cos(angle);
-                float s = sin(angle);
-                return mat2(c, -s, s, c);
-            }
-
-            void main() {
-                vec2 uv = vUv;
-                float t = uTime;
-                vec2 centerDir = normalize(uv - 0.5 + 0.001);
-                float distFromCenter = length(uv - 0.5);
-                float flowSpeed = t * uTunnelSpeed;
-                vec3 flowPos = vec3(uv.x * 2.0, uv.y * 2.0, flowSpeed + vDepth * 5.0);
-                vec2 swirlUv = (uv - 0.5) * rotate(t * 0.1 + vDepth * 2.0) + 0.5;
-                vec3 swirlPos = vec3(swirlUv * 3.0, flowSpeed * 0.7);
-                float ink1 = fbm(flowPos + swirlPos * 0.5, 4);
-                float ink2 = fbm(flowPos * 1.5 + vec3(t * 0.2, t * 0.15, 0.0), 3);
-                float ink3 = fbm(vec3(
-                    centerDir.x * distFromCenter * 4.0 + t * 0.3,
-                    centerDir.y * distFromCenter * 4.0,
-                    vDepth * 3.0 + t * 0.5
-                ), 3);
-                float veins = smoothstep(0.3, 0.6, abs(ink1));
-                veins *= smoothstep(0.2, 0.5, abs(ink2));
-                float flowLines = sin(distFromCenter * 20.0 - t * 3.0 - vDepth * 10.0) * 0.5 + 0.5;
-                flowLines = smoothstep(0.4, 0.6, flowLines) * (1.0 - vDepth * 0.5);
-                float inkPattern = veins * 0.5 + abs(ink3) * 0.3 + flowLines * 0.2;
-                inkPattern = smoothstep(0.2, 0.8, inkPattern);
-                vec3 color = mix(uInkColor1, uInkColor2, ink1 * 0.5 + 0.5);
-                color = mix(color, uInkColor3, ink2 * 0.5 + 0.5);
-                float depthFade = 1.0 - vDepth * 0.7;
-                color *= depthFade;
-                color *= 1.0 + inkPattern * uInkIntensity;
-                float edgeDist = length(uv - 0.5) * 1.5;
-                float vignette = 1.0 - smoothstep(0.3, 0.8, edgeDist);
-                color *= vignette * 0.3 + 0.7;
-                float glow = flowLines * 0.15 * (1.0 - vDepth);
-                color += uInkColor2 * glow;
-                float alpha = 0.85 + inkPattern * 0.15;
-                alpha *= (1.0 - vDepth * 0.3);
-                gl_FragColor = vec4(color, alpha);
-            }
-        `;
-    }
-
-    createDepthLayers() {
-        // Create multiple layered planes for depth
-        this.depthLayers = [];
-        const layerCount = 5;
-
-        for (let i = 0; i < layerCount; i++) {
-            const progress = (i + 1) / (layerCount + 1);
-            const scale = 1.0 - progress * 0.6;
-            const layerGeometry = new THREE.PlaneGeometry(20 * scale, 15 * scale, 40, 30);
-
-            const layerMaterial = new THREE.ShaderMaterial({
-                uniforms: {
-                    uTime: this.tunnelMaterial.uniforms.uTime,
-                    uTunnelDepth: this.tunnelMaterial.uniforms.uTunnelDepth,
-                    uDistortionStrength: { value: 3.5 * (1.0 - progress * 0.5) },
-                    uTunnelSpeed: this.tunnelMaterial.uniforms.uTunnelSpeed,
-                    uInkIntensity: { value: 0.6 * (1.0 - progress * 0.3) },
-                    uInkColor1: this.tunnelMaterial.uniforms.uInkColor1,
-                    uInkColor2: this.tunnelMaterial.uniforms.uInkColor2,
-                    uInkColor3: this.tunnelMaterial.uniforms.uInkColor3,
-                    uResolution: this.tunnelMaterial.uniforms.uResolution
-                },
-                vertexShader: this.tunnelMaterial.vertexShader,
-                fragmentShader: this.tunnelMaterial.fragmentShader,
-                transparent: true,
-                side: THREE.DoubleSide,
-                depthWrite: false,
-                depthTest: true,
-                blending: THREE.AdditiveBlending
-            });
-
-            const layerMesh = new THREE.Mesh(layerGeometry, layerMaterial);
-            layerMesh.position.z = -progress * this.tunnelDepth * 0.3;
-            layerMesh.material.opacity = 0.3 * (1.0 - progress);
-
-            this.tunnelGroup.add(layerMesh);
-            this.depthLayers.push(layerMesh);
+            // Ceiling line
+            ceilPositions.push(
+                nearX, nearH/2, 0,
+                farX, farH/2, -d
+            );
         }
+
+        // Horizontal cross lines at various depths
+        const numDepthSteps = 6;
+        for (let i = 0; i < numDepthSteps; i++) {
+            const t = (i + 1) / (numDepthSteps + 1); // 0 to 1
+            const easeT = t * t; // ease-in for perspective spacing
+            const z = -d * easeT;
+            const w = nearW + (farW - nearW) * easeT;
+            const h = nearH + (farH - nearH) * easeT;
+
+            floorPositions.push(-w/2, -nearH/2 + (farH/2 - nearH/2) * easeT, z,
+                                 w/2, -nearH/2 + (farH/2 - nearH/2) * easeT, z);
+            ceilPositions.push(-w/2, nearH/2 + (-farH/2 - nearH/2) * easeT, z,
+                                w/2, nearH/2 + (-farH/2 - nearH/2) * easeT, z);
+        }
+
+        // Floor grid
+        const floorGeo = new THREE.BufferGeometry();
+        floorGeo.setAttribute('position', new THREE.Float32BufferAttribute(floorPositions, 3));
+        this.floorMaterial = new THREE.LineBasicMaterial({
+            color: this.colorBlue,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        this.floorGrid = new THREE.LineSegments(floorGeo, this.floorMaterial);
+        this.roomGroup.add(this.floorGrid);
+
+        // Ceiling grid
+        const ceilGeo = new THREE.BufferGeometry();
+        ceilGeo.setAttribute('position', new THREE.Float32BufferAttribute(ceilPositions, 3));
+        this.ceilingMaterial = new THREE.LineBasicMaterial({
+            color: this.colorBlue,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        this.ceilingGrid = new THREE.LineSegments(ceilGeo, this.ceilingMaterial);
+        this.roomGroup.add(this.ceilingGrid);
     }
 
-    createFlowParticles() {
-        const particleCount = 200;
-        const positions = new Float32Array(particleCount * 3);
+    /**
+     * Build flowing particles: 150 particles drifting along perspective lines
+     * From screen edges toward the vanishing point
+     */
+    _buildFlowParticles() {
+        const positions = new Float32Array(this.particleCount * 3);
+        const colors = new Float32Array(this.particleCount * 3);
         const velocities = [];
 
-        for (let i = 0; i < particleCount; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const radius = 0.5 + Math.random() * 8;
-            positions[i * 3] = Math.cos(angle) * radius;
-            positions[i * 3 + 1] = Math.sin(angle) * radius;
-            positions[i * 3 + 2] = -Math.random() * this.tunnelDepth * 0.5;
+        const colorCyan = this.colorCyan;
+        const colorPink = this.colorPink;
+        const tempColor = new THREE.Color();
 
+        for (let i = 0; i < this.particleCount; i++) {
+            // Random starting position: around the near plane perimeter
+            const side = Math.floor(Math.random() * 4); // 0=top,1=right,2=bottom,3=left
+            const t = Math.random();
+            let x, y, z;
+
+            const margin = 0.3;
+            switch (side) {
+                case 0: // top
+                    x = (t - 0.5) * 14;
+                    y = 5 + margin;
+                    break;
+                case 1: // right
+                    x = 7 + margin;
+                    y = (t - 0.5) * 10;
+                    break;
+                case 2: // bottom
+                    x = (t - 0.5) * 14;
+                    y = -5 - margin;
+                    break;
+                case 3: // left
+                    x = -7 - margin;
+                    y = (t - 0.5) * 10;
+                    break;
+            }
+            z = -Math.random() * this.depth * 0.8;
+
+            positions[i * 3] = x;
+            positions[i * 3 + 1] = y;
+            positions[i * 3 + 2] = z;
+
+            // Velocity: drift toward vanishing point (0,0,-d)
+            const speed = 1.5 + Math.random() * 3.0;
             velocities.push({
-                speed: 0.5 + Math.random() * 2.0,
-                angle: angle,
-                radius: radius,
-                wobble: Math.random() * Math.PI * 2
+                speed: speed,
+                driftX: (Math.random() - 0.5) * 0.3,
+                driftY: (Math.random() - 0.5) * 0.3,
+                wobblePhase: Math.random() * Math.PI * 2
             });
+
+            // Color gradient based on depth: cyan near, pink far
+            const depthRatio = Math.abs(z) / this.depth;
+            tempColor.copy(colorCyan).lerp(colorPink, depthRatio);
+            colors[i * 3] = tempColor.r;
+            colors[i * 3 + 1] = tempColor.g;
+            colors[i * 3 + 2] = tempColor.b;
         }
+
+        this.particlePositions = positions;
+        this.particleVelocities = velocities;
 
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-        const material = new THREE.PointsMaterial({
-            color: 0x8a9ba8,
-            size: 0.04,
+        this.particleMaterial = new THREE.PointsMaterial({
+            size: 0.06,
             transparent: true,
-            opacity: 0.5,
+            opacity: 0,
             blending: THREE.AdditiveBlending,
             depthWrite: false,
+            vertexColors: true,
             sizeAttenuation: true
         });
 
-        this.particleSystem = new THREE.Points(geometry, material);
-        this.particleVelocities = velocities;
-        this.tunnelGroup.add(this.particleSystem);
+        this.particleSystem = new THREE.Points(geometry, this.particleMaterial);
+        this.roomGroup.add(this.particleSystem);
     }
 
-    createFlowLines() {
-        // Create perspective lines converging to center
-        const lineCount = 12;
-        this.flowLines = [];
+    /**
+     * Vanishing point light: a faint glow at the deep center
+     */
+    _buildVanishingLight() {
+        this.vanishingLight = new THREE.PointLight(this.colorPink, 0, 15);
+        this.vanishingLight.position.set(0, 0, -this.depth);
+        this.roomGroup.add(this.vanishingLight);
 
-        for (let i = 0; i < lineCount; i++) {
-            const angle = (i / lineCount) * Math.PI * 2;
-            const points = [];
-            const segments = 30;
-
-            for (let j = 0; j < segments; j++) {
-                const t = j / (segments - 1);
-                const radius = t * 10;
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
-                const z = -t * this.tunnelDepth * 0.4;
-                points.push(new THREE.Vector3(x, y, z));
-            }
-
-            const geometry = new THREE.BufferGeometry().setFromPoints(points);
-            const material = new THREE.LineBasicMaterial({
-                color: 0x4a6080,
-                transparent: true,
-                opacity: 0.08,
-                blending: THREE.AdditiveBlending,
-                depthWrite: false
-            });
-
-            const line = new THREE.Line(geometry, material);
-            this.tunnelGroup.add(line);
-            this.flowLines.push({
-                mesh: line,
-                angle: angle,
-                material: material
-            });
-        }
+        // Small glow sphere at vanishing point
+        const glowGeo = new THREE.SphereGeometry(0.15, 16, 16);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: this.colorPink,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        this.vanishingGlow = new THREE.Mesh(glowGeo, glowMat);
+        this.vanishingGlow.position.set(0, 0, -this.depth);
+        this.roomGroup.add(this.vanishingGlow);
     }
+
+    // ============================================
+    // Visibility
+    // ============================================
 
     setVisible(visible) {
-        if (this.tunnelGroup) {
-            this.tunnelGroup.visible = visible;
-        }
+        this.roomGroup.visible = visible;
 
         const overlay = document.getElementById('liminal-overlay');
         if (overlay) {
@@ -418,22 +331,33 @@ class LiminalState {
         }
     }
 
+    // ============================================
+    // State Transitions
+    // ============================================
+
     enter() {
         if (this.isActive) return;
         this.isActive = true;
         this.setVisible(true);
 
-        // Reset tunnel rotation
-        this.tunnelRotation = 0;
-        if (this.tunnelGroup) {
-            this.tunnelGroup.rotation.z = 0;
-        }
+        // Entrance: room "opens" from flat to full depth
+        this.opacity = 0;
+        this.targetOpacity = 1;
+        this.fadeSpeed = 1 / 2.0; // 2 seconds
+        this.entering = true;
+        this.exiting = false;
 
-        // Entrance animation
-        this.isEntering = true;
-        this.entranceStartTime = this.threeScene.getElapsedTime();
+        this.depthProgress = 0;
+        this.targetDepthProgress = 1;
 
-        // Disable CRT post-processing in liminal state
+        // Reset rotation
+        this.rotationY = 0;
+        this.roomGroup.rotation.y = 0;
+
+        // Reset particle positions
+        this._resetParticles();
+
+        // Disable post-processing
         this.threeScene.enablePostProcessing(false);
     }
 
@@ -441,135 +365,215 @@ class LiminalState {
         if (!this.isActive) return;
         this.isActive = false;
 
-        this.isExiting = true;
-        this.exitStartTime = this.threeScene.getElapsedTime();
+        // Exit: room "closes" — collapses to flat
+        this.targetOpacity = 0;
+        this.fadeSpeed = 1 / 1.0; // 1 second
+        this.entering = false;
+        this.exiting = true;
 
-        setTimeout(() => {
-            this.setVisible(false);
-            this.isExiting = false;
-        }, 600);
+        this.targetDepthProgress = 0;
     }
 
-    update(deltaTime) {
-        if (!this.isActive && !this.isEntering && !this.isExiting) return;
-        if (!this.tunnelMaterial) return;
+    /**
+     * Reset all particles to starting positions
+     */
+    _resetParticles() {
+        if (!this.particlePositions) return;
 
-        const time = this.threeScene.getElapsedTime();
+        for (let i = 0; i < this.particleCount; i++) {
+            const side = Math.floor(Math.random() * 4);
+            const t = Math.random();
+            let x, y;
 
-        // Update shader uniforms
-        this.tunnelMaterial.uniforms.uTime.value = time;
-
-        // Entrance animation - fade in
-        if (this.isEntering) {
-            const elapsed = time - this.entranceStartTime;
-            const progress = Math.min(elapsed / 1.0, 1.0);
-            const eased = 1 - Math.pow(1 - progress, 2);
-
-            if (this.tunnelMaterial) {
-                this.tunnelMaterial.opacity = eased;
+            const margin = 0.3;
+            switch (side) {
+                case 0: x = (t - 0.5) * 14; y = 5 + margin; break;
+                case 1: x = 7 + margin; y = (t - 0.5) * 10; break;
+                case 2: x = (t - 0.5) * 14; y = -5 - margin; break;
+                case 3: x = -7 - margin; y = (t - 0.5) * 10; break;
             }
-            if (this.particleSystem) {
-                this.particleSystem.material.opacity = eased * 0.5;
-            }
-            this.flowLines.forEach(line => {
-                line.material.opacity = eased * 0.08;
-            });
 
-            if (progress >= 1.0) {
-                this.isEntering = false;
-            }
-        }
-
-        // Exit animation
-        if (this.isExiting) {
-            const elapsed = time - this.exitStartTime;
-            const progress = Math.min(elapsed / 0.6, 1.0);
-            const fadeOut = 1.0 - progress;
-
-            if (this.tunnelMaterial) {
-                this.tunnelMaterial.opacity = fadeOut;
-            }
-            if (this.particleSystem) {
-                this.particleSystem.material.opacity = fadeOut * 0.5;
-            }
-        }
-
-        if (!this.isActive) return;
-
-        // Rotate tunnel slowly
-        this.tunnelRotation += deltaTime * 0.05;
-        if (this.tunnelGroup) {
-            this.tunnelGroup.rotation.z = this.tunnelRotation * 0.3;
-        }
-
-        // Update flow particles
-        if (this.particleSystem) {
-            this.updateParticles(deltaTime, time);
-        }
-
-        // Pulse flow lines
-        this.flowLines.forEach((line, i) => {
-            const pulse = Math.sin(time * 2 + i * 0.5) * 0.5 + 0.5;
-            line.material.opacity = 0.05 + pulse * 0.06;
-        });
-
-        // Pulsing tunnel light
-        if (this.tunnelLight) {
-            this.tunnelLight.intensity = 0.5 + Math.sin(time * 1.5) * 0.2;
-        }
-    }
-
-    updateParticles(deltaTime, time) {
-        const positions = this.particleSystem.geometry.attributes.position.array;
-        const particleCount = this.particleVelocities.length;
-
-        for (let i = 0; i < particleCount; i++) {
-            const vel = this.particleVelocities[i];
-
-            // Move particles along tunnel (toward camera / deeper in)
-            positions[i * 3 + 2] += vel.speed * deltaTime * 2.0;
-
-            // Spiral motion
-            vel.angle += deltaTime * 0.3;
-            const wobbleAmount = Math.sin(time + vel.wobble) * 0.3;
-            positions[i * 3] = Math.cos(vel.angle) * (vel.radius + wobbleAmount);
-            positions[i * 3 + 1] = Math.sin(vel.angle) * (vel.radius + wobbleAmount);
-
-            // Reset particle if it passes the camera
-            if (positions[i * 3 + 2] > 2) {
-                positions[i * 3 + 2] = -this.tunnelDepth * 0.5;
-                vel.radius = 0.5 + Math.random() * 8;
-            }
+            this.particlePositions[i * 3] = x;
+            this.particlePositions[i * 3 + 1] = y;
+            this.particlePositions[i * 3 + 2] = -Math.random() * this.depth * 0.5;
         }
 
         this.particleSystem.geometry.attributes.position.needsUpdate = true;
     }
 
+    // ============================================
+    // Update (called every frame)
+    // ============================================
+
+    update(deltaTime) {
+        const needsUpdate = this.isActive || this.entering || this.exiting;
+        if (!needsUpdate) return;
+
+        const time = this.threeScene.getElapsedTime();
+
+        // --- Opacity fade ---
+        if (this.opacity < this.targetOpacity) {
+            this.opacity = Math.min(this.opacity + this.fadeSpeed * deltaTime, this.targetOpacity);
+        } else if (this.opacity > this.targetOpacity) {
+            this.opacity = Math.max(this.opacity - this.fadeSpeed * deltaTime, this.targetOpacity);
+        }
+
+        // --- Depth progress (room opening/closing) ---
+        const depthSpeed = this.exiting ? 3.0 : 2.0; // Close faster
+        if (this.depthProgress < this.targetDepthProgress) {
+            this.depthProgress = Math.min(this.depthProgress + depthSpeed * deltaTime, this.targetDepthProgress);
+        } else if (this.depthProgress > this.targetDepthProgress) {
+            this.depthProgress = Math.max(this.depthProgress - depthSpeed * deltaTime, this.targetDepthProgress);
+        }
+
+        // Ease the depth progress
+        const easedDepth = this._easeOutCubic(this.depthProgress);
+
+        // --- Entrance/exit state ---
+        if (this.entering && this.opacity >= 1.0 && this.depthProgress >= 1.0) {
+            this.entering = false;
+        }
+        if (this.exiting && this.opacity <= 0 && this.depthProgress <= 0) {
+            this.exiting = false;
+            this.setVisible(false);
+        }
+
+        if (this.opacity <= 0.001) return;
+
+        // --- Apply depth animation: scale room from flat to full ---
+        // At depthProgress=0: room is flat (z-scale ≈ 0)
+        // At depthProgress=1: full depth
+        const zScale = Math.max(0.001, easedDepth);
+        this.roomGroup.scale.set(1, 1, zScale);
+
+        // --- Opacity for all line materials ---
+        const baseLineOpacity = 0.18 * this.opacity; // 0.1-0.25 range base
+        if (this.edgeMaterial) {
+            this.edgeMaterial.opacity = baseLineOpacity;
+        }
+        if (this.floorMaterial) {
+            this.floorMaterial.opacity = baseLineOpacity * 0.4;
+        }
+        if (this.ceilingMaterial) {
+            this.ceilingMaterial.opacity = baseLineOpacity * 0.4;
+        }
+        if (this.particleMaterial) {
+            this.particleMaterial.opacity = 0.6 * this.opacity;
+        }
+
+        // --- Slow Y-axis rotation ---
+        if (this.isActive) {
+            this.rotationY += deltaTime * 0.02; // 0.02 rad/s
+            this.roomGroup.rotation.y = this.rotationY;
+        }
+
+        // --- Pulse vanishing point light ---
+        const vanishPulse = Math.sin(time * 1.5) * 0.3 + 0.7;
+        if (this.vanishingLight) {
+            this.vanishingLight.intensity = 0.8 * vanishPulse * this.opacity;
+        }
+        if (this.vanishingGlow) {
+            this.vanishingGlow.material.opacity = 0.3 * vanishPulse * this.opacity;
+        }
+
+        // --- Update flow particles ---
+        if (this.particleSystem && this.isActive) {
+            this._updateParticles(deltaTime, time);
+        }
+    }
+
+    /**
+     * Update particle positions: flow along perspective lines toward vanishing point
+     */
+    _updateParticles(deltaTime, time) {
+        const positions = this.particlePositions;
+        const d = this.depth;
+        let needsReset = false;
+
+        for (let i = 0; i < this.particleCount; i++) {
+            const vel = this.particleVelocities[i];
+            const idx = i * 3;
+
+            // Current position
+            let x = positions[idx];
+            let y = positions[idx + 1];
+            let z = positions[idx + 2];
+
+            // Direction toward vanishing point (0, 0, -d)
+            const dx = -x;
+            const dy = -y;
+            const dz = -d - z;
+            const dist = Math.sqrt(dx*dx + dy*dy + dz*dz) + 0.001;
+
+            // Normalize + add speed
+            const speed = vel.speed * deltaTime;
+            x += (dx / dist) * speed;
+            y += (dy / dist) * speed;
+            z += (dz / dist) * speed;
+
+            // Add wobble
+            const wobble = Math.sin(time * 2 + vel.wobblePhase) * 0.003;
+            x += vel.driftX * wobble;
+            y += vel.driftY * wobble;
+
+            // Reset if reached vanishing point (or passed it)
+            if (dist < 0.5 || z < -d + 0.1) {
+                // Respawn at edge
+                const side = Math.floor(Math.random() * 4);
+                const t = Math.random();
+                const margin = 0.5;
+                switch (side) {
+                    case 0: x = (t - 0.5) * 14; y = 5.5 + margin; break;
+                    case 1: x = 7.5 + margin; y = (t - 0.5) * 10; break;
+                    case 2: x = (t - 0.5) * 14; y = -5.5 - margin; break;
+                    case 3: x = -7.5 - margin; y = (t - 0.5) * 10; break;
+                }
+                z = -Math.random() * 2; // Start near screen
+            }
+
+            positions[idx] = x;
+            positions[idx + 1] = y;
+            positions[idx + 2] = z;
+        }
+
+        this.particleSystem.geometry.attributes.position.needsUpdate = true;
+    }
+
+    // ============================================
+    // Easing
+    // ============================================
+
+    _easeOutCubic(t) {
+        return 1 - Math.pow(1 - t, 3);
+    }
+
+    // ============================================
+    // Cleanup
+    // ============================================
+
     dispose() {
-        if (this.tunnelMesh) {
-            this.tunnelMesh.geometry.dispose();
+        if (this.edgeLines) {
+            this.edgeLines.geometry.dispose();
+            this.edgeMaterial.dispose();
         }
-        if (this.tunnelMaterial) {
-            this.tunnelMaterial.dispose();
+        if (this.floorGrid) {
+            this.floorGrid.geometry.dispose();
+            this.floorMaterial.dispose();
         }
-        if (this.depthLayers) {
-            this.depthLayers.forEach(layer => {
-                layer.geometry.dispose();
-                layer.material.dispose();
-            });
+        if (this.ceilingGrid) {
+            this.ceilingGrid.geometry.dispose();
+            this.ceilingMaterial.dispose();
         }
         if (this.particleSystem) {
             this.particleSystem.geometry.dispose();
-            this.particleSystem.material.dispose();
+            this.particleMaterial.dispose();
         }
-        if (this.flowLines) {
-            this.flowLines.forEach(line => {
-                line.mesh.geometry.dispose();
-                line.material.dispose();
-            });
+        if (this.vanishingGlow) {
+            this.vanishingGlow.geometry.dispose();
+            this.vanishingGlow.material.dispose();
         }
-        if (this.tunnelGroup) {
-            this.scene.remove(this.tunnelGroup);
+        if (this.roomGroup) {
+            this.scene.remove(this.roomGroup);
         }
     }
 }

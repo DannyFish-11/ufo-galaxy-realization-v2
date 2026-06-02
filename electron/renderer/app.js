@@ -1,17 +1,17 @@
 /**
  * app.js
- * Three-State State Machine for UFO Galaxy Desktop Presence
+ * Three-State State Machine for Galaxy V2 Desktop Presence
  *
  * States:
- *   SILENT  -> Static transparent overlay with breathing particle avatar
- *   LIMINAL -> Perspective tunnel with FOV distortion + liquid ink flow
- *   MANIFEST -> CRT monitor effect with result display
+ *   SILENT  -> Static ambient edge glow + HUD corner brackets
+ *   LIMINAL -> Perspective box tunnel with vanishing point
+ *   MANIFEST -> Holographic HUD panel + sci-fi terminal
  *
  * Transitions:
- *   SILENT → LIMINAL: Backend requests processing (phase_change: liminal)
- *   LIMINAL → MANIFEST: Backend returns result (phase_change: manifest)
- *   MANIFEST → SILENT: Task complete / dismissed (phase_change: silent)
- *   Any → SILENT: Reset command
+ *   SILENT -> LIMINAL: Backend requests processing (phase_change: liminal)
+ *   LIMINAL -> MANIFEST: Backend returns result (phase_change: manifest)
+ *   MANIFEST -> SILENT: Task complete / dismissed (phase_change: silent)
+ *   Any -> SILENT: Reset command
  */
 
 // ============================================
@@ -44,14 +44,13 @@ class ThreeStateManager {
         this.ws = null;
         this.wsReconnectInterval = 3000;
         this.wsReconnectTimer = null;
-        // PR-WEBSOCKET-PORT-FIX: /ws/desktop-presence is served by Galaxy Gateway
-        // on port 8765 (gateway port), NOT on web_ui_port (16201).
-        this.wsUrl = 'ws://localhost:8765/ws/desktop-presence';
+        // WebSocket endpoint: Galaxy Gateway serves /ws/desktop-presence on port 9000
+        this.wsUrl = 'ws://localhost:9000/ws/desktop-presence';
 
         // UI elements
         this.wsStatusEl = document.getElementById('ws-status');
         this.wsStatusTextEl = document.getElementById('ws-status-text');
-        this.crtPhaseEl = document.getElementById('crt-phase');
+        this.manifestPhaseEl = document.getElementById('manifest-phase-display');
 
         // Initialize
         this.init();
@@ -113,7 +112,9 @@ class ThreeStateManager {
 
     onWindowResize(width, height) {
         // Notify states that need to handle resize
-        // States reference the scene which already updated camera/renderer
+        if (this.silentState) {
+            this.silentState.onResize();
+        }
     }
 
     // ============================================
@@ -130,7 +131,7 @@ class ThreeStateManager {
         this.previousPhase = this.currentPhase;
         this.currentPhase = phase;
 
-        console.log(`[ThreeStateManager] Transition: ${this.previousPhase} → ${phase}`, data);
+        console.log(`[ThreeStateManager] Transition: ${this.previousPhase} -> ${phase}`, data);
 
         // Exit previous state
         this.exitCurrentState(this.previousPhase);
@@ -189,8 +190,9 @@ class ThreeStateManager {
     }
 
     updateWSStatusText(phase) {
-        if (this.crtPhaseEl) {
-            this.crtPhaseEl.textContent = phase.toUpperCase();
+        // Update the phase display in manifest panel footer
+        if (this.manifestPhaseEl) {
+            this.manifestPhaseEl.textContent = phase.toUpperCase();
         }
     }
 
@@ -218,7 +220,7 @@ class ThreeStateManager {
                 this.wsSend({
                     type: 'register',
                     client: 'desktop-presence',
-                    version: '1.0.0'
+                    version: '2.0.0'
                 });
             };
 
@@ -265,7 +267,7 @@ class ThreeStateManager {
             const message = JSON.parse(data);
             console.log('[ThreeStateManager] WS message:', message);
 
-            // PR-AIPV3-PHASE: Support both legacy format and AIP v3 STATE_EVENT
+            // Support both legacy format and AIP v3 STATE_EVENT
             const msgType = message.type;
 
             // AIP v3 STATE_EVENT format: {type: "state_event", event_category: "phase", event_action: "liminal"}
@@ -289,7 +291,7 @@ class ThreeStateManager {
 
                 case 'task_result':
                 case 'goal_execution_result':
-                    // AIP v3 task result — update manifest display
+                    // AIP v3 task result -- update manifest display
                     if (this.manifestState && (message.result || message.data)) {
                         const resultText = this.formatTaskResult(message);
                         this.manifestState.setResult(resultText);
@@ -316,7 +318,7 @@ class ThreeStateManager {
         }
     }
 
-    // PR-AIPV3-PHASE: Handle AIP v3 STATE_EVENT messages for phase transitions
+    // Handle AIP v3 STATE_EVENT messages for phase transitions
     handleAIPV3StateEvent(message) {
         const category = message.event_category || '';
         const action = message.event_action || '';
@@ -413,7 +415,7 @@ class ThreeStateManager {
         const isValid = this.isValidTransition(this.currentPhase, newPhase);
         if (!isValid) {
             console.warn(
-                `[ThreeStateManager] Invalid transition: ${this.currentPhase} → ${newPhase}`
+                `[ThreeStateManager] Invalid transition: ${this.currentPhase} -> ${newPhase}`
             );
             // Allow forced transitions from backend
             if (message.force) {
@@ -423,7 +425,7 @@ class ThreeStateManager {
             }
         }
 
-        console.log(`[ThreeStateManager] Phase change: ${this.currentPhase} → ${newPhase} (${reason})`);
+        console.log(`[ThreeStateManager] Phase change: ${this.currentPhase} -> ${newPhase} (${reason})`);
 
         // Extract relevant data for the new state
         const stateData = {
@@ -560,7 +562,7 @@ document.addEventListener('keydown', (e) => {
             case '3':
                 console.log('[App] Dev shortcut: force MANIFEST');
                 if (stateManager) stateManager.forcePhase(Phase.MANIFEST, {
-                    result: 'MANIFEST STATE ACTIVATED\n===================\n\nThis is a test of the CRT display system.\n\nAll systems operational.\nAwaiting further instructions.'
+                    result: 'MANIFEST STATE ACTIVATED\n===================\n\nHolographic HUD panel test.\nAll systems operational.\nAwaiting further instructions.'
                 });
                 break;
         }
@@ -568,4 +570,4 @@ document.addEventListener('keydown', (e) => {
 });
 
 // Log startup
-console.log('[App] UFO Galaxy Desktop Presence - App module loaded');
+console.log('[App] Galaxy V2 Desktop Presence - App module loaded');

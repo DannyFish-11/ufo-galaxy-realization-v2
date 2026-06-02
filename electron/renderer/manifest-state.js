@@ -1,8 +1,8 @@
 /**
  * manifest-state.js
- * Manifest State: CRT monitor effect with scanlines, chromatic aberration, vignette, grain
- * - Full-screen industrial execution grid
- * - Result display with typing animation
+ * Manifest State: Holographic HUD panel + sci-fi terminal
+ * Perspective space collapses, content panel expands from vanishing point
+ * NO typing effect — content displays directly with fade-in
  */
 
 class ManifestState {
@@ -11,139 +11,98 @@ class ManifestState {
         this.scene = threeScene.getScene();
         this.isActive = false;
 
-        // CRT scene elements
-        this.crtGroup = null;
-        this.screenMesh = null;
-        this.screenMaterial = null;
-        this.frameMesh = null;
-        this.glowMesh = null;
+        // Three.js elements: a faint glow at center (optional ambient)
+        this.glowGroup = null;
+        this.centerGlow = null;
 
-        // Result content
+        // DOM overlay elements (cached)
+        this.overlayEl = null;
+        this.panelEl = null;
+        this.resultTextEl = null;
+        this.phaseDisplayEl = null;
+        this.timestampEl = null;
+        this.cursorBlinkEl = null;
+
+        // Animation state
+        this.opacity = 0;
+        this.panelScale = 0.5;
+        this.entering = false;
+        this.exiting = false;
+        this.contentVisible = false;
+
+        // Content
         this.resultText = '';
-        this.isTyping = false;
-        this.typedLength = 0;
-        this.typingSpeed = 30; // ms per character
-        this.typingInterval = null;
+        this.timestampInterval = null;
 
-        // Boot animation
-        this.bootPhase = 0;
+        // Timing
+        this.enterDuration = 0.6;   // Panel expand: 0.6s
+        this.exitDuration = 0.4;    // Panel collapse: 0.4s
+        this.contentDelay = 0.3;    // Content fade-in delay: 0.3s
+
+        // Galaxy palette
+        this.colorCyan = new THREE.Color(0x00e1ff);
 
         this.build();
+        this._cacheDOMElements();
     }
 
+    // ============================================
+    // Build (minimal Three.js — just ambient glow)
+    // ============================================
     build() {
-        this.crtGroup = new THREE.Group();
+        // A subtle center glow behind the panel (Three.js)
+        this.glowGroup = new THREE.Group();
 
-        // Screen plane for CRT display area
-        const screenGeometry = new THREE.PlaneGeometry(16, 10, 1, 1);
-        const screenMaterial = new THREE.MeshBasicMaterial({
-            color: 0x0a0f14,
+        const glowGeo = new THREE.SphereGeometry(0.8, 32, 32);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: this.colorCyan,
             transparent: true,
-            opacity: 0.95,
-            side: THREE.DoubleSide
-        });
-        this.screenMesh = new THREE.Mesh(screenGeometry, screenMaterial);
-        this.screenMesh.position.z = 0;
-        this.crtGroup.add(this.screenMesh);
-
-        // Outer frame (bezel)
-        const frameGeometry = new THREE.PlaneGeometry(17, 11, 1, 1);
-        const frameMaterial = new THREE.MeshBasicMaterial({
-            color: 0x1a2028,
-            transparent: true,
-            opacity: 0.8,
-            side: THREE.DoubleSide
-        });
-        this.frameMesh = new THREE.Mesh(frameGeometry, frameMaterial);
-        this.frameMesh.position.z = -0.1;
-        this.crtGroup.add(this.frameMesh);
-
-        // Screen glow
-        const glowGeometry = new THREE.PlaneGeometry(16.5, 10.5, 1, 1);
-        const glowMaterial = new THREE.MeshBasicMaterial({
-            color: 0x4a6080,
-            transparent: true,
-            opacity: 0.1,
-            side: THREE.BackSide,
+            opacity: 0,
             blending: THREE.AdditiveBlending,
             depthWrite: false
         });
-        this.glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
-        this.glowMesh.position.z = -0.2;
-        this.crtGroup.add(this.glowMesh);
+        this.centerGlow = new THREE.Mesh(glowGeo, glowMat);
+        this.glowGroup.add(this.centerGlow);
 
-        // Corner accents (4 small markers at corners)
-        this.cornerAccents = [];
-        const cornerSize = 0.3;
-        const cornerPositions = [
-            [-8, 5, 0.1], [8, 5, 0.1],
-            [-8, -5, 0.1], [8, -5, 0.1]
-        ];
-        cornerPositions.forEach(pos => {
-            const geo = new THREE.PlaneGeometry(cornerSize, 0.03);
-            const mat = new THREE.MeshBasicMaterial({
-                color: 0x8a9ba8,
-                transparent: true,
-                opacity: 0.5
-            });
-            const meshH = new THREE.Mesh(geo, mat);
-            meshH.position.set(pos[0], pos[1], pos[2]);
-            this.crtGroup.add(meshH);
-
-            const geoV = new THREE.PlaneGeometry(0.03, cornerSize);
-            const meshV = new THREE.Mesh(geoV, mat.clone());
-            meshV.position.set(pos[0], pos[1], pos[2]);
-            this.crtGroup.add(meshV);
-            this.cornerAccents.push(meshH, meshV);
-        });
-
-        // Status LEDs
-        this.ledMesh = new THREE.Mesh(
-            new THREE.CircleGeometry(0.06, 16),
-            new THREE.MeshBasicMaterial({
-                color: 0x50c878,
-                transparent: true,
-                opacity: 0.8
-            })
-        );
-        this.ledMesh.position.set(7.8, -5.3, 0.1);
-        this.crtGroup.add(this.ledMesh);
-
-        // Add CRT lighting
-        this.crtLight = new THREE.PointLight(0x4a6080, 0.6, 20);
-        this.crtLight.position.set(0, 0, 3);
-        this.crtGroup.add(this.crtLight);
-
-        this.scene.add(this.crtGroup);
+        this.scene.add(this.glowGroup);
         this.setVisible(false);
     }
 
+    /**
+     * Cache references to DOM overlay elements
+     */
+    _cacheDOMElements() {
+        this.overlayEl = document.getElementById('manifest-overlay');
+        this.panelEl = document.getElementById('manifest-panel');
+        this.resultTextEl = document.getElementById('manifest-result-text');
+        this.phaseDisplayEl = document.getElementById('manifest-phase-display');
+        this.timestampEl = document.getElementById('manifest-timestamp');
+        this.cursorBlinkEl = document.getElementById('output-cursor-blink');
+        this.taskNameEl = document.getElementById('manifest-task-name');
+    }
+
+    // ============================================
+    // Visibility
+    // ============================================
+
     setVisible(visible) {
-        if (this.crtGroup) {
-            this.crtGroup.visible = visible;
+        if (this.glowGroup) {
+            this.glowGroup.visible = visible;
         }
 
-        const overlay = document.getElementById('crt-overlay');
-        if (overlay) {
+        if (this.overlayEl) {
             if (visible) {
-                overlay.classList.remove('hidden');
-                overlay.classList.add('crt-boot');
+                this.overlayEl.classList.remove('hidden');
+                this.overlayEl.style.opacity = '0';
             } else {
-                overlay.classList.add('hidden');
-                overlay.classList.remove('crt-boot');
-                overlay.classList.add('crt-shutdown');
-                setTimeout(() => {
-                    overlay.classList.remove('crt-shutdown');
-                }, 400);
+                this.overlayEl.classList.add('hidden');
             }
         }
-
-        // Update CRT phase indicator
-        const phaseEl = document.getElementById('crt-phase');
-        if (phaseEl) {
-            phaseEl.textContent = 'MANIFEST';
-        }
     }
+
+    // ============================================
+    // State Transitions
+    // ============================================
 
     enter(resultText = '') {
         if (this.isActive) return;
@@ -151,43 +110,71 @@ class ManifestState {
         this.setVisible(true);
 
         this.resultText = resultText || '';
-        this.typedLength = 0;
-        this.bootPhase = 0;
-        this.isTyping = false;
+        this.contentVisible = false;
 
-        // Boot animation sequence
-        this.isBooting = true;
-        this.bootStartTime = this.threeScene.getElapsedTime();
+        // Reset animation state
+        this.opacity = 0;
+        this.panelScale = 0.5;
+        this.entering = true;
+        this.exiting = false;
+        this.enterStartTime = this.threeScene.getElapsedTime();
+        this.contentShownTime = null;
 
-        // Enable CRT post-processing
+        // Update DOM content immediately
+        this._updateDOMContent();
+        this._updateTimestamp();
+
+        // Start timestamp updates
+        if (this.timestampInterval) clearInterval(this.timestampInterval);
+        this.timestampInterval = setInterval(() => this._updateTimestamp(), 1000);
+
+        // Update phase display
+        if (this.phaseDisplayEl) {
+            this.phaseDisplayEl.textContent = 'MANIFEST';
+        }
+
+        // Apply initial CSS for entrance animation
+        if (this.panelEl) {
+            this.panelEl.style.transition = 'none';
+            this.panelEl.style.opacity = '0';
+            this.panelEl.style.transform = 'scale(0.5)';
+
+            // Force reflow
+            void this.panelEl.offsetHeight;
+
+            // Start entrance transition
+            this.panelEl.style.transition = `opacity ${this.enterDuration}s ease-out, transform ${this.enterDuration}s cubic-bezier(0.16, 1, 0.3, 1)`;
+            this.panelEl.style.opacity = '1';
+            this.panelEl.style.transform = 'scale(1)';
+        }
+
+        // Update overlay opacity
+        if (this.overlayEl) {
+            this.overlayEl.style.transition = `opacity ${this.enterDuration}s ease-out`;
+            this.overlayEl.style.opacity = '1';
+        }
+
+        // Schedule content fade-in
+        setTimeout(() => {
+            this.contentVisible = true;
+            this._fadeInContent();
+        }, this.contentDelay * 1000);
+
+        // Enable subtle post-processing for glow effect
         this.threeScene.enablePostProcessing(true);
         this.threeScene.updateCRTUniforms({
-            uScanlineIntensity: 0.35,
-            uChromaticStrength: 1.0,
-            uVignetteStrength: 0.7,
-            uGrainIntensity: 0.15,
-            uFlickerIntensity: 0.06,
-            uCurvature: 0.1
+            uScanlineIntensity: 0.15,
+            uChromaticStrength: 0.3,
+            uVignetteStrength: 0.5,
+            uGrainIntensity: 0.06,
+            uFlickerIntensity: 0.02,
+            uCurvature: 0.04
         });
-
-        // Update DOM content
-        this.updateTimestamp();
-        this.timestampInterval = setInterval(() => this.updateTimestamp(), 1000);
-
-        // Start typing if result provided
-        if (this.resultText) {
-            setTimeout(() => {
-                this.startTyping();
-            }, 800);
-        }
     }
 
     exit() {
         if (!this.isActive) return;
         this.isActive = false;
-
-        // Stop typing
-        this.stopTyping();
 
         // Stop timestamp updates
         if (this.timestampInterval) {
@@ -195,177 +182,175 @@ class ManifestState {
             this.timestampInterval = null;
         }
 
-        // Shutdown animation
-        this.setVisible(false);
+        this.entering = false;
+        this.exiting = true;
+        this.exitStartTime = this.threeScene.getElapsedTime();
 
-        // Disable post-processing
-        this.threeScene.enablePostProcessing(false);
+        // CSS exit animation: scale down + fade out
+        if (this.panelEl) {
+            this.panelEl.style.transition = `opacity ${this.exitDuration}s ease-in, transform ${this.exitDuration}s ease-in`;
+            this.panelEl.style.opacity = '0';
+            this.panelEl.style.transform = 'scale(0.8)';
+        }
+
+        if (this.overlayEl) {
+            this.overlayEl.style.transition = `opacity ${this.exitDuration}s ease-in`;
+            this.overlayEl.style.opacity = '0';
+        }
+
+        // Hide after exit animation completes
+        setTimeout(() => {
+            this.exiting = false;
+            this.setVisible(false);
+            this.threeScene.enablePostProcessing(false);
+        }, this.exitDuration * 1000 + 50);
     }
 
-    startTyping() {
-        if (this.isTyping) return;
-        this.isTyping = true;
-        this.typedLength = 0;
+    // ============================================
+    // Content Management
+    // ============================================
 
-        const resultEl = document.getElementById('crt-result');
-        if (!resultEl) return;
-
-        resultEl.innerHTML = '<span class="typing-cursor"></span>';
-
-        this.typingInterval = setInterval(() => {
-            if (this.typedLength < this.resultText.length) {
-                this.typedLength++;
-                const text = this.resultText.substring(0, this.typedLength);
-                // Add occasional line styling
-                const lines = text.split('\n');
-                let html = '';
-                lines.forEach((line, i) => {
-                    if (i > 0) html += '\n';
-                    html += `<span class="crt-result-line" style="animation-delay: ${i * 0.05}s">${this.escapeHtml(line)}</span>`;
-                });
-                html += '<span class="typing-cursor"></span>';
-                resultEl.innerHTML = html;
-            } else {
-                // Done typing - keep cursor blinking
-                const text = this.resultText;
-                const lines = text.split('\n');
-                let html = '';
-                lines.forEach((line, i) => {
-                    if (i > 0) html += '\n';
-                    html += `<span class="crt-result-line">${this.escapeHtml(line)}</span>`;
-                });
-                html += '<span class="typing-cursor"></span>';
-                resultEl.innerHTML = html;
-                this.stopTyping();
-            }
-        }, this.typingSpeed);
-    }
-
-    stopTyping() {
-        this.isTyping = false;
-        if (this.typingInterval) {
-            clearInterval(this.typingInterval);
-            this.typingInterval = null;
+    /**
+     * Set result text directly (NO typing effect)
+     */
+    setResult(text) {
+        this.resultText = text || '';
+        if (this.isActive) {
+            this._updateDOMContent();
         }
     }
 
-    escapeHtml(text) {
+    /**
+     * Update DOM content: display text directly with fade-in
+     */
+    _updateDOMContent() {
+        if (!this.resultTextEl) return;
+
+        // Direct display — no typing
+        const escaped = this._escapeHtml(this.resultText);
+        // Preserve line breaks
+        const withBreaks = escaped.replace(/\n/g, '<br>');
+        this.resultTextEl.innerHTML = withBreaks;
+
+        // Start with opacity 0, then fade in
+        this.resultTextEl.style.opacity = '0';
+        this.resultTextEl.style.transition = 'none';
+
+        // Force reflow
+        void this.resultTextEl.offsetHeight;
+
+        // Fade in
+        this.resultTextEl.style.transition = 'opacity 0.4s ease-out';
+        this.resultTextEl.style.opacity = '1';
+    }
+
+    /**
+     * Fade in content elements
+     */
+    _fadeInContent() {
+        if (!this.resultTextEl || !this.resultText) return;
+
+        this.resultTextEl.style.opacity = '0';
+        this.resultTextEl.style.transition = 'opacity 0.4s ease-out 0.1s';
+
+        requestAnimationFrame(() => {
+            this.resultTextEl.style.opacity = '1';
+        });
+    }
+
+    /**
+     * Update timestamp display
+     */
+    _updateTimestamp() {
+        if (!this.timestampEl) return;
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        const ss = String(now.getSeconds()).padStart(2, '0');
+        this.timestampEl.textContent = `${hh}:${mm}:${ss}`;
+    }
+
+    /**
+     * Escape HTML special characters
+     */
+    _escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     }
 
-    updateTimestamp() {
-        const el = document.getElementById('crt-timestamp');
-        if (el) {
-            const now = new Date();
-            const hh = String(now.getHours()).padStart(2, '0');
-            const mm = String(now.getMinutes()).padStart(2, '0');
-            const ss = String(now.getSeconds()).padStart(2, '0');
-            el.textContent = `${hh}:${mm}:${ss}`;
-        }
-    }
-
-    setResult(text) {
-        this.resultText = text;
-        this.typedLength = 0;
-        if (this.isActive) {
-            this.stopTyping();
-            this.startTyping();
-        }
-    }
+    // ============================================
+    // Update (called every frame)
+    // ============================================
 
     update(deltaTime) {
-        if (!this.isActive && !this.isBooting) return;
+        const needsUpdate = this.isActive || this.entering || this.exiting;
+        if (!needsUpdate) return;
 
         const time = this.threeScene.getElapsedTime();
 
-        // Boot animation
-        if (this.isBooting) {
-            const elapsed = time - this.bootStartTime;
-            const progress = Math.min(elapsed / 1.2, 1.0);
-
-            // Flicker effect during boot
-            const flicker = progress < 0.3
-                ? Math.random() * 0.5 + 0.5
-                : 1.0;
-
-            if (this.screenMesh) {
-                this.screenMesh.material.opacity = progress * 0.95 * flicker;
-            }
-            if (this.glowMesh) {
-                this.glowMesh.material.opacity = progress * 0.15;
-            }
-            if (this.frameMesh) {
-                this.frameMesh.material.opacity = progress * 0.8;
-            }
+        // --- Entrance animation tracking ---
+        if (this.entering) {
+            const elapsed = time - this.enterStartTime;
+            const progress = Math.min(elapsed / this.enterDuration, 1.0);
+            this.opacity = progress;
+            // Scale: 0.5 → 1.0 with ease-out
+            this.panelScale = 0.5 + (1 - Math.pow(1 - progress, 3)) * 0.5;
 
             if (progress >= 1.0) {
-                this.isBooting = false;
+                this.entering = false;
+                this.opacity = 1;
+                this.panelScale = 1;
             }
         }
 
-        if (!this.isActive) return;
+        // --- Exit animation tracking ---
+        if (this.exiting) {
+            const elapsed = time - this.exitStartTime;
+            const progress = Math.min(elapsed / this.exitDuration, 1.0);
+            this.opacity = 1 - progress;
+            this.panelScale = 1 - progress * 0.2; // 1.0 → 0.8
 
-        // LED pulse
-        if (this.ledMesh) {
-            const ledPulse = Math.sin(time * 3) * 0.3 + 0.7;
-            this.ledMesh.material.opacity = ledPulse;
+            if (progress >= 1.0) {
+                this.exiting = false;
+            }
         }
 
-        // Glow breathing
-        if (this.glowMesh) {
-            const glowBreath = Math.sin(time * 1.5) * 0.05 + 0.15;
-            this.glowMesh.material.opacity = glowBreath;
+        // --- Three.js glow update ---
+        if (this.centerGlow && this.glowGroup.visible) {
+            // Pulse glow
+            const pulse = Math.sin(time * 2) * 0.2 + 0.8;
+            this.centerGlow.material.opacity = 0.06 * pulse * this.opacity;
+            this.centerGlow.scale.setScalar(1 + Math.sin(time * 1.5) * 0.1);
+
+            // Slow rotation
+            this.glowGroup.rotation.y += deltaTime * 0.3;
+            this.glowGroup.rotation.x += deltaTime * 0.15;
         }
 
-        // Corner accent pulse
-        this.cornerAccents.forEach((accent, i) => {
-            const pulse = Math.sin(time * 2 + i * 0.5) * 0.3 + 0.5;
-            accent.material.opacity = pulse * 0.5;
-        });
-
-        // CRT light flicker
-        if (this.crtLight) {
-            this.crtLight.intensity = 0.6 + Math.sin(time * 4) * 0.1;
+        // --- Cursor blink animation ---
+        if (this.cursorBlinkEl && this.isActive) {
+            const blink = Math.sin(time * 5) > 0 ? '_' : '';
+            this.cursorBlinkEl.textContent = blink;
+            this.cursorBlinkEl.style.opacity = 0.5 + Math.sin(time * 3) * 0.5;
         }
-
-        // Update post-processing uniforms
-        const flickerIntensity = 0.04 + Math.sin(time * 8) * 0.02;
-        this.threeScene.updateCRTUniforms({
-            uFlickerIntensity: flickerIntensity,
-            uTime: time
-        });
     }
 
+    // ============================================
+    // Cleanup
+    // ============================================
+
     dispose() {
-        this.stopTyping();
         if (this.timestampInterval) {
             clearInterval(this.timestampInterval);
         }
 
-        if (this.screenMesh) {
-            this.screenMesh.geometry.dispose();
-            this.screenMesh.material.dispose();
+        if (this.centerGlow) {
+            this.centerGlow.geometry.dispose();
+            this.centerGlow.material.dispose();
         }
-        if (this.frameMesh) {
-            this.frameMesh.geometry.dispose();
-            this.frameMesh.material.dispose();
-        }
-        if (this.glowMesh) {
-            this.glowMesh.geometry.dispose();
-            this.glowMesh.material.dispose();
-        }
-        if (this.ledMesh) {
-            this.ledMesh.geometry.dispose();
-            this.ledMesh.material.dispose();
-        }
-        this.cornerAccents.forEach(accent => {
-            accent.geometry.dispose();
-            accent.material.dispose();
-        });
-        if (this.crtGroup) {
-            this.scene.remove(this.crtGroup);
+        if (this.glowGroup) {
+            this.scene.remove(this.glowGroup);
         }
     }
 }
