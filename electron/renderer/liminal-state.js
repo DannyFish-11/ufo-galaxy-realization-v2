@@ -264,7 +264,16 @@ class LiminalState {
         canvas.height = 768;
         const ctx = canvas.getContext('2d');
 
-        // 基础深色渐变
+        // ============================================
+        // 实际运行时：使用 Electron desktopCapturer 捕获真实桌面
+        // const sources = await desktopCapturer.getSources({types:['screen']});
+        // const stream = await navigator.mediaDevices.getUserMedia({
+        //     video: {mandatory: {chromeMediaSource:'desktop', chromeMediaSourceId:sources[0].id}}
+        // });
+        // ============================================
+
+        // 在线演示：绘制模拟桌面（含图标）
+        // 基础深色渐变背景
         const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
         gradient.addColorStop(0, '#0C101C');
         gradient.addColorStop(0.5, '#0E1220');
@@ -272,7 +281,7 @@ class LiminalState {
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // 添加一些微妙的径向渐变增加真实感
+        // 微妙的径向渐变
         const grad1 = ctx.createRadialGradient(
             canvas.width * 0.2, canvas.height * 0.3, 0,
             canvas.width * 0.2, canvas.height * 0.3, canvas.width * 0.5
@@ -291,7 +300,7 @@ class LiminalState {
         ctx.fillStyle = grad2;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // 添加细微噪点纹理
+        // 噪点纹理
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
@@ -301,6 +310,53 @@ class LiminalState {
             data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise));
         }
         ctx.putImageData(imageData, 0, 0);
+
+        // 绘制模拟桌面图标 — 12个图标排列在网格中
+        const icons = [
+            {x: 80, y: 60, icon: '📁', label: 'Projects'},
+            {x: 200, y: 60, icon: '🌐', label: 'Safari'},
+            {x: 320, y: 60, icon: '📝', label: 'Notes'},
+            {x: 860, y: 60, icon: '⚙️', label: 'Settings'},
+            {x: 80, y: 180, icon: '🎵', label: 'Music'},
+            {x: 200, y: 180, icon: '📷', label: 'Photos'},
+            {x: 320, y: 180, icon: '📧', label: 'Mail'},
+            {x: 80, y: 300, icon: '🗓️', label: 'Calendar'},
+            {x: 200, y: 300, icon: '💬', label: 'Messages'},
+            {x: 320, y: 300, icon: '🗺️', label: 'Maps'},
+            {x: 80, y: 420, icon: '📺', label: 'TV'},
+            {x: 200, y: 420, icon: '🏠', label: 'Home'},
+        ];
+
+        icons.forEach(({x, y, icon, label}) => {
+            // 图标背景
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.035)';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+            const size = 48;
+            const r = 12;
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + size - r, y);
+            ctx.quadraticCurveTo(x + size, y, x + size, y + r);
+            ctx.lineTo(x + size, y + size - r);
+            ctx.quadraticCurveTo(x + size, y + size, x + size - r, y + size);
+            ctx.lineTo(x + r, y + size);
+            ctx.quadraticCurveTo(x, y + size, x, y + size - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.fill();
+            ctx.stroke();
+
+            // Emoji
+            ctx.font = '22px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(icon, x + size / 2, y + size / 2);
+
+            // Label
+            ctx.font = '11px -apple-system, sans-serif';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.40)';
+            ctx.fillText(label, x + size / 2, y + size + 16);
+        });
 
         const texture = new THREE.CanvasTexture(canvas);
         texture.needsUpdate = true;
