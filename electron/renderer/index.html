@@ -8,33 +8,36 @@
 </head>
 <body>
     <!-- ============================================
-         桌面层 (Liminal态下会被Three.js场景接管)
+         桌面层 — 真实桌面始终可见
          ============================================ -->
     <div class="desktop" id="desk">
         <div class="bg"></div>
     </div>
 
     <!-- ============================================
-         Three.js 3D 场景容器 (Liminal态使用)
-         ============================================ -->
-    <div id="three-container"></div>
-
-    <!-- ============================================
          SILENT 静默态 — WebGL Shader有机波动
          ============================================ -->
-    <div class="s" id="sLayer">
-        <!-- WebGL Canvas会被动态注入到这里 -->
+    <div class="s on" id="sLayer">
+        <!-- WebGL Canvas容器 -->
         <div id="silent-canvas-container"></div>
         <!-- CSS辅助：屏幕边缘氛围灯 -->
         <div class="s-bezel"></div>
     </div>
 
     <!-- ============================================
-         LIMINAL 阈限态 — Three.js 3D透视 + 消失点光球
+         LIMINAL 阈限态 — CSS 3D深度空间
          ============================================ -->
     <div class="l" id="lLayer">
-        <div class="l-haze"></div>
-        <div class="vanish"></div>
+        <div class="corridor">
+            <div class="room">
+                <div class="wall-floor"></div>
+                <div class="wall-ceil"></div>
+                <div class="wall-left"></div>
+                <div class="wall-right"></div>
+                <div class="vanish"></div>
+            </div>
+        </div>
+        <div class="l-fog"></div>
         <div class="l-text">正在理解</div>
     </div>
 
@@ -54,14 +57,14 @@
     <!-- ============================================
          脚本加载
          ============================================ -->
-    <!-- Three.js — 必须在各态模块之前加载 -->
+    <!-- Three.js — Silent态WebGL Shader所需 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
+
     <!-- 三态模块 -->
     <script src="silent-state.js"></script>
     <script src="liminal-state.js"></script>
     <script src="manifest-state.js"></script>
-    
+
     <!-- 主应用 — 状态机 + WebSocket -->
     <script src="app.js"></script>
 </body>
