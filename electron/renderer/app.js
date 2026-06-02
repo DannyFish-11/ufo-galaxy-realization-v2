@@ -1,22 +1,17 @@
 /**
  * app.js
- * Galaxy V2 Desktop Presence — Three-State State Machine
- *
- * Design Philosophy: 无形(Invisible) / 克制(Restrained) / 智能(Intelligent)
+ * Three-State State Machine for Galaxy V2 Desktop Presence
  *
  * States:
- *   SILENT   -> Completely transparent. Optional 16px indicator dot.
- *               Like a macOS menu bar icon. Zero interference.
- *   LIMINAL  -> Center glow + 3 orbiting dots + thought text.
- *               Like Siri awakening. Elegant, alive, minimal.
- *   MANIFEST -> Zero UI panel. Only an 18px cursor + trail + ripple.
- *               The agent operates the computer directly.
+ *   SILENT  -> Static ambient edge glow + HUD corner brackets
+ *   LIMINAL -> Perspective box tunnel with vanishing point
+ *   MANIFEST -> Holographic HUD panel + sci-fi terminal
  *
  * Transitions:
- *   SILENT -> LIMINAL:  Backend requests processing (phase_change: liminal)
- *   LIMINAL -> MANIFEST: Backend starts execution (phase_change: manifest)
- *   MANIFEST -> SILENT:  Task complete / dismissed (phase_change: silent)
- *   Any -> SILENT:       Reset command
+ *   SILENT -> LIMINAL: Backend requests processing (phase_change: liminal)
+ *   LIMINAL -> MANIFEST: Backend returns result (phase_change: manifest)
+ *   MANIFEST -> SILENT: Task complete / dismissed (phase_change: silent)
+ *   Any -> SILENT: Reset command
  */
 
 // ============================================
@@ -71,11 +66,8 @@ class ThreeStateManager {
         this.threeScene = new ThreeScene('canvas-container');
 
         // Initialize states
-        // SilentState: pure CSS overlay, no Three.js needed
-        this.silentState = new SilentState();
-        // LiminalState: CSS overlay + Three.js particles
-        this.liminalState = new LiminalState(null, this.threeScene);
-        // ManifestState: CSS overlay + Canvas2D trail
+        this.silentState = new SilentState(this.threeScene);
+        this.liminalState = new LiminalState(this.threeScene);
         this.manifestState = new ManifestState(this.threeScene);
 
         // Start render loop
