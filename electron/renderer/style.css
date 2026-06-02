@@ -1,7 +1,12 @@
 /* =============================================
    Galaxy V2 Desktop Presence — 三态视觉系统
-   Silent / Liminal / Manifest
-   纯 CSS 实现，不使用 Three.js
+   Silent (WebGL Shader) / Liminal (Three.js 3D) / Manifest
+   
+   色调统一：
+   Silent:   rgb(40,75,180)   @ 4-10%   — 极淡有机波动
+   Liminal:  rgb(60,100,220)  @ 10-20%  — 消失点光球
+   桌面:     #080C18 → #0C101C → #111828
+   文字:     rgba(155,180,215,0.32)
    ============================================= */
 
 /* ---------- 全局重置 ---------- */
@@ -27,6 +32,8 @@ html, body {
     z-index: 0;
     transform-origin: center center;
     transition: none;
+    /* 桌面在Liminal态下会被Three.js场景替代，
+       但保留此元素作为后备 */
 }
 
 .desktop .bg {
@@ -36,15 +43,24 @@ html, body {
         radial-gradient(ellipse at 20% 30%, rgba(12, 16, 28, 0.8) 0%, transparent 60%),
         radial-gradient(ellipse at 80% 70%, rgba(17, 24, 40, 0.6) 0%, transparent 55%),
         linear-gradient(180deg, #0C101C 0%, #111828 100%);
-    /* 桌面背景：深蓝灰渐变 */
 }
 
-/* =============================================
-   SILENT 静默态
-   ============================================= */
+/* ---------- Three.js Canvas 容器 ---------- */
+#three-container {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 600ms ease-out;
+}
 
-/* Silent 覆盖层 — 默认隐藏，.on 时显示 */
-.s {
+#three-container.active {
+    opacity: 1;
+}
+
+/* ---------- WebGL Canvas 容器 (Silent态) ---------- */
+#silent-canvas-container {
     position: fixed;
     inset: 0;
     z-index: 10;
@@ -54,70 +70,56 @@ html, body {
     transition: opacity 400ms ease-out;
 }
 
-.s.on {
+#silent-canvas-container.active {
     display: block;
+    opacity: 1;
 }
 
-/* ---------- 三层光晕 ---------- */
-.s-glow {
-    position: absolute;
+/* =============================================
+   SILENT 静默态 — WebGL Shader覆盖层
+   ============================================= */
+
+/* Silent覆盖层容器 */
+.s {
+    position: fixed;
     inset: 0;
-    background:
-        /* 底部中央光晕 */
-        radial-gradient(ellipse 80% 55% at 50% 95%, rgba(40, 75, 180, 0.10), transparent 50%),
-        /* 右上光晕 */
-        radial-gradient(ellipse 50% 40% at 85% 10%, rgba(55, 95, 200, 0.06), transparent 45%),
-        /* 左下光晕 */
-        radial-gradient(ellipse 55% 45% at 15% 85%, rgba(45, 80, 175, 0.07), transparent 45%);
-    animation: sBreath 8s ease-in-out infinite;
-    transform-origin: center center;
+    z-index: 10;
+    pointer-events: none;
 }
 
-/* 8 秒呼吸：opacity 0.4→1→0.4, scale 1→1.015→1 */
-@keyframes sBreath {
-    0%, 100% {
-        opacity: 0.4;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 1;
-        transform: scale(1.015);
-    }
-}
-
-/* ---------- 屏幕边缘氛围灯 ---------- */
+/* ---------- 屏幕边缘氛围灯 (CSS辅助) ---------- */
 .s-bezel {
     position: absolute;
     inset: 0;
-    /* 三层 inset box-shadow 叠加 */
     box-shadow:
-        inset 0 0 100px rgba(40, 75, 180, 0.03),
-        inset 0 0 50px rgba(55, 95, 200, 0.04),
-        inset 0 0 25px rgba(45, 80, 175, 0.05);
+        inset 0 0 120px rgba(40, 75, 180, 0.04),
+        inset 0 0 60px  rgba(55, 95, 200, 0.05),
+        inset 0 0 30px  rgba(45, 80, 175, 0.06);
     animation: sBezelBreath 8s ease-in-out infinite;
     pointer-events: none;
+    z-index: 11;
 }
 
 @keyframes sBezelBreath {
     0%, 100% {
         box-shadow:
-            inset 0 0 100px rgba(40, 75, 180, 0.02),
-            inset 0 0 50px rgba(55, 95, 200, 0.03),
-            inset 0 0 25px rgba(45, 80, 175, 0.04);
+            inset 0 0 120px rgba(40, 75, 180, 0.025),
+            inset 0 0 60px  rgba(55, 95, 200, 0.03),
+            inset 0 0 30px  rgba(45, 80, 175, 0.04);
     }
     50% {
         box-shadow:
-            inset 0 0 100px rgba(40, 75, 180, 0.05),
-            inset 0 0 50px rgba(55, 95, 200, 0.06),
-            inset 0 0 25px rgba(45, 80, 175, 0.07);
+            inset 0 0 120px rgba(40, 75, 180, 0.06),
+            inset 0 0 60px  rgba(55, 95, 200, 0.07),
+            inset 0 0 30px  rgba(45, 80, 175, 0.08);
     }
 }
 
 /* =============================================
-   LIMINAL 阈限态
+   LIMINAL 阈限态 — Three.js 3D透视
    ============================================= */
 
-/* Liminal 覆盖层 — 默认隐藏，.on 时显示 */
+/* Liminal覆盖层 */
 .l {
     position: fixed;
     inset: 0;
@@ -125,39 +127,57 @@ html, body {
     pointer-events: none;
     opacity: 0;
     display: none;
-    transition: opacity 800ms ease-out;
 }
 
-.l.on {
+.l.active {
     display: block;
-    opacity: 1;
+    animation: lFadeIn 800ms ease-out forwards;
+}
+
+.l.exiting {
+    display: block;
+    animation: lFadeOut 600ms ease-in forwards;
+}
+
+@keyframes lFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes lFadeOut {
+    from { opacity: 1; }
+    to   { opacity: 0; }
 }
 
 /* ---------- 大气雾效 ---------- */
 .l-haze {
     position: absolute;
     inset: 0;
-    /* 桌面边缘淡入虚空的 radial-gradient */
     background:
         radial-gradient(ellipse 90% 80% at 50% 50%, transparent 30%, rgba(8, 12, 24, 0.6) 70%, rgba(8, 12, 24, 0.95) 100%);
     opacity: 0;
     transition: opacity 2s ease-out 0.3s;
 }
 
-.l.on .l-haze {
+.l.active .l-haze {
     opacity: 1;
 }
 
-/* ---------- 消失点光晕 ---------- */
+.l.exiting .l-haze {
+    opacity: 0;
+    transition: opacity 0.4s ease-in;
+}
+
+/* ---------- 消失点光晕 (Three.js光球的后备/叠加层) ---------- */
 .vanish {
     position: absolute;
     top: 34%;
     left: 50%;
     width: 55vw;
-    height: 30vw; /* 约 16:9 比例，自适应 */
+    height: 30vw;
     transform: translate(-50%, -50%);
     background:
-        radial-gradient(ellipse at center, rgba(40, 75, 180, 0.25) 0%, rgba(65, 100, 210, 0.15) 35%, rgba(90, 120, 200, 0.05) 60%, transparent 70%);
+        radial-gradient(ellipse at center, rgba(60, 100, 220, 0.20) 0%, rgba(65, 100, 210, 0.10) 35%, rgba(90, 120, 200, 0.03) 60%, transparent 70%);
     filter: blur(55px);
     border-radius: 50%;
     animation: vanishBreath 6s ease-in-out infinite;
@@ -165,14 +185,18 @@ html, body {
     transition: opacity 1.5s ease-out 0.6s;
 }
 
-.l.on .vanish {
+.l.active .vanish {
     opacity: 1;
 }
 
-/* 6 秒呼吸 */
+.l.exiting .vanish {
+    opacity: 0;
+    transition: opacity 0.4s ease-in;
+}
+
 @keyframes vanishBreath {
     0%, 100% {
-        opacity: 0.7;
+        opacity: 0.6;
         transform: translate(-50%, -50%) scale(1);
     }
     50% {
@@ -195,33 +219,22 @@ html, body {
     white-space: nowrap;
     opacity: 0;
     transition: opacity 1.5s ease-out 1.2s;
-    /* 极淡的文字光晕 */
     text-shadow: 0 0 12px rgba(65, 100, 210, 0.15);
 }
 
-.l.on .l-text {
+.l.active .l-text {
     opacity: 1;
 }
 
-/* ---------- 桌面推入深度（body 上的 perspective-mode） ---------- */
-body.perspective-mode .desktop {
-    transform: perspective(1200px) rotateX(6deg) scale(0.80) translateY(-2%);
-    filter: brightness(0.42) saturate(0.48) contrast(0.88);
-    transition: transform 2.6s cubic-bezier(0.16, 1, 0.3, 1),
-                filter 2.6s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* 退出 perspective-mode 时的恢复过渡 */
-.desktop {
-    transition: transform 1.5s cubic-bezier(0.16, 1, 0.3, 1),
-                filter 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+.l.exiting .l-text {
+    opacity: 0;
+    transition: opacity 0.3s ease-in;
 }
 
 /* =============================================
-   MANIFEST 显现态
+   MANIFEST 显现态 — 极简
    ============================================= */
 
-/* Manifest 层 — 极简空壳 */
 .m {
     position: fixed;
     inset: 0;
@@ -231,16 +244,30 @@ body.perspective-mode .desktop {
     opacity: 0;
 }
 
-.m.on {
+.m.active {
     display: block;
-    opacity: 1;
+    animation: mFadeIn 600ms ease-out forwards;
+}
+
+.m.exiting {
+    display: block;
+    animation: mFadeOut 600ms ease-in forwards;
+}
+
+@keyframes mFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes mFadeOut {
+    from { opacity: 1; }
+    to   { opacity: 0; }
 }
 
 /* =============================================
    辅助样式
    ============================================= */
 
-/* 内容淡化 */
 .content-fade-in {
     animation: contentFadeIn 0.4s ease-out 0.3s both;
 }
@@ -305,7 +332,6 @@ body.perspective-mode .desktop {
     font-family: 'Courier New', monospace;
 }
 
-/* 光标闪烁 */
 .cursor-blink {
     animation: cursorBlink 1s step-end infinite;
 }

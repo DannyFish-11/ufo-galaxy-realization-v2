@@ -1,14 +1,13 @@
 /**
  * app.js
- * Galaxy V2 Desktop Presence — 三态状态机
+ * Galaxy V2 Desktop Presence — 三态状态机主控制器
  *
- * 三态：SILENT (静默) / LIMINAL (阈限) / MANIFEST (显现)
- * 纯 CSS 实现，不使用 Three.js
+ * 三态：SILENT (WebGL Shader) / LIMINAL (Three.js 3D) / MANIFEST (极简)
  *
  * 状态转换：
- *   SILENT -> LIMINAL: 后端请求处理中 (phase_change: liminal)
- *   LIMINAL -> MANIFEST: 后端返回结果 (phase_change: manifest)
- *   MANIFEST -> SILENT: 任务完成 / 关闭 (phase_change: silent)
+ *   SILENT -> LIMINAL: 后端请求处理中
+ *   LIMINAL -> MANIFEST: 后端返回结果
+ *   MANIFEST -> SILENT: 任务完成 / 关闭
  *   任意 -> SILENT: 重置命令
  *
  * WebSocket: ws://localhost:9000/ws/desktop-presence
@@ -42,14 +41,13 @@ class ThreeStateManager {
         this.ws = null;
         this.wsReconnectInterval = 3000;
         this.wsReconnectTimer = null;
-        // WebSocket 端点：Galaxy Gateway 端口 9000
         this.wsUrl = 'ws://localhost:9000/ws/desktop-presence';
 
-        // UI 元素
+        // UI 元素引用
         this.wsStatusEl = document.getElementById('ws-status');
         this.wsStatusTextEl = document.getElementById('ws-status-text');
 
-        // 动画循环引用
+        // 动画循环引用（仅用于协调，各态有自己的渲染循环）
         this._rafId = null;
         this._lastTime = 0;
 
@@ -60,20 +58,27 @@ class ThreeStateManager {
     // 初始化
     // ============================================
     init() {
-        console.log('[ThreeStateManager] 初始化...');
+        console.log('[ThreeStateManager] 初始化 Galaxy V2 三态系统...');
 
-        // 为各态准备 cssOverlay 对象
-        const silentOverlay = { element: document.getElementById('sLayer') };
-        const liminalOverlay = { element: document.getElementById('lLayer') };
-        const manifestOverlay = { element: document.getElementById('mLayer') };
+        // 检查 Three.js 是否可用
+        if (typeof THREE === 'undefined') {
+            console.error('[ThreeStateManager] Three.js 未加载！检查网络或CDN');
+            // 显示错误提示
+            this._showError('Three.js 加载失败');
+            return;
+        }
+        console.log('[ThreeStateManager] Three.js 版本:', THREE.REVISION);
 
-        // 初始化各态 —— 纯 CSS 实现，不再使用 Three.js
-        this.silentState = new SilentState(silentOverlay);
-        this.liminalState = new LiminalState(liminalOverlay, null);
-        this.manifestState = new ManifestState(manifestOverlay);
+        // 初始化各态
+        this.silentState = new SilentState({ element: document.getElementById('sLayer') });
+        this.liminalState = new LiminalState(
+            { element: document.getElementById('lLayer') },
+            document.getElementById('three-container')
+        );
+        this.manifestState = new ManifestState({ element: document.getElementById('mLayer') });
 
-        // 启动轻量级动画循环（供需要 update 的态使用）
-        this._startRenderLoop();
+        // 启动协调渲染循环
+        this._startCoordinationLoop();
 
         // 监听窗口变化
         window.addEventListener('resize', () => this.onWindowResize());
@@ -81,19 +86,34 @@ class ThreeStateManager {
         // 连接 WebSocket
         this.connectWebSocket();
 
-        // 进入初始态
+        // 进入初始态（Silent）
         this.enterState(Phase.SILENT);
 
         console.log('[ThreeStateManager] 初始化完成，当前阶段:', this.currentPhase);
     }
 
+    /** 显示错误信息 */
+    _showError(message) {
+        const el = document.createElement('div');
+        el.style.cssText = `
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: rgba(255, 80, 80, 0.8); font-family: monospace; font-size: 14px;
+            background: rgba(0, 0, 0, 0.6); padding: 20px; border-radius: 4px;
+            z-index: 9999; letter-spacing: 2px; text-align: center;
+        `;
+        el.textContent = `[ERROR] ${message}`;
+        document.body.appendChild(el);
+    }
+
     // ============================================
-    // 轻量级渲染循环
+    // 协调渲染循环
+    // 各态（Silent/Liminal）有自己的独立渲染循环，
+    // 此处仅用于协调和通用更新
     // ============================================
-    _startRenderLoop() {
+    _startCoordinationLoop() {
         const loop = (time) => {
             this._rafId = requestAnimationFrame(loop);
-            const deltaTime = Math.min((time - this._lastTime) / 1000, 0.1); // 秒，限制最大步长
+            const deltaTime = Math.min((time - this._lastTime) / 1000, 0.1);
             this._lastTime = time;
 
             if (deltaTime > 0) {
@@ -105,20 +125,25 @@ class ThreeStateManager {
     }
 
     onRenderFrame(deltaTime) {
-        // 调用当前态的 update（即使为空也保留接口）
+        // 当前态的 update（各态自主管理自己的 Three.js 渲染循环，
+        // 这里仅保留接口供额外逻辑使用）
         switch (this.currentPhase) {
             case Phase.SILENT:
-                // Silent 纯 CSS，无需 JS 更新
+                // SilentState 有自己的 _render 循环
                 break;
             case Phase.LIMINAL:
-                this.liminalState.update(deltaTime);
+                // LiminalState 有自己的 _render 循环
+                if (this.liminalState) {
+                    this.liminalState.update(deltaTime);
+                }
                 break;
             case Phase.MANIFEST:
-                // Manifest 纯 CSS，无需 JS 更新
+                // Manifest 纯CSS，无需JS更新
                 break;
         }
     }
 
+    /** 窗口大小变化 — 通知各态 */
     onWindowResize() {
         if (this.silentState) this.silentState.onResize();
         if (this.liminalState) this.liminalState.onResize();
@@ -128,10 +153,29 @@ class ThreeStateManager {
     // ============================================
     // 状态管理
     // ============================================
+
+    /**
+     * 进入指定状态
+     * @param {string} phase - 目标阶段
+     * @param {Object} data - 附加数据
+     */
     enterState(phase, data = {}) {
         if (this.isTransitioning) {
             console.log('[ThreeStateManager] 转换进行中，排队:', phase);
             this.queuedTransition = { phase, data };
+            return;
+        }
+
+        // 验证目标态
+        if (!Object.values(Phase).includes(phase)) {
+            console.warn('[ThreeStateManager] 无效阶段:', phase);
+            return;
+        }
+
+        // 校验状态转换合法性
+        const isValid = this.isValidTransition(this.currentPhase, phase);
+        if (!isValid && !data.force) {
+            console.warn(`[ThreeStateManager] 无效转换: ${this.currentPhase} -> ${phase}`);
             return;
         }
 
@@ -142,31 +186,11 @@ class ThreeStateManager {
         console.log(`[ThreeStateManager] 转换: ${this.previousPhase} -> ${phase}`, data);
 
         // 退出当前态
-        this.exitCurrentState(this.previousPhase);
+        this._exitState(this.previousPhase);
 
-        // 短暂延迟后进入新态，给退出动画留出时间
+        // 短暂延迟后进入新态（给退出动画留出时间）
         setTimeout(() => {
-            switch (phase) {
-                case Phase.SILENT:
-                    this.silentState.enter();
-                    this.updateWSStatusText(phase);
-                    break;
-
-                case Phase.LIMINAL:
-                    this.liminalState.enter();
-                    this.updateWSStatusText(phase);
-                    break;
-
-                case Phase.MANIFEST:
-                    this.manifestState.enter();
-                    this.updateWSStatusText(phase);
-                    break;
-
-                default:
-                    console.warn('[ThreeStateManager] 未知阶段:', phase);
-                    this.silentState.enter();
-                    this.currentPhase = Phase.SILENT;
-            }
+            this._enterState(phase, data);
 
             this.isTransitioning = false;
 
@@ -176,19 +200,54 @@ class ThreeStateManager {
                 this.queuedTransition = null;
                 this.enterState(queued.phase, queued.data);
             }
-        }, 100);
+        }, 50);
     }
 
-    exitCurrentState(phase) {
+    /** 进入具体状态 */
+    _enterState(phase, data) {
         switch (phase) {
             case Phase.SILENT:
-                this.silentState.exit();
+                // 先确保 Liminal 态的 Three.js 场景已停止
+                if (this.liminalState && this.previousPhase === Phase.LIMINAL) {
+                    // LiminalState 的 exit 会在 _exitState 中被调用
+                    // 这里额外确保 three-container 隐藏
+                    const threeContainer = document.getElementById('three-container');
+                    if (threeContainer) threeContainer.classList.remove('active');
+                }
+                this.silentState.enter();
+                break;
+
+            case Phase.LIMINAL:
+                // 先确保 Silent 态的 WebGL 已停止
+                if (this.silentState) {
+                    this.silentState.exit();
+                }
+                this.liminalState.enter();
+                break;
+
+            case Phase.MANIFEST:
+                this.manifestState.enter();
+                break;
+
+            default:
+                console.warn('[ThreeStateManager] 未知阶段:', phase);
+                this.silentState.enter();
+        }
+
+        this.updateWSStatusText(phase);
+    }
+
+    /** 退出当前状态 */
+    _exitState(phase) {
+        switch (phase) {
+            case Phase.SILENT:
+                if (this.silentState) this.silentState.exit();
                 break;
             case Phase.LIMINAL:
-                this.liminalState.exit();
+                if (this.liminalState) this.liminalState.exit();
                 break;
             case Phase.MANIFEST:
-                this.manifestState.exit();
+                if (this.manifestState) this.manifestState.exit();
                 break;
             default:
                 // 无前态
@@ -196,8 +255,22 @@ class ThreeStateManager {
         }
     }
 
+    /** 验证状态转换 */
+    isValidTransition(from, to) {
+        const transitions = {
+            [Phase.SILENT]: [Phase.LIMINAL, Phase.MANIFEST, Phase.SILENT],
+            [Phase.LIMINAL]: [Phase.MANIFEST, Phase.SILENT, Phase.LIMINAL],
+            [Phase.MANIFEST]: [Phase.SILENT, Phase.LIMINAL, Phase.MANIFEST]
+        };
+        return transitions[from] && transitions[from].includes(to);
+    }
+
+    /** 更新状态显示文本 */
     updateWSStatusText(phase) {
-        console.log('[ThreeStateManager] 阶段更新:', phase.toUpperCase());
+        if (this.wsStatusTextEl) {
+            this.wsStatusTextEl.textContent = phase.toUpperCase();
+        }
+        console.log('[ThreeStateManager] 当前阶段:', phase.toUpperCase());
     }
 
     // ============================================
@@ -285,7 +358,6 @@ class ThreeStateManager {
                     break;
 
                 case 'update_result':
-                    // 仅更新结果文字，不切换态
                     console.log('[ThreeStateManager] 结果更新:', message.result);
                     break;
 
@@ -314,7 +386,7 @@ class ThreeStateManager {
         }
     }
 
-    // 处理 AIP v3 STATE_EVENT 消息进行态转换
+    // ---------- AIP v3 STATE_EVENT 处理 ----------
     handleAIPV3StateEvent(message) {
         const category = message.event_category || '';
         const action = message.event_action || '';
@@ -388,7 +460,39 @@ class ThreeStateManager {
         console.log('[ThreeStateManager] 未处理的 STATE_EVENT:', category, action);
     }
 
-    // 格式化 AIP v3 任务结果
+    // ---------- 兼容旧格式 phase_change ----------
+    handlePhaseChange(message) {
+        const newPhase = message.phase;
+        const reason = message.reason || '';
+
+        if (!newPhase || !Object.values(Phase).includes(newPhase)) {
+            console.warn('[ThreeStateManager] 无效阶段:', newPhase);
+            return;
+        }
+
+        const isValid = this.isValidTransition(this.currentPhase, newPhase);
+        if (!isValid) {
+            console.warn(`[ThreeStateManager] 无效转换: ${this.currentPhase} -> ${newPhase}`);
+            if (message.force) {
+                console.log('[ThreeStateManager] 强制转换允许');
+            } else {
+                return;
+            }
+        }
+
+        console.log(`[ThreeStateManager] 阶段切换: ${this.currentPhase} -> ${newPhase} (${reason})`);
+
+        const stateData = {
+            result: message.result || message.data,
+            reason: reason,
+            metadata: message.metadata || {},
+            force: message.force || false
+        };
+
+        this.enterState(newPhase, stateData);
+    }
+
+    /** 格式化 AIP v3 任务结果 */
     formatTaskResult(message) {
         const payload = message.payload || {};
         const result = message.result || payload.result || payload.message || '';
@@ -403,48 +507,7 @@ class ThreeStateManager {
         return String(result);
     }
 
-    handlePhaseChange(message) {
-        const newPhase = message.phase;
-        const reason = message.reason || '';
-
-        if (!newPhase || !Object.values(Phase).includes(newPhase)) {
-            console.warn('[ThreeStateManager] 无效阶段:', newPhase);
-            return;
-        }
-
-        // 校验状态转换
-        const isValid = this.isValidTransition(this.currentPhase, newPhase);
-        if (!isValid) {
-            console.warn(
-                `[ThreeStateManager] 无效转换: ${this.currentPhase} -> ${newPhase}`
-            );
-            if (message.force) {
-                console.log('[ThreeStateManager] 强制转换允许');
-            } else {
-                return;
-            }
-        }
-
-        console.log(`[ThreeStateManager] 阶段切换: ${this.currentPhase} -> ${newPhase} (${reason})`);
-
-        const stateData = {
-            result: message.result || message.data,
-            reason: reason,
-            metadata: message.metadata || {}
-        };
-
-        this.enterState(newPhase, stateData);
-    }
-
-    isValidTransition(from, to) {
-        const transitions = {
-            [Phase.SILENT]: [Phase.LIMINAL, Phase.MANIFEST, Phase.SILENT],
-            [Phase.LIMINAL]: [Phase.MANIFEST, Phase.SILENT, Phase.LIMINAL],
-            [Phase.MANIFEST]: [Phase.SILENT, Phase.LIMINAL, Phase.MANIFEST]
-        };
-        return transitions[from] && transitions[from].includes(to);
-    }
-
+    // ---------- 连接状态 UI ----------
     updateConnectionStatus(status) {
         if (!this.wsStatusEl || !this.wsStatusTextEl) return;
 
@@ -484,23 +547,27 @@ class ThreeStateManager {
     dispose() {
         console.log('[ThreeStateManager] 清理中...');
 
+        // 停止协调循环
         if (this._rafId) {
             cancelAnimationFrame(this._rafId);
             this._rafId = null;
         }
 
+        // 关闭 WebSocket
         if (this.wsReconnectTimer) {
             clearTimeout(this.wsReconnectTimer);
         }
-
         if (this.ws) {
             this.ws.close();
             this.ws = null;
         }
 
+        // 清理各态
         if (this.silentState) this.silentState.dispose();
         if (this.liminalState) this.liminalState.dispose();
         if (this.manifestState) this.manifestState.dispose();
+
+        console.log('[ThreeStateManager] 清理完成');
     }
 }
 
@@ -510,12 +577,12 @@ class ThreeStateManager {
 let stateManager = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('[App] DOM 加载完成，初始化 ThreeStateManager...');
+    console.log('[App] DOM 加载完成，初始化 Galaxy V2 ThreeStateManager...');
 
     try {
         stateManager = new ThreeStateManager();
         window.stateManager = stateManager;
-        console.log('[App] 应用初始化成功');
+        console.log('[App] Galaxy V2 应用初始化成功');
     } catch (err) {
         console.error('[App] 初始化失败:', err);
     }
@@ -527,26 +594,37 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
-// 开发快捷键：Ctrl+Shift+1/2/3 手动切换三态
+// ============================================
+// 开发快捷键
+// ============================================
 document.addEventListener('keydown', (e) => {
+    // Ctrl+Shift+1/2/3 手动切换三态
     if (e.ctrlKey && e.shiftKey) {
         switch (e.key) {
             case '1':
-                console.log('[App] 开发快捷键: 强制 SILENT');
+                console.log('[App] 快捷键: 强制 SILENT');
                 if (stateManager) stateManager.forcePhase(Phase.SILENT);
                 break;
             case '2':
-                console.log('[App] 开发快捷键: 强制 LIMINAL');
+                console.log('[App] 快捷键: 强制 LIMINAL');
                 if (stateManager) stateManager.forcePhase(Phase.LIMINAL);
                 break;
             case '3':
-                console.log('[App] 开发快捷键: 强制 MANIFEST');
+                console.log('[App] 快捷键: 强制 MANIFEST');
                 if (stateManager) stateManager.forcePhase(Phase.MANIFEST, {
-                    result: 'MANIFEST 态激活\n===================\n\n系统运行正常。\n等待进一步指令。'
+                    result: 'MANIFEST 态测试\n===================\n\n系统运行正常。\n等待进一步指令。'
                 });
+                break;
+            case 'R':
+            case 'r':
+                // 强制重置所有状态
+                console.log('[App] 快捷键: 强制重置');
+                if (stateManager) {
+                    stateManager.enterState(Phase.SILENT, { force: true });
+                }
                 break;
         }
     }
 });
 
-console.log('[App] Galaxy V2 Desktop Presence — 应用模块已加载');
+console.log('[App] Galaxy V2 Desktop Presence — 三态系统已加载 (WebGL Shader + Three.js 3D)');
