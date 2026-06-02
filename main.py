@@ -9,6 +9,14 @@ if sys.platform == "win32":
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+    # Force logging StreamHandler to use UTF-8 as well
+    try:
+        import io
+        # Wrap stdout in a UTF-8 TextIOWrapper to ensure logging picks it up
+        if hasattr(sys.stdout, "buffer"):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+    except Exception:
+        pass
     # Also set environment variable for subprocesses
     os.environ["PYTHONIOENCODING"] = "utf-8:replace"
     # PR-D7: Set process priority (Windows only)
