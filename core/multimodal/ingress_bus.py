@@ -47,8 +47,10 @@ from __future__ import annotations
 import asyncio
 import itertools
 import logging
+import os
+import shutil
 import time
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .audio_features import AudioState
 from .video_features import VideoState
@@ -69,6 +71,10 @@ class MultimodalIngressBus:
     update_system) are safe to call from any thread or asyncio task.
     Subscription and emission must happen within the same event loop.
     """
+
+    # PR-ACTIVE-PERCEPTION: scan toolchain every N ticks (not every tick)
+    _TOOLCHAIN_SCAN_INTERVAL = 30   # ~30 ticks × 200 ms = 6 s
+    _OPPORTUNITY_SCAN_INTERVAL = 150  # ~150 ticks × 200 ms = 30 s
 
     def __init__(self, tick_ms: int = 200) -> None:
         self._tick_ms = tick_ms
@@ -94,6 +100,12 @@ class MultimodalIngressBus:
         self._running = False
         self._subscribers: List[asyncio.Queue] = []
         self._callbacks: List[Callable[[PerceptionFrame], None]] = []
+
+        # PR-ACTIVE-PERCEPTION: tool-chain cache + tick counters -----------
+        self._tick_count: int = 0
+        self._cached_toolchain: Dict[str, Any] = {}
+        # async callback for autonomous goal submission (set by shell)
+        self._goal_submitter: Optional[Callable[[str], None]] = None
 
     # ------------------------------------------------------------------
     # Signal injection
@@ -164,11 +176,56 @@ class MultimodalIngressBus:
             )
         return quality
 
+    # ------------------------------------------------------------------
+    # PR-ACTIVE-PERCEPTION: tool-chain snapshot (lightweight, cached)
+    # ------------------------------------------------------------------
+
+    def _scan_toolchain(self) -> Dict[str, Any]:
+        """Return a snapshot of available tools on the host.
+
+        Checks are cheap (shutil.which / os.path.exists) and results are
+        cached for ``_TOOLCHAIN_SCAN_INTERVAL`` ticks.
+        """
+        tc: Dict[str, Any] = {}
+        # Programming runtimes
+        tc["python"] = bool(shutil.which("python") or shutil.which("python3"))
+        tc["node"] = bool(shutil.which("node"))
+        tc["docker"] = bool(shutil.which("docker"))
+        # Editors / IDEs (common install paths)
+        tc["vscode"] = bool(
+            shutil.which("code")
+            or os.path.exists(os.path.expandvars(r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe"))
+        )
+        # Version control
+        tc["git"] = bool(shutil.which("git"))
+        # Browsers
+        tc["chrome"] = bool(
+            shutil.which("chrome")
+            or os.path.exists(os.path.expandvars(r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe"))
+        )
+        tc["edge"] = bool(shutil.which("msedge"))
+        # Shell
+        tc["powershell"] = bool(shutil.which("powershell"))
+        tc["bash"] = bool(shutil.which("bash"))
+        return tc
+
+    # ------------------------------------------------------------------
+    # Frame construction
+    # ------------------------------------------------------------------
+
     def build_frame(self) -> PerceptionFrame:
         """Compose a PerceptionFrame from the current snapshots."""
         aq = self._apply_staleness(self._audio_ts, self._audio_quality)
         vq = self._apply_staleness(self._video_ts, self._video_quality)
         sq = self._apply_staleness(self._system_ts, self._system_quality)
+
+        # PR-ACTIVE-PERCEPTION: inject cached toolchain into system signals
+        system = self._system if sq.is_usable else None
+        if system is not None:
+            system.toolchain = self._cached_toolchain
+        elif sq.is_usable:
+            # system is usable but None — create minimal with toolchain
+            system = SystemSignals(toolchain=self._cached_toolchain)
 
         return PerceptionFrame(
             frame_id=next(self._frame_counter),
@@ -176,7 +233,7 @@ class MultimodalIngressBus:
             audio_quality=aq,
             video=self._video if vq.is_usable else None,
             video_quality=vq,
-            system=self._system if sq.is_usable else None,
+            system=system,
             system_quality=sq,
         )
 
@@ -202,14 +259,82 @@ class MultimodalIngressBus:
     # Tick loop
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # PR-ACTIVE-PERCEPTION: opportunity analysis (invoked by tick loop)
+    # ------------------------------------------------------------------
+
+    def _analyze_opportunity(self, frame: PerceptionFrame) -> Optional[str]:
+        """Inspect the current frame and decide whether an autonomous goal
+        should be submitted.  Returns a natural-language goal string, or
+        *None* when there is nothing to do.
+
+        This is a **thin hook** — heavy logic lives in the cognitive layers
+        (memory_bias_layer, task_memory, etc.).  Here we only detect
+        high-confidence triggers that warrant interrupting the silent state.
+        """
+        if frame.system is None:
+            return None
+
+        tc = frame.system.toolchain
+        extra = frame.system.extra
+
+        # Trigger 1: high CPU for extended period → suggest diagnostics
+        cpu = frame.system.cpu_load
+        if cpu is not None and cpu > 0.85:
+            return "系统CPU使用率很高，帮我诊断一下"
+
+        # Trigger 2: memory pressure
+        mem = frame.system.memory_load
+        if mem is not None and mem > 0.90:
+            return "内存快用完了，帮我清理一下"
+
+        # Trigger 3: time-based (simple wall-clock checks)
+        hour = time.localtime().tm_hour
+        minute = time.localtime().tm_min
+        if hour == 9 and 0 <= minute <= 5:
+            return "早上好，帮我看看今天的日程安排"
+
+        # No trigger → remain silent
+        return None
+
     async def run(self) -> None:
-        """Tick loop: emits a PerceptionFrame every tick_ms milliseconds."""
+        """Tick loop: emits a PerceptionFrame every tick_ms milliseconds.
+
+        PR-ACTIVE-PERCEPTION: every ``_TOOLCHAIN_SCAN_INTERVAL`` ticks the
+        tool-chain cache is refreshed; every ``_OPPORTUNITY_SCAN_INTERVAL``
+        ticks an opportunity-analysis runs and may submit an autonomous goal
+        via the ``_goal_submitter`` callback registered by the shell.
+        """
         self._running = True
-        logger.info("Multimodal ingress bus started (tick=%d ms)", self._tick_ms)
+        logger.info(
+            "Multimodal ingress bus started (tick=%d ms, toolchain_scan=%d ticks, "
+            "opportunity_scan=%d ticks)",
+            self._tick_ms, self._TOOLCHAIN_SCAN_INTERVAL, self._OPPORTUNITY_SCAN_INTERVAL,
+        )
         try:
             while self._running:
+                self._tick_count += 1
+
+                # --- periodic toolchain refresh --------------------------------
+                if self._tick_count % self._TOOLCHAIN_SCAN_INTERVAL == 0:
+                    try:
+                        self._cached_toolchain = self._scan_toolchain()
+                    except Exception as exc:
+                        logger.debug("Tool-chain scan error: %s", exc)
+
                 frame = self.build_frame()
                 await self._emit(frame)
+
+                # --- periodic opportunity analysis -----------------------------
+                if self._tick_count % self._OPPORTUNITY_SCAN_INTERVAL == 0:
+                    try:
+                        goal = self._analyze_opportunity(frame)
+                        if goal and self._goal_submitter is not None:
+                            logger.info("Active-perception trigger: %s", goal)
+                            self._goal_submitter(goal)
+                    except Exception as exc:
+                        logger.debug("Opportunity analysis error: %s", exc)
+
                 await asyncio.sleep(self._tick_ms / 1000.0)
         finally:
             self._running = False

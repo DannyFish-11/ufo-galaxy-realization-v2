@@ -1261,11 +1261,45 @@ class DesktopPresenceRuntime:
         try:
             from core.multimodal.ingest_runtime import start_ingest_bus
 
-            started = start_ingest_bus(runtime_session_id=None)
+            # PR-ACTIVE-PERCEPTION: pass autonomous goal submitter to the bus
+            started = start_ingest_bus(
+                runtime_session_id=None,
+                goal_submitter=self._submit_autonomous_goal,
+            )
             if started:
                 logger.info("DesktopPresenceRuntime: multimodal ingest bus started")
         except Exception as _err:
             logger.debug("DesktopPresenceRuntime: ingest bus startup skipped (%s)", _err)
+
+    def _submit_autonomous_goal(self, goal: str) -> None:
+        """PR-ACTIVE-PERCEPTION: callback wired into MultimodalIngressBus.
+
+        When the continuous perception layer detects a high-confidence
+        opportunity (high CPU, memory pressure, time triggers, etc.) it
+        calls this method with a natural-language goal.  The shell then
+        routes it through ``handle_request()`` so the full
+        silent→liminal→manifest→silent lifecycle is respected.
+
+        This keeps autonomous triggers **first-class** — they go through
+        the same OpenClawd cognition / execution path as user requests.
+        """
+        import asyncio
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._handle_autonomous_goal(goal))
+        except RuntimeError:
+            pass  # no running loop — skip
+
+    async def _handle_autonomous_goal(self, goal: str) -> None:
+        """Async wrapper: route an autonomous goal through the shell."""
+        try:
+            result = await self.handle_request(
+                message=goal,
+                source="autonomous_perception",
+            )
+            logger.info("Autonomous goal result: %s", result.get("tristate", "unknown"))
+        except Exception as exc:
+            logger.debug("Autonomous goal handling error: %s", exc)
 
     def _try_init_webrtc_session_manager(self) -> None:
         """Initialize WebRTC session manager when the runtime switch is enabled."""

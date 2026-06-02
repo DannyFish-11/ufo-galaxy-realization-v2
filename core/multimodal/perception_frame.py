@@ -51,6 +51,11 @@ class SystemSignals:
     active_app: Optional[str] = None
     extra: Dict[str, Any] = field(default_factory=dict)
 
+    # PR-ACTIVE-PERCEPTION: tool-chain snapshot — what the host can do right now
+    # Populated by MultimodalIngressBus._scan_toolchain() every N ticks.
+    # Keys: python, node, docker, vscode, git, browser, … (empty dict = not scanned)
+    toolchain: Dict[str, Any] = field(default_factory=dict)
+
 
 @dataclass
 class PerceptionFrame:

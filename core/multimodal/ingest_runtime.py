@@ -94,6 +94,7 @@ def start_ingest_bus(
     *,
     runtime_session_id: Optional[str] = None,
     tick_ms: int = 200,
+    goal_submitter: "Optional[Callable[[str], None]]" = None,
 ) -> bool:
     """Start the singleton MultimodalIngressBus if not already running.
 
@@ -161,6 +162,10 @@ def start_ingest_bus(
         logger.debug(
             "VideoIngestPipeline unavailable (non-fatal): %s", _video_err
         )
+
+    # PR-ACTIVE-PERCEPTION: wire autonomous goal submitter (shell-owned)
+    if goal_submitter is not None:
+        bus._goal_submitter = goal_submitter
 
     # ── Start bus tick loop ───────────────────────────────────────────────
     try:
