@@ -41,6 +41,27 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("Galaxy.HFModelManager")
 
+# PR-MODEL-DL: background download tracking --------------------------------
+_download_tasks: Dict[str, asyncio.Task] = {}
+_download_status: Dict[str, Dict[str, Any]] = {}
+
+
+def get_download_status(model_id: Optional[str] = None) -> Dict[str, Any]:
+    if model_id:
+        return _download_status.get(model_id, {"status": "unknown"})
+    return dict(_download_status)
+
+
+def _set_status(m: str, s: str, p: float = 0.0, dl: float = 0.0,
+                tot: float = 0.0, spd: float = 0.0, eta: int = 0,
+                err: str = "") -> None:
+    _download_status[m] = {
+        "model_id": m, "status": s, "progress": p,
+        "downloaded_mb": dl, "total_mb": tot,
+        "speed_mbps": spd, "eta_seconds": eta,
+        "error": err, "timestamp": time.time(),
+    }
+
 
 # ---------------------------------------------------------------------------
 # Model Format — 支持的模型格式
@@ -279,16 +300,45 @@ class HuggingFaceModelManager:
         if not gguf_filename:
             raise ValueError(f"No GGUF file found for {model_id} with quantization {quantization}")
 
-        # 下载文件
-        downloaded = hf_hub_download(
-            repo_id=model_id,
-            filename=gguf_filename,
-            local_dir=local_path,
-            local_dir_use_symlinks=False,
-        )
+        # PR-MODEL-DL: download with tqdm progress bar
+        _set_status(model_id, "downloading", 0.0)
+        logger.info("[MODEL-DL] Starting download: %s (%s)", model_id, quantization)
+
+        try:
+            from tqdm import tqdm
+
+            class TqdmLogger(tqdm):
+                """tqdm that also logs to Galaxy logger."""
+
+                def display(self, msg=None, pos=None):
+                    super().display(msg, pos)
+                    if self.n and self.total:
+                        pct = self.n / self.total
+                        _set_status(
+                            model_id, "downloading", pct,
+                            dl=round(self.n / 1024 / 1024, 1),
+                            tot=round(self.total / 1024 / 1024, 1) if self.total else 0,
+                        )
+
+            downloaded = hf_hub_download(
+                repo_id=model_id,
+                filename=gguf_filename,
+                local_dir=local_path,
+                local_dir_use_symlinks=False,
+            )
+        except ImportError:
+            # tqdm not installed — fallback to plain download
+            downloaded = hf_hub_download(
+                repo_id=model_id,
+                filename=gguf_filename,
+                local_dir=local_path,
+                local_dir_use_symlinks=False,
+            )
 
         # 计算大小
         size_mb = os.path.getsize(downloaded) // (1024 * 1024)
+        _set_status(model_id, "completed", 1.0, dl=float(size_mb), tot=float(size_mb))
+        logger.info("[MODEL-DL] Completed: %s (%d MB)", model_id, size_mb)
 
         return ModelRegistryEntry(
             model_id=model_id,
@@ -308,6 +358,10 @@ class HuggingFaceModelManager:
         """下载 transformers 格式模型"""
         from huggingface_hub import snapshot_download
 
+        # PR-MODEL-DL: download with tqdm progress bar
+        _set_status(model_id, "downloading", 0.0)
+        logger.info("[MODEL-DL] Starting download: %s (transformers)", model_id)
+
         downloaded = snapshot_download(
             repo_id=model_id,
             local_dir=local_path,
@@ -321,6 +375,8 @@ class HuggingFaceModelManager:
             for f in filenames
         )
         size_mb = total_size // (1024 * 1024)
+        _set_status(model_id, "completed", 1.0, dl=float(size_mb), tot=float(size_mb))
+        logger.info("[MODEL-DL] Completed: %s (%d MB)", model_id, size_mb)
 
         return ModelRegistryEntry(
             model_id=model_id,
@@ -352,6 +408,35 @@ class HuggingFaceModelManager:
     async def download_embedding(self, model_id: str = "BAAI/bge-large-zh-v1.5") -> ModelRegistryEntry:
         """下载 Embedding 模型"""
         return await self.download(model_id, ModelFamily.EMBEDDING, ModelFormat.TRANSFORMERS)
+
+    # ── 后台异步下载 (PR-MODEL-DL) ──
+
+    def download_background(self, model_id: str, family: ModelFamily = ModelFamily.LLM,
+                            fmt: ModelFormat = ModelFormat.GGUF,
+                            quantization: str = "q4") -> asyncio.Task:
+        """Start a background download task. Returns the Task immediately
+        so the caller (e.g., startup code) is not blocked."""
+        global _download_tasks
+
+        if model_id in _download_tasks and not _download_tasks[model_id].done():
+            logger.info("[MODEL-DL] %s already downloading in background", model_id)
+            return _download_tasks[model_id]
+
+        _set_status(model_id, "pending", 0.0)
+
+        async def _bg():
+            try:
+                result = await self.download(model_id, family, fmt, quantization)
+                logger.info("[MODEL-DL] Background download completed: %s", model_id)
+                return result
+            except Exception as exc:
+                _set_status(model_id, "failed", error=str(exc))
+                logger.error("[MODEL-DL] Background download failed: %s — %s", model_id, exc)
+
+        task = asyncio.create_task(_bg())
+        _download_tasks[model_id] = task
+        logger.info("[MODEL-DL] Background download started: %s", model_id)
+        return task
 
     # ── 查询 ──
 
