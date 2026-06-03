@@ -3384,59 +3384,58 @@ class CommandRouter:
         command_id: str,
         timeout: float = 30.0,
     ) -> Optional[Dict[str, Any]]:
-        """Delegate transport dispatch — AIPTransportRouter → DeviceRouter fallback.
+        """Delegate transport dispatch — Mesh routing + DeviceRouter.
 
-        PR-TRANSPORT-UNIFIED: First attempts routing via AIPTransportRouter
-        (Mesh P2P → NATS → WebSocket), then falls back to DeviceRouter.
+        PR-MESH-ROUTING: Queries MeshCoordinator for routing advice
+        (peer reachability, topology), then delegates actual transport
+        to DeviceRouter via WebSocket.
+
+        Architecture:
+            Mesh = routing advisor (discover, advise)
+            NATS = broadcast/result backflow (pub/sub)
+            WebSocket = actual data transport (always executes)
 
         Canonical chain::
-
             OpenClawd → CommandRouter (orchestration)
                 → _dispatch_via_device_router()
-                    → AIPTransportRouter.route() (smart transport selection)
-                        → Mesh P2P / NATS / WebSocket
-                    → fallback: DeviceRouter.send_command_to_device()
-                        → WebSocket
+                    → Mesh: check peer reachability (advisory only)
+                    → DeviceRouter.send_command_to_device() (transport)
+                        → WebSocket → target device
+                    → NATS: publish result backflow (async)
 
         Returns:
-            Result dict on success, or ``None`` when all transports fail.
+            Result dict on success, or ``None`` when DeviceRouter unavailable.
         """
-        # ── PR-TRANSPORT-UNIFIED: Try AIPTransportRouter first ──────────────
+        # ── PR-MESH-ROUTING: Query Mesh for routing advice ──────────────────
+        _mesh_advice = None
         try:
-            from core.aip_transport_router import get_transport_router
+            from core.mesh_coordinator import get_mesh_coordinator
+            mesh = get_mesh_coordinator()
+            peer = mesh.get_peer(device_id)
+            if peer:
+                _mesh_advice = {
+                    "reachable_direct": peer.reachable_direct,
+                    "reachable_relay": peer.reachable_relay,
+                    "latency_ms": peer.latency_ms,
+                    "last_seen": peer.last_seen,
+                }
+                logger.debug(
+                    "Mesh routing advice for %s: direct=%s relay=%s latency=%s",
+                    device_id,
+                    peer.reachable_direct,
+                    peer.reachable_relay,
+                    peer.latency_ms,
+                )
+        except Exception as _mesh_exc:
+            logger.debug("Mesh routing query failed (non-fatal): %s", _mesh_exc)
 
-            _router = get_transport_router()
-            envelope = {
-                "command": command,
-                "payload": payload,
-                "task_id": task_id,
-                "trace_id": trace_id,
-                "command_id": command_id,
-            }
-            # Use "galaxy_desktop" or the first available local device as source
-            _source = "galaxy_desktop"  # will be resolved by UDM
-            result = await _router.route(
-                envelope=envelope,
-                source_device=_source,
-                target_device=device_id,
-            )
-            if result and result.get("success"):
-                result.setdefault("command_id", command_id)
-                result.setdefault("via", f"aip_transport_router->{result.get('via', 'unknown')}")
-                return result
-        except Exception as _aip_exc:
-            logger.debug(
-                "AIPTransportRouter dispatch failed (will try DeviceRouter): %s",
-                _aip_exc,
-            )
-
-        # ── Fallback: DeviceRouter (original canonical chain) ───────────────
+        # ── Execute transport via DeviceRouter (WebSocket) ──────────────────
         try:
             from galaxy_gateway.device_router import device_router as _dr  # lazy import
 
             device = _dr.get_device(device_id)
             if device is None:
-                return None  # device not in DeviceRouter — caller will fall back
+                return None
 
             result = await _dr.send_command_to_device(
                 device_id=device_id,
@@ -3449,10 +3448,33 @@ class CommandRouter:
             if result is not None:
                 result.setdefault("command_id", command_id)
                 result.setdefault("via", "command_router->device_router")
+                if _mesh_advice:
+                    result["mesh_advice"] = _mesh_advice
+
+                    # ── NATS result backflow ──────────────────────────────
+                    # Publish result to NATS for async subscribers
+                    try:
+                        from core.nats_bus import nats_bus
+                        if nats_bus.is_connected():
+                            nats_bus._publish(
+                                f"galaxy.tasks.result.{task_id}",
+                                {
+                                    "task_id": task_id,
+                                    "device_id": device_id,
+                                    "command": command,
+                                    "result": result,
+                                    "mesh_advice": _mesh_advice,
+                                    "transport": "websocket",
+                                },
+                            )
+                            logger.debug("Result backflow published to NATS: %s", task_id)
+                    except Exception as _nats_exc:
+                        logger.debug("NATS result backflow failed (non-fatal): %s", _nats_exc)
+
             return result
         except Exception as _dr_exc:
             logger.debug(
-                "CommandRouter._dispatch_via_device_router unavailable " "(will fall back): %s",
+                "CommandRouter._dispatch_via_device_router unavailable (will fall back): %s",
                 _dr_exc,
             )
             return None
