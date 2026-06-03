@@ -142,21 +142,28 @@ class ThreeStateManager {
 
     /** 进入具体状态 */
     _enterState(phase, data) {
+        // P13 修复：根据态控制鼠标穿透
+        const mouseIgnore = phase === Phase.LIMINAL ? false : true;
+        if (window.electronAPI?.setIgnoreMouse) {
+            window.electronAPI.setIgnoreMouse(mouseIgnore);
+        }
+
         switch (phase) {
             case Phase.SILENT:
-                // Silent态：桌面壁纸正常显示
+                // Silent态：桌面壁纸正常显示，鼠标穿透
                 document.body.classList.remove('liminal-active');
                 this.silentState.enter();
                 break;
 
             case Phase.LIMINAL:
-                // Liminal态：桌面背景变暗，空间层透过来
-                if (this.silentState) this.silentState.exit();
+                // Liminal态：桌面背景变暗，空间层透过来，不穿透
+                // 注意：silentState.exit() 已在 _exitState() 中调用，无需重复
                 document.body.classList.add('liminal-active');
                 this.liminalState.enter();
                 break;
 
             case Phase.MANIFEST:
+                // Manifest态：鼠标穿透，所有覆盖层淡出
                 document.body.classList.remove('liminal-active');
                 this.manifestState.enter();
                 break;

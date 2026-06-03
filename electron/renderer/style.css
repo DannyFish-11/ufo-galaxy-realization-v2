@@ -29,7 +29,10 @@ html, body { width:100%; height:100%; overflow:hidden; background:#080810; font-
 
 .space{position:fixed;inset:0;z-index:0;opacity:0;pointer-events:none;
   perspective:1000px;perspective-origin:50% 42%;overflow:hidden;
-  transition:opacity 3s var(--ease-expo);}
+  transition:opacity 3s var(--ease-expo);
+  /* 初始隐藏，防止启动时闪烁 */
+  visibility:hidden;}
+.space.active{opacity:1;visibility:visible;}
 .space.active{opacity:1;}
 
 .space-plane{position:absolute;
@@ -97,6 +100,21 @@ body.liminal-active .desktop .bg{
   transition:opacity 400ms ease-out;pointer-events:none;}
 #silent-canvas-container.active{display:block;opacity:1;}
 #silent-canvas-container canvas{width:100%;height:100%;display:block;}
+
+/* P12: WebGL 不可用时 CSS fallback 呼吸动画 */
+.s-canvas-fallback{position:absolute;inset:0;opacity:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 130% 65% at 50% 100%,
+      rgba(var(--c-blue),0.08) 0%,
+      rgba(var(--c-purple),0.05) 15%,
+      transparent 45%);
+  animation:sCanvasFallback 8s ease-in-out infinite;
+  transition:opacity 1s ease;}
+.s-canvas-fallback.active{opacity:1;}
+@keyframes sCanvasFallback{
+  0%,100%{opacity:0.3;transform:scale(1)}
+  40%{opacity:0.7;transform:scale(1.02)}
+  70%{opacity:0.35;transform:scale(0.995)}}
 
 /* 屏幕边缘氛围灯 */
 .s-bezel{position:absolute;inset:0;

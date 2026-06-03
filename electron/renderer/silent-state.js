@@ -24,9 +24,11 @@ class SilentState {
         this.geometry = null;
         this.uniforms = null;
         this.animationId = null;
+        this.fallbackEl = document.getElementById('silent-canvas-fallback');
         this.isActive = false;
         this.startTime = null;
         this.isDisposed = false;
+        this.useWebGL = false;
     }
 
     /** 检查 Three.js 是否可用 */
@@ -227,15 +229,26 @@ class SilentState {
 
         this.initWebGL();
 
-        if (this.canvasContainer) {
-            this.canvasContainer.classList.add('active');
+        // P12: 标记是否使用 WebGL
+        this.useWebGL = (this.renderer !== null);
+
+        if (this.useWebGL) {
+            // WebGL 模式：显示 canvas
+            if (this.canvasContainer) {
+                this.canvasContainer.classList.add('active');
+            }
+            this.startTime = performance.now();
+            this.animate();
+        } else {
+            // CSS fallback 模式：显示 fallback 元素
+            if (this.fallbackEl) {
+                this.fallbackEl.classList.add('active');
+            }
         }
+
         if (this.element) {
             this.element.classList.add('on');
         }
-
-        this.startTime = performance.now();
-        this.animate();
     }
 
     exit() {
@@ -244,6 +257,10 @@ class SilentState {
 
         if (this.canvasContainer) {
             this.canvasContainer.classList.remove('active');
+        }
+        // P12: 清理 CSS fallback
+        if (this.fallbackEl) {
+            this.fallbackEl.classList.remove('active');
         }
         if (this.element) {
             this.element.classList.remove('on');
@@ -258,7 +275,7 @@ class SilentState {
         // P2 修复：exit() 时 dispose 所有 WebGL 资源
         this._disposeWebGL();
 
-        console.log('[SilentState] 退出 Silent 态 — WebGL 资源已清理');
+        console.log('[SilentState] 退出 Silent 态');
     }
 
     /** P2 修复：完全 dispose 所有 WebGL 资源 */

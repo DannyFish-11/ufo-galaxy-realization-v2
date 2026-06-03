@@ -37,8 +37,11 @@
     <!-- ============================================
          SILENT 静默态 — WebGL Shader有机波动
          ============================================ -->
-    <div class="s on" id="sLayer">
+    <!-- Silent态初始无.on class，由app.js enterState统一添加 -->
+    <div class="s" id="sLayer">
         <div id="silent-canvas-container"></div>
+        <!-- P12: WebGL 不可用时 CSS fallback -->
+        <div class="s-canvas-fallback" id="silent-canvas-fallback"></div>
         <div class="s-bezel"></div>
     </div>
 
