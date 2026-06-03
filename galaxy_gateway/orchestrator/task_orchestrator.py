@@ -644,17 +644,32 @@ class TaskOrchestrator:
         task.status = TaskStatus.CANCELLED
         task.completed_at = datetime.now(timezone.utc)
         
-        # 发送取消消息到设备
+        # 发送取消消息到设备 — PR-AIP-UNIFIED: 走 AIPTransport
         if task.assigned_device:
-            cancel_message = AIPMessage(
-                type=MessageType.TASK_CANCEL,
-                device_id=task.assigned_device,
-                task_id=task_id
-            )
-            await self.websocket_manager.send_message(
-                task.assigned_device,
-                cancel_message
-            )
+            cancel_message = {
+                "type": "task_cancel",
+                "device_id": task.assigned_device,
+                "task_id": task_id,
+                "transport": "websocket",
+                "version": "3.0",
+            }
+            try:
+                from core.aip_transport import get_aip_transport
+                await get_aip_transport().send(
+                    cancel_message,
+                    task.assigned_device,
+                )
+            except Exception:
+                # Fallback: direct WS
+                aip_msg = AIPMessage(
+                    type=MessageType.TASK_CANCEL,
+                    device_id=task.assigned_device,
+                    task_id=task_id
+                )
+                await self.websocket_manager.send_message(
+                    task.assigned_device,
+                    aip_msg
+                )
         
         logger.info(f"Task cancelled: {task_id}")
         return True

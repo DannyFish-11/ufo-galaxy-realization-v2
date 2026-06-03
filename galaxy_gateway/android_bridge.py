@@ -399,9 +399,20 @@ class AndroidBridge:
                         },
                         "timestamp": int(time.time() * 1000),
                     }
-                    await device.websocket.send_json(liquid_msg)
-                    results[target] = True
-                    logger.info("LiquidIsland: msg '%s' routed to active device %s", msg_type, target)
+                    # PR-AIP-UNIFIED: Route through AIPTransport
+                    from core.aip_transport import get_aip_transport
+                    _msg = {**liquid_msg, "transport": "websocket", "version": "3.0"}
+                    try:
+                        result = await get_aip_transport().send(_msg, target)
+                        if result.get("success"):
+                            results[target] = True
+                            logger.info("LiquidIsland: msg '%s' routed to active device %s via AIPTransport", msg_type, target)
+                        else:
+                            raise Exception("AIPTransport send failed")
+                    except Exception:
+                        await device.websocket.send_json(liquid_msg)
+                        results[target] = True
+                        logger.info("LiquidIsland: msg '%s' routed to active device %s via WS", msg_type, target)
                     # 如果不需要广播，到此结束
                     if not fallback_broadcast:
                         return results
@@ -425,10 +436,18 @@ class AndroidBridge:
                             },
                             "timestamp": int(time.time() * 1000),
                         }
-                        await dev.websocket.send_json(liquid_msg)
-                        results[did] = True
-                    except Exception:
-                        results[did] = False
+                        # PR-AIP-UNIFIED: Route through AIPTransport
+                        from core.aip_transport import get_aip_transport
+                        _msg = {**liquid_msg, "transport": "websocket", "version": "3.0"}
+                        try:
+                            result = await get_aip_transport().send(_msg, did)
+                            results[did] = result.get("success", False)
+                        except Exception:
+                            try:
+                                await dev.websocket.send_json(liquid_msg)
+                                results[did] = True
+                            except Exception:
+                                results[did] = False
 
         return results
 
@@ -1243,7 +1262,15 @@ class AndroidBridge:
             return None
 
         try:
-            await device.websocket.send_json(message)
+            # PR-AIP-UNIFIED: Route through AIPTransport
+            from core.aip_transport import get_aip_transport
+            _msg = {**message, "transport": "websocket", "version": "3.0"}
+            try:
+                result = await get_aip_transport().send(_msg, device_id)
+                if not result.get("success"):
+                    raise Exception("AIPTransport failed")
+            except Exception:
+                await device.websocket.send_json(message)
 
             if wait_response:
                 message_id = message.get("message_id") or message.get("task_id")
@@ -1637,14 +1664,30 @@ class AndroidBridge:
             current_phase = dpr.get_current_phase() if hasattr(dpr, 'get_current_phase') else 'silent'
             if current_phase and websocket is not None:
                 import json, time as _time
-                asyncio.create_task(websocket.send_json({
+                # PR-AIP-UNIFIED: Route phase sync through AIPTransport
+                from core.aip_transport import get_aip_transport
+                _phase_msg = {
                     "type": "state_event",
                     "event_category": "phase",
                     "event_action": current_phase,
                     "device_id": "v2_desktop",
                     "timestamp": int(_time.time() * 1000),
                     "aip_version": "3.0",
+                    "transport": "websocket",
+                    "version": "3.0",
                     "payload": {
+                }
+                try:
+                    asyncio.create_task(get_aip_transport().send(_phase_msg, device_id))
+                except Exception:
+                    asyncio.create_task(websocket.send_json({
+                        "type": "state_event",
+                        "event_category": "phase",
+                        "event_action": current_phase,
+                        "device_id": "v2_desktop",
+                        "timestamp": int(_time.time() * 1000),
+                        "aip_version": "3.0",
+                        "payload": {
                         "from_phase": "unknown",
                         "to_phase": current_phase,
                         "source": "desktop_presence_runtime",
@@ -1724,15 +1767,16 @@ class AndroidBridge:
         # This re-delivers task-type messages that arrived during the disconnect
         # window, closing the INFLIGHT_TASK_LOSS_ON_DISCONNECT gap.
         try:
-            async def _ws_send(msg: Dict[str, Any]) -> None:
-                async with self._lock:
-                    dev = self._devices.get(device_id)
-                if dev and dev.connected and dev.websocket is not None:
-                    await dev.websocket.send_json(msg)
-                else:
-                    raise RuntimeError(f"device {device_id} not connected during buffer flush")
+            # PR-AIP-UNIFIED: Route buffer flush through AIPTransport
+            from core.aip_transport import get_aip_transport
+            async def _aip_send(msg: Dict[str, Any]) -> None:
+                msg["transport"] = "websocket"
+                msg["version"] = "3.0"
+                result = await get_aip_transport().send(msg, device_id)
+                if not result.get("success"):
+                    raise RuntimeError(f"AIPTransport failed for {device_id}")
 
-            _delivered, _skipped = await _pending_delivery_buffer.flush(device_id, _ws_send)
+            _delivered, _skipped = await _pending_delivery_buffer.flush(device_id, _aip_send)
             if _delivered or _skipped:
                 logger.info(
                     "android_bridge: reconnect buffer flush — device_id=%s "

@@ -82,7 +82,17 @@ async def handle_vision_request(
 
     try:
         if websocket is not None:
-            await websocket.send_json(response)
+            # PR-AIP-UNIFIED: Route through AIPTransport
+            from core.aip_transport import get_aip_transport
+            _msg = {
+                **response,
+                "transport": "websocket",
+                "version": "3.0",
+            }
+            try:
+                await get_aip_transport().send(_msg, device_id or "unknown")
+            except Exception:
+                await websocket.send_json(response)
     except Exception as e:
         logger.warning("Failed to push vision_result to %s: %s", device_id, e)
 

@@ -59,8 +59,19 @@ async def handle_wearos_state_sync(
     }
 
     try:
-        await device.websocket.send_json(wear_msg)
-        logger.debug("WearOS sync: phase=%s sent to %s", phase, device_id)
+        # PR-AIP-UNIFIED: Route through AIPTransport instead of direct WS
+        from core.aip_transport import get_aip_transport
+        msg = {
+            **wear_msg,
+            "transport": "websocket",
+            "version": "3.0",
+        }
+        result = await get_aip_transport().send(msg, device_id)
+        if result.get("success"):
+            logger.debug("WearOS sync: phase=%s sent to %s", phase, device_id)
+        else:
+            # Fallback: direct WS
+            await device.websocket.send_json(wear_msg)
     except Exception as exc:
         logger.debug("WearOS sync: send failed: %s", exc)
 

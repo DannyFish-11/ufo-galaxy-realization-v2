@@ -150,9 +150,16 @@ def _schedule_pending_delivery_replay_on_canonical_reconnect(
 
     async def _flush() -> None:
         try:
+            # PR-AIP-UNIFIED: Wrap send through AIPTransport instead of direct WS
+            from core.aip_transport import get_aip_transport
+            async def _aip_send(msg_dict):
+                msg_dict["transport"] = "websocket"
+                msg_dict["version"] = "3.0"
+                await get_aip_transport().send(msg_dict, device_id)
+
             delivered, skipped = await _pending_delivery_buffer.flush(
                 device_id,
-                websocket.send_json,
+                _aip_send,
             )
             logger.info(
                 "handle_device_register: canonical reconnect replay complete "
@@ -1090,11 +1097,25 @@ async def handle_device_register(
             current_phase = dpr.get_current_phase() if hasattr(dpr, 'get_current_phase') else 'silent'
             if current_phase and device.websocket is not None:
                 import json, time
-                await device.websocket.send_json({
+                # PR-AIP-UNIFIED: Route through AIPTransport
+                from core.aip_transport import get_aip_transport
+                _phase_msg = {
                     "type": "state_event",
                     "event_category": "phase",
                     "event_action": current_phase,
                     "device_id": "v2_desktop",
+                    "transport": "websocket",
+                    "version": "3.0",
+                    "timestamp": time.time(),
+                }
+                try:
+                    await get_aip_transport().send(_phase_msg, device_id)
+                except Exception:
+                    await device.websocket.send_json({
+                        "type": "state_event",
+                        "event_category": "phase",
+                        "event_action": current_phase,
+                        "device_id": "v2_desktop",
                     "timestamp": int(time.time() * 1000),
                     "aip_version": "3.0",
                     "payload": {

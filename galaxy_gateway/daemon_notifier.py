@@ -102,6 +102,23 @@ class DaemonNotifier:
             sent = 0
             for device_id, conn in list(self._android_bridge.items()):
                 try:
+                    # PR-AIP-UNIFIED: Route daemon notifications through AIPTransport
+                    # instead of direct websocket access.
+                    try:
+                        from core.aip_transport import get_aip_transport
+                        msg = {
+                            "type": "daemon_notification",
+                            "payload": payload,
+                            "transport": "websocket",
+                            "version": "3.0",
+                        }
+                        result = await get_aip_transport().send(msg, device_id)
+                        if result.get("success"):
+                            sent += 1
+                            continue
+                    except Exception:
+                        pass
+                    # Fallback: direct websocket
                     if hasattr(conn, "send_json"):
                         await conn.send_json(payload)
                         sent += 1
