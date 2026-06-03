@@ -1480,61 +1480,48 @@ class DeviceRouter:
                 from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
                 from core.command_router import get_command_router
 
-                cmd_router = get_command_router()
-                if cmd_router._executor is not None:
-                    _tool = self._extract_tool_name(task)
-                    _args = task.get("payload", {}).get("params") or task.get("payload", {})
-                    # PR-7: carry remote_execution_mode through the substrate envelope
-                    _rem_mode_str = task.get("remote_execution_mode", "")
-                    _rem_mode = None
-                    if _rem_mode_str:
-                        try:
-                            from core.schemas.remote_execution import RemoteExecutionMode as _REM
+                # PR-AIP-UNIFIED: Removed circular call to cmd_router.route_envelope.
+                # DeviceRouter is the substrate layer; it should NOT call back into
+                # CommandRouter (orchestration layer). All transport goes through
+                # AIPTransport directly. See P2 fix in v51.
+                pass
+            except Exception:
+                pass
 
-                            _rem_mode = _REM(_rem_mode_str)
-                        except Exception:
-                            pass
-                    _task_envelope = _TaskEnvelope(
-                        task_id=task.get("task_id") or str(uuid.uuid4()),
-                        trace_id=task.get("trace_id"),
-                        source="device_router",
-                        targets=[device.device_id],
-                        tool_name=_tool,
-                        args=_args if isinstance(_args, dict) else {},
-                        remote_execution_mode=_rem_mode,
-                        metadata={
-                            "command": task.get("command", ""),
-                            "device_router": "true",
-                            "source_device_id": task.get("source_device_id", ""),
-                            "target_device_id": device.device_id,
-                            "source_runtime_posture": task.get("source_runtime_posture", "control_only"),
-                        },
-                    )
-                    logger.debug(
-                        "DeviceRouter.dispatch_task envelope | task_id=%s trace_id=%s " "tool=%s device=%s mode=%s",
-                        _task_envelope.task_id,
-                        _task_envelope.trace_id,
-                        _task_envelope.tool_name,
-                        device.device_id,
-                        _rem_mode_str or "unset",
-                    )
-                    cr_result = await cmd_router.route_envelope(_task_envelope)
+            # PR-AIP-UNIFIED: Route through AIPTransport instead of direct WS.
+            # Remove circular call to cmd_router.route_envelope (P2 fix).
+            # Use AIPTransport as unified transport entry (P1 fix).
+            task_id = task["task_id"]
+            _aip_message = _routing_build_aip_message(
+                device_id=device.device_id,
+                task_id=task_id,
+                trace_id=task.get("trace_id", ""),
+                command=task.get("command", ""),
+                payload=task.get("payload"),
+            )
+            _aip_message["transport"] = "websocket"  # Mark transport type
+
+            try:
+                from core.aip_transport import get_aip_transport
+                aip_result = await get_aip_transport().send(
+                    _aip_message,
+                    device.device_id,
+                )
+                if aip_result.get("success"):
                     return {
-                        "success": cr_result.get("success", False),
-                        "result": cr_result.get("result"),
-                        "error": cr_result.get("error_message"),
-                        "task_id": cr_result.get("task_id"),
-                        "trace_id": cr_result.get("trace_id"),
-                        "remote_execution_mode": cr_result.get("remote_execution_mode", _rem_mode_str),
+                        "success": True,
+                        "result": aip_result.get("result"),
+                        "task_id": task_id,
+                        "trace_id": task.get("trace_id", ""),
+                        "via": "device_router->aip_transport",
                     }
-            except Exception as route_err:
-                logger.debug(f"route_envelope 路由失败，回退 WebSocket: {route_err}")
+                # AIPTransport failed, fallback to direct WS
+                logger.debug("AIPTransport failed, fallback to direct websocket")
+            except Exception as _aip_err:
+                logger.debug(f"AIPTransport error, fallback to direct websocket: {_aip_err}")
 
-            # PR-4: WebSocket fallback — delegate send/wait to routing.dispatch.
+            # Final fallback: direct websocket (legacy compat)
             if device.websocket:
-                task_id = task["task_id"]
-
-                # PR-S5: use envelope timeout if available; fall back to 30 s.
                 _ws_timeout = 30.0
                 try:
                     if _task_envelope is not None:
@@ -1542,16 +1529,9 @@ class DeviceRouter:
                 except Exception:
                     pass
 
-                _ws_message = _routing_build_aip_message(
-                    device_id=device.device_id,
-                    task_id=task_id,
-                    trace_id=task.get("trace_id", ""),
-                    command=task.get("command", ""),
-                    payload=task.get("payload"),
-                )
                 ws_result = await _routing_dispatch_to_websocket(
                     device=device,
-                    message=_ws_message,
+                    message=_aip_message,
                     task_id=task_id,
                     task_events=self._task_events,
                     task_results=self.task_results,
