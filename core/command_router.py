@@ -3384,33 +3384,53 @@ class CommandRouter:
         command_id: str,
         timeout: float = 30.0,
     ) -> Optional[Dict[str, Any]]:
-        """Delegate transport dispatch to ``DeviceRouter`` (canonical chain).
+        """Delegate transport dispatch — AIPTransportRouter → DeviceRouter fallback.
 
-        This method implements the ``CommandRouter → DeviceRouter`` hop in
-        the canonical execution chain::
+        PR-TRANSPORT-UNIFIED: First attempts routing via AIPTransportRouter
+        (Mesh P2P → NATS → WebSocket), then falls back to DeviceRouter.
+
+        Canonical chain::
 
             OpenClawd → CommandRouter (orchestration)
                 → _dispatch_via_device_router()
-                    → DeviceRouter.send_command_to_device() (transport)
-                        → WebSocket / device
-
-        It attempts to look up the target device in ``DeviceRouter``'s live
-        session table and delegates the actual send to
-        :meth:`galaxy_gateway.device_router.DeviceRouter.send_command_to_device`.
-        When ``DeviceRouter`` is unavailable or the device is not registered
-        in its table the caller falls back to ``connection_manager`` directly.
+                    → AIPTransportRouter.route() (smart transport selection)
+                        → Mesh P2P / NATS / WebSocket
+                    → fallback: DeviceRouter.send_command_to_device()
+                        → WebSocket
 
         Returns:
-            Result dict on success (keys: ``success``, ``result``,
-            ``error_message``, ``task_id``, ``trace_id``, ``via``), or
-            ``None`` when DeviceRouter is unavailable / device not found.
-
-        Note:
-            This method **must not** call :meth:`route_envelope` — doing so
-            would create an infinite recursion.  It is intended as the
-            terminal transport step after all orchestration decisions are
-            complete.
+            Result dict on success, or ``None`` when all transports fail.
         """
+        # ── PR-TRANSPORT-UNIFIED: Try AIPTransportRouter first ──────────────
+        try:
+            from core.aip_transport_router import get_transport_router
+
+            _router = get_transport_router()
+            envelope = {
+                "command": command,
+                "payload": payload,
+                "task_id": task_id,
+                "trace_id": trace_id,
+                "command_id": command_id,
+            }
+            # Use "galaxy_desktop" or the first available local device as source
+            _source = "galaxy_desktop"  # will be resolved by UDM
+            result = await _router.route(
+                envelope=envelope,
+                source_device=_source,
+                target_device=device_id,
+            )
+            if result and result.get("success"):
+                result.setdefault("command_id", command_id)
+                result.setdefault("via", f"aip_transport_router->{result.get('via', 'unknown')}")
+                return result
+        except Exception as _aip_exc:
+            logger.debug(
+                "AIPTransportRouter dispatch failed (will try DeviceRouter): %s",
+                _aip_exc,
+            )
+
+        # ── Fallback: DeviceRouter (original canonical chain) ───────────────
         try:
             from galaxy_gateway.device_router import device_router as _dr  # lazy import
 
@@ -3418,10 +3438,6 @@ class CommandRouter:
             if device is None:
                 return None  # device not in DeviceRouter — caller will fall back
 
-            # Build a minimal task dict compatible with DeviceRouter.dispatch_task.
-            # We deliberately do NOT route back through route_envelope to avoid
-            # recursion; we call send_command_to_device which is the terminal
-            # WebSocket sender on DeviceRouter.
             result = await _dr.send_command_to_device(
                 device_id=device_id,
                 command=command,
