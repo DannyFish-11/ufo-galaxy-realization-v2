@@ -14,6 +14,14 @@ Path characteristics:
     Same tailnet P2P:  latency ~5-20ms, encrypted WireGuard, NAT-traversal
     DERP relay fallback: latency ~80-300ms, still encrypted, global reach
 
+Design:
+- Persistent TCP connection pool (one per target device)
+- Thread-safe connection management (asyncio.Lock)
+- Periodic connection health check (60s interval, dead conns auto-purged)
+- Explicit device_id → tailscale_ip registration (from MeshCoordinator)
+- Peer cache from `tailscale status --json` (hostname → ts_ip)
+- Fuzzy matching for device_id resolution
+
 Usage:
     Registered automatically in lifecycle.py Phase 8 if Tailscale is available.
     AIPTransport auto-selects this adapter when target is on same tailnet.
@@ -24,9 +32,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import socket
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.aip_transport import TransportAdapter
 
@@ -34,10 +41,39 @@ logger = logging.getLogger("Galaxy.Adapter.TailscaleP2P")
 
 # ── Constants ────────────────────────────────────────────────────────────
 
-_DEFAULT_P2P_PORT = 19721           # Tailscale P2P direct port (distinct from LAN 19720)
+_DEFAULT_P2P_PORT = 19721           # Tailscale P2P direct port
 _CONNECT_TIMEOUT = 5.0              # seconds
-_READ_TIMEOUT = 10.0                # seconds
-Peer_CACHE_TTL = 60.0               # seconds: how long to cache peer Tailscale IPs
+_READ_TIMEOUT = 10.0                # seconds for inbound read
+_PEER_CACHE_TTL = 60.0              # seconds: peer cache freshness
+_HEALTH_CHECK_INTERVAL = 60.0       # seconds: connection pool health check
+_MAX_MSG_SIZE = 10 * 1024 * 1024    # 10MB max message
+
+
+class _ConnectionEntry:
+    """A pooled connection with metadata."""
+
+    def __init__(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        device_id: str,
+        ts_ip: str,
+    ) -> None:
+        self.reader = reader
+        self.writer = writer
+        self.device_id = device_id
+        self.ts_ip = ts_ip
+        self.created_at = time.time()
+        self.last_used = time.time()
+        self.msg_count = 0
+
+    @property
+    def is_alive(self) -> bool:
+        return not self.writer.is_closing()
+
+    def touch(self) -> None:
+        self.last_used = time.time()
+        self.msg_count += 1
 
 
 class TailscaleP2PAdapter(TransportAdapter):
@@ -50,8 +86,6 @@ class TailscaleP2PAdapter(TransportAdapter):
     - Tailscale must be installed and running on this device
     - Target device must be on the same tailnet (have a 100.x IP)
     - Target device must be listening on the P2P port via this adapter
-
-    Singleton pattern: one persistent connection pool per target device.
     """
 
     @property
@@ -60,29 +94,37 @@ class TailscaleP2PAdapter(TransportAdapter):
 
     def __init__(self, p2p_port: int = _DEFAULT_P2P_PORT) -> None:
         self._p2p_port = p2p_port
-        self._available = False           # set after successful tailscale detection
+        self._available = False
         self._my_ts_ip: Optional[str] = None
         self._my_hostname: str = ""
-        # Cache of device_id -> (tailscale_ip, timestamp)
-        self._peer_cache: Dict[str, tuple[str, float]] = {}
-        # Persistent TCP connections: device_id -> (reader, writer)
-        self._connections: Dict[str, tuple[Any, Any]] = {}
+        # Explicit device_id → ts_ip registration (from MeshCoordinator etc.)
+        self._device_registry: Dict[str, str] = {}
+        # Peer cache from tailscale status: hostname → (ts_ip, timestamp)
+        self._peer_cache: Dict[str, Tuple[str, float]] = {}
+        # Connection pool: device_id → _ConnectionEntry
+        self._connections: Dict[str, _ConnectionEntry] = {}
+        self._conn_lock = asyncio.Lock()
+        # Health check task
+        self._health_task: Optional[asyncio.Task] = None
+        self._running = False
 
     # ── TransportAdapter interface ──────────────────────────────────
 
     async def initialize(self) -> bool:
-        """Detect Tailscale and populate peer cache.
-
-        Called from lifecycle.py Phase 8 during startup.
-        Returns True if Tailscale is available and usable.
-        """
+        """Detect Tailscale and populate peer cache."""
         try:
             self._my_ts_ip, self._my_hostname = await self._detect_self()
             if self._my_ts_ip:
                 self._available = True
                 await self._refresh_peer_cache()
+                self._running = True
+                # Start health check loop
+                self._health_task = asyncio.create_task(
+                    self._health_check_loop(),
+                    name="tailscale_p2p_health",
+                )
                 logger.info(
-                    "TailscaleP2PAdapter initialized | my_ip=%s hostname=%s peers=%d",
+                    "TailscaleP2PAdapter initialized | ip=%s host=%s peers=%d",
                     self._my_ts_ip, self._my_hostname, len(self._peer_cache),
                 )
                 return True
@@ -92,60 +134,47 @@ class TailscaleP2PAdapter(TransportAdapter):
         return False
 
     async def send(self, message: Dict[str, Any], target: str) -> Dict[str, Any]:
-        """Send AIP v3 message to target device via Tailscale P2P.
-
-        Args:
-            message: AIP v3 message dict
-            target:  target device_id
-
-        Returns:
-            {"success": bool, "via": "tailscale_p2p", "rtt_ms": float}
-        """
+        """Send AIP v3 message to target device via Tailscale P2P."""
         if not self._available:
             return {"success": False, "error": "TailscaleP2P not available"}
 
-        ts_ip = await self._resolve_target(target)
+        ts_ip = self._resolve_target(target)
         if not ts_ip:
-            return {"success": False, "error": f"Target {target} not found in tailnet"}
+            return {"success": False, "error": f"Target {target} not in tailnet registry"}
 
         start = time.time()
         try:
-            # Use persistent connection or create new one
-            writer = await self._get_writer(ts_ip)
+            entry = await self._acquire_connection(target, ts_ip)
             payload = json.dumps(message, default=str).encode("utf-8")
+            if len(payload) > _MAX_MSG_SIZE:
+                return {"success": False, "error": "Message too large"}
             # Frame: 4-byte length prefix + JSON payload
             frame = len(payload).to_bytes(4, "big") + payload
-            writer.write(frame)
-            await writer.drain()
+            entry.writer.write(frame)
+            await entry.writer.drain()
+            entry.touch()
 
             rtt = (time.time() - start) * 1000
             return {"success": True, "via": "tailscale_p2p", "rtt_ms": round(rtt, 2)}
         except Exception as exc:
-            # Connection broken — remove from pool and fail
-            self._connections.pop(target, None)
+            # Remove broken connection
+            async with self._conn_lock:
+                self._connections.pop(target, None)
             logger.debug("Tailscale P2P send to %s (%s) failed: %s", target, ts_ip, exc)
             return {"success": False, "error": f"Tailscale P2P failed: {exc}"}
 
     async def is_available(self, target: str) -> bool:
-        """Check if target is reachable via Tailscale P2P.
-
-        True if:
-        1. Tailscale is running on this device
-        2. Target has a cached Tailscale IP (is on same tailnet)
-        3. Target responds to TCP probe on P2P port
-        """
+        """Check if target is reachable via Tailscale P2P."""
         if not self._available:
             return False
-
-        ts_ip = await self._resolve_target(target)
+        ts_ip = self._resolve_target(target)
         if not ts_ip:
             return False
-
-        # Quick TCP connect probe
+        # Quick TCP probe
         try:
             _, writer = await asyncio.wait_for(
                 asyncio.open_connection(ts_ip, self._p2p_port),
-                timeout=1.0,
+                timeout=1.5,
             )
             writer.close()
             return True
@@ -157,9 +186,16 @@ class TailscaleP2PAdapter(TransportAdapter):
         if not self._available:
             return {"success": False, "error": "TailscaleP2P not available"}
 
+        # Combine registry + peer cache
+        all_targets: Dict[str, str] = {}
+        for did, ts_ip in self._device_registry.items():
+            all_targets[did] = ts_ip
+        for hostname, (ts_ip, _) in self._peer_cache.items():
+            if hostname not in all_targets:
+                all_targets[hostname] = ts_ip
+
         results = {}
-        await self._refresh_peer_cache()
-        for device_id, (ts_ip, _) in list(self._peer_cache.items()):
+        for device_id, ts_ip in all_targets.items():
             try:
                 result = await self.send(message, device_id)
                 results[device_id] = result
@@ -176,29 +212,138 @@ class TailscaleP2PAdapter(TransportAdapter):
         }
 
     async def close(self) -> None:
-        """Close all persistent connections."""
-        for device_id, (reader, writer) in list(self._connections.items()):
+        """Close all persistent connections and stop health check."""
+        self._running = False
+        if self._health_task and not self._health_task.done():
+            self._health_task.cancel()
             try:
-                writer.close()
-                await writer.wait_closed()
+                await self._health_task
+            except asyncio.CancelledError:
+                pass
+
+        async with self._conn_lock:
+            for entry in list(self._connections.values()):
+                try:
+                    entry.writer.close()
+                    await entry.writer.wait_closed()
+                except Exception:
+                    pass
+            self._connections.clear()
+        logger.debug("TailscaleP2PAdapter closed")
+
+    # ── Device registration (called by MeshCoordinator etc.) ────────
+
+    def register_device(self, device_id: str, tailscale_ip: str) -> None:
+        """Explicitly register a device_id → tailscale_ip mapping.
+
+        Called by MeshCoordinator when a peer announces with tailscale_ip.
+        This is the primary way device_ids are mapped to Tailscale IPs.
+        """
+        if tailscale_ip:
+            self._device_registry[device_id] = tailscale_ip
+            logger.debug("Registered device %s → %s", device_id, tailscale_ip)
+
+    def unregister_device(self, device_id: str) -> None:
+        """Remove a device registration."""
+        self._device_registry.pop(device_id, None)
+        # Also close any connection
+        entry = self._connections.pop(device_id, None)
+        if entry:
+            try:
+                entry.writer.close()
             except Exception:
                 pass
-        self._connections.clear()
-        logger.debug("TailscaleP2PAdapter connections closed")
 
-    # ── Internal helpers ────────────────────────────────────────────
+    def list_registered_devices(self) -> Dict[str, str]:
+        """Return all registered device_id → ts_ip mappings."""
+        return dict(self._device_registry)
 
-    async def _detect_self(self) -> tuple[Optional[str], str]:
-        """Detect own Tailscale IP and hostname.
+    def get_stats(self) -> Dict[str, Any]:
+        """Return connection pool stats for monitoring."""
+        return {
+            "available": self._available,
+            "my_ts_ip": self._my_ts_ip,
+            "registry_size": len(self._device_registry),
+            "peer_cache_size": len(self._peer_cache),
+            "connection_pool_size": len(self._connections),
+            "connections": {
+                did: {
+                    "ts_ip": e.ts_ip,
+                    "alive": e.is_alive,
+                    "msg_count": e.msg_count,
+                    "idle_seconds": round(time.time() - e.last_used, 1),
+                }
+                for did, e in self._connections.items()
+            },
+        }
 
-        Returns: (tailscale_ip, hostname)
-        """
+    # ── Internal: connection management ─────────────────────────────
+
+    async def _acquire_connection(self, device_id: str, ts_ip: str) -> _ConnectionEntry:
+        """Get or create a pooled connection (thread-safe)."""
+        async with self._conn_lock:
+            # Check existing connection
+            entry = self._connections.get(device_id)
+            if entry is not None:
+                if entry.is_alive and entry.ts_ip == ts_ip:
+                    return entry
+                # Stale or wrong IP — remove
+                try:
+                    entry.writer.close()
+                except Exception:
+                    pass
+                del self._connections[device_id]
+
+            # Create new connection
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(ts_ip, self._p2p_port),
+                timeout=_CONNECT_TIMEOUT,
+            )
+            entry = _ConnectionEntry(reader, writer, device_id, ts_ip)
+            self._connections[device_id] = entry
+            logger.debug("New P2P connection: %s → %s:%d", device_id, ts_ip, self._p2p_port)
+            return entry
+
+    async def _health_check_loop(self) -> None:
+        """Periodic health check: purge dead connections, refresh peer cache."""
+        while self._running:
+            try:
+                await asyncio.sleep(_HEALTH_CHECK_INTERVAL)
+            except asyncio.CancelledError:
+                break
+            if not self._running:
+                break
+
+            # Purge dead connections
+            async with self._conn_lock:
+                dead = [
+                    did for did, e in list(self._connections.items())
+                    if not e.is_alive
+                ]
+                for did in dead:
+                    entry = self._connections.pop(did, None)
+                    if entry:
+                        try:
+                            entry.writer.close()
+                        except Exception:
+                            pass
+                    logger.debug("Health check: purged dead connection to %s", did)
+
+            # Refresh peer cache
+            try:
+                await self._refresh_peer_cache()
+            except Exception:
+                pass
+
+    # ── Internal: Tailscale discovery ───────────────────────────────
+
+    async def _detect_self(self) -> Tuple[Optional[str], str]:
+        """Detect own Tailscale IP and hostname."""
         import shutil
         import subprocess
 
         if not shutil.which("tailscale"):
             return None, ""
-
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
@@ -222,7 +367,6 @@ class TailscaleP2PAdapter(TransportAdapter):
 
         if not shutil.which("tailscale"):
             return
-
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
@@ -236,86 +380,43 @@ class TailscaleP2PAdapter(TransportAdapter):
                     ts_ips = peer_info.get("TailscaleIPs", [])
                     hostname = peer_info.get("HostName", key)
                     if ts_ips:
-                        # Use hostname as device_id (matches MagicDNS)
                         self._peer_cache[hostname] = (ts_ips[0], now)
         except Exception as exc:
             logger.debug("Peer cache refresh failed: %s", exc)
 
-    async def _resolve_target(self, target: str) -> Optional[str]:
+    def _resolve_target(self, target: str) -> Optional[str]:
         """Resolve device_id to Tailscale IP.
 
-        1. Check cache
-        2. If stale, refresh from tailscale status
-        3. Try exact match, then fuzzy match
+        Resolution order:
+        1. Explicit device registry (device_id → ts_ip)
+        2. Peer cache exact match
+        3. Peer cache fuzzy match
+        4. None
         """
-        now = time.time()
-        cached = self._peer_cache.get(target)
-        if cached:
-            ts_ip, ts = cached
-            if now - ts < _Peer_CACHE_TTL:
-                return ts_ip
+        # 1. Explicit registry (most reliable)
+        ts_ip = self._device_registry.get(target)
+        if ts_ip:
+            return ts_ip
 
-        # Stale or missing — refresh
-        await self._refresh_peer_cache()
+        # 2. Peer cache exact match
         cached = self._peer_cache.get(target)
         if cached:
             return cached[0]
 
-        # Try to match tailscale hostname from device_id
-        # e.g., "android-pixel" might match "pixel.your-tailnet.ts.net"
-        for hostname, (ts_ip, _) in self._peer_cache.items():
-            if target.lower() in hostname.lower() or hostname.lower() in target.lower():
+        # 3. Peer cache fuzzy match
+        target_lower = target.lower()
+        for hostname, (ts_ip, ts) in self._peer_cache.items():
+            if target_lower in hostname.lower() or hostname.lower() in target_lower:
+                # Cache the match for next time
+                self._device_registry[target] = ts_ip
                 return ts_ip
 
         return None
 
-    async def _get_writer(self, ts_ip: str) -> Any:
-        """Get or create a TCP writer for the given Tailscale IP.
-
-        Uses persistent connections keyed by IP address.
-        """
-        # Check if we have a connection for this IP
-        for device_id, (reader, writer) in list(self._connections.items()):
-            # Check if connection is still alive
-            if writer.is_closing():
-                del self._connections[device_id]
-                continue
-            # We need to map ts_ip back to device_id — for now create new
-            # Simplified: use ts_ip as key
-
-        # Check existing connection by IP pseudo-key
-        ip_key = f"_ip_{ts_ip}"
-        existing = self._connections.get(ip_key)
-        if existing:
-            _, writer = existing
-            if not writer.is_closing():
-                return writer
-            del self._connections[ip_key]
-
-        # Create new connection
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(ts_ip, self._p2p_port),
-            timeout=_CONNECT_TIMEOUT,
-        )
-        self._connections[ip_key] = (reader, writer)
-        logger.debug("New Tailscale P2P connection to %s:%d", ts_ip, self._p2p_port)
-        return writer
-
     # ── Server side (inbound) ───────────────────────────────────────
 
     async def start_server(self, host: str = "", port: int = 0) -> asyncio.Server:
-        """Start a TCP server listening for inbound Tailscale P2P connections.
-
-        Binds to the Tailscale IP (100.x.x.x) by default, or 0.0.0.0 if
-        tailscale IP is not detected.
-
-        Args:
-            host: Bind host (default: Tailscale IP, fallback 0.0.0.0)
-            port: Port to bind (default: _DEFAULT_P2P_PORT)
-
-        Returns:
-            asyncio.Server instance
-        """
+        """Start TCP server for inbound Tailscale P2P connections."""
         bind_host = host or self._my_ts_ip or "0.0.0.0"
         bind_port = port or self._p2p_port
 
@@ -324,47 +425,38 @@ class TailscaleP2PAdapter(TransportAdapter):
             host=bind_host,
             port=bind_port,
         )
-        logger.info(
-            "Tailscale P2P server listening on %s:%d", bind_host, bind_port,
-        )
+        logger.info("Tailscale P2P server on %s:%d", bind_host, bind_port)
         return server
 
     async def _handle_inbound(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
     ) -> None:
-        """Handle an inbound Tailscale P2P connection."""
+        """Handle inbound P2P connection."""
         peer_addr = writer.get_extra_info("peername")
-        logger.debug("Inbound Tailscale P2P connection from %s", peer_addr)
+        logger.debug("Inbound P2P from %s", peer_addr)
 
         try:
             while True:
-                # Read 4-byte length prefix
                 len_bytes = await asyncio.wait_for(reader.read(4), timeout=_READ_TIMEOUT)
                 if len(len_bytes) < 4:
-                    break  # Connection closed
+                    break
 
                 msg_len = int.from_bytes(len_bytes, "big")
-                if msg_len > 10 * 1024 * 1024:  # 10MB max
+                if msg_len > _MAX_MSG_SIZE:
                     logger.warning("Oversized message from %s: %d bytes", peer_addr, msg_len)
                     break
 
-                # Read payload
-                payload_bytes = await asyncio.wait_for(
-                    reader.read(msg_len), timeout=_READ_TIMEOUT,
-                )
+                payload_bytes = await asyncio.wait_for(reader.read(msg_len), timeout=_READ_TIMEOUT)
                 if len(payload_bytes) < msg_len:
-                    break  # Incomplete
+                    break
 
                 message = json.loads(payload_bytes.decode("utf-8"))
-                logger.debug("Received P2P message from %s: type=%s", peer_addr, message.get("type"))
-
-                # Dispatch to message handler (AIP v3 message)
                 await self._dispatch_inbound(message, peer_addr)
 
         except asyncio.TimeoutError:
-            logger.debug("P2P connection from %s timed out", peer_addr)
+            pass
         except Exception as exc:
-            logger.debug("P2P connection from %s error: %s", peer_addr, exc)
+            logger.debug("P2P inbound from %s error: %s", peer_addr, exc)
         finally:
             writer.close()
             try:
@@ -375,19 +467,11 @@ class TailscaleP2PAdapter(TransportAdapter):
     async def _dispatch_inbound(
         self, message: Dict[str, Any], peer_addr: tuple,
     ) -> None:
-        """Dispatch an inbound AIP v3 message.
-
-        Subclasses or callers can override this to handle inbound messages.
-        Default implementation routes to the AIP v3 ingress handler.
-        """
+        """Dispatch inbound AIP v3 message received via P2P."""
         try:
-            # Route to AIP v3 message handler
-            from core.aip_transport import get_aip_transport
-            # Mark as received via tailscale_p2p
             message["_received_via"] = "tailscale_p2p"
             message["_peer_addr"] = f"{peer_addr[0]}:{peer_addr[1]}"
 
-            # Emit event for downstream processing
             from core.state_event_bus import get_state_event_bus
             get_state_event_bus().publish(
                 "aip.tailscale_p2p.received",

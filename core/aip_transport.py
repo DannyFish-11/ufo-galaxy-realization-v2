@@ -146,14 +146,8 @@ class AIPTransport:
 
         ttype = adapter.transport_type
 
-        # 4. 发送
-        try:
-            result = await adapter.send(msg_dict, target)
-            result["_transport_used"] = ttype
-            return result
-        except Exception as e:
-            logger.warning("Send via '%s' failed: %s", ttype, e)
-            return {"success": False, "error": f"{ttype} send failed: {e}"}
+        # 4. 发送 + PR-28 fallback 链：一个传输失败自动试下一个
+        return await self._send_with_fallback(msg_dict, target, adapter, ttype)
 
     async def broadcast(
         self,
@@ -260,6 +254,59 @@ class AIPTransport:
             return default
 
         return None
+
+    # -- PR-28: Fallback chain -----------------------------------------------
+
+    async def _send_with_fallback(
+        self,
+        msg_dict: Dict[str, Any],
+        target: str,
+        first_adapter: TransportAdapter,
+        first_ttype: str,
+    ) -> Dict[str, Any]:
+        """Send with automatic fallback chain.
+
+        If the first adapter fails, try the next one in priority order.
+        Records all attempts for diagnostics.
+        """
+        attempted: List[str] = []
+        errors: List[str] = []
+
+        adapters_to_try = [first_adapter]
+        # Add remaining adapters in priority order
+        for ttype in self._transport_priority:
+            adapter = self._adapters.get(ttype)
+            if adapter and adapter not in adapters_to_try:
+                adapters_to_try.append(adapter)
+
+        for adapter in adapters_to_try:
+            ttype = adapter.transport_type
+            attempted.append(ttype)
+            try:
+                result = await adapter.send(msg_dict, target)
+                result["_transport_used"] = ttype
+                if result.get("success"):
+                    if len(attempted) > 1:
+                        logger.info(
+                            "PR-28 fallback success: %s → %s for %s (tried: %s)",
+                            first_ttype, ttype, target, attempted,
+                        )
+                    return result
+                # Adapter returned success=False — record reason and try next
+                errors.append(f"{ttype}: {result.get('error', 'unknown')}")
+            except Exception as exc:
+                errors.append(f"{ttype}: {exc}")
+                continue
+
+        # All failed
+        logger.warning(
+            "PR-28 all transports failed for %s: %s", target, errors,
+        )
+        return {
+            "success": False,
+            "error": f"All transports failed (tried: {attempted}): {' | '.join(errors)}",
+            "_attempted": attempted,
+        }
 
     # -- 内部工具 ----------------------------------------------------------
 

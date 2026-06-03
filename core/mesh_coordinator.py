@@ -161,6 +161,19 @@ class MeshCoordinator:
     # Peer 管理
     # ================================================================
 
+    @staticmethod
+    def _sync_tailscale_registry(device_id: str, tailscale_ip: str) -> None:
+        """Sync device tailscale_ip to TailscaleP2PAdapter registry."""
+        if not tailscale_ip:
+            return
+        try:
+            from core.aip_transport import get_aip_transport
+            adapter = get_aip_transport().get_adapter("tailscale_p2p")
+            if adapter is not None and hasattr(adapter, "register_device"):
+                adapter.register_device(device_id, tailscale_ip)
+        except Exception:
+            pass
+
     def register_peer(
         self,
         device_id: str,
@@ -204,6 +217,9 @@ class MeshCoordinator:
                 f"Peer registered: {device_id} (lan={local_ip}:{local_port}, "
                 f"ts={tailscale_ip or 'none'})"
             )
+        # PR-28: Sync tailscale_ip to TailscaleP2PAdapter
+        if tailscale_ip:
+            self._sync_tailscale_registry(device_id, tailscale_ip)
         return peer
 
     def unregister_peer(self, device_id: str):

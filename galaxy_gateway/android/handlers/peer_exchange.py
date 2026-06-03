@@ -85,6 +85,12 @@ async def handle_peer_announce(
 
     if mesh is not None:
         try:
+            # PR-28: Extract tailscale_ip from payload if present
+            payload = message.get("payload") or {}
+            ts_ip = payload.get("tailscale_ip") or message.get("tailscale_ip", "")
+            if ts_ip and "tailscale_ip" not in str(message):
+                # Ensure tailscale_ip is in the message dict for handle_peer_announce
+                message["tailscale_ip"] = ts_ip
             # Register / update the peer entry.
             peer = mesh.handle_peer_announce(device_id, message)
             # Build the peer list excluding the announcing device.

@@ -257,6 +257,11 @@ class WebSocketManager:
             mesh = get_mesh_coordinator()
 
             if msg_type == "peer_announce":
+                # PR-28: Extract tailscale_ip if present in announce
+                payload = raw.get("payload") or {}
+                ts_ip = payload.get("tailscale_ip") or raw.get("tailscale_ip", "")
+                if ts_ip:
+                    raw["tailscale_ip"] = ts_ip
                 peer = mesh.handle_peer_announce(device_id, raw)
                 peer_list = mesh.build_peer_exchange(exclude_device=device_id)
                 response = {
