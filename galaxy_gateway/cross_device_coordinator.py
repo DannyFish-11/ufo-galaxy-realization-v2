@@ -765,12 +765,13 @@ class CrossDeviceCoordinator:
         safe_name = os.path.basename(file_path)
         if not safe_name:
             return ""
-        if allowed_base_dir:
-            safe_path = os.path.abspath(os.path.join(allowed_base_dir, safe_name))
-            if not safe_path.startswith(os.path.abspath(allowed_base_dir)):
-                return ""
-            return safe_path
-        return os.path.abspath(safe_name)
+        # 设置默认安全目录（系统临时目录），避免空目录跳过验证
+        if not allowed_base_dir:
+            allowed_base_dir = tempfile.gettempdir()
+        safe_path = os.path.abspath(os.path.join(allowed_base_dir, safe_name))
+        if not safe_path.startswith(os.path.abspath(allowed_base_dir)):
+            return ""
+        return safe_path
 
     async def _transfer_file(self, command: str, context: Optional[Dict] = None) -> Dict:
         """
@@ -823,7 +824,7 @@ class CrossDeviceCoordinator:
                 return {"success": False, "error": f"没有可用的{target_type}设备"}
 
             # 步骤 1: 从源设备拉取文件到中转目录
-            safe_transfer_name = f"{hashlib.sha256(file_name.encode()).hexdigest()}_{os.path.basename(file_name)}"
+            safe_transfer_name = f"{hashlib.sha256(file_name.encode('utf-8', errors='strict')).hexdigest()}_{os.path.basename(file_name)}"
             transfer_path = os.path.join(transfer_dir, safe_transfer_name)
 
             if source_type == DeviceType.ANDROID:

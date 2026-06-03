@@ -243,9 +243,9 @@ class P2PConnector:
         if public_ip and public_port:
             self.local_device.public_ip = public_ip
             self.local_device.public_port = public_port
-            print(f"公网地址: {public_ip}:{public_port}")
+            logger.info("公网地址: %s:%s", public_ip, public_port)
         else:
-            print("无法获取公网地址，将只支持局域网连接")
+            logger.warning("无法获取公网地址，将只支持局域网连接")
         
         # 启动服务器（监听连接）
         self.server_task = self._spawn_task(self._run_server(), name="p2p_server")
@@ -299,9 +299,9 @@ class P2PConnector:
                     conn.reader = reader
                     conn.writer = writer
                     connected = True
-                    print(f"通过局域网连接到 {peer.device_id}")
+                    logger.info("通过局域网连接到 %s", peer.device_id)
                 except Exception as e:
-                    print(f"局域网连接失败 ({peer.device_id}): {e}")
+                    logger.debug("局域网连接失败 (%s): %s", peer.device_id, e)
             
             # 尝试 2: 公网直连
             if not connected and peer.public_ip:
@@ -313,9 +313,9 @@ class P2PConnector:
                     conn.reader = reader
                     conn.writer = writer
                     connected = True
-                    print(f"通过公网连接到 {peer.device_id}")
+                    logger.info("通过公网连接到 %s", peer.device_id)
                 except Exception as e:
-                    print(f"公网连接失败 ({peer.device_id}): {e}")
+                    logger.debug("公网连接失败 (%s): %s", peer.device_id, e)
             
             if connected:
                 conn.state = ConnectionState.CONNECTED
@@ -332,8 +332,10 @@ class P2PConnector:
                 conn.state = ConnectionState.FAILED
                 return False
         
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
-            print(f"连接失败: {e}")
+            logger.error("连接失败: %s", e)
             conn.state = ConnectionState.FAILED
             return False
     
@@ -363,7 +365,7 @@ class P2PConnector:
             await conn.writer.drain()
             return True
         except Exception as e:
-            print(f"发送失败: {e}")
+            logger.error("发送失败: %s", e)
             await self._close_connection(conn)
             return False
     
@@ -372,16 +374,16 @@ class P2PConnector:
         try:
             server = await asyncio.start_server(
                 self._handle_client,
-                '0.0.0.0',
+                '127.0.0.1',
                 self.local_device.local_port
             )
             
-            print(f"P2P 服务器启动: {self.local_device.local_ip}:{self.local_device.local_port}")
+            logger.info("P2P 服务器启动: %s:%s", self.local_device.local_ip, self.local_device.local_port)
             
             async with server:
                 await server.serve_forever()
         except Exception as e:
-            print(f"服务器错误: {e}")
+            logger.error("服务器错误: %s", e)
     
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         """处理客户端连接"""
@@ -405,13 +407,13 @@ class P2PConnector:
             
             self.connections[peer_info.device_id] = conn
             
-            print(f"接受来自 {peer_info.device_id} 的连接")
+            logger.info("接受来自 %s 的连接", peer_info.device_id)
             
             # 启动接收任务
             await self._receive_loop(conn)
         
         except Exception as e:
-            print(f"处理客户端错误: {e}")
+            logger.error("处理客户端错误: %s", e)
             writer.close()
             await writer.wait_closed()
     
@@ -495,7 +497,7 @@ class P2PConnector:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            print(f"接收错误: {e}")
+            logger.error("接收错误: %s", e)
             await self._close_connection(conn)
     
     async def _handle_data(self, conn: P2PConnection, data: bytes):
@@ -527,7 +529,7 @@ class P2PConnector:
                     
                     # 检查心跳超时
                     if current_time - conn.last_heartbeat > P2PConfig.HEARTBEAT_INTERVAL * 2:
-                        print(f"连接 {device_id} 心跳超时，关闭连接")
+                        logger.warning("连接 %s 心跳超时，关闭连接", device_id)
                         await self._close_connection(conn)
                         continue
                     
@@ -543,7 +545,7 @@ class P2PConnector:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"心跳错误: {e}")
+                logger.error("心跳错误: %s", e)
     
     async def _close_connection(self, conn: P2PConnection):
         """关闭连接"""
@@ -551,6 +553,8 @@ class P2PConnector:
             conn.writer.close()
             await conn.writer.wait_closed()
         
+        conn.reader = None
+        conn.writer = None
         conn.state = ConnectionState.DISCONNECTED
         
         if conn.peer.device_id in self.connections:

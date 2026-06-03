@@ -12,6 +12,7 @@ Version: 1.0
 """
 
 import asyncio
+import atexit
 import logging
 import threading
 import time
@@ -80,6 +81,7 @@ class WakeEventBus:
         # 保护 _executor 创建和 _dedup_buffer 操作的锁
         self._lock = threading.Lock()
 
+        atexit.register(self.shutdown)
         logger.info("WakeEventBus initialized")
 
     def _get_executor(self) -> ThreadPoolExecutor:
