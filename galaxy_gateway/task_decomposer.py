@@ -392,6 +392,60 @@ class IntelligentTaskPlanner:
         except Exception:
             pass
     
+    @staticmethod
+    def _detect_cycle_and_topological_sort(tasks: List[Any]) -> List[Any]:
+        """检测任务依赖中的环并返回拓扑排序结果。
+
+        使用 Kahn 算法进行拓扑排序。如果发现环，抛出 ValueError。
+
+        Args:
+            tasks: 任务列表，每个任务需有 task_id 和 depends_on 属性
+
+        Returns:
+            拓扑排序后的任务列表
+
+        Raises:
+            ValueError: 如果检测到依赖环
+        """
+        # 构建图：task_id -> task 对象，以及邻接表
+        task_map: Dict[str, Any] = {}
+        in_degree: Dict[str, int] = {}
+        adjacency: Dict[str, List[str]] = {}
+
+        for task in tasks:
+            tid = task.task_id
+            task_map[tid] = task
+            in_degree[tid] = 0
+            adjacency[tid] = []
+
+        # 构建邻接表和入度计数
+        for task in tasks:
+            tid = task.task_id
+            for dep in getattr(task, "depends_on", []) or []:
+                if dep in task_map:
+                    adjacency[dep].append(tid)
+                    in_degree[tid] = in_degree.get(tid, 0) + 1
+
+        # Kahn 算法
+        queue = [tid for tid, deg in in_degree.items() if deg == 0]
+        sorted_tasks = []
+
+        while queue:
+            current = queue.pop(0)
+            sorted_tasks.append(task_map[current])
+            for neighbor in adjacency[current]:
+                in_degree[neighbor] -= 1
+                if in_degree[neighbor] == 0:
+                    queue.append(neighbor)
+
+        if len(sorted_tasks) != len(tasks):
+            # 发现环 - 找出环中的任务
+            visited = set(t.task_id for t in sorted_tasks)
+            cycle_tasks = [t.task_id for t in tasks if t.task_id not in visited]
+            raise ValueError(f"任务依赖存在环，涉及任务: {cycle_tasks}")
+
+        return sorted_tasks
+
     async def plan_complex_task(
         self,
         user_input: str,
@@ -482,7 +536,10 @@ class IntelligentTaskPlanner:
                     estimated_duration=task_data.get("estimated_duration", 2.0)
                 )
                 tasks.append(task)
-            
+
+            # 环检测与拓扑排序：LLM 可能生成循环依赖（如 A→B→C→A），必须检测
+            tasks = IntelligentTaskPlanner._detect_cycle_and_topological_sort(tasks)
+
             # 解析数据流
             data_flows = []
             for flow_data in result_data.get("data_flows", []):

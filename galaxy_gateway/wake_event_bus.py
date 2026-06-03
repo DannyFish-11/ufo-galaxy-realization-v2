@@ -150,28 +150,39 @@ class WakeEventBus:
         # 清理过期去重条目，防止无限增长
         self._cleanup_dedup_buffer()
 
-        # 去重检查
+        # 去重检查（受锁保护，防止并发去重失效）
         now_ms = time.time() * 1000
         key = raw_event.wake_word.strip().lower()
 
-        if key in self._dedup_buffer:
-            last_ts_ms, existing_event_id = self._dedup_buffer[key]
-            if now_ms - last_ts_ms < self.DEDUP_WINDOW_MS:
-                logger.debug(
-                    f"[WakeEventBus] 事件去重: wake_word='{raw_event.wake_word}' "
-                    f"from device={raw_event.source_device_id} "
-                    f"elapsed_ms={now_ms - last_ts_ms:.1f}"
-                )
-                return False
+        with self._lock:
+            if key in self._dedup_buffer:
+                last_ts_ms, existing_event_id = self._dedup_buffer[key]
+                if now_ms - last_ts_ms < self.DEDUP_WINDOW_MS:
+                    logger.debug(
+                        f"[WakeEventBus] 事件去重: wake_word='{raw_event.wake_word}' "
+                        f"from device={raw_event.source_device_id} "
+                        f"elapsed_ms={now_ms - last_ts_ms:.1f}"
+                    )
+                    return False
 
-        # 记录去重时间戳
-        event_id = str(uuid.uuid4())[:8]
-        self._dedup_buffer[key] = (now_ms, event_id)
+            # 记录去重时间戳
+            event_id = str(uuid.uuid4())[:8]
+            self._dedup_buffer[key] = (now_ms, event_id)
 
         # 转换为 WakeEvent 并路由
         wake_event = self._to_wake_event(raw_event, event_id)
         await self._dispatch(wake_event)
         return True
+
+    def _run_publish_in_new_loop(self, raw_event: RawWakeEvent):
+        """在新的事件循环中运行 publish（用于线程池提交）。"""
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self.publish(raw_event))
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
 
     def publish_sync(self, raw_event: RawWakeEvent):
         """
@@ -183,11 +194,11 @@ class WakeEventBus:
                 # 事件循环正在运行，使用 create_task 调度
                 loop.create_task(self.publish(raw_event))
             else:
-                # 事件循环存在但未运行，使用线程池提交
-                self._get_executor().submit(asyncio.run, self.publish(raw_event))
+                # 事件循环存在但未运行，使用线程池提交（避免 asyncio.run 在有循环的线程中崩溃）
+                self._get_executor().submit(self._run_publish_in_new_loop, raw_event)
         except RuntimeError:
-            # 没有 event loop，在线程池中运行
-            self._get_executor().submit(asyncio.run, self.publish(raw_event))
+            # 没有 event loop，在线程池中运行（使用新事件_loop避免冲突）
+            self._get_executor().submit(self._run_publish_in_new_loop, raw_event)
 
     # ------------------------------------------------------------------
     # 从 WebSocket 消息解析并发布

@@ -18,6 +18,7 @@ import os
 import sys
 import time
 import importlib
+import importlib.util
 import logging
 import asyncio
 from typing import Dict, Any, Optional
@@ -39,6 +40,24 @@ class ExecuteRequest(BaseModel):
     command: str
     params: Dict[str, Any] = {}
 
+def _load_module_from_file(module_name: str, file_path: str):
+    """使用 importlib.util 从文件路径安全加载模块。
+
+    避免 sys.path.append 污染模块搜索路径，防止模块劫持攻击。
+    """
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load module from {file_path}")
+    module = importlib.util.module_from_spec(spec)
+    # 验证模块文件路径在预期的安全目录内
+    expected_dir = os.path.dirname(os.path.dirname(file_path))
+    module_file = getattr(spec, 'origin', file_path)
+    if not os.path.abspath(module_file).startswith(os.path.abspath(expected_dir)):
+        raise ImportError(f"Module file {module_file} is outside expected directory {expected_dir}")
+    spec.loader.exec_module(module)
+    return module
+
+
 def load_nodes():
     """动态扫描并加载 nodes/ 目录下的所有标准化节点"""
     nodes_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "nodes")
@@ -46,39 +65,39 @@ def load_nodes():
         logger.error(f"❌ Nodes directory not found: {nodes_dir}")
         return
 
-    if nodes_dir not in sys.path:
-        sys.path.append(nodes_dir)
-    
     # 扫描 Node_XX 格式的目录
     for item in os.listdir(nodes_dir):
         if item.startswith("Node_") and os.path.isdir(os.path.join(nodes_dir, item)):
             node_id = "_".join(item.split('_')[:2])
             try:
                 # 优先加载标准化入口 fusion_entry.py
-                module_path = f"{item}.fusion_entry"
-                try:
-                    module = importlib.import_module(module_path)
+                fusion_entry_path = os.path.join(nodes_dir, item, "fusion_entry.py")
+                if os.path.exists(fusion_entry_path):
+                    module = _load_module_from_file(f"{item}.fusion_entry", fusion_entry_path)
                     if hasattr(module, "get_node_instance"):
                         node_instances[node_id] = module.get_node_instance()
                         logger.info(f"✅ Loaded standardized node: {node_id}")
                         continue
-                except ImportError:
+                else:
                     logger.debug(f"ℹ️  No fusion_entry found for {node_id}, trying legacy load...")
 
                 # 备选：尝试直接加载 main.py (旧逻辑)
-                module_path = f"{item}.main"
-                module = importlib.import_module(module_path)
-                instance = None
-                if hasattr(module, "get_instance"):
-                    instance = module.get_instance()
-                elif hasattr(module, "Node"):
-                    instance = module.Node()
-                
-                if instance:
-                    node_instances[node_id] = instance
-                    logger.info(f"✅ Loaded legacy node: {node_id}")
+                main_path = os.path.join(nodes_dir, item, "main.py")
+                if os.path.exists(main_path):
+                    module = _load_module_from_file(f"{item}.main", main_path)
+                    instance = None
+                    if hasattr(module, "get_instance"):
+                        instance = module.get_instance()
+                    elif hasattr(module, "Node"):
+                        instance = module.Node()
+
+                    if instance:
+                        node_instances[node_id] = instance
+                        logger.info(f"✅ Loaded legacy node: {node_id}")
+                    else:
+                        logger.warning(f"⚠️  Node {node_id} has no valid entry point")
                 else:
-                    logger.warning(f"⚠️  Node {node_id} has no valid entry point")
+                    logger.warning(f"⚠️  Node {node_id} has no fusion_entry.py or main.py")
             except Exception as e:
                 logger.error(f"❌ Failed to load node {node_id}: {e}")
 

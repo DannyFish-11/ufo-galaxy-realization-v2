@@ -26,6 +26,9 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
+# 最大消息长度限制（10MB），防止恶意 peer 发送超大消息导致 OOM
+MAX_MESSAGE_SIZE = 10 * 1024 * 1024
+
 # ============================================================================
 # 配置
 # ============================================================================
@@ -418,7 +421,12 @@ class P2PConnector:
             # 读取长度
             length_data = await asyncio.wait_for(reader.readexactly(4), timeout=5)
             length = struct.unpack('!I', length_data)[0]
-            
+
+            # 检查消息长度上限，防止 OOM
+            if length > MAX_MESSAGE_SIZE:
+                logger.warning(f"Handshake message too large: {length} bytes, closing connection")
+                return None
+
             # 读取数据
             data = await asyncio.wait_for(reader.readexactly(length), timeout=5)
             handshake = json.loads(data.decode('utf-8'))
@@ -444,16 +452,22 @@ class P2PConnector:
                 # 读取数据长度
                 length_data = await conn.reader.readexactly(4)
                 length = struct.unpack('!I', length_data)[0]
-                
+
+                # 检查消息长度上限，防止 OOM
+                if length > MAX_MESSAGE_SIZE:
+                    logger.warning(f"Message too large: {length} bytes from {conn.peer.device_id}, closing connection")
+                    await self._close_connection(conn)
+                    return
+
                 # 读取数据
                 data = await conn.reader.readexactly(length)
-                
+
                 # 处理数据
                 await self._handle_data(conn, data)
-                
+
                 # 更新心跳时间
                 conn.last_heartbeat = time.time()
-        
+
         except asyncio.CancelledError:
             pass
         except Exception as e:

@@ -42,14 +42,20 @@ Version: 1.0
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Dict, List, Optional, Any, Callable
 
 logger = logging.getLogger("UFO-Galaxy.SessionRoaming")
+
+# 持久化存储目录（JSON 文件）
+PERSISTENCE_DIR = Path(os.path.expanduser("~")) / ".galaxy" / "session_roaming"
+PERSISTENCE_FILE = PERSISTENCE_DIR / "sessions.json"
 
 
 # =============================================================================
@@ -202,7 +208,51 @@ class SessionRoamingManager:
         # 注意力焦点变化回调（device_id -> session_id 迁移）
         self._on_migrated: Optional[Callable[[str, str, str], Any]] = None
 
+        # 从磁盘加载持久化会话
+        self._load_sessions_from_disk()
+
         logger.info("SessionRoamingManager initialized")
+
+    def _load_sessions_from_disk(self):
+        """从磁盘 JSON 文件加载会话数据。"""
+        try:
+            if PERSISTENCE_FILE.exists():
+                data = json.loads(PERSISTENCE_FILE.read_text(encoding="utf-8"))
+                for sid, sdict in data.get("sessions", {}).items():
+                    try:
+                        session = Session(
+                            session_id=sdict["session_id"],
+                            device_id=sdict["device_id"],
+                            state=SessionState(sdict["state"]),
+                            context=SessionContext.from_dict(sdict["context"]),
+                            created_at=sdict.get("created_at", time.time()),
+                            last_active=sdict.get("last_active", time.time()),
+                        )
+                        self._sessions[sid] = session
+                    except Exception as e:
+                        logger.warning(f"[SessionRoaming] 跳过低效会话: {e}")
+                self._device_session_map = data.get("device_session_map", {})
+                logger.info(f"[SessionRoaming] 从磁盘加载 {len(self._sessions)} 个会话")
+        except Exception as e:
+            logger.warning(f"[SessionRoaming] 从磁盘加载会话失败: {e}")
+
+    def _save_sessions_to_disk(self):
+        """将会话数据持久化到磁盘 JSON 文件。"""
+        try:
+            PERSISTENCE_DIR.mkdir(parents=True, exist_ok=True)
+            data = {
+                "sessions": {
+                    sid: s.to_dict() for sid, s in self._sessions.items()
+                },
+                "device_session_map": dict(self._device_session_map),
+                "saved_at": datetime.now().isoformat(),
+            }
+            # 先写入临时文件，再原子重命名，防止写断
+            tmp_file = PERSISTENCE_FILE.with_suffix(".tmp")
+            tmp_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp_file.replace(PERSISTENCE_FILE)
+        except Exception as e:
+            logger.warning(f"[SessionRoaming] 持久化到磁盘失败: {e}")
 
     # ------------------------------------------------------------------
     # 会话生命周期
@@ -237,6 +287,7 @@ class SessionRoamingManager:
         )
         self._sessions[session_id] = session
         self._device_session_map[device_id] = session_id
+        self._save_sessions_to_disk()
         logger.info(f"[SessionRoaming] 会话创建: session_id={session_id} device={device_id}")
         return session
 
@@ -259,6 +310,7 @@ class SessionRoamingManager:
             return
         session.context.history.append(ConversationTurn(role=role, content=content))
         session.last_active = time.time()
+        self._save_sessions_to_disk()
 
     def update_task_state(self, session_id: str, task_state: Dict):
         """更新会话的任务状态"""
@@ -267,6 +319,7 @@ class SessionRoamingManager:
             return
         session.context.task_state.update(task_state)
         session.last_active = time.time()
+        self._save_sessions_to_disk()
 
     def close_session(self, session_id: str):
         """关闭会话"""
@@ -277,6 +330,7 @@ class SessionRoamingManager:
         # 移除设备映射
         if self._device_session_map.get(session.device_id) == session_id:
             del self._device_session_map[session.device_id]
+        self._save_sessions_to_disk()
         logger.info(f"[SessionRoaming] 会话关闭: session_id={session_id}")
 
     # ------------------------------------------------------------------
@@ -317,30 +371,38 @@ class SessionRoamingManager:
 
         session.state = SessionState.MIGRATING
 
+        # 保存原始状态用于回滚
+        original_device_id = session.device_id
+
         try:
             # 步骤 1：序列化上下文
             context_snapshot = session.context.to_dict()
 
-            # 步骤 2：持久化快照到 cross_device_coordinator
+            # 步骤 2：持久化快照到磁盘
             self._persist_snapshot(session_id, context_snapshot)
 
-            # 步骤 3：推送到目标设备
+            # 步骤 3：推送到目标设备（必须成功，否则回滚）
             push_ok = await self._push_context_to_device(
                 target_device_id, session_id, context_snapshot
             )
             if not push_ok:
-                logger.warning(
-                    f"[SessionRoaming] 推送上下文失败，但继续迁移: "
+                # 推送失败：回滚所有状态变更
+                logger.error(
+                    f"[SessionRoaming] 推送上下文失败，迁移回滚: "
                     f"session_id={session_id} target={target_device_id}"
                 )
+                session.device_id = original_device_id
+                session.state = SessionState.ACTIVE
+                return False
 
-            # 步骤 4：更新状态
+            # 步骤 4：推送成功，提交状态变更（两阶段提交）
             if self._device_session_map.get(old_device_id) == session_id:
                 del self._device_session_map[old_device_id]
             session.device_id = target_device_id
             self._device_session_map[target_device_id] = session_id
             session.state = SessionState.ACTIVE
             session.last_active = time.time()
+            self._save_sessions_to_disk()
 
             logger.info(
                 f"[SessionRoaming] 迁移成功: session_id={session_id} "
@@ -360,7 +422,10 @@ class SessionRoamingManager:
 
         except Exception as e:
             logger.error(f"[SessionRoaming] 迁移异常: {e}")
-            session.state = SessionState.ACTIVE  # 回滚状态
+            # 异常回滚：恢复原始设备 ID 和状态
+            session.device_id = original_device_id
+            session.state = SessionState.ACTIVE
+            self._save_sessions_to_disk()
             return False
 
     async def auto_migrate_on_attention_shift(
@@ -408,25 +473,25 @@ class SessionRoamingManager:
     # ------------------------------------------------------------------
 
     def _persist_snapshot(self, session_id: str, snapshot: Dict):
-        """将会话快照存储到 cross_device_coordinator 共享数据"""
+        """将会话快照持久化到磁盘（替代纯内存存储，防止进程重启丢数据）。"""
         try:
-            from galaxy_gateway.cross_device_coordinator import CrossDeviceCoordinator
-            if not hasattr(SessionRoamingManager, "_coordinator"):
-                SessionRoamingManager._coordinator = CrossDeviceCoordinator()
-            key = f"{self.SNAPSHOT_KEY_PREFIX}{session_id}"
-            SessionRoamingManager._coordinator.set_shared_data(key, snapshot)
-            logger.debug(f"[SessionRoaming] 快照持久化: key={key}")
+            PERSISTENCE_DIR.mkdir(parents=True, exist_ok=True)
+            snapshot_file = PERSISTENCE_DIR / f"snapshot_{session_id}.json"
+            # 先写临时文件再原子重命名，防止写断
+            tmp_file = snapshot_file.with_suffix(".tmp")
+            tmp_file.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp_file.replace(snapshot_file)
+            logger.debug(f"[SessionRoaming] 快照持久化到磁盘: {snapshot_file}")
         except Exception as e:
             logger.warning(f"[SessionRoaming] 快照持久化失败: {e}")
 
     def load_snapshot(self, session_id: str) -> Optional[Dict]:
-        """从共享数据加载会话快照"""
+        """从磁盘加载会话快照。"""
         try:
-            coordinator = getattr(SessionRoamingManager, "_coordinator", None)
-            if coordinator is None:
-                return None
-            key = f"{self.SNAPSHOT_KEY_PREFIX}{session_id}"
-            return coordinator.get_shared_data(key)
+            snapshot_file = PERSISTENCE_DIR / f"snapshot_{session_id}.json"
+            if snapshot_file.exists():
+                return json.loads(snapshot_file.read_text(encoding="utf-8"))
+            return None
         except Exception as e:
             logger.warning(f"[SessionRoaming] 加载快照失败: {e}")
             return None

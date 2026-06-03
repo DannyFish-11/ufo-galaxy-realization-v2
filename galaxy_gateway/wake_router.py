@@ -33,6 +33,7 @@ WAKE_ROUTER_TASK_GRAPH_REGISTERED: str = (
 
 import asyncio
 import logging
+import threading
 import time
 import uuid as _uuid_mod
 from dataclasses import dataclass, field
@@ -125,6 +126,8 @@ class WakeRouter:
         # 路由历史记录
         self._route_history: List[RouteDecision] = []
         self._max_history: int = 200
+        # 线程锁保护共享状态
+        self._lock = threading.Lock()
 
         logger.info("WakeRouter initialized")
 
@@ -151,19 +154,20 @@ class WakeRouter:
         Returns:
             路由决策结果，若去重后被丢弃则返回 None
         """
-        # 去重检查
-        if self._is_duplicate(wake_event):
-            logger.info(
-                f"[WakeRouter] 唤醒事件去重: wake_word='{wake_event.wake_word}' "
-                f"from device={wake_event.source_device_id}"
-            )
-            return None
+        # 去重检查（受锁保护）
+        with self._lock:
+            if self._is_duplicate(wake_event):
+                logger.info(
+                    f"[WakeRouter] 唤醒事件去重: wake_word='{wake_event.wake_word}' "
+                    f"from device={wake_event.source_device_id}"
+                )
+                return None
 
-        # 记录本次唤醒词时间戳，防止后续重复
-        self._recent_wake_events[wake_event.wake_word] = (
-            wake_event.timestamp,
-            wake_event.event_id,
-        )
+            # 记录本次唤醒词时间戳，防止后续重复
+            self._recent_wake_events[wake_event.wake_word] = (
+                wake_event.timestamp,
+                wake_event.event_id,
+            )
 
         # 获取在线设备列表
         devices = self._get_online_devices()
@@ -266,10 +270,11 @@ class WakeRouter:
             wake_event=wake_event,
         )
 
-        # 记录路由历史
-        self._route_history.append(decision)
-        if len(self._route_history) > self._max_history:
-            self._route_history = self._route_history[-self._max_history:]
+        # 记录路由历史（受锁保护）
+        with self._lock:
+            self._route_history.append(decision)
+            if len(self._route_history) > self._max_history:
+                self._route_history = self._route_history[-self._max_history:]
 
         logger.info(
             "[WakeRouter] 路由决策: device=%s score=%.2f reason='%s' canonical_scoring=%s",
@@ -314,11 +319,13 @@ class WakeRouter:
 
     def get_route_history(self, limit: int = 50) -> List[Dict]:
         """获取路由历史记录"""
-        return [d.to_dict() for d in self._route_history[-limit:]]
+        with self._lock:
+            return [d.to_dict() for d in self._route_history[-limit:]]
 
     def clear_dedup_cache(self):
         """清除去重缓存（用于测试或手动重置）"""
-        self._recent_wake_events.clear()
+        with self._lock:
+            self._recent_wake_events.clear()
 
     # ------------------------------------------------------------------
     # 内部方法：去重

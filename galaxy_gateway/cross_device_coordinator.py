@@ -141,6 +141,7 @@ import os
 import shutil
 import hashlib
 import tempfile
+import unicodedata
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from galaxy_gateway.device_router import device_router
@@ -751,12 +752,15 @@ class CrossDeviceCoordinator:
     def _sanitize_path(self, file_path: str, allowed_base_dir: str = "") -> str:
         """验证并清理文件路径，防止路径遍历攻击。
 
-        1. 提取 basename 去除目录跳跃
-        2. 拼接绝对路径
-        3. 验证路径在允许目录下
+        1. Unicode 规范化（NFC）防御同形异义攻击
+        2. 提取 basename 去除目录跳跃
+        3. 拼接绝对路径
+        4. 验证路径在允许目录下
         """
         if not file_path:
             return ""
+        # Unicode 规范化，防止 NFC/NFD 不同编码绕过验证
+        file_path = unicodedata.normalize('NFC', file_path)
         # 提取文件名，丢弃任何路径遍历尝试
         safe_name = os.path.basename(file_path)
         if not safe_name:
@@ -865,9 +869,10 @@ class CrossDeviceCoordinator:
             elif target_type == DeviceType.WINDOWS:
                 # 本地文件复制（安全验证目标路径）
                 raw_target = context.get("target_path", os.path.join(os.path.expanduser("~"), "Downloads", file_name))
-                target_path = self._sanitize_path(raw_target, os.path.dirname(raw_target) if raw_target else "")
+                # 使用 transfer_dir 作为 allowed_base_dir，防止写入任意目录
+                target_path = self._sanitize_path(raw_target, transfer_dir)
                 if not target_path:
-                    target_path = os.path.join(os.path.expanduser("~"), "Downloads", os.path.basename(file_name))
+                    return {"success": False, "error": "目标路径包含非法字符或路径遍历攻击"}
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 shutil.copy2(transfer_path, target_path)
                 push_result = {"success": True}
