@@ -51,6 +51,9 @@ class PeerEntry:
     local_port: int = 0
     public_ip: str = ""
     public_port: int = 0
+    # PR-28: Tailscale support
+    tailscale_ip: str = ""           # Tailscale 100.x.x.x IP
+    tailscale_reachable: bool = False  # Can reach via Tailscale P2P
     reachable_direct: bool = False
     connection_type: ConnectionType = ConnectionType.UNKNOWN
     latency_ms: float = -1          # -1 = 未探测
@@ -66,6 +69,8 @@ class PeerEntry:
             "local_port": self.local_port,
             "public_ip": self.public_ip,
             "public_port": self.public_port,
+            "tailscale_ip": self.tailscale_ip,
+            "tailscale_reachable": self.tailscale_reachable,
             "reachable_direct": self.reachable_direct,
             "connection_type": self.connection_type.value,
             "latency_ms": self.latency_ms,
@@ -163,6 +168,7 @@ class MeshCoordinator:
         local_port: int = 0,
         public_ip: str = "",
         public_port: int = 0,
+        tailscale_ip: str = "",
         metadata: Dict = None,
     ) -> PeerEntry:
         """注册或更新一个 peer"""
@@ -176,6 +182,9 @@ class MeshCoordinator:
                 peer.public_ip = public_ip
             if public_port:
                 peer.public_port = public_port
+            if tailscale_ip:
+                peer.tailscale_ip = tailscale_ip
+                peer.tailscale_reachable = True
             peer.last_seen = time.time()
             if metadata:
                 peer.metadata.update(metadata)
@@ -186,10 +195,15 @@ class MeshCoordinator:
                 local_port=local_port,
                 public_ip=public_ip,
                 public_port=public_port,
+                tailscale_ip=tailscale_ip,
+                tailscale_reachable=bool(tailscale_ip),
                 metadata=metadata or {},
             )
             self._peers[device_id] = peer
-            logger.info(f"Peer registered: {device_id} ({local_ip}:{local_port})")
+            logger.info(
+                f"Peer registered: {device_id} (lan={local_ip}:{local_port}, "
+                f"ts={tailscale_ip or 'none'})"
+            )
         return peer
 
     def unregister_peer(self, device_id: str):
@@ -245,17 +259,35 @@ class MeshCoordinator:
     # ================================================================
 
     async def probe_peer(self, device_id: str) -> bool:
-        """探测单个 peer 的 TCP 可达性"""
+        """探测单个 peer 的 TCP 可达性。
+
+        PR-28: 优先探测 Tailscale IP（100.x.x.x），失败再回退到 local_ip。
+        """
         peer = self._peers.get(device_id)
-        if not peer or not peer.local_ip:
+        if not peer:
             return False
 
-        port = peer.local_port or 19720
-        start = time.time()
+        # PR-28: Try Tailscale IP first (usually faster and more reliable)
+        if peer.tailscale_ip:
+            ok = await self._probe_host(device_id, peer, peer.tailscale_ip, 19721)
+            if ok:
+                peer.tailscale_reachable = True
+                peer.connection_type = ConnectionType.DIRECT
+                return True
+            peer.tailscale_reachable = False
 
+        # Fallback to local IP
+        if peer.local_ip:
+            return await self._probe_host(device_id, peer, peer.local_ip, peer.local_port or 19720)
+
+        return False
+
+    async def _probe_host(self, device_id: str, peer: PeerEntry, host: str, port: int) -> bool:
+        """Probe TCP connectivity to a specific host:port."""
+        start = time.time()
         try:
             _, writer = await asyncio.wait_for(
-                asyncio.open_connection(peer.local_ip, port),
+                asyncio.open_connection(host, port),
                 timeout=self.PROBE_TIMEOUT,
             )
             writer.close()
@@ -264,11 +296,10 @@ class MeshCoordinator:
             latency = (time.time() - start) * 1000
             peer.reachable_direct = True
             peer.latency_ms = latency
-            peer.connection_type = ConnectionType.DIRECT
             peer.probe_failures = 0
             peer.last_probe = time.time()
             self._stats["probe_success"] += 1
-            logger.debug(f"Probe OK: {device_id} ({latency:.1f}ms)")
+            logger.debug("Probe OK: %s via %s:%d (%.1fms)", device_id, host, port, latency)
             return True
         except (asyncio.TimeoutError, OSError, ConnectionRefusedError):
             peer.probe_failures += 1
@@ -313,6 +344,7 @@ class MeshCoordinator:
                 "local_port": peer.local_port,
                 "public_ip": peer.public_ip,
                 "public_port": peer.public_port,
+                "tailscale_ip": peer.tailscale_ip,
             })
         return peers
 
@@ -343,6 +375,7 @@ class MeshCoordinator:
             local_port=data.get("local_port", 0),
             public_ip=data.get("public_ip", ""),
             public_port=data.get("public_port", 0),
+            tailscale_ip=data.get("tailscale_ip", ""),
             metadata=data.get("metadata", {}),
         )
 

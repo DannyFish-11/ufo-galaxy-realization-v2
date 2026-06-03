@@ -373,6 +373,18 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
 
         aip_transport = get_aip_transport()
         aip_transport.register_adapter(WebSocketAdapter(websocket_manager))
+        # PR-28: Tailscale P2P — register before others so it gets priority
+        try:
+            from core.adapters.tailscale_p2p_adapter import TailscaleP2PAdapter
+            ts_adapter = TailscaleP2PAdapter()
+            if asyncio.get_event_loop().run_until_complete(ts_adapter.initialize()):
+                aip_transport.register_adapter(ts_adapter)
+                logger.info("PR-28: TailscaleP2PAdapter registered and active")
+            else:
+                logger.debug("PR-28: Tailscale not available, P2P adapter skipped")
+        except Exception as exc:
+            logger.debug("PR-28: TailscaleP2PAdapter registration skipped: %s", exc)
+
         aip_transport.register_adapter(MQTTAdapter())
         aip_transport.register_adapter(TCPAdapter())
         aip_transport.register_adapter(UDPAdapter())

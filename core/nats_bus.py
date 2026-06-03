@@ -274,9 +274,14 @@ class NATSBus:
             "reconnects": 0,
         }
 
-        # 不再接受no-op — 如果没有URL，准备启动内置服务器
+        # PR-28: Auto-detect Tailscale IP for cross-device NATS connectivity
         if not self._url:
-            if _HAS_NATS:
+            ts_url = self._detect_tailscale_nats_url()
+            if ts_url:
+                self._url = ts_url
+                self._auto_local = True
+                logger.info("NATSBus: auto-configured Tailscale URL: %s", ts_url)
+            elif _HAS_NATS:
                 self._url = "nats://localhost:4222"
                 self._auto_local = True
             else:
@@ -284,6 +289,35 @@ class NATSBus:
                     "NATSBus: nats-py not installed. "
                     "Install: pip install nats-py[nats]"
                 )
+
+    # PR-28: Tailscale auto-detection for cross-device NATS
+    @staticmethod
+    def _detect_tailscale_nats_url() -> str:
+        """Detect if Tailscale is available and return NATS URL using Tailscale IP.
+
+        Returns nats://<tailscale-ip>:4222 if Tailscale is running,
+        empty string otherwise.
+        """
+        import shutil
+        import subprocess
+
+        if not shutil.which("tailscale"):
+            return ""
+
+        try:
+            result = subprocess.run(
+                ["tailscale", "status", "--json"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                import json
+                status = json.loads(result.stdout)
+                ts_ips = status.get("Self", {}).get("TailscaleIPs", [])
+                if ts_ips:
+                    return f"nats://{ts_ips[0]}:4222"
+        except Exception:
+            pass
+        return ""
 
     @classmethod
     def get_instance(cls) -> NATSBus:

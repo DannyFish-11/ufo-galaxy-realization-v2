@@ -12,7 +12,8 @@ core/aip_transport.py — AIP v3 统一传输层
 - transport 字段在发送时由 AIPTransport 自动注入
 
 支持的传输适配器:
-- websocket: WebSocket 点对点（主路径）
+- tailscale_p2p: Tailscale WireGuard P2P（同 tailnet 设备优先，~5ms）
+- websocket: WebSocket 点对点（全局兜底路径）
 - mqtt: MQTT 发布/订阅
 - tcp: TCP 直连（P2P）
 - udp: UDP 报文
@@ -80,7 +81,16 @@ class AIPTransport:
         self._adapters: Dict[str, TransportAdapter] = {}
         self._default_transport: str = "websocket"
         # 传输优先级（用于自动选择）
-        self._transport_priority = ["websocket", "mqtt", "tcp", "udp", "ble", "serial"]
+        # PR-28: tailscale_p2p 排在首位 — 同 tailnet 设备直接走 WireGuard
+        self._transport_priority = [
+            "tailscale_p2p",   # Tailscale WireGuard P2P（最低延迟）
+            "tcp",              # LAN TCP 直连
+            "websocket",        # WebSocket 兜底
+            "mqtt",             # MQTT 广播/订阅
+            "udp",              # UDP 报文
+            "ble",              # 蓝牙 LE
+            "serial",           # 串口
+        ]
 
     # -- 注册管理 ----------------------------------------------------------
 
@@ -200,7 +210,22 @@ class AIPTransport:
         2. 优先使用 caller 指定的传输
         3. 如果不可用，按优先级 fallback
         4. 如果都不通，返回默认传输适配器
+
+        PR-28: 当 TailscaleP2PAdapter 注册且目标在同 tailnet 时，
+        自动提升 tailscale_p2p 为首选，绕过 WebSocket 网关。
         """
+        # PR-28: Tailscale 拓扑感知 — 同 tailnet 优先 P2P
+        ts_adapter = self._adapters.get("tailscale_p2p")
+        if ts_adapter is not None and await ts_adapter.is_available(target):
+            # Target is on same tailnet — use P2P even if caller didn't ask
+            if preferred not in ("tailscale_p2p", "auto"):
+                logger.debug(
+                    "Tailscale P2P available for '%s', overriding preferred '%s'",
+                    target, preferred,
+                )
+            logger.debug("Auto-selected 'tailscale_p2p' for target '%s' (same tailnet)", target)
+            return ts_adapter
+
         # 1. "auto" 模式：按优先级探测第一个可用的
         if preferred == "auto":
             for ttype in self._transport_priority:

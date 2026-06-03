@@ -565,22 +565,21 @@ class TaskOrchestrator:
             callback=self._on_task_result
         )
         
-        # PR-AIP-UNIFIED: Route through AIPTransport
+        # PR-28: Route through AIPTransport with auto transport selection.
+        # AIPTransport will automatically prefer tailscale_p2p for same-tailnet
+        # devices, fallback to tcp/websocket as needed.
         try:
             from core.aip_transport import get_aip_transport
             result = await get_aip_transport().send(
                 message,
                 task.assigned_device,
-                transport="websocket",
+                transport="auto",
             )
             success = result.get("success", False)
-        except Exception:
-            # Fallback: direct WS send
-            success = await self.websocket_manager.send_message(
-                task.assigned_device,
-                message,
-            )
-        
+        except Exception as exc:
+            logger.warning("AIPTransport send failed for %s: %s", task.assigned_device, exc)
+            success = False
+
         if not success:
             raise Exception(f"Failed to send task to device {task.assigned_device}")
     
@@ -644,7 +643,7 @@ class TaskOrchestrator:
         task.status = TaskStatus.CANCELLED
         task.completed_at = datetime.now(timezone.utc)
         
-        # 发送取消消息到设备 — PR-AIP-UNIFIED: 走 AIPTransport
+        # PR-28: 统一走 AIPTransport，自动选择最优传输
         if task.assigned_device:
             cancel_message = {
                 "type": "task_cancel",
@@ -659,17 +658,8 @@ class TaskOrchestrator:
                     cancel_message,
                     task.assigned_device,
                 )
-            except Exception:
-                # Fallback: direct WS
-                aip_msg = AIPMessage(
-                    type=MessageType.TASK_CANCEL,
-                    device_id=task.assigned_device,
-                    task_id=task_id
-                )
-                await self.websocket_manager.send_message(
-                    task.assigned_device,
-                    aip_msg
-                )
+            except Exception as exc:
+                logger.warning("AIPTransport cancel send failed for %s: %s", task.assigned_device, exc)
         
         logger.info(f"Task cancelled: {task_id}")
         return True
