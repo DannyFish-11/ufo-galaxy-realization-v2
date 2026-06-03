@@ -17,7 +17,7 @@ Usage:
 
 import logging
 import socket
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 

@@ -314,21 +314,44 @@ connection_manager = GatewayWSManager()
 async def handle_websocket(websocket: WebSocket, connection_id: str):
     """处理 WebSocket 连接"""
     await connection_manager.connect(websocket, connection_id)
-    
+
+    # B4 fix: 最大连续错误计数和重试限制，防止无限循环
+    _MAX_CONSECUTIVE_ERRORS = 10
+    _RECEIVE_TIMEOUT = 60.0  # 60秒接收超时
+    consecutive_errors = 0
+
     try:
-        while True:
-            # 接收消息
-            data = await websocket.receive_text()
-            message = json.loads(data)
-            
-            # 处理消息
-            await handle_message(connection_id, message, websocket)
-            
+        while consecutive_errors < _MAX_CONSECUTIVE_ERRORS:
+            try:
+                # 接收消息（带超时）
+                data = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=_RECEIVE_TIMEOUT
+                )
+                message = json.loads(data)
+
+                # 处理消息
+                await handle_message(connection_id, message, websocket)
+                # 成功处理，重置错误计数
+                consecutive_errors = 0
+
+            except asyncio.TimeoutError:
+                consecutive_errors += 1
+                logger.warning(
+                    "⏱️ WebSocket 接收超时 (%s/%s): %s",
+                    consecutive_errors, _MAX_CONSECUTIVE_ERRORS, connection_id
+                )
+                # 发送心跳保持连接
+                try:
+                    await websocket.send_json({"type": "ping", "timestamp": datetime.now(timezone.utc).isoformat()})
+                except Exception:
+                    break
+
     except WebSocketDisconnect:
         logger.info("📡 WebSocket 连接断开: %s", connection_id)
-        await connection_manager.disconnect(connection_id)
     except Exception as e:
         logger.error("❌ WebSocket 处理异常: %s", e)
+    finally:
         await connection_manager.disconnect(connection_id)
 
 
@@ -498,7 +521,9 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
             )
 
             if success:
-                connection_manager.device_connections[device_id] = connection_id
+                # B4 fixed: lock-protected shared dict mutation
+                async with connection_manager._lock:
+                    connection_manager.device_connections[device_id] = connection_id
 
                 # ── Presence backbone: register with UCM (reconnect-safe) ──
                 try:

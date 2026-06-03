@@ -748,6 +748,26 @@ class CrossDeviceCoordinator:
             logger.error(f"❌ 剪贴板同步失败: {e}")
             return {"success": False, "error": str(e)}
 
+    def _sanitize_path(self, file_path: str, allowed_base_dir: str = "") -> str:
+        """验证并清理文件路径，防止路径遍历攻击。
+
+        1. 提取 basename 去除目录跳跃
+        2. 拼接绝对路径
+        3. 验证路径在允许目录下
+        """
+        if not file_path:
+            return ""
+        # 提取文件名，丢弃任何路径遍历尝试
+        safe_name = os.path.basename(file_path)
+        if not safe_name:
+            return ""
+        if allowed_base_dir:
+            safe_path = os.path.abspath(os.path.join(allowed_base_dir, safe_name))
+            if not safe_path.startswith(os.path.abspath(allowed_base_dir)):
+                return ""
+            return safe_path
+        return os.path.abspath(safe_name)
+
     async def _transfer_file(self, command: str, context: Dict = None) -> Dict:
         """
         跨设备文件传输 - 通过中转目录实现
@@ -767,9 +787,16 @@ class CrossDeviceCoordinator:
             transfer_dir = os.path.join(tempfile.gettempdir(), "galaxy_transfers")
             os.makedirs(transfer_dir, exist_ok=True)
 
-            # 从上下文获取文件路径
-            file_path = context.get("file_path", "")
-            file_name = context.get("file_name", os.path.basename(file_path) if file_path else "")
+            # 从上下文获取文件路径（安全验证）
+            raw_file_path = context.get("file_path", "")
+            file_name = context.get("file_name", os.path.basename(raw_file_path) if raw_file_path else "")
+            # 安全验证：防止路径遍历
+            file_path = self._sanitize_path(raw_file_path, transfer_dir) if raw_file_path else ""
+            if not file_path and raw_file_path:
+                return {"success": False, "error": "文件路径包含非法字符或路径遍历攻击"}
+            # 如果 file_path 为空但 file_name 有效，使用 transfer_dir 作为基准
+            if not file_path and file_name:
+                file_path = os.path.join(transfer_dir, file_name)
 
             # 获取源设备和目标设备
             # PR-6: resolve devices from canonical projections; router used for dispatch only
@@ -792,7 +819,8 @@ class CrossDeviceCoordinator:
                 return {"success": False, "error": f"没有可用的{target_type}设备"}
 
             # 步骤 1: 从源设备拉取文件到中转目录
-            transfer_path = os.path.join(transfer_dir, f"{hashlib.md5(file_name.encode()).hexdigest()}_{file_name}")
+            safe_transfer_name = f"{hashlib.md5(file_name.encode()).hexdigest()}_{os.path.basename(file_name)}"
+            transfer_path = os.path.join(transfer_dir, safe_transfer_name)
 
             if source_type == DeviceType.ANDROID:
                 # ADB pull 从安卓设备拉取
@@ -800,18 +828,19 @@ class CrossDeviceCoordinator:
                     "task_type": "system_control",
                     "action": "shell",
                     "target": "",
-                    "params": {"command": f"pull {file_path} {transfer_path}"},
+                    "params": {"command": f"pull {raw_file_path} {transfer_path}"},
                 }
                 pull_result = await device_router.dispatch_task(
                     {"task_id": "file_pull", "payload": pull_task}, source_device
                 )
             elif source_type == DeviceType.WINDOWS:
-                # 本地文件复制
-                if os.path.exists(file_path):
-                    shutil.copy2(file_path, transfer_path)
+                # 本地文件复制（使用安全验证后的路径）
+                safe_source = self._sanitize_path(raw_file_path)
+                if safe_source and os.path.exists(safe_source):
+                    shutil.copy2(safe_source, transfer_path)
                     pull_result = {"success": True}
                 else:
-                    pull_result = {"success": False, "error": f"文件不存在: {file_path}"}
+                    pull_result = {"success": False, "error": f"文件不存在或路径不安全: {raw_file_path}"}
             else:
                 pull_result = {"success": False, "error": f"不支持的源设备类型: {source_type}"}
 
@@ -822,7 +851,8 @@ class CrossDeviceCoordinator:
             # 步骤 2: 将文件推送到目标设备
             if target_type == DeviceType.ANDROID:
                 # ADB push 推送到安卓设备
-                target_path = context.get("target_path", f"/sdcard/Download/{file_name}")
+                raw_target = context.get("target_path", f"/sdcard/Download/{file_name}")
+                target_path = raw_target
                 push_task = {
                     "task_type": "system_control",
                     "action": "shell",
@@ -833,8 +863,11 @@ class CrossDeviceCoordinator:
                     {"task_id": "file_push", "payload": push_task}, target_device
                 )
             elif target_type == DeviceType.WINDOWS:
-                # 本地文件复制
-                target_path = context.get("target_path", os.path.join(os.path.expanduser("~"), "Downloads", file_name))
+                # 本地文件复制（安全验证目标路径）
+                raw_target = context.get("target_path", os.path.join(os.path.expanduser("~"), "Downloads", file_name))
+                target_path = self._sanitize_path(raw_target, os.path.dirname(raw_target) if raw_target else "")
+                if not target_path:
+                    target_path = os.path.join(os.path.expanduser("~"), "Downloads", os.path.basename(file_name))
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 shutil.copy2(transfer_path, target_path)
                 push_result = {"success": True}

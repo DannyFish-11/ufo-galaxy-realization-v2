@@ -114,77 +114,91 @@ class STUNClient:
     XOR_MAPPED_ADDRESS = 0x0020
     
     @staticmethod
-    async def get_public_address(
+    def _blocking_stun_request(
         local_port: int,
-        stun_server: Tuple[str, int] = None
+        stun_server: Tuple[str, int]
     ) -> Tuple[Optional[str], Optional[int]]:
-        """
-        获取公网地址
-        
-        Args:
-            local_port: 本地端口
-            stun_server: STUN 服务器（可选）
-        
-        Returns:
-            (public_ip, public_port) 或 (None, None)
-        """
-        if not stun_server:
-            stun_server = P2PConfig.STUN_SERVERS[0]
-        
+        """阻塞式 STUN 请求（在线程池中运行以避免阻塞事件循环）。"""
+        sock = None
         try:
             # 创建 UDP socket
             sock = sock_module.socket(sock_module.AF_INET, sock_module.SOCK_DGRAM)
             sock.bind(('0.0.0.0', local_port))
             sock.settimeout(5)
-            
+
             # 构建 STUN Binding Request
-            transaction_id = os.urandom(12)  # 随机生成事务 ID
+            transaction_id = os.urandom(12)
             message = struct.pack('!HHI', STUNClient.BINDING_REQUEST, 0, 0x2112A442) + transaction_id
-            
+
             # 发送请求
             sock.sendto(message, stun_server)
-            
+
             # 接收响应
             data, addr = sock.recvfrom(1024)
-            
+
             # 解析响应
             if len(data) < 20:
                 return None, None
-            
+
             msg_type, msg_len, magic_cookie = struct.unpack('!HHI', data[:8])
-            
+
             if msg_type != STUNClient.BINDING_RESPONSE:
                 return None, None
-            
+
             # 解析属性
             offset = 20
             while offset < len(data):
                 if offset + 4 > len(data):
                     break
-                
+
                 attr_type, attr_len = struct.unpack('!HH', data[offset:offset+4])
                 offset += 4
-                
+
                 if attr_type == STUNClient.XOR_MAPPED_ADDRESS:
                     # XOR-MAPPED-ADDRESS
                     if attr_len >= 8:
                         family, port, ip_bytes = struct.unpack('!BBH4s', data[offset:offset+8])
-                        
+
                         # XOR 解码
                         port ^= (magic_cookie >> 16)
                         ip = '.'.join(str(b ^ ((magic_cookie >> (24 - i*8)) & 0xFF)) for i, b in enumerate(ip_bytes))
-                        
-                        sock.close()
+
                         return ip, port
-                
+
                 offset += attr_len
-            
-            sock.close()
+
             return None, None
-        
         except Exception as e:
-            print(f"STUN 错误: {e}")
+            logger.warning("STUN 错误: %s", e)
             return None, None
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+
+    @staticmethod
+    async def get_public_address(
+        local_port: int,
+        stun_server: Tuple[str, int] = None
+    ) -> Tuple[Optional[str], Optional[int]]:
+        """
+        获取公网地址（使用 asyncio.to_thread 包装阻塞操作）
+
+        Args:
+            local_port: 本地端口
+            stun_server: STUN 服务器（可选）
+
+        Returns:
+            (public_ip, public_port) 或 (None, None)
+        """
+        if not stun_server:
+            stun_server = P2PConfig.STUN_SERVERS[0]
+
+        return await asyncio.to_thread(
+            STUNClient._blocking_stun_request, local_port, stun_server
+        )
 
 # ============================================================================
 # P2P 连接器

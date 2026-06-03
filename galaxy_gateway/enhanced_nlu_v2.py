@@ -838,10 +838,19 @@ class EnhancedNLUEngineV2:
         # 调用 LLM
         try:
             response = await self.llm_client.generate(user_prompt, system_prompt)
-            
-            # 解析 JSON 响应
+
+            # 解析 JSON 响应（处理嵌套 JSON：外层可能有 "text" 字段包含真正的任务 JSON）
             result_data = json.loads(response)
-            
+
+            # 如果 result_data 有 "text" 字段且内容是 JSON 字符串，解析内层 JSON
+            if "text" in result_data and isinstance(result_data["text"], str):
+                try:
+                    inner_data = json.loads(result_data["text"])
+                    if isinstance(inner_data, dict) and ("tasks" in inner_data or "success" in inner_data):
+                        result_data = inner_data
+                except (json.JSONDecodeError, TypeError):
+                    pass  # "text" 不是有效的 JSON，保留原始 result_data
+
             # 构建 Task 对象
             tasks = []
             for task_data in result_data.get("tasks", []):
@@ -857,7 +866,7 @@ class EnhancedNLUEngineV2:
                     estimated_duration=task_data.get("estimated_duration", 2.0)
                 )
                 tasks.append(task)
-            
+
             return NLUResult(
                 success=result_data.get("success", True),
                 tasks=tasks,

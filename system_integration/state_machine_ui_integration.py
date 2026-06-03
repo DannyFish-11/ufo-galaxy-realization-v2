@@ -244,7 +244,7 @@ class SystemStateMachine:
                     },
                 )
         except Exception:
-            pass
+            self._logger.exception("SHELL_* 事件发布失败（非阻塞）")
 
         self._logger.info(f"状态转换: {old_state.value} -> {new_state.value} "
                          f"(触发: {trigger_type.value})")

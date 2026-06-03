@@ -448,6 +448,8 @@ class AndroidBridge:
                                 results[did] = True
                             except Exception:
                                 results[did] = False
+                    except Exception:
+                        results[did] = False
 
         return results
 
@@ -1178,6 +1180,9 @@ class AndroidBridge:
                             gate_decision.reason,
                             gate_decision.observed_schema_version,
                         )
+                        # 标记消息为降级状态，让 handler 知晓并进行兼容性处理
+                        message["_schema_degraded"] = True
+                        message["_schema_degrade_reason"] = gate_decision.reason
             except Exception as gate_exc:
                 logger.warning(
                     "android_bridge: schema/version gate evaluation failed (non-fatal): "
@@ -1675,6 +1680,11 @@ class AndroidBridge:
                     "aip_version": "3.0",
                     "_transport": "auto",
                     "payload": {
+                        "from_phase": "unknown",
+                        "to_phase": current_phase,
+                        "source": "desktop_presence_runtime",
+                        "sync_type": "cross_device_reconnect_sync",
+                    },
                 }
                 try:
                     asyncio.create_task(get_aip_transport().send(_phase_msg, device_id))

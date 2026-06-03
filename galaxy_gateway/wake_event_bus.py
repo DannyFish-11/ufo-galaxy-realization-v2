@@ -15,6 +15,7 @@ import asyncio
 import logging
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Callable, Any
@@ -59,6 +60,10 @@ class WakeEventBus:
     DEDUP_WINDOW_MS: float = 500.0
     # 最大事件日志条数
     MAX_LOG_SIZE: int = 1000
+    # 去重缓冲区最大条目数（防止无限增长）
+    MAX_DEDUP_BUFFER_SIZE: int = 500
+    # 去重缓冲区条目过期时间（毫秒）
+    DEDUP_EXPIRY_MS: float = 30000.0  # 30秒
 
     def __init__(self):
         # 去重缓冲区：wake_word -> (first_timestamp_ms, event_id)
@@ -69,8 +74,26 @@ class WakeEventBus:
         self._dispatched_log: List[Dict] = []
         # 额外的订阅者回调（除 WakeRouter 外）
         self._subscribers: List[Callable[[Any], Any]] = []
+        # 线程池用于同步发布
+        self._executor: Optional[ThreadPoolExecutor] = None
 
         logger.info("WakeEventBus initialized")
+
+    def _cleanup_dedup_buffer(self):
+        """定期清理过期的去重缓冲区条目，防止无限增长。"""
+        now_ms = time.time() * 1000
+        expired_keys = [
+            key for key, (ts_ms, _) in self._dedup_buffer.items()
+            if now_ms - ts_ms > self.DEDUP_EXPIRY_MS
+        ]
+        for key in expired_keys:
+            del self._dedup_buffer[key]
+        # 如果缓冲区仍超出最大限制，移除最旧的条目
+        if len(self._dedup_buffer) > self.MAX_DEDUP_BUFFER_SIZE:
+            sorted_items = sorted(self._dedup_buffer.items(), key=lambda x: x[1][0])
+            to_remove = len(self._dedup_buffer) - self.MAX_DEDUP_BUFFER_SIZE
+            for key, _ in sorted_items[:to_remove]:
+                del self._dedup_buffer[key]
 
     # ------------------------------------------------------------------
     # 事件提交接口
@@ -92,6 +115,9 @@ class WakeEventBus:
         """
         # 记录原始事件
         self._log_raw(raw_event)
+
+        # 清理过期去重条目，防止无限增长
+        self._cleanup_dedup_buffer()
 
         # 去重检查
         now_ms = time.time() * 1000
@@ -118,17 +144,23 @@ class WakeEventBus:
 
     def publish_sync(self, raw_event: RawWakeEvent):
         """
-        同步接口（兼容非异步调用方），内部使用 asyncio.create_task 异步处理
+        同步接口（兼容非异步调用方），使用线程池或 asyncio.create_task 调度
         """
         try:
             loop = asyncio.get_running_loop()
             if loop.is_running():
+                # 事件循环正在运行，使用 create_task 调度
                 loop.create_task(self.publish(raw_event))
             else:
-                loop.run_until_complete(self.publish(raw_event))
+                # 事件循环存在但未运行，使用线程池提交
+                if self._executor is None:
+                    self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="wake_event_bus")
+                self._executor.submit(asyncio.run, self.publish(raw_event))
         except RuntimeError:
-            # 没有 event loop，直接在新的 loop 中运行
-            asyncio.run(self.publish(raw_event))
+            # 没有 event loop，在线程池中运行
+            if self._executor is None:
+                self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="wake_event_bus")
+            self._executor.submit(asyncio.run, self.publish(raw_event))
 
     # ------------------------------------------------------------------
     # 从 WebSocket 消息解析并发布

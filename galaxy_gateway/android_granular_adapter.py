@@ -13,6 +13,9 @@ pre-v3 message directly raises :class:`AIPAdapterVersionError`.
 """
 import logging
 import base64
+import os
+import shlex
+import tempfile
 from typing import Dict, Any, Optional, List
 from .protocol.aip_v3 import AIPMessage, MessageType
 
@@ -179,9 +182,9 @@ class AndroidGranularAdapter:
     async def _handle_type(self, device_id: str, params: Dict) -> Dict:
         """处理文本输入"""
         text = params.get("text", "")
-        # 转义特殊字符
-        escaped = text.replace(" ", "%s").replace("&", "\\&").replace("<", "\\<").replace(">", "\\>").replace("'", "\\'").replace('"', '\\"')
-        await self.adb.shell(f"input text '{escaped}'", device_id)
+        # 使用 shlex.quote 安全转义用户输入
+        escaped = shlex.quote(text)
+        await self.adb.shell(f"input text {escaped}", device_id)
         return {"status": "success", "action": "type", "text_length": len(text)}
 
     async def _handle_keyevent(self, device_id: str, params: Dict) -> Dict:
@@ -205,23 +208,39 @@ class AndroidGranularAdapter:
     async def _handle_screenshot(self, device_id: str, params: Dict) -> Dict:
         """处理截图操作"""
         result = await self.adb.shell("screencap -p /sdcard/screenshot.png", device_id)
-        # 拉取截图文件
-        pull_result = await self.adb.pull("/sdcard/screenshot.png", "/tmp/screenshot.png", device_id)
-        # 读取并转为base64
+        # 使用安全的临时文件
+        fd, tmp_path = tempfile.mkstemp(prefix="screenshot_", suffix=".png")
+        os.close(fd)
         try:
-            with open("/tmp/screenshot.png", "rb") as f:
+            # 拉取截图文件
+            pull_result = await self.adb.pull("/sdcard/screenshot.png", tmp_path, device_id)
+            # 读取并转为base64
+            with open(tmp_path, "rb") as f:
                 image_data = base64.b64encode(f.read()).decode("utf-8")
             return {"status": "success", "action": "screenshot", "image_base64": image_data}
         except FileNotFoundError:
             return {"status": "success", "action": "screenshot", "note": "screenshot saved on device"}
+        finally:
+            # 清理临时文件
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
     async def _handle_shell(self, device_id: str, params: Dict) -> Dict:
         """处理Shell命令"""
         command = params.get("command", "")
-        # 安全检查 - 禁止危险命令
-        dangerous = ["rm -rf /", "dd if=/dev/zero", "mkfs", "format"]
-        if any(d in command.lower() for d in dangerous):
-            return {"status": "error", "action": "shell", "error": "Dangerous command blocked"}
+        # 安全检查 - 只允许白名单中的命令前缀
+        ALLOWED_PREFIXES = ("pm ", "am ", "dumpsys ", "input ", "getprop ", "wm ", "monkey ",
+                           "screencap", "screenrecord", "logcat", "ps", "ls", "cat ",
+                           "echo", "grep", "pgrep", "pidof", "uiautomator ", "settings ")
+        command_stripped = command.strip().lower()
+        if not any(command_stripped.startswith(p) for p in ALLOWED_PREFIXES):
+            return {"status": "error", "action": "shell", "error": f"Command not in allowlist: {command.split()[0] if command else 'empty'}"}
+        # 额外安全检查 - 禁止危险命令模式
+        dangerous_patterns = [";", "&&", "||", "|", "$(", "`", ">", "<", "rm -rf", "dd if=/dev/zero", "mkfs", "format", "shred", "mkfs."]
+        if any(p in command for p in dangerous_patterns):
+            return {"status": "error", "action": "shell", "error": "Dangerous command pattern blocked"}
         result = await self.adb.shell(command, device_id)
         return {"status": "success", "action": "shell", "output": str(result)}
 

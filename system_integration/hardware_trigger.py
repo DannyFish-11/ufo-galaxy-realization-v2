@@ -62,8 +62,7 @@ from enum import Enum, auto
 from collections import deque
 import importlib.util
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# 使用模块级 logger，不设置 basicConfig（避免污染全局日志配置）
 logger = logging.getLogger(__name__)
 
 # =============================================================================
@@ -652,12 +651,12 @@ class AndroidHardwareKeyListener:
             if action == self._KeyEvent.ACTION_DOWN:
                 if key_code not in self._key_states:
                     self._key_states[key_code] = {
-                        "press_time": eventTime,
+                        "press_time": event_time,
                         "long_press_triggered": False
                     }
                 
                 # Check for long press
-                press_duration = (eventTime - self._key_states[key_code]["press_time"]) / 1000.0
+                press_duration = (event_time - self._key_states[key_code]["press_time"]) / 1000.0
                 
                 if press_duration >= self.config.long_press_duration:
                     if not self._key_states[key_code]["long_press_triggered"]:
@@ -667,7 +666,7 @@ class AndroidHardwareKeyListener:
             # Key released
             elif action == self._KeyEvent.ACTION_UP:
                 if key_code in self._key_states:
-                    press_duration = (eventTime - self._key_states[key_code]["press_time"]) / 1000.0
+                    press_duration = (event_time - self._key_states[key_code]["press_time"]) / 1000.0
                     
                     if press_duration < self.config.long_press_duration:
                         self._handle_short_press(key_code)
