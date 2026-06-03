@@ -1,5 +1,7 @@
 """
-core/adapters/ — AIP v3 传输适配器集合
+core/adapters/ — AIP v3 传输适配器集合（物理传输层）
+
+注意: NATS 不在这里，NATS 是任务分发层，和 AIP Transport 并列。
 
 Migrated from nodes/:
 - Node_41_MQTT → MQTTAdapter
@@ -8,14 +10,12 @@ Migrated from nodes/:
 """
 
 from core.adapters.websocket_adapter import WebSocketAdapter
-from core.adapters.nats_adapter import NATSAdapter
 from core.adapters.mqtt_adapter import MQTTAdapter
 from core.adapters.ble_adapter import BLEAdapter
 from core.adapters.serial_adapter import SerialAdapter
 
 __all__ = [
     "WebSocketAdapter",
-    "NATSAdapter",
     "MQTTAdapter",
     "BLEAdapter",
     "SerialAdapter",
