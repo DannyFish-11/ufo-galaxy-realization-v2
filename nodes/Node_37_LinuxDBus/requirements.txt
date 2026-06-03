@@ -1,7 +1,0 @@
-fastapi>=0.109.0
-uvicorn>=0.27.0
-pydantic>=2.5.3
-dbus-python>=1.3.2
-
-# Device-specific dependencies (auto-detected)
-dbus-python>=1.3.2

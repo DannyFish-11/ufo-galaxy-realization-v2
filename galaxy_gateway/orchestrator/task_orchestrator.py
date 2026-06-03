@@ -565,10 +565,21 @@ class TaskOrchestrator:
             callback=self._on_task_result
         )
         
-        success = await self.websocket_manager.send_message(
-            task.assigned_device,
-            message
-        )
+        # PR-AIP-UNIFIED: Route through AIPTransport
+        try:
+            from core.aip_transport import get_aip_transport
+            result = await get_aip_transport().send(
+                message,
+                task.assigned_device,
+                transport="websocket",
+            )
+            success = result.get("success", False)
+        except Exception:
+            # Fallback: direct WS send
+            success = await self.websocket_manager.send_message(
+                task.assigned_device,
+                message,
+            )
         
         if not success:
             raise Exception(f"Failed to send task to device {task.assigned_device}")

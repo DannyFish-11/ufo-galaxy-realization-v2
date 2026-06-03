@@ -40,7 +40,17 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     async def on_message(device_id: str, message: AIPMessage):
         response = await message_handler.handle_message(device_id, message)
         if response:
-            await websocket_manager.send_message(device_id, response)
+            # PR-AIP-UNIFIED: Send via AIPTransport
+            try:
+                from core.aip_transport import get_aip_transport
+                await get_aip_transport().send(
+                    response.model_dump(mode="json") if hasattr(response, 'model_dump') else response,
+                    device_id,
+                    transport="websocket",
+                )
+            except Exception:
+                # Fallback: direct WS
+                await websocket_manager.send_message(device_id, response)
 
     async def on_connect(device_id: str):
         logger.info("Device connected: %s", device_id)
@@ -357,6 +367,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         from core.adapters import (
             WebSocketAdapter,
             MQTTAdapter, BLEAdapter, SerialAdapter,
+            DBusAdapter, CANBusAdapter,
         )
 
         aip_transport = get_aip_transport()
@@ -364,6 +375,8 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         aip_transport.register_adapter(MQTTAdapter())
         aip_transport.register_adapter(BLEAdapter())
         aip_transport.register_adapter(SerialAdapter())
+        aip_transport.register_adapter(DBusAdapter())
+        aip_transport.register_adapter(CANBusAdapter())
 
         app.state.aip_transport = aip_transport
         logger.info(
