@@ -208,20 +208,18 @@ class AIPTransport:
         PR-28: 当 TailscaleP2PAdapter 注册且目标在同 tailnet 时，
         自动提升 tailscale_p2p 为首选，绕过 WebSocket 网关。
         """
-        # PR-28: Tailscale 拓扑感知 — 同 tailnet 优先 P2P
-        ts_adapter = self._adapters.get("tailscale_p2p")
-        if ts_adapter is not None and await ts_adapter.is_available(target):
-            # Target is on same tailnet — use P2P even if caller didn't ask
-            if preferred not in ("tailscale_p2p", "auto"):
-                logger.debug(
-                    "Tailscale P2P available for '%s', overriding preferred '%s'",
-                    target, preferred,
-                )
-            logger.debug("Auto-selected 'tailscale_p2p' for target '%s' (same tailnet)", target)
-            return ts_adapter
-
-        # 1. "auto" 模式：按优先级探测第一个可用的
+        # PR-28: "auto" 模式 — 用 NetworkTopologyRuntime 评估最佳路径
         if preferred == "auto":
+            recommended_transport = await self._assess_via_topology(target)
+            if recommended_transport and recommended_transport != "auto":
+                adapter = self._adapters.get(recommended_transport)
+                if adapter and await adapter.is_available(target):
+                    logger.debug(
+                        "Auto-selected '%s' for target '%s' (via topology)",
+                        recommended_transport, target,
+                    )
+                    return adapter
+            # Topology 无法推荐或推荐的不通 — 按优先级逐个探测
             for ttype in self._transport_priority:
                 adapter = self._adapters.get(ttype)
                 if adapter and await adapter.is_available(target):
@@ -233,27 +231,49 @@ class AIPTransport:
                 return default
             return None
 
-        # 2. 尝试首选
+        # PR-28: 指定模式下也做拓扑检查 — 同 tailnet 强制走 P2P
+        if preferred not in ("tailscale_p2p",):
+            ts_adapter = self._adapters.get("tailscale_p2p")
+            if ts_adapter is not None and await ts_adapter.is_available(target):
+                logger.debug(
+                    "Tailscale P2P available for '%s', overriding preferred '%s'",
+                    target, preferred,
+                )
+                return ts_adapter
+
+        # 尝试首选
         adapter = self._adapters.get(preferred)
         if adapter and await adapter.is_available(target):
             return adapter
 
-        # 3. 按优先级 fallback
+        # 按优先级 fallback
         for ttype in self._transport_priority:
             if ttype == preferred:
-                continue  # 已试过
+                continue
             adapter = self._adapters.get(ttype)
             if adapter and await adapter.is_available(target):
                 logger.debug("Fallback: '%s' → '%s' for target '%s'", preferred, ttype, target)
                 return adapter
 
-        # 4. 最后尝试默认（不检查 is_available，尽最大努力）
+        # 最后尝试默认
         default = self._adapters.get(self._default_transport)
         if default:
             logger.debug("Force default '%s' for target '%s'", self._default_transport, target)
             return default
 
         return None
+
+    async def _assess_via_topology(self, target: str) -> str:
+        """Use NetworkTopologyRuntime to assess best path. Returns transport type."""
+        try:
+            from core.network_topology_runtime import get_network_topology_runtime
+            topo = get_network_topology_runtime()
+            # Need a source device ID — use my position
+            source = topo._my_device_id or "server"
+            assessment = topo.assess_path(source, target)
+            return assessment.recommended_transport
+        except Exception:
+            return "auto"
 
     # -- PR-28: Fallback chain -----------------------------------------------
 
