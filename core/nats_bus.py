@@ -423,17 +423,28 @@ class NATSBus:
     async def publish_aip_v3(self, subject: str, aip_message: "AIPMessage") -> dict:
         """Publish a canonical AIP v3 message to NATS.
 
-        This is the PRIMARY publish method. All other publish_* methods delegate
-        here after converting their input to AIPMessage subclasses.
+        PR-AIP-UNIFIED: All publishes go through AIPTransport.
+        NATSAdapter handles the actual NATS JetStream publish.
 
         Args:
             subject: NATS subject (e.g. "galaxy.tasks.dispatch.worker_01")
-            aip_message: An AIPMessage subclass instance (TaskAssignMsg, HeartbeatMsg, etc.)
+            aip_message: An AIPMessage subclass instance
 
         Returns:
             {"success": bool, "seq": int} or {"success": False, "error": str}
         """
         data = aip_message.model_dump(mode="json", exclude_none=True)
+        data["transport"] = "nats"  # Mark as NATS transport
+
+        # Route through AIPTransport (unified entry)
+        try:
+            from core.aip_transport import get_aip_transport
+            result = await get_aip_transport().send(data, subject, transport="nats")
+            if result.get("success"):
+                return {"success": True, "seq": result.get("seq", 0)}
+        except Exception:
+            pass  # Fallback to direct publish
+
         return await self._publish(subject, data)
 
     # ── Device lifecycle ──

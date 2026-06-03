@@ -1633,7 +1633,7 @@ class DeviceRouter:
                 "via": "device_router",
             }
 
-        # PR-4: delegate AIP message construction and send/wait to routing.dispatch.
+        # PR-AIP-UNIFIED: Route through AIPTransport (WebSocket adapter)
         message = _routing_build_aip_message(
             device_id=device_id,
             task_id=_task_id,
@@ -1641,14 +1641,21 @@ class DeviceRouter:
             command=command,
             payload=payload,
         )
-        return await _routing_dispatch_to_websocket(
-            device=device,
-            message=message,
-            task_id=_task_id,
-            task_events=self._task_events,
-            task_results=self.task_results,
-            timeout=timeout,
-        )
+        message["transport"] = "websocket"  # Mark as WS transport
+
+        try:
+            from core.aip_transport import get_aip_transport
+            return await get_aip_transport().send(message, device_id)
+        except Exception:
+            # Fallback: direct websocket dispatch
+            return await _routing_dispatch_to_websocket(
+                device=device,
+                message=message,
+                task_id=_task_id,
+                task_events=self._task_events,
+                task_results=self.task_results,
+                timeout=timeout,
+            )
 
     async def _dispatch_cross_device_task(
         self,

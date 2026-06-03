@@ -347,6 +347,25 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
             "\U0001f513 TLS: DISABLED (set GALAXY_TLS_CERT + GALAXY_TLS_KEY to enable)"
         )
 
+    # ── Phase 8: AIPTransport adapter registration ──
+    # PR-AIP-UNIFIED: Register all transport adapters for unified sending.
+    try:
+        from core.aip_transport import get_aip_transport, AIPTransport
+        from core.adapters.websocket_adapter import WebSocketAdapter
+        from core.adapters.nats_adapter import NATSAdapter
+
+        aip_transport = get_aip_transport()
+        aip_transport.register_adapter(WebSocketAdapter(websocket_manager))
+        aip_transport.register_adapter(NATSAdapter())
+
+        app.state.aip_transport = aip_transport
+        logger.info(
+            "AIPTransport adapters registered: %s",
+            aip_transport.list_adapters(),
+        )
+    except Exception as _aip_err:
+        logger.warning("AIPTransport adapter registration failed (non-fatal): %s", _aip_err)
+
     # ── Update module-level globals in app.py for backward compatibility ──
     # (legacy imports: ``from galaxy_gateway.app import websocket_manager``)
     try:
@@ -359,6 +378,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         _gw_app.llm_router_instance = app.state.llm_router_instance
         _gw_app.nats_adapter = app.state.nats_adapter
         _gw_app.heartbeat_scheduler = app.state.heartbeat_scheduler
+        _gw_app.aip_transport = getattr(app.state, "aip_transport", None)
     except Exception as _bc_err:
         logger.debug("Module-level backward-compat globals update failed: %s", _bc_err)
 

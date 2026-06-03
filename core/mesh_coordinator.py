@@ -317,18 +317,19 @@ class MeshCoordinator:
         return peers
 
     async def broadcast_peer_exchange(self):
-        """向所有在线设备广播 peer 列表"""
-        if not self._ws_send:
-            return
+        """向所有在线设备广播 peer 列表（通过 AIPTransport）。"""
+        from core.aip_transport import get_aip_transport
 
+        aip_transport = get_aip_transport()
         for device_id in list(self._peers.keys()):
             peer_list = self.build_peer_exchange(exclude_device=device_id)
             if peer_list:
-                await self._ws_send(device_id, {
+                await aip_transport.send({
                     "type": "peer_exchange",
+                    "transport": "websocket",
                     "peers": peer_list,
                     "timestamp": time.time(),
-                })
+                }, device_id)
 
     def handle_peer_announce(self, device_id: str, data: Dict) -> PeerEntry:
         """
