@@ -302,7 +302,7 @@ class CrossDeviceCoordinator:
     async def execute_cross_device_task(
         self,
         command: str,
-        context: Dict = None,
+        context: Optional[Dict] = None,
         *,
         _substrate_caller: str = "",
     ) -> Dict:
@@ -678,7 +678,7 @@ class CrossDeviceCoordinator:
         else:
             return "generic"
 
-    async def _sync_clipboard(self, command: str, context: Dict = None) -> Dict:
+    async def _sync_clipboard(self, command: str, context: Optional[Dict] = None) -> Dict:
         """
         同步剪贴板
 
@@ -768,7 +768,7 @@ class CrossDeviceCoordinator:
             return safe_path
         return os.path.abspath(safe_name)
 
-    async def _transfer_file(self, command: str, context: Dict = None) -> Dict:
+    async def _transfer_file(self, command: str, context: Optional[Dict] = None) -> Dict:
         """
         跨设备文件传输 - 通过中转目录实现
 
@@ -909,7 +909,7 @@ class CrossDeviceCoordinator:
             logger.error(f"❌ 文件传输失败: {e}")
             return {"success": False, "error": str(e)}
 
-    async def _sync_media_control(self, command: str, context: Dict = None) -> Dict:
+    async def _sync_media_control(self, command: str, context: Optional[Dict] = None) -> Dict:
         """
         同步媒体控制
 
@@ -951,7 +951,7 @@ class CrossDeviceCoordinator:
             logger.error(f"❌ 媒体控制同步失败: {e}")
             return {"success": False, "error": str(e)}
 
-    async def _sync_notification(self, command: str, context: Dict = None) -> Dict:
+    async def _sync_notification(self, command: str, context: Optional[Dict] = None) -> Dict:
         """
         同步通知
 
@@ -995,7 +995,7 @@ class CrossDeviceCoordinator:
             logger.error(f"❌ 通知同步失败: {e}")
             return {"success": False, "error": str(e)}
 
-    async def _execute_generic_cross_device_task(self, command: str, context: Dict = None) -> Dict:
+    async def _execute_generic_cross_device_task(self, command: str, context: Optional[Dict] = None) -> Dict:
         """执行通用跨设备任务"""
         try:
             logger.info("🔄 执行通用跨设备任务")
@@ -1076,4 +1076,4 @@ class CrossDeviceCoordinator:
 
 
 # 全局跨设备协调器实例
-cross_device_coordinator = CrossDeviceCoordinator()
+cross_device_coordinator = CrossDeviceCoor

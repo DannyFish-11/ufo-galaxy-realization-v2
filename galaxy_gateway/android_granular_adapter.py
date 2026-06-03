@@ -361,7 +361,9 @@ class AndroidGranularAdapter:
         """设置剪贴板"""
         content = params.get("content", "")
         # Android 10+ 可用 service call clipboard
-        await self.adb.shell(f"am broadcast -a clipper.set -e text '{content}'", device_id)
+        # 使用 shlex.quote 安全转义用户输入，防止命令注入
+        escaped = shlex.quote(content)
+        await self.adb.shell(f"am broadcast -a clipper.set -e text {escaped}", device_id)
         return {"status": "success", "action": "set_clipboard", "content_length": len(content)}
 
     async def _handle_get_clipboard(self, device_id: str, params: Dict) -> Dict:

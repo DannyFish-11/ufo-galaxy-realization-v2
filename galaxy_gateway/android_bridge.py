@@ -343,6 +343,16 @@ class AndroidBridge:
         self._message_handlers: Dict[MessageType, Callable] = {}
         self._lock = asyncio.Lock()
 
+        # LIQUID-ISLAND: 当前对话设备追踪属性
+        self._active_conversation_device: Optional[str] = None
+        self._active_conversation_at: float = 0.0
+        self._ACTIVE_CONVERSATION_TTL: float = 300.0  # 5分钟无活动则过期
+
+        # 注册默认消息处理器
+        self._register_default_handlers()
+
+        logger.info("AndroidBridge initialized")
+
     # =========================================================================
     # LIQUID-ISLAND: 当前对话设备追踪 + 灵动岛消息路由
     # =========================================================================
@@ -472,15 +482,6 @@ class AndroidBridge:
             session_id=getattr(self, "_session_id", ""),
             source=source,
         )
-        # 用户当前在哪个设备上对话，消息就优先投送到该设备
-        self._active_conversation_device: Optional[str] = None
-        self._active_conversation_at: float = 0.0
-        self._ACTIVE_CONVERSATION_TTL: float = 300.0  # 5分钟无活动则过期
-
-        # 注册默认处理器
-        self._register_default_handlers()
-
-        logger.info("AndroidBridge initialized")
 
     # =========================================================================
     # UDM canonical write/patch helpers (PR-2)

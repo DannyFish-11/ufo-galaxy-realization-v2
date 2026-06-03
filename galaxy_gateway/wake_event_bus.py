@@ -13,6 +13,7 @@ Version: 1.0
 
 import asyncio
 import logging
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -74,26 +75,56 @@ class WakeEventBus:
         self._dispatched_log: List[Dict] = []
         # 额外的订阅者回调（除 WakeRouter 外）
         self._subscribers: List[Callable[[Any], Any]] = []
-        # 线程池用于同步发布
+        # 线程池用于同步发布（单例模式，延迟创建）
         self._executor: Optional[ThreadPoolExecutor] = None
+        # 保护 _executor 创建和 _dedup_buffer 操作的锁
+        self._lock = threading.Lock()
 
         logger.info("WakeEventBus initialized")
 
+    def _get_executor(self) -> ThreadPoolExecutor:
+        """线程安全地获取或创建 ThreadPoolExecutor（单例模式）。"""
+        if self._executor is None:
+            with self._lock:
+                # 双重检查，防止并发创建
+                if self._executor is None:
+                    self._executor = ThreadPoolExecutor(
+                        max_workers=2, thread_name_prefix="wake_event_bus"
+                    )
+        return self._executor
+
+    def shutdown(self):
+        """关闭 ThreadPoolExecutor，释放线程资源。"""
+        with self._lock:
+            if self._executor is not None:
+                self._executor.shutdown(wait=True)
+                self._executor = None
+                logger.info("WakeEventBus ThreadPoolExecutor shut down")
+
+    def __del__(self):
+        """析构时确保关闭 executor。"""
+        try:
+            self.shutdown()
+        except Exception:
+            pass
+
     def _cleanup_dedup_buffer(self):
         """定期清理过期的去重缓冲区条目，防止无限增长。"""
-        now_ms = time.time() * 1000
-        expired_keys = [
-            key for key, (ts_ms, _) in self._dedup_buffer.items()
-            if now_ms - ts_ms > self.DEDUP_EXPIRY_MS
-        ]
-        for key in expired_keys:
-            del self._dedup_buffer[key]
-        # 如果缓冲区仍超出最大限制，移除最旧的条目
-        if len(self._dedup_buffer) > self.MAX_DEDUP_BUFFER_SIZE:
-            sorted_items = sorted(self._dedup_buffer.items(), key=lambda x: x[1][0])
-            to_remove = len(self._dedup_buffer) - self.MAX_DEDUP_BUFFER_SIZE
-            for key, _ in sorted_items[:to_remove]:
+        with self._lock:
+            now_ms = time.time() * 1000
+            # 使用 list() 复制后再遍历，避免在迭代时修改字典
+            expired_keys = [
+                key for key, (ts_ms, _) in list(self._dedup_buffer.items())
+                if now_ms - ts_ms > self.DEDUP_EXPIRY_MS
+            ]
+            for key in expired_keys:
                 del self._dedup_buffer[key]
+            # 如果缓冲区仍超出最大限制，移除最旧的条目
+            if len(self._dedup_buffer) > self.MAX_DEDUP_BUFFER_SIZE:
+                sorted_items = sorted(self._dedup_buffer.items(), key=lambda x: x[1][0])
+                to_remove = len(self._dedup_buffer) - self.MAX_DEDUP_BUFFER_SIZE
+                for key, _ in sorted_items[:to_remove]:
+                    del self._dedup_buffer[key]
 
     # ------------------------------------------------------------------
     # 事件提交接口
@@ -153,14 +184,10 @@ class WakeEventBus:
                 loop.create_task(self.publish(raw_event))
             else:
                 # 事件循环存在但未运行，使用线程池提交
-                if self._executor is None:
-                    self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="wake_event_bus")
-                self._executor.submit(asyncio.run, self.publish(raw_event))
+                self._get_executor().submit(asyncio.run, self.publish(raw_event))
         except RuntimeError:
             # 没有 event loop，在线程池中运行
-            if self._executor is None:
-                self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="wake_event_bus")
-            self._executor.submit(asyncio.run, self.publish(raw_event))
+            self._get_executor().submit(asyncio.run, self.publish(raw_event))
 
     # ------------------------------------------------------------------
     # 从 WebSocket 消息解析并发布
