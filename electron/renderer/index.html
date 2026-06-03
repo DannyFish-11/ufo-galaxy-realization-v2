@@ -57,10 +57,11 @@
 
     <!-- ============================================
          脚本加载
+         
+         Three.js 通过 electron/preload.js 本地加载
+         （contextBridge.exposeInMainWorld('THREE', THREE)）
+         无需 CDN，支持离线使用
          ============================================ -->
-    <!-- Three.js — Silent态WebGL Shader所需 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
     <!-- 三态模块 -->
     <script src="silent-state.js"></script>
     <script src="liminal-state.js"></script>

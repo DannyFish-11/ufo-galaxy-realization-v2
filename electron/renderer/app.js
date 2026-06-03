@@ -36,7 +36,9 @@ class ThreeStateManager {
 
         // WebSocket
         this.ws = null;
-        this.wsReconnectInterval = 3000;
+        this.wsReconnectBaseInterval = 1000;   // 初始重连间隔 1秒
+        this.wsReconnectMaxInterval = 30000;   // 最大重连间隔 30秒
+        this.wsReconnectAttempts = 0;          // 重连次数（指数退避）
         this.wsReconnectTimer = null;
         this.wsUrl = 'ws://localhost:9000/ws/desktop-presence';
 
@@ -125,7 +127,7 @@ class ThreeStateManager {
         // 退出当前态
         this._exitState(this.previousPhase);
 
-        // 短暂延迟后进入新态
+        // P4 修复：100ms 延迟确保前一个态的 CSS 过渡开始执行
         setTimeout(() => {
             this._enterState(phase, data);
             this.isTransitioning = false;
@@ -135,7 +137,7 @@ class ThreeStateManager {
                 this.queuedTransition = null;
                 this.enterState(queued.phase, queued.data);
             }
-        }, 50);
+        }, 100);
     }
 
     /** 进入具体状态 */
@@ -216,6 +218,9 @@ class ThreeStateManager {
                 console.log('[ThreeStateManager] WebSocket 已连接');
                 this.updateConnectionStatus('connected');
 
+                // P6 修复：连接成功后重置重连计数
+                this.wsReconnectAttempts = 0;
+
                 if (this.wsReconnectTimer) {
                     clearTimeout(this.wsReconnectTimer);
                     this.wsReconnectTimer = null;
@@ -250,13 +255,22 @@ class ThreeStateManager {
         }
     }
 
+    /** P6 修复：指数退避重连策略 */
     scheduleReconnect() {
         if (this.wsReconnectTimer) return;
-        console.log(`[ThreeStateManager] ${this.wsReconnectInterval}ms 后重连...`);
+        
+        // 指数退避：1s → 2s → 4s → 8s → ... → 30s(max)
+        const interval = Math.min(
+            this.wsReconnectBaseInterval * Math.pow(2, this.wsReconnectAttempts),
+            this.wsReconnectMaxInterval
+        );
+        this.wsReconnectAttempts++;
+        
+        console.log(`[ThreeStateManager] ${interval}ms 后重连 (第${this.wsReconnectAttempts}次)...`);
         this.wsReconnectTimer = setTimeout(() => {
             this.wsReconnectTimer = null;
             this.connectWebSocket();
-        }, this.wsReconnectInterval);
+        }, interval);
     }
 
     wsSend(message) {
@@ -453,11 +467,13 @@ class ThreeStateManager {
     // ============================================
     // 清理
     // ============================================
+    /** P5 修复：dispose 时清理全局引用 */
     dispose() {
         console.log('[ThreeStateManager] 清理中...');
 
         if (this.wsReconnectTimer) {
             clearTimeout(this.wsReconnectTimer);
+            this.wsReconnectTimer = null;
         }
         if (this.ws) {
             this.ws.close();
@@ -467,6 +483,11 @@ class ThreeStateManager {
         if (this.silentState) this.silentState.dispose();
         if (this.liminalState) this.liminalState.dispose();
         if (this.manifestState) this.manifestState.dispose();
+
+        // 清理全局引用
+        if (window.stateManager === this) {
+            window.stateManager = null;
+        }
 
         console.log('[ThreeStateManager] 清理完成');
     }

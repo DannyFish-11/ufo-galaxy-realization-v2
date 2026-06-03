@@ -1,314 +1,346 @@
 /**
- * silent-state.js
- * Silent 静默态 — "呼吸的深海"
+ * silent-state.js — v39 Fixed
+ * Silent 静默态 — "存在但不被注意"
  *
- * 技术方案：全屏 WebGL Fragment Shader（Three.js）
- * - PlaneGeometry(2,2) + OrthographicCamera 全屏四边形
- * - 3层 Perlin noise 叠加产生有机波动
- * - 光晕限制在屏幕底部40% + 两侧边缘
- * - 8秒慢呼吸周期
+ * 技术方案：WebGL Fragment Shader + Perlin Noise（本地 Three.js）
+ * 视觉：极淡的底部/边缘蓝紫光晕，像 Siri 唤醒时的屏幕边缘发光
+ * 特征：8秒慢呼吸，几乎看不见，但你感觉到"有什么在那里"
  *
- * 色调：rgb(40,75,180) @ 4-10% opacity
+ * 修复：
+ * - P1: 使用 window.THREE（preload 本地加载，无需 CDN）
+ * - P2: exit() 时 dispose 所有 WebGL 资源，防止内存泄漏
+ * - P3: 添加 try-catch 错误边界，WebGL 失败时 graceful degradation
  */
 
-// ---------- Vertex Shader — 传递UV坐标 ----------
-const SILENT_VERTEX_SHADER = `
-varying vec2 vUv;
-void main(){
-    vUv = uv;
-    gl_Position = vec4(position, 1.0);
-}
-`;
-
-// ---------- Fragment Shader — 3层Perlin noise有机波动 ----------
-const SILENT_FRAGMENT_SHADER = `
-// ============================================
-// Classic Perlin 3D Noise — 完整实现
-// ============================================
-vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
-vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
-vec3 fade(vec3 t){return t*t*t*(t*(t*6.0-15.0)+10.0);}
-
-float cnoise(vec3 P){
-  vec3 Pi0 = floor(P);
-  vec3 Pi1 = Pi0 + vec3(1.0);
-  Pi0 = mod(Pi0, 289.0);
-  Pi1 = mod(Pi1, 289.0);
-  vec3 Pf0 = fract(P);
-  vec3 Pf1 = Pf0 - vec3(1.0);
-  vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
-  vec4 iy = vec4(Pi0.yy, Pi1.yy);
-  vec4 iz0 = Pi0.zzzz;
-  vec4 iz1 = Pi1.zzzz;
-  vec4 ixy = permute(permute(ix) + iy);
-  vec4 ixy0 = permute(ixy + iz0);
-  vec4 ixy1 = permute(ixy + iz1);
-  vec4 gx0 = ixy0 / 7.0;
-  vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
-  gx0 = fract(gx0);
-  vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
-  vec4 sz0 = step(gz0, vec4(0.0));
-  gx0 -= sz0 * (step(0.0, gx0) - 0.5);
-  gy0 -= sz0 * (step(0.0, gy0) - 0.5);
-  vec4 gx1 = ixy1 / 7.0;
-  vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
-  gx1 = fract(gx1);
-  vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
-  vec4 sz1 = step(gz1, vec4(0.0));
-  gx1 -= sz1 * (step(0.0, gx1) - 0.5);
-  gy1 -= sz1 * (step(0.0, gy1) - 0.5);
-  vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
-  vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
-  vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
-  vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
-  vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
-  vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
-  vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
-  vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
-  vec4 norm0 = taylorInvSqrt(vec4(dot(g000,g000),dot(g010,g010),dot(g100,g100),dot(g110,g110)));
-  g000 *= norm0.x; g010 *= norm0.y; g100 *= norm0.z; g110 *= norm0.w;
-  vec4 norm1 = taylorInvSqrt(vec4(dot(g001,g001),dot(g011,g011),dot(g101,g101),dot(g111,g111)));
-  g001 *= norm1.x; g011 *= norm1.y; g101 *= norm1.z; g111 *= norm1.w;
-  float n000 = dot(g000, Pf0);
-  float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
-  float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
-  float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
-  float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
-  float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
-  float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
-  float n111 = dot(g111, Pf1);
-  vec3 fade_xyz = fade(Pf0);
-  vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
-  vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
-  float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
-  return 2.2 * n_xyz;
-}
-
-// ============================================
-// Uniforms & Main
-// ============================================
-uniform float uTime;
-varying vec2 vUv;
-
-void main(){
-  vec2 uv = vUv;
-  
-  // ---------- 三层 Perlin noise 叠加 ----------
-  // Layer 1: 大尺度慢波（频率0.5，速度0.1）— 整体光晕缓慢变形
-  float n1 = cnoise(vec3(uv * 0.5, uTime * 0.1));
-  // Layer 2: 中区域流动（频率2.0，速度0.3）— 光晕内部流动感
-  float n2 = cnoise(vec3(uv * 2.0, uTime * 0.3));
-  // Layer 3: 细微扰动（频率8.0，速度0.5）— 边缘不规则感
-  float n3 = cnoise(vec3(uv * 8.0, uTime * 0.5));
-  
-  // 加权合成：大尺度占主导，细微扰动最少
-  float noise = n1 * 0.5 + n2 * 0.35 + n3 * 0.15;
-  
-  // ---------- 光晕区域限制 ----------
-  // 计算到边缘的最小距离（底部和两侧）
-  float edgeDist = min(min(uv.x, 1.0 - uv.x), uv.y);
-  // smoothstep将光晕限制在边缘附近，noise增加边缘不规则感
-  float glow = smoothstep(0.4, 0.0, edgeDist + noise * 0.15);
-  
-  // ---------- 8秒慢呼吸（增强）----------
-  // sin周期 = 2π/0.785 ≈ 8秒
-  // 振幅加大：0.3→0.35，呼吸更明显
-  float breathe = sin(uTime * 0.785) * 0.35 + 0.65;
-  
-  // ---------- 颜色输出 ----------
-  // 纯宇宙蓝 rgb(40,75,180) → vec3(0.157, 0.294, 0.706)
-  vec3 color = vec3(0.157, 0.294, 0.706);
-  // opacity 6-15%: glow(0~1) * 0.12 * breathe(0.3~1.0) → 0~0.12
-  // 之前0.08(4-10%)，现在0.12(6-15%)，更明显但不过度
-  float alpha = glow * 0.12 * breathe;
-  
-  gl_FragColor = vec4(color, alpha);
-}
-`;
-
-// ============================================
-// SilentState 类
-// ============================================
 class SilentState {
-    /**
-     * @param {Object} overlay - 覆盖层对象，需包含 element 属性
-     */
-    constructor(overlay) {
-        this.element = overlay?.element || document.getElementById('sLayer');
+    constructor(cssOverlay, threeContainer) {
+        this.element = cssOverlay?.element || document.getElementById('sLayer');
         this.canvasContainer = document.getElementById('silent-canvas-container');
-        this.isActive = false;
-
-        // Three.js 对象
         this.scene = null;
         this.camera = null;
         this.renderer = null;
         this.material = null;
         this.mesh = null;
-        this.clock = null;
-
-        // 动画循环
-        this._rafId = null;
-        this._isDisposed = false;
-
-        // 初始化 WebGL 场景
-        this._initWebGL();
+        this.geometry = null;
+        this.uniforms = null;
+        this.animationId = null;
+        this.isActive = false;
+        this.startTime = null;
+        this.isDisposed = false;
     }
 
-    // ---------- WebGL 初始化 ----------
-    _initWebGL() {
-        // 创建场景
-        this.scene = new THREE.Scene();
+    /** 检查 Three.js 是否可用 */
+    _checkTHREE() {
+        if (typeof window.THREE === 'undefined') {
+            console.warn('[SilentState] window.THREE 不可用 — 可能是 preload 加载失败');
+            return false;
+        }
+        return true;
+    }
 
-        // 正交相机 — 全屏四边形不需要透视
-        this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    /** 初始化 WebGL 场景 */
+    initWebGL() {
+        if (this.isDisposed || this.renderer) return;
 
-        // WebGL 渲染器 — alpha透明， premultipliedAlpha
-        this.renderer = new THREE.WebGLRenderer({
-            alpha: true,
-            premultipliedAlpha: false,
-            antialias: false // 全屏Shader不需要抗锯齿
-        });
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.domElement.style.width = '100%';
-        this.renderer.domElement.style.height = '100%';
-        this.renderer.domElement.style.display = 'block';
-
-        // Shader 材质
-        this.material = new THREE.ShaderMaterial({
-            vertexShader: SILENT_VERTEX_SHADER,
-            fragmentShader: SILENT_FRAGMENT_SHADER,
-            uniforms: {
-                uTime: { value: 0.0 }
-            },
-            transparent: true,
-            depthWrite: false,
-            depthTest: false
-        });
-
-        // 全屏四边形 — PlaneGeometry(2,2) 正好填满正交相机视野
-        const geometry = new THREE.PlaneGeometry(2, 2);
-        this.mesh = new THREE.Mesh(geometry, this.material);
-        this.scene.add(this.mesh);
-
-        // 时钟
-        this.clock = new THREE.Clock();
-
-        // 将 canvas 注入容器
-        if (this.canvasContainer) {
-            this.canvasContainer.appendChild(this.renderer.domElement);
+        // P1 修复：使用 window.THREE（preload 本地加载）
+        if (!this._checkTHREE()) {
+            console.warn('[SilentState] WebGL 不可用 — Silent 态将以 CSS 降级模式运行');
+            return;
         }
 
-        console.log('[SilentState] WebGL Shader 场景初始化完成');
-    }
+        try {
+            const container = this.canvasContainer;
+            if (!container) return;
 
-    // ---------- 动画循环 ----------
-    _startRenderLoop() {
-        const loop = () => {
-            if (this._isDisposed) return;
-            this._rafId = requestAnimationFrame(loop);
-            this._render();
-        };
-        this._rafId = requestAnimationFrame(loop);
-    }
+            const width = window.innerWidth;
+            const height = window.innerHeight;
 
-    _render() {
-        if (!this.isActive || !this.material || !this.renderer) return;
+            // 创建渲染器
+            this.renderer = new window.THREE.WebGLRenderer({
+                antialias: false,
+                alpha: true,
+                premultipliedAlpha: false
+            });
+            this.renderer.setSize(width, height);
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            this.renderer.setClearColor(0x000000, 0);
+            this.renderer.domElement.style.width = '100%';
+            this.renderer.domElement.style.height = '100%';
+            this.renderer.domElement.style.display = 'block';
+            container.appendChild(this.renderer.domElement);
 
-        // 更新时间uniform
-        const elapsed = this.clock.getElapsedTime();
-        this.material.uniforms.uTime.value = elapsed;
+            // 场景和相机
+            this.scene = new window.THREE.Scene();
+            this.camera = new window.THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-        // 渲染
-        this.renderer.render(this.scene, this.camera);
-    }
+            // 自定义 Perlin noise shader
+            this.uniforms = {
+                uTime: { value: 0.0 },
+                uResolution: { value: new window.THREE.Vector2(width, height) },
+                uViewportRes: { value: new window.THREE.Vector2(width, height) }
+            };
 
-    _stopRenderLoop() {
-        if (this._rafId !== null) {
-            cancelAnimationFrame(this._rafId);
-            this._rafId = null;
+            this.material = new window.THREE.ShaderMaterial({
+                uniforms: this.uniforms,
+                transparent: true,
+                depthWrite: false,
+                vertexShader: this._getVertexShader(),
+                fragmentShader: this._getFragmentShader()
+            });
+
+            this.geometry = new window.THREE.PlaneGeometry(2, 2);
+            this.mesh = new window.THREE.Mesh(this.geometry, this.material);
+            this.scene.add(this.mesh);
+
+        } catch (err) {
+            console.error('[SilentState] WebGL 初始化失败:', err);
+            this._cleanupPartial();
         }
+    }
+
+    /** 清理部分初始化的资源 */
+    _cleanupPartial() {
+        if (this.geometry) { this.geometry.dispose(); this.geometry = null; }
+        if (this.material) { this.material.dispose(); this.material = null; }
+        if (this.renderer) {
+            this.renderer.dispose();
+            this.renderer = null;
+        }
+    }
+
+    /** Vertex Shader */
+    _getVertexShader() {
+        return `
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                gl_Position = vec4(position, 1.0);
+            }
+        `;
+    }
+
+    /** Fragment Shader — Perlin noise organic glow */
+    _getFragmentShader() {
+        return `
+            uniform float uTime;
+            uniform vec2 uResolution;
+            uniform vec2 uViewportRes;
+            varying vec2 vUv;
+
+            // Perlin noise 2D
+            vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+            vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+            vec2 fade(vec2 t) {return t*t*t*(t*(t*6.0-15.0)+10.0);}
+
+            float cnoise(vec2 P){
+                vec4 Pi = floor(P.xyxy) + vec4(0.0, 0.0, 1.0, 1.0);
+                vec4 Pf = fract(P.xyxy) - vec4(0.0, 0.0, 1.0, 1.0);
+                Pi = mod(Pi, 289.0);
+                vec4 ix = Pi.xzxz;
+                vec4 iy = Pi.yyww;
+                vec4 fx = Pf.xzxz;
+                vec4 fy = Pf.yyww;
+                vec4 i = permute(permute(ix) + iy);
+                vec4 gx = 2.0 * fract(i * 0.0243902439) - 1.0;
+                vec4 gy = abs(gx) - 0.5;
+                vec4 tx = floor(gx + 0.5);
+                gx = gx - tx;
+                vec2 g00 = vec2(gx.x,gy.x);
+                vec2 g10 = vec2(gx.y,gy.y);
+                vec2 g01 = vec2(gx.z,gy.z);
+                vec2 g11 = vec2(gx.w,gy.w);
+                vec4 norm = 1.79284291400159 - 0.85373472095314 * vec4(dot(g00,g00), dot(g01,g01), dot(g10,g10), dot(g11,g11));
+                g00 *= norm.x; g01 *= norm.y; g10 *= norm.z; g11 *= norm.w;
+                float n00 = dot(g00, vec2(fx.x, fy.x));
+                float n10 = dot(g10, vec2(fx.y, fy.y));
+                float n01 = dot(g01, vec2(fx.z, fy.z));
+                float n11 = dot(g11, vec2(fx.w, fy.w));
+                vec2 fade_xy = fade(Pf.xy);
+                vec2 n_x = mix(vec2(n00, n01), vec2(n10, n11), fade_xy.x);
+                float n_xy = mix(n_x.x, n_x.y, fade_xy.y);
+                return 2.3 * n_xy;
+            }
+
+            void main(){
+                vec2 uv = gl_FragCoord.xy / uViewportRes;
+                float aspect = uViewportRes.x / uViewportRes.y;
+
+                // 时间推进（极慢，0.03倍速）
+                float time = uTime * 0.03;
+
+                // 多层 Perlin noise 叠加
+                float noise1 = cnoise(uv * 3.0 + time * 0.5);
+                float noise2 = cnoise(uv * 6.0 - time * 0.3);
+                float noise3 = cnoise(uv * 12.0 + time * 0.2);
+
+                // 有机纹理组合
+                float organicPattern = noise1 * 0.5 + noise2 * 0.3 + noise3 * 0.2;
+                organicPattern = organicPattern * 0.5 + 0.5;
+
+                // 垂直分布：底部更亮，向上渐隐
+                float verticalDist = 1.0 - uv.y;
+                verticalDist = pow(verticalDist, 1.8);
+
+                // 水平分布：两侧比中间亮（环绕感）
+                float horizontalDist = abs(uv.x - 0.5) * 2.0;
+                horizontalDist = pow(horizontalDist, 0.6);
+
+                // 组合分布
+                float distribution = verticalDist * 0.6 + horizontalDist * 0.4;
+                distribution = smoothstep(0.0, 1.0, distribution);
+
+                // 边缘柔化
+                float edgeFade = smoothstep(0.0, 0.15, uv.y);
+                distribution *= edgeFade;
+
+                // 有机流动
+                float flow = sin(time * 0.5 + organicPattern * 6.28) * 0.5 + 0.5;
+                float glow = organicPattern * distribution * flow;
+
+                // 8秒慢呼吸（修复：振幅 0.3→0.35，更明显）
+                float breathe = sin(uTime * 0.785) * 0.35 + 0.65;
+
+                // 纯宇宙蓝 rgb(40,75,180)
+                vec3 color = vec3(0.157, 0.294, 0.706);
+                // opacity 0.12（修复：0.08→0.12，6-15%）
+                float alpha = glow * 0.12 * breathe;
+
+                // 微妙顶部紫光边缘
+                float topEdge = smoothstep(0.85, 1.0, uv.y);
+                float topGlow = topEdge * horizontalDist * 0.015 * breathe;
+
+                // 颜色混合
+                vec3 topColor = vec3(0.4, 0.25, 0.7);
+                color = mix(color, topColor, topEdge * 0.15);
+
+                gl_FragColor = vec4(color, alpha + topGlow);
+            }
+        `;
     }
 
     // ---------- 生命周期 ----------
 
-    /** 进入静默态 */
     enter() {
         if (this.isActive) return;
         this.isActive = true;
+        this.isDisposed = false;
 
-        // 显示容器
+        this.initWebGL();
+
         if (this.canvasContainer) {
             this.canvasContainer.classList.add('active');
         }
+        if (this.element) {
+            this.element.classList.add('on');
+        }
 
-        // 启动动画循环
-        this.clock.start();
-        this._startRenderLoop();
-
-        console.log('[SilentState] 进入 Silent 态 — WebGL Shader 呼吸启动');
+        this.startTime = performance.now();
+        this.animate();
     }
 
-    /** 退出静默态 */
     exit() {
         if (!this.isActive) return;
         this.isActive = false;
 
-        // 停止动画
-        this._stopRenderLoop();
-        this.clock.stop();
-
-        // 隐藏容器
         if (this.canvasContainer) {
             this.canvasContainer.classList.remove('active');
         }
-
-        console.log('[SilentState] 退出 Silent 态');
-    }
-
-    /** 窗口大小变化 */
-    onResize() {
-        if (!this.renderer) return;
-
-        const w = window.innerWidth;
-        const h = window.innerHeight;
-
-        // 更新渲染器尺寸
-        this.renderer.setSize(w, h);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-        console.log('[SilentState] 窗口 resize:', w, 'x', h);
-    }
-
-    /** 清理 */
-    dispose() {
-        this._isDisposed = true;
-        this.isActive = false;
-        this._stopRenderLoop();
-
-        if (this.renderer) {
-            this.renderer.dispose();
-            if (this.renderer.domElement && this.renderer.domElement.parentNode) {
-                this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
-            }
-            this.renderer = null;
+        if (this.element) {
+            this.element.classList.remove('on');
         }
 
+        // 停止渲染循环
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+
+        // P2 修复：exit() 时 dispose 所有 WebGL 资源
+        this._disposeWebGL();
+
+        console.log('[SilentState] 退出 Silent 态 — WebGL 资源已清理');
+    }
+
+    /** P2 修复：完全 dispose 所有 WebGL 资源 */
+    _disposeWebGL() {
+        if (this.mesh) {
+            this.scene?.remove(this.mesh);
+            this.mesh = null;
+        }
+        if (this.geometry) {
+            this.geometry.dispose();
+            this.geometry = null;
+        }
         if (this.material) {
             this.material.dispose();
             this.material = null;
         }
-
-        if (this.mesh) {
-            if (this.mesh.geometry) this.mesh.geometry.dispose();
-            this.mesh = null;
+        if (this.renderer) {
+            // 移除 canvas
+            const canvas = this.renderer.domElement;
+            if (canvas && canvas.parentNode) {
+                canvas.parentNode.removeChild(canvas);
+            }
+            this.renderer.dispose();
+            this.renderer = null;
         }
-
         this.scene = null;
         this.camera = null;
-        this.clock = null;
+        this.uniforms = null;
+    }
 
-        console.log('[SilentState] 已清理');
+    /** 完全清理 */
+    dispose() {
+        this.isActive = false;
+        this.isDisposed = true;
+
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+
+        this._disposeWebGL();
+
+        if (this.element) {
+            this.element.classList.remove('on');
+        }
+        if (this.canvasContainer) {
+            this.canvasContainer.classList.remove('active');
+        }
+
+        console.log('[SilentState] 已完全清理');
+    }
+
+    // ---------- 渲染循环 ----------
+
+    animate() {
+        if (!this.isActive || this.isDisposed) return;
+
+        // P1 修复：使用 window.THREE
+        if (!this.renderer || !this.scene || !this.camera || !this.uniforms) {
+            // WebGL 不可用，跳过渲染（CSS 降级模式）
+            return;
+        }
+
+        this.animationId = requestAnimationFrame(() => this.animate());
+
+        const elapsed = (performance.now() - this.startTime) / 1000.0;
+        this.uniforms.uTime.value = elapsed;
+
+        this.renderer.render(this.scene, this.camera);
+    }
+
+    // ---------- 工具 ----------
+
+    onResize() {
+        if (!this.renderer || !this.uniforms || this.isDisposed) return;
+
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        this.renderer.setSize(width, height);
+        this.uniforms.uResolution.value.set(width, height);
+        this.uniforms.uViewportRes.value.set(width, height);
     }
 }
 
