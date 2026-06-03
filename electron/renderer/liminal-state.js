@@ -1,100 +1,84 @@
 /**
- * liminal-state.js — v18
+ * liminal-state.js — v39 Fixed
  * Liminal 阈限态 — "空间被打开"
  *
- * 技术方案：纯CSS 3D Transforms（无Three.js）
- * - CSS perspective + rotateX 创造桌面推入深度感
- * - 四面墙壁（floor/ceiling/left/right）形成空间
- * - 渐变边界（mask-image）消除硬边
- * - 消失点光球 — 粉紫蓝连续光谱
- *
- * 进入/退出：只操作CSS类，保持与旧版相同的API接口
+ * 技术方案：纯CSS（无Three.js）
+ * - .space 层 CSS 3D纵深（perspective + rotateX）
+ * - .l-glow 蓝紫粉边缘光雾叠加
+ * - 进入/退出：操作CSS class
  */
 
 class LiminalState {
-    /**
-     * @param {Object} cssOverlay - CSS覆盖层对象
-     * @param {Object} threeContainer - 保留参数兼容（不再使用）
-     */
     constructor(cssOverlay, threeContainer) {
         this.element = cssOverlay?.element || document.getElementById('lLayer');
-        // threeContainer 参数保留兼容，但不再使用
-        this.container = threeContainer || document.getElementById('three-container');
+        this.spaceLayer = document.getElementById('spaceLayer');
         this.isActive = false;
         this.isAnimating = false;
-
-        // 不再需要 Three.js 对象
-        this.scene = null;
-        this.camera = null;
-        this.renderer = null;
-
-        console.log('[LiminalState] v18 纯CSS 3D 初始化完成');
     }
 
-    // ---------- 生命周期（CSS类操作，无Three.js） ----------
-
-    /** 进入阈限态 — 激活CSS覆盖层 */
+    /** 进入阈限态 */
     enter() {
         if (this.isActive) return;
         this.isActive = true;
         this.isAnimating = true;
 
-        // 激活CSS覆盖层
+        // 激活Liminal覆盖层（使用.on class与CSS匹配）
         if (this.element) {
-            this.element.classList.remove('exiting');
-            this.element.classList.add('active');
+            this.element.classList.add('on');
         }
 
-        // 延迟标记动画完成（给CSS过渡时间）
+        // 激活空间层（背后3D纵深）
+        if (this.spaceLayer) {
+            this.spaceLayer.classList.add('active');
+        }
+
+        // 标记动画完成
         setTimeout(() => {
             this.isAnimating = false;
-        }, 2500);
+        }, 3000);
 
-        console.log('[LiminalState] 进入 Liminal 态 — CSS 3D深度空间');
+        console.log('[LiminalState] 进入 Liminal 态 — 空间打开');
     }
 
-    /** 退出阈限态 — 淡出 */
+    /** 退出阈限态 */
     exit() {
         if (!this.isActive) return;
         this.isActive = false;
         this.isAnimating = true;
 
+        // 关闭Liminal覆盖层
         if (this.element) {
-            this.element.classList.remove('active');
-            this.element.classList.add('exiting');
+            this.element.classList.remove('on');
         }
 
-        // 清理退出动画类
+        // 关闭空间层
+        if (this.spaceLayer) {
+            this.spaceLayer.classList.remove('active');
+        }
+
         setTimeout(() => {
-            if (this.element) {
-                this.element.classList.remove('exiting');
-            }
             this.isAnimating = false;
         }, 600);
 
-        console.log('[LiminalState] 退出 Liminal 态 — 淡出');
+        console.log('[LiminalState] 退出 Liminal 态');
     }
 
-    /** 每帧更新 — v18无需渲染循环 */
-    update(deltaTime) {
-        // 纯CSS方案，无需JS渲染循环
-    }
+    /** 每帧更新 — 纯CSS，无需JS渲染 */
+    update(deltaTime) {}
 
-    /** 窗口大小变化 — 纯CSS自适应，无需处理 */
-    onResize() {
-        // CSS 3D自动响应窗口变化
-    }
+    /** 窗口大小变化 — 纯CSS自适应 */
+    onResize() {}
 
     /** 清理 */
     dispose() {
         this.isActive = false;
         this.isAnimating = false;
-
         if (this.element) {
-            this.element.classList.remove('active');
-            this.element.classList.remove('exiting');
+            this.element.classList.remove('on');
         }
-
+        if (this.spaceLayer) {
+            this.spaceLayer.classList.remove('active');
+        }
         console.log('[LiminalState] 已清理');
     }
 }
