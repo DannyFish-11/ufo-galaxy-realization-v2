@@ -22,6 +22,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# M2 fixed: explicit short-code mapping table for phase → WearOS action codes
+_PHASE_CODE_MAP: Dict[str, str] = {
+    "silent": "sil",
+    "liminal": "lim",
+    "manifest": "man",
+    # Add new phases here with explicit codes to avoid collision
+}
+
+
 async def handle_wearos_state_sync(
     bridge: "AndroidBridge",
     device_id: str,
@@ -38,13 +47,15 @@ async def handle_wearos_state_sync(
         logger.debug("WearOS sync: device %s not connected", device_id)
         return
 
-    # Compressed format for Wear OS (minimal fields)
+    # M2 fixed: use explicit mapping table instead of fragile phase[:3]
+    phase_code = _PHASE_CODE_MAP.get(phase.lower(), phase[:3])
     wear_msg = {
         "t": "se",  # type: state_event (compressed)
         "cat": "ph",  # category: phase (compressed)
-        "act": phase[:3],  # action: first 3 chars of phase
+        "act": phase_code,  # M2 fixed: explicit mapped short code
         "ts": payload.get("timestamp", 0),
         "src": "dpr",  # source: desktop_presence_runtime (compressed)
+        "v": 1,  # M2 fixed: add version for protocol negotiation
     }
 
     try:

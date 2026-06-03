@@ -110,7 +110,10 @@ class EdgeTTSEngine:
             ) from exc
 
         if not output_path:
-            output_path = tempfile.mktemp(suffix=".mp3")
+            # M3 fixed: use NamedTemporaryFile with delete=False for explicit cleanup
+            _tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+            _tmp.close()
+            output_path = _tmp.name
 
         output_path = os.path.abspath(output_path)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)

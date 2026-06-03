@@ -158,9 +158,9 @@ except Exception as _sb_err:
 try:
     from .gateway_service import router as _gateway_v5_router
     app.include_router(_gateway_v5_router, tags=["gateway-v5"])
-    logger.info("Gateway v5.0 路由已挂载")
+    logger.info("Gateway v5.0 routes mounted")
 except Exception as _gw5_err:
-    logger.warning("Gateway v5.0 路由挂载跳过: %s", _gw5_err)
+    logger.error("Gateway v5.0 routes FAILED to mount: %s", _gw5_err, exc_info=True)  # H6 fixed
 
 try:
     from .api.config import router as _client_config_router

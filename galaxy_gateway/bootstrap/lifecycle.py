@@ -96,7 +96,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                 await scheduler.start()
                 app.state.heartbeat_scheduler = scheduler
         except Exception as e:
-            logger.warning("OpenClawd heartbeat scheduler not started (non-fatal): %s", e)
+            logger.warning("OpenClawd heartbeat scheduler not started (non-fatal): %s", e, exc_info=True)  # H4 fixed
 
     # ── Phase 6: LLM router reference ──
     try:
@@ -104,7 +104,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         app.state.llm_router_instance = get_llm_router()
         logger.info("MultiLLMRouter reference acquired")
     except Exception as e:
-        logger.warning("MultiLLMRouter unavailable: %s", e)
+        logger.warning("MultiLLMRouter unavailable: %s", e, exc_info=True)  # H4 fixed
 
     # ── Phase 7: Agent Swarm Coordinator ──
     try:
@@ -112,7 +112,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         app.state.swarm_coordinator = SwarmCoordinator()
         logger.info("Agent Swarm Coordinator initialized")
     except Exception as e:
-        logger.warning("SwarmCoordinator unavailable (swarm endpoint will degrade): %s", e)
+        logger.warning("SwarmCoordinator unavailable (swarm endpoint will degrade): %s", e, exc_info=True)  # H4 fixed
 
     logger.info("Galaxy Gateway initialized successfully")
 
@@ -127,7 +127,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         logger.info("AgentIdentity: loaded — %s", _identity.get_identity().name)
         app.state.agent_identity = _identity
     except Exception as _id_err:
-        logger.debug("AgentIdentity init skipped (non-fatal): %s", _id_err)
+        logger.debug("AgentIdentity init skipped (non-fatal): %s", _id_err, exc_info=True)  # H4 fixed
 
     # 2. Node Capability Loader — discovers node actions on startup
     try:
@@ -139,11 +139,11 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                 result = await _loader.load_all_capabilities()
                 logger.info("NodeCapability: loaded %d nodes", len(result))
             except Exception as _cl_err:
-                logger.debug("NodeCapability background load failed: %s", _cl_err)
-        _asyncio.create_task(_load_capabilities_bg())
+                logger.debug("NodeCapability background load failed: %s", _cl_err, exc_info=True)  # H4 fixed
+        asyncio.create_task(_load_capabilities_bg())  # L3 fixed: use asyncio directly
         app.state.capability_loader = _loader
     except Exception as _cl_err:
-        logger.debug("NodeCapability init skipped (non-fatal): %s", _cl_err)
+        logger.debug("NodeCapability init skipped (non-fatal): %s", _cl_err, exc_info=True)  # H4 fixed
 
     # 3. State Sync Bus — cross-standard synchronization
     try:
@@ -151,7 +151,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         install_default_sync()
         logger.info("StateSyncBus: default sync handlers installed")
     except Exception as _ss_err:
-        logger.debug("StateSyncBus init skipped (non-fatal): %s", _ss_err)
+        logger.debug("StateSyncBus init skipped (non-fatal): %s", _ss_err, exc_info=True)  # H4 fixed
 
     # 4. Tailscale Manager — optional VPN tunnel monitoring
     try:
@@ -162,7 +162,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
             logger.info("Tailscale: available at %s", _ts_mgr.get_tailscale_ip())
         app.state.tailscale_manager = _ts_mgr
     except Exception as _ts_err:
-        logger.debug("Tailscale init skipped (non-fatal): %s", _ts_err)
+        logger.debug("Tailscale init skipped (non-fatal): %s", _ts_err, exc_info=True)  # H4 fixed
 
     # 5. Voice Wake Module — local "Galaxy" wake-word detection
     try:
@@ -174,7 +174,6 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
             # exclusively through the handle_request lifecycle (SILENT→LIMINAL
             #→MANIFEST→SILENT).  We fire a minimal wake-word request.
             def _on_wake_word():
-                import asyncio as _asyncio
                 async def _wake_request():
                     try:
                         from core.desktop_presence_runtime import (  # noqa: PLC0415
@@ -189,14 +188,14 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                             logger.info("VoiceWake: 'Galaxy' detected → LIMINAL via handle_request")
                     except Exception as _we:
                         logger.debug("VoiceWake: handle_request failed: %s", _we)
-                _asyncio.create_task(_wake_request())
+                asyncio.create_task(_wake_request())  # L3 fixed: use asyncio directly
 
             started = _vw.start(callback=_on_wake_word)
             if started:
                 logger.info("VoiceWake: 'Galaxy' wake-word detection active")
             app.state.voice_wake = _vw
     except Exception as _vw_err:
-        logger.debug("VoiceWake init skipped (non-fatal): %s", _vw_err)
+        logger.debug("VoiceWake init skipped (non-fatal): %s", _vw_err, exc_info=True)  # H4 fixed
 
     # 6. Feedback Loop — execution result tracking
     try:
@@ -205,7 +204,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         app.state.feedback_loop = _fb
         logger.info("FeedbackLoop: initialized (%d history entries)", len(_fb._history))
     except Exception as _fb_err:
-        logger.debug("FeedbackLoop init skipped (non-fatal): %s", _fb_err)
+        logger.debug("FeedbackLoop init skipped (non-fatal): %s", _fb_err, exc_info=True)  # H4 fixed
 
     logger.info("PR-STABILITY-INIT: all modules integrated")
 
@@ -230,7 +229,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                 nats_url,
             )
     except Exception as e:
-        logger.warning("NATS Gateway Adapter init error (non-fatal): %s", e)
+        logger.warning("NATS Gateway Adapter init error (non-fatal): %s", e, exc_info=True)  # H4 fixed
 
     # ── Stale-device cleanup background task ──
     # Periodically calls android_bridge.cleanup_stale_devices() to mark
@@ -238,9 +237,8 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # disconnected in the transport cache.  This ensures the routing layer
     # never dispatches to a device that has silently gone offline.
     # Cleanup interval: 90 s (heartbeat timeout is 120 s, OkHttp TCP ping 20 s).
-    _stale_cleanup_task: object = None
+    app.state.stale_cleanup_task = None  # H5 fixed: store on app.state instead of local var
     try:
-        import asyncio as _asyncio
         from galaxy_gateway.android_bridge import android_bridge as _android_bridge
 
         async def _periodic_stale_cleanup() -> None:
@@ -252,7 +250,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                 os.getenv("GALAXY_STALE_CLEANUP_TIMEOUT_S", "120")
             )
             while True:
-                await _asyncio.sleep(_cleanup_interval)
+                await asyncio.sleep(_cleanup_interval)
                 try:
                     await _android_bridge.cleanup_stale_devices(
                         timeout_seconds=_cleanup_timeout
@@ -267,9 +265,10 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                     logger.debug(
                         "Stale device cleanup pass failed (non-fatal): %s",
                         _cln_err,
+                        exc_info=True,  # H4 fixed
                     )
 
-        _stale_cleanup_task = _asyncio.create_task(_periodic_stale_cleanup())
+        app.state.stale_cleanup_task = asyncio.create_task(_periodic_stale_cleanup())  # H5 fixed
         logger.info(
             "Stale-device cleanup background task started "
             "(interval=%ss, timeout=%ss)",
@@ -281,6 +280,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
             "Stale-device cleanup background task could not be started "
             "(non-fatal): %s",
             _task_err,
+            exc_info=True,  # H4 fixed
         )
 
     # ── MasterBrain: cloud-side orchestrator ──
@@ -305,7 +305,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
             else:
                 logger.warning("MasterBrain: get_master_brain() returned None")
         except Exception as _mb_err:
-            logger.warning("MasterBrain startup failed (non-fatal): %s", _mb_err)
+            logger.warning("MasterBrain startup failed (non-fatal): %s", _mb_err, exc_info=True)  # H4 fixed
     else:
         logger.info(
             "MasterBrain: disabled (set GALAXY_MASTER_BRAIN_ENABLED=true to enable)"
@@ -362,17 +362,24 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     logger.info("Shutting down Galaxy Gateway...")
 
     # Cancel the stale-device cleanup background task first.
-    if _stale_cleanup_task is not None:
+    # H3 fixed: await task cancellation with timeout; H5 fixed: use app.state
+    if getattr(app.state, 'stale_cleanup_task', None) is not None:
         try:
-            _stale_cleanup_task.cancel()  # type: ignore[union-attr]
-        except Exception:
+            app.state.stale_cleanup_task.cancel()
+            await asyncio.wait_for(asyncio.shield(app.state.stale_cleanup_task), timeout=5.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
             pass
+        except Exception:
+            logger.warning("Stale cleanup shutdown error", exc_info=True)
 
+    # H7 fixed: add timeout and proper error logging for heartbeat scheduler stop
     if app.state.heartbeat_scheduler is not None:
         try:
-            await app.state.heartbeat_scheduler.stop()
-        except Exception:
-            pass
+            await asyncio.wait_for(app.state.heartbeat_scheduler.stop(), timeout=10.0)
+        except asyncio.TimeoutError:
+            logger.error("Heartbeat scheduler stop timed out")
+        except Exception as e:
+            logger.error("Heartbeat scheduler stop failed: %s", e, exc_info=True)
 
     try:
         from core.master_brain import get_master_brain

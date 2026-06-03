@@ -46,21 +46,24 @@ class GalaxyDaemon:
     def __init__(self):
         self.logger = setup_logging()
         self.process = None
-        self.restart_count = 0
-        self.restart_window_start = time.time()
+        # M1 fixed: track restart timestamps in a list for accurate rate limiting
+        self._restart_timestamps: list = []
         self._notifier = None  # lazy init
 
     def _notify(self, message: str, severity: str = "warning", category: str = "daemon") -> None:
-        """Fire-and-forget notification (best-effort, non-blocking)."""
+        """Fire-and-forget notification using a dedicated thread event loop."""
         try:
-            import asyncio
-            from galaxy_gateway.daemon_notifier import DaemonNotifier
-            if self._notifier is None:
-                self._notifier = DaemonNotifier()
-            # Run async notify in a new task without blocking
-            asyncio.get_running_loop().create_task(
-                self._notifier.notify(message, severity=severity, category=category)
-            )
+            import threading
+            def _send():
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    from galaxy_gateway.daemon_notifier import DaemonNotifier
+                    notifier = DaemonNotifier()
+                    loop.run_until_complete(notifier.notify(message, severity=severity, category=category))
+                finally:
+                    loop.close()
+            threading.Thread(target=_send, daemon=True).start()
         except Exception:
             self.logger.info("[NOTIFY] %s: %s", severity.upper(), message)
 
@@ -81,20 +84,39 @@ class GalaxyDaemon:
         )
 
     def _monitor(self):
-        if self.process.stdout:
-            for line in self.process.stdout:
-                line = line.strip()
-                if line:
-                    self.logger.info(f"[Galaxy] {line[:200]}")
+        """Non-blocking pipe read with drain on exit."""
+        import selectors
+        if not self.process or not self.process.stdout:
+            return
+        sel = selectors.DefaultSelector()
+        sel.register(self.process.stdout, selectors.EVENT_READ)
+        try:
+            while True:
+                # Check if process exited
+                ret = self.process.poll()
+                if ret is not None:
+                    break
+                events = sel.select(timeout=1.0)
+                for key, _ in events:
+                    line = key.fileobj.readline()
+                    if line:
+                        self.logger.info("[Galaxy] %s", line[:200].strip())
+                    else:
+                        break
+        finally:
+            sel.close()
+            if self.process.stdout:
+                self.process.stdout.close()
 
     def _should_restart(self) -> bool:
+        # M1 fixed: use timestamp list for accurate restart rate limiting
         now = time.time()
-        if now - self.restart_window_start > 3600:
-            self.restart_count = 0
-            self.restart_window_start = now
-        self.restart_count += 1
-        if self.restart_count > MAX_RESTARTS_PER_HOUR:
-            self.logger.error(f"Too many restarts ({MAX_RESTARTS_PER_HOUR}/hr), stopping")
+        window_start = now - 3600
+        # Keep only timestamps within the last hour
+        self._restart_timestamps = [ts for ts in self._restart_timestamps if ts > window_start]
+        self._restart_timestamps.append(now)
+        if len(self._restart_timestamps) > MAX_RESTARTS_PER_HOUR:
+            self.logger.error("Too many restarts (%d/hr), stopping", MAX_RESTARTS_PER_HOUR)
             return False
         return True
 
@@ -126,25 +148,4 @@ class GalaxyDaemon:
 
             if not self._should_restart():
                 self._notify(
-                    f"Galaxy 连续重启超过 {MAX_RESTARTS_PER_HOUR} 次/小时，守护已停止",
-                    severity="critical",
-                    category="too_many_restarts",
-                )
-                return 1
-            self.logger.info(f"Restarting in {RESTART_COOLDOWN}s...")
-            time.sleep(RESTART_COOLDOWN)
-
-
-def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--status", action="store_true", help="Check daemon status")
-    args = parser.parse_args()
-    if args.status:
-        print("Daemon runs in foreground. Use Ctrl+C to stop.")
-        return 0
-    return GalaxyDaemon().run()
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+                    f"Galaxy 连续重启超过 {MAX_RES

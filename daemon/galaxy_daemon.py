@@ -20,6 +20,7 @@ try:
 except ImportError:
     psutil = None
 import json
+from collections import deque
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
@@ -245,18 +246,24 @@ class GalaxyDaemon:
         self.processes: Dict[str, ProcessManager] = {}
         
         # Health tracking
-        self.health_metrics: List[HealthMetrics] = []
+        self.health_metrics: deque = deque(maxlen=1000)  # B3 fixed: O(1) append + auto-truncate
         self.max_health_history = 1000
         
         # Control flags
         self._running = False
         self._shutdown_event = threading.Event()
-        
-        # Setup signal handlers
+        # H8 fixed: use atomic int flag for signal-safe deferred handling
+        self._signal_pending: int = 0  # 0=none, SIGTERM/SIGINT=shutdown, SIGHUP=reload
+
+        # Setup signal handlers — use a simple atomic flag approach for thread safety
         signal.signal(signal.SIGTERM, self._signal_handler)
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGHUP, self._signal_handler)
-        
+        # Prevent signals from interrupting system calls (retry instead)
+        signal.siginterrupt(signal.SIGTERM, False)
+        signal.siginterrupt(signal.SIGINT, False)
+        signal.siginterrupt(signal.SIGHUP, False)
+
         logger.info("GalaxyDaemon initialized")
     
     def _load_config(self, config_path: Optional[str]) -> Dict[str, Any]:
@@ -290,22 +297,33 @@ class GalaxyDaemon:
         return default_config
     
     def _signal_handler(self, signum, frame):
-        """Handle system signals"""
+        """Handle system signals — thread-safe deferred processing.
+
+        H8 fixed: Only set an atomic flag; actual handling is done in the
+        main loop to avoid signal-handler race conditions with file I/O.
+        """
+        import signal as _signal_module
         signals = {
-            signal.SIGTERM: "SIGTERM",
-            signal.SIGINT: "SIGINT",
-            signal.SIGHUP: "SIGHUP"
+            _signal_module.SIGTERM: "SIGTERM",
+            _signal_module.SIGINT: "SIGINT",
+            _signal_module.SIGHUP: "SIGHUP"
         }
         signal_name = signals.get(signum, f"Signal {signum}")
-        logger.info(f"Received {signal_name}")
-        
+        logger.info("Received %s", signal_name)
+        # Set atomic flag — main loop will process it safely
+        self._signal_pending = signum
+
+    def _process_pending_signals(self):
+        """Process any pending signals in the main loop (thread-safe)."""
+        if self._signal_pending == 0:
+            return
+        signum = self._signal_pending
+        self._signal_pending = 0  # Clear before processing
         if signum == signal.SIGHUP:
-            # Reload configuration
             self._reload_config()
         else:
-            # Shutdown
             self._shutdown_event.set()
-    
+
     def _reload_config(self):
         """Reload daemon configuration"""
         logger.info("Reloading configuration...")
@@ -367,27 +385,30 @@ class GalaxyDaemon:
         """Main daemon loop"""
         health_interval = self.config.get("health_check_interval", 30)
         metrics_interval = self.config.get("metrics_collection_interval", 60)
-        
+
         last_health_check = 0
         last_metrics = 0
-        
+
         while self._running and not self._shutdown_event.is_set():
+            # H8 fixed: process signals in main loop (thread-safe)
+            self._process_pending_signals()
+
             current_time = time.time()
-            
+
             # Health check
             if current_time - last_health_check >= health_interval:
                 self._health_check()
                 last_health_check = current_time
-            
+
             # Collect metrics
             if current_time - last_metrics >= metrics_interval:
                 self._collect_metrics()
                 last_metrics = current_time
-            
+
             # Check for shutdown
             if self._shutdown_event.wait(1):
                 break
-        
+
         # Graceful shutdown
         self.stop()
     
@@ -441,9 +462,7 @@ class GalaxyDaemon:
                 metrics.uptime_seconds = (datetime.now() - self.start_time).total_seconds()
             
             # Store metrics
-            self.health_metrics.append(metrics)
-            if len(self.health_metrics) > self.max_health_history:
-                self.health_metrics = self.health_metrics[-self.max_health_history:]
+            self.health_metrics.append(metrics)  # B3 fixed: deque auto-truncates
             
             # Check thresholds
             self._check_thresholds(metrics)
@@ -531,4 +550,7 @@ if __name__ == "__main__":
                 os.kill(proc.info['pid'], signal.SIGTERM)
                 print(f"Stopped daemon (PID {proc.info['pid']})")
     else:
-        daemon = start_daemon(args.config)
+        daemoinfo['pid'], signal.SIGTERM)
+                print(f"Stopped daemon (PID {proc.info['pid']})")
+    else:
+        daemo

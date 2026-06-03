@@ -183,6 +183,7 @@ class GatewayWSManager:
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.device_connections: Dict[str, str] = {}  # device_id -> connection_id
+        self._lock = asyncio.Lock()  # B4 fixed: protect dict mutations/reads
 
     # ------------------------------------------------------------------
     # Internal: lazy UCM accessor (avoids circular import at module load)
@@ -195,18 +196,21 @@ class GatewayWSManager:
 
     async def connect(self, websocket: WebSocket, connection_id: str):
         """接受新连接"""
-        await websocket.accept()
-        self.active_connections[connection_id] = websocket
-        logger.info(f"✅ WebSocket 连接建立: {connection_id}")
+        async with self._lock:  # B4 fixed: lock-protected mutation
+            await websocket.accept()
+            self.active_connections[connection_id] = websocket
+        logger.info("✅ WebSocket 连接建立: %s", connection_id)
 
-    def disconnect(self, connection_id: str):
+    async def disconnect(self, connection_id: str):
         """断开连接"""
-        if connection_id in self.active_connections:
+        async with self._lock:  # B4 fixed: lock-protected mutation + read
+            if connection_id not in self.active_connections:
+                return
             del self.active_connections[connection_id]
 
             # 注销设备
             device_id = None
-            for did, cid in self.device_connections.items():
+            for did, cid in list(self.device_connections.items()):
                 if cid == connection_id:
                     device_id = did
                     break
@@ -247,21 +251,24 @@ class GatewayWSManager:
                 except Exception:
                     pass
 
-            logger.info(f"✅ WebSocket 连接断开: {connection_id}")
+        logger.info("✅ WebSocket 连接断开: %s", connection_id)
 
     async def send_message(self, connection_id: str, message: Dict):
         """发送消息到指定连接"""
-        if connection_id in self.active_connections:
-            websocket = self.active_connections[connection_id]
+        async with self._lock:  # B4 fixed: lock-protected read
+            websocket = self.active_connections.get(connection_id)
+        if websocket is not None:
             await websocket.send_json(message)
 
     async def send_to_device(self, device_id: str, message: Dict):
         """发送消息到指定设备 — 委托 UCM 处理（含 fallback 逻辑）。"""
         # Fast path: use local connection_id map for direct send
-        connection_id = self.device_connections.get(device_id)
-        if connection_id and connection_id in self.active_connections:
+        async with self._lock:  # B4 fixed: lock-protected read
+            connection_id = self.device_connections.get(device_id)
+            websocket = self.active_connections.get(connection_id) if connection_id else None
+        if connection_id and websocket is not None:
             try:
-                await self.send_message(connection_id, message)
+                await websocket.send_json(message)
                 return
             except Exception as e:
                 logger.warning("GatewayWSManager.send_to_device local send failed, delegating to UCM: %s", e)
@@ -270,25 +277,29 @@ class GatewayWSManager:
         try:
             await self._ucm().send_to_device(device_id, message)
         except Exception as e:
-            logger.error(f"❌ UCM send_to_device failed for {device_id}: {e}")
+            logger.error("❌ UCM send_to_device failed for %s: %s", device_id, e)
 
-    def is_device_connected(self, device_id: str) -> bool:
+    async def is_device_connected(self, device_id: str) -> bool:
         """Check if a device has an active connection (UCM is authoritative)."""
-        if device_id in self.device_connections:
-            return True
+        async with self._lock:  # B4 fixed: lock-protected read
+            if device_id in self.device_connections:
+                return True
         return self._ucm().is_device_connected(device_id)
 
     async def broadcast(self, message: Dict):
         """广播消息到所有连接"""
-        for connection_id in list(self.active_connections.keys()):
+        async with self._lock:  # B4 fixed: lock-protected copy
+            conns = list(self.active_connections.items())
+        for connection_id, websocket in conns:
             try:
-                await self.send_message(connection_id, message)
+                await websocket.send_json(message)
             except Exception as e:
-                logger.error(f"❌ 广播消息失败: {e}")
+                logger.error("❌ 广播消息失败: %s", e)
 
-    def get_connected_devices(self) -> list:
+    async def get_connected_devices(self) -> list:
         """返回当前本地已连接的设备 ID 列表。"""
-        return list(self.device_connections.keys())
+        async with self._lock:  # B4 fixed: lock-protected read
+            return list(self.device_connections.keys())
 
 
 # 全局连接管理器
@@ -309,11 +320,11 @@ async def handle_websocket(websocket: WebSocket, connection_id: str):
             await handle_message(connection_id, message, websocket)
             
     except WebSocketDisconnect:
-        logger.info(f"📡 WebSocket 连接断开: {connection_id}")
-        connection_manager.disconnect(connection_id)
+        logger.info("📡 WebSocket 连接断开: %s", connection_id)
+        await connection_manager.disconnect(connection_id)
     except Exception as e:
-        logger.error(f"❌ WebSocket 处理异常: {e}")
-        connection_manager.disconnect(connection_id)
+        logger.error("❌ WebSocket 处理异常: %s", e)
+        await connection_manager.disconnect(connection_id)
 
 
 async def handle_message(connection_id: str, message: Dict, websocket: WebSocket):

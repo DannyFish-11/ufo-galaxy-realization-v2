@@ -42,6 +42,7 @@ import logging
 import threading
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -151,7 +152,7 @@ class PresenceProjection:
     """
 
     def __init__(self) -> None:
-        self._recent: List[ProjectionEvent] = []
+        self._recent: deque = deque(maxlen=200)  # B3 fixed: O(1) append + auto-truncate
         self._lock = threading.Lock()
         self._max_recent = 200
 
@@ -296,9 +297,7 @@ class PresenceProjection:
         )
 
         with self._lock:
-            self._recent.append(evt)
-            if len(self._recent) > self._max_recent:
-                self._recent = self._recent[-self._max_recent:]
+            self._recent.append(evt)  # B3 fixed: deque auto-truncates, no manual slice
 
         self._emit_event(evt)
         return evt
@@ -310,7 +309,7 @@ class PresenceProjection:
     def last_events(self, n: int = 20) -> List[ProjectionEvent]:
         """Return the most recent *n* projection events."""
         with self._lock:
-            return list(self._recent[-n:])
+            return list(self._recent)[-n:]
 
     # ------------------------------------------------------------------
     # Internal helpers

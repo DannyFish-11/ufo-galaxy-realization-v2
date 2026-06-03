@@ -58,6 +58,9 @@ NODE_SERVICES = {
     "knowledge": os.getenv("KNOWLEDGE_SERVICE_URL", "http://localhost:8103")
 }
 
+# H2 fixed: module-level singleton clients to avoid creating new clients per health check
+_client_instances: Dict[str, httpx.AsyncClient] = {}
+
 # ============================================================================
 # 数据模型
 # ============================================================================
@@ -106,11 +109,15 @@ class AutonomousProgrammingRequest(BaseModel):
 
 class NodeClient:
     """节点服务客户端"""
-    
+
     def __init__(self, base_url: str):
         self.base_url = base_url
         self.client = httpx.AsyncClient(timeout=60.0)
-    
+
+    async def aclose(self) -> None:
+        """H1 fixed: close the underlying HTTP connection pool."""
+        await self.client.aclose()
+
     async def post(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """POST 请求"""
         try:
@@ -121,10 +128,14 @@ class NodeClient:
             if response.status_code == 200:
                 return response.json()
             else:
-                return {"success": False, "error": f"HTTP {response.status_code}"}
+                return {"success": False, "error": f"HTTP {response.status_code}", "error_code": "http_error", "status_code": response.status_code}
+        except httpx.TimeoutException as e:
+            return {"success": False, "error": str(e), "error_code": "timeout", "error_type": "TimeoutException"}
+        except httpx.ConnectError as e:
+            return {"success": False, "error": str(e), "error_code": "connection_refused", "error_type": "ConnectError"}
         except Exception as e:
-            return {"success": False, "error": str(e)}
-    
+            return {"success": False, "error": str(e), "error_code": "unknown", "error_type": type(e).__name__}
+
     async def get(self, endpoint: str) -> Dict[str, Any]:
         """GET 请求"""
         try:
@@ -132,9 +143,13 @@ class NodeClient:
             if response.status_code == 200:
                 return response.json()
             else:
-                return {"success": False, "error": f"HTTP {response.status_code}"}
+                return {"success": False, "error": f"HTTP {response.status_code}", "error_code": "http_error", "status_code": response.status_code}
+        except httpx.TimeoutException as e:
+            return {"success": False, "error": str(e), "error_code": "timeout", "error_type": "TimeoutException"}
+        except httpx.ConnectError as e:
+            return {"success": False, "error": str(e), "error_code": "connection_refused", "error_type": "ConnectError"}
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": str(e), "error_code": "unknown", "error_type": type(e).__name__}
 
 # 初始化客户端
 memory_client = NodeClient(NODE_SERVICES["memory"])
@@ -298,7 +313,8 @@ async def _health_impl():
     services_status = {}
     for name, url in NODE_SERVICES.items():
         try:
-            client = NodeClient(url)
+            # H2 fixed: use singleton client per service instead of creating new one each call
+            client = _client_instances.setdefault(name, NodeClient(url))
             result = await client.get("/health")
             services_status[name] = result.get("status") == "healthy"
         except Exception:

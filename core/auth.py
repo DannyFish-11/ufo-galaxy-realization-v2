@@ -161,9 +161,9 @@ def _warn_no_token_once():
     if not _no_token_warning_issued:
         _no_token_warning_issued = True
         logger.warning(
-            "UFO_API_TOKEN is not set and UFO_DEV_MODE is not enabled. "
-            "Authentication is disabled. Set UFO_API_TOKEN for production "
-            "or UFO_DEV_MODE=1 to suppress this warning."
+            "GALAXY_API_TOKEN is not set and GALAXY_DEV_MODE is not enabled. "  # M7 fixed
+            "Authentication is disabled. Set GALAXY_API_TOKEN for production "  # M7 fixed
+            "or GALAXY_DEV_MODE=1 to suppress this warning."  # M7 fixed
         )
 
 

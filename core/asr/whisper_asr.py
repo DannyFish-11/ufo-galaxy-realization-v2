@@ -213,9 +213,18 @@ class WhisperASR:
         Args:
             model_size: 新的模型大小，None则保持当前大小。
         """
+        import gc  # M9 fixed
         if model_size:
             self.model_size = model_size
         self.model = None
+        gc.collect()  # M9 fixed: force Python GC
+        try:
+            import torch  # M9 fixed
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()  # M9 fixed: clear GPU memory cache
+                logger.info("GPU cache cleared after model unload")
+        except ImportError:
+            pass
         self._load_model()
 
     def __repr__(self) -> str:

@@ -30,6 +30,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -80,7 +81,7 @@ class PresenceDirector:
     def __init__(self, config: Optional[DirectorConfig] = None) -> None:
         self._config = config or DirectorConfig()
         self._lock = threading.Lock()
-        self._trace_log: List[Dict[str, Any]] = []
+        self._trace_log: deque = deque(maxlen=100)  # B3 fixed: O(1) append + auto-truncate
         self._max_trace = 100
 
     # ------------------------------------------------------------------
@@ -232,7 +233,7 @@ class PresenceDirector:
     def get_trace_log(self, n: int = 20) -> List[Dict[str, Any]]:
         """Return the most recent *n* director trace entries."""
         with self._lock:
-            return list(self._trace_log[-n:])
+            return list(self._trace_log)[-n:]
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -298,9 +299,7 @@ class PresenceDirector:
             "ts": time.time(),
         }
         with self._lock:
-            self._trace_log.append(entry)
-            if len(self._trace_log) > self._max_trace:
-                self._trace_log = self._trace_log[-self._max_trace:]
+            self._trace_log.append(entry)  # B3 fixed: deque auto-truncates, no manual slice
 
     @staticmethod
     def _emit_director_event(

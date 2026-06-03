@@ -67,6 +67,9 @@ class WebSocketManager:
         self.on_disconnect = on_disconnect
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._running = False
+        self._reconnect_backoff: Dict[str, float] = {}  # M5 fixed: exponential backoff tracker
+        self._backoff_base = 1.0
+        self._backoff_max = 60.0
         
     async def start(self):
         """启动管理器"""
@@ -92,16 +95,23 @@ class WebSocketManager:
     
     async def connect(self, websocket: WebSocket, device_id: str) -> bool:
         """接受新连接"""
+        # M5 fixed: check exponential backoff for reconnecting clients
+        now = datetime.now(timezone.utc).timestamp()
+        backoff_until = self._reconnect_backoff.get(device_id, 0)
+        if now < backoff_until:
+            wait = backoff_until - now
+            logger.warning("Device %s reconnect too fast, backoff %.1fs", device_id, wait)
+            await asyncio.sleep(wait)
         try:
             await websocket.accept()
             
             now = datetime.now(timezone.utc)
             self.connections[device_id] = DeviceConnection(
                 device_id=device_id,
-                websocket=websocket,
                 connected_at=now,
                 last_heartbeat=now
             )
+            _websocket_sockets[device_id] = websocket  # M4 fixed: store WebSocket separately
             
             logger.info(f"Device connected: {device_id}")
             
@@ -115,6 +125,15 @@ class WebSocketManager:
     
     async def disconnect(self, device_id: str):
         """断开连接"""
+        # M5 fixed: set exponential backoff before removing connection
+        prev_backoff = self._reconnect_backoff.get(device_id, 0)
+        now_ts = datetime.now(timezone.utc).timestamp()
+        if now_ts - prev_backoff < 120:  # double backoff if disconnect within 2min
+            self._reconnect_backoff[device_id] = now_ts + min(
+                self._backoff_max, self._backoff_base * 2 ** len([k for k, v in self._reconnect_backoff.items() if v > now_ts])
+            )
+        else:
+            self._reconnect_backoff[device_id] = now_ts + self._backoff_base
         if device_id in self.connections:
             conn = self.connections[device_id]
             conn.is_active = False
@@ -125,7 +144,8 @@ class WebSocketManager:
                 pass
             
             del self.connections[device_id]
-            logger.info(f"Device disconnected: {device_id}")
+            _websocket_sockets.pop(device_id, None)  # M4 fixed: clean up separate WebSocket store
+            logger.info("Device disconnected: %s", device_id)
             
             if self.on_disconnect:
                 await self._safe_callback(self.on_disconnect, device_id)
@@ -247,9 +267,9 @@ class WebSocketManager:
                 response = {"type": "error", "error": f"Unknown mesh type: {msg_type}"}
 
             # Send raw JSON (not AIPMessage) since mesh types are v2 extended
-            if device_id in self.connections:
-                conn = self.connections[device_id]
-                await conn.websocket.send_text(json.dumps(response))
+            websocket = _websocket_sockets.get(device_id)
+            if websocket is not None:
+                await websocket.send_text(json.dumps(response))
         except ImportError:
             logger.debug("mesh_coordinator not available, ignoring mesh message")
         except Exception as e:
