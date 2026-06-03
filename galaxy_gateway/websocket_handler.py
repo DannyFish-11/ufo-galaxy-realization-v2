@@ -189,10 +189,15 @@ class GatewayWSManager:
     # Internal: lazy UCM accessor (avoids circular import at module load)
     # ------------------------------------------------------------------
 
+    # L4 fixed: module-level cache for UCM instance (avoids repeated import+setup)
+    _ucm_instance = None
+
     @staticmethod
     def _ucm():
-        from core.unified.connection_manager import get_unified_connection_manager
-        return get_unified_connection_manager()
+        if GatewayWSManager._ucm_instance is None:
+            from core.unified.connection_manager import get_unified_connection_manager
+            GatewayWSManager._ucm_instance = get_unified_connection_manager()
+        return GatewayWSManager._ucm_instance
 
     async def connect(self, websocket: WebSocket, connection_id: str):
         """接受新连接"""

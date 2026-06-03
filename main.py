@@ -84,6 +84,7 @@ _PHASE_WIDTH = 60
 def print_phase(title: str) -> None:
     """Print a Phase section title with separators."""
     print_section_header(title)
+    logger.info("[Phase] %s", title)  # L2 fixed: mirror to logger
 
 
 def print_item(name: str, status: str = "ok", detail: str = "") -> None:
@@ -103,6 +104,8 @@ def print_item(name: str, status: str = "ok", detail: str = "") -> None:
     icon, color = icon_map.get(status, ("▶", Colors.CYAN))
     detail_str = f"  ({Colors.DIM}{detail}{Colors.ENDC})" if detail else ""
     print(f"  {color}{icon}{Colors.ENDC} {name}{detail_str}")
+    # L2 fixed: mirror status items to logger (without ANSI codes)
+    logger.info("[%s] %s %s", status.upper(), name, detail)
 
 
 from entrypoint_role_contract import (
@@ -552,7 +555,7 @@ def _run_setup_wizard() -> int:
     if wizard_path.exists():
         sys.exit(subprocess.call([sys.executable, str(wizard_path)]))
     else:
-        print("Configuration wizard not found:", wizard_path)
+        logger.info("Configuration wizard not found: %s", wizard_path)  # L2 fixed
         sys.exit(1)
 
 

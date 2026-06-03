@@ -13,6 +13,34 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from datetime import datetime
 import uuid
 
+__all__ = [  # L1 fixed: explicit export list
+    "AIPDeviceType",
+    "DevicePlatform",
+    "DeviceCapability",
+    "MessageType",
+    "TaskStatus",
+    "ResultStatus",
+    "Rect",
+    "UIElement",
+    "DeviceInfo",
+    "Command",
+    "CommandResult",
+    "AIPMessage",
+    "ParallelSubtaskItem",
+    "ParallelResultPayload",
+    "create_register_message",
+    "create_heartbeat_message",
+    "create_task_message",
+    "create_gui_click_message",
+    "create_gui_input_message",
+    "create_screenshot_message",
+    "create_gui_scroll_message",
+    "create_error_message",
+    "parse_message",
+    "validate_message",
+    "UnifiedMessageTypes",
+]
+
 
 # ============================================================================
 # 设备类型定义 (统一所有平台)

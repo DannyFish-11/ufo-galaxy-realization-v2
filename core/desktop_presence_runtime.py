@@ -201,29 +201,39 @@ class RuntimeSession:
             new_state.value,
         )
         # PR-8: emit phase transition on the unified state event bus.
-        try:
-            from core.state_event_bus import emit as _seb_emit, StateEventType
+        # M8 fixed: add 3-attempt retry loop with small backoff for event emission
+        _emission_err = None
+        for _attempt in range(3):
+            try:
+                from core.state_event_bus import emit as _seb_emit, StateEventType
 
-            _phase_map = {
-                TriState.SILENT: StateEventType.PHASE_SILENT,
-                TriState.LIMINAL: StateEventType.PHASE_LIMINAL,
-                TriState.MANIFEST: StateEventType.PHASE_MANIFEST,
-            }
-            et = _phase_map.get(new_state)
-            if et is not None:
-                _seb_emit(
-                    et,
-                    source="desktop_presence_runtime",
-                    payload={
-                        "from_phase": old_state.value,
-                        "to_phase": new_state.value,
-                        "request_source": self.source,
-                    },
-                    trace_id=self.trace_id,
-                    runtime_session_id=self.runtime_session_id,
-                )
-        except Exception as exc:
-            logger.warning("Phase change notification failed: %s", exc)
+                _phase_map = {
+                    TriState.SILENT: StateEventType.PHASE_SILENT,
+                    TriState.LIMINAL: StateEventType.PHASE_LIMINAL,
+                    TriState.MANIFEST: StateEventType.PHASE_MANIFEST,
+                }
+                et = _phase_map.get(new_state)
+                if et is not None:
+                    _seb_emit(
+                        et,
+                        source="desktop_presence_runtime",
+                        payload={
+                            "from_phase": old_state.value,
+                            "to_phase": new_state.value,
+                            "request_source": self.source,
+                        },
+                        trace_id=self.trace_id,
+                        runtime_session_id=self.runtime_session_id,
+                    )
+                break  # success — exit retry loop
+            except Exception as exc:
+                _emission_err = exc
+                if _attempt < 2:
+                    import time
+                    time.sleep(0.05 * (2 ** _attempt))  # 50ms / 100ms backoff
+        else:
+            # all 3 attempts exhausted
+            logger.warning("Phase change notification failed after 3 retries: %s", _emission_err)
 
         # PR-CROSS-DEVICE-SYNC: proactively push phase change to all connected Android devices.
         # This is fire-and-forget: failures are logged and swallowed.

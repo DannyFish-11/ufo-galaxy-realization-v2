@@ -109,11 +109,13 @@ class EdgeTTSEngine:
                 "Install it with: pip install edge-tts"
             ) from exc
 
+        _tmp_path = None
         if not output_path:
             # M3 fixed: use NamedTemporaryFile with delete=False for explicit cleanup
             _tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
             _tmp.close()
             output_path = _tmp.name
+            _tmp_path = output_path  # track for cleanup on exception
 
         output_path = os.path.abspath(output_path)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -121,14 +123,24 @@ class EdgeTTSEngine:
         use_voice = voice or self.voice
         use_rate = rate or self.rate
 
-        communicate = edge_tts.Communicate(
-            text,
-            use_voice,
-            rate=use_rate,
-            volume=self.volume,
-            proxy=self.proxy,
-        )
-        await communicate.save(output_path)
+        try:
+            communicate = edge_tts.Communicate(
+                text,
+                use_voice,
+                rate=use_rate,
+                volume=self.volume,
+                proxy=self.proxy,
+            )
+            await communicate.save(output_path)
+        except Exception:
+            # M3 fixed: cleanup temp file on synthesis failure
+            if _tmp_path is not None:
+                try:
+                    os.remove(_tmp_path)
+                    logger.debug("Cleaned up temp file after synthesis failure: %s", _tmp_path)
+                except OSError:
+                    pass
+            raise
         logger.debug("TTS synthesized: '%s...' → %s", text[:50], output_path)
         return output_path
 

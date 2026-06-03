@@ -186,6 +186,13 @@ class WebSocketManager:
     async def handle_connection(self, websocket: WebSocket, device_id: str):
         """处理设备连接的完整生命周期"""
         if not await self.connect(websocket, device_id):
+            # M5 fixed: set exponential backoff on connection failure to prevent tight retry loops
+            now_ts = datetime.now(timezone.utc).timestamp()
+            prev_failures = len([k for k, v in self._reconnect_backoff.items() if v > now_ts])
+            delay = min(self._backoff_max, self._backoff_base * (2 ** prev_failures))
+            self._reconnect_backoff[device_id] = now_ts + delay
+            logger.warning("Connection failed for %s, backoff %.1fs", device_id, delay)
+            await asyncio.sleep(delay)
             return
         
         try:

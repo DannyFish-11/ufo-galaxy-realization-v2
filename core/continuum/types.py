@@ -40,6 +40,21 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
+__all__ = [  # L1 fixed: explicit export list
+    "TriStatePhase",
+    "ContinuumPhase",
+    "RuntimeDomain",
+    "continuum_to_tri_state",
+    "ActionLevel",
+    "FormSignature",
+    "SpatialPresence",
+    "HumanFieldState",
+    "UnifiedState",
+    "ExpressionState",
+    "DecisionState",
+    "ContinuumState",
+]
+
 
 # ---------------------------------------------------------------------------
 # Enumerations
