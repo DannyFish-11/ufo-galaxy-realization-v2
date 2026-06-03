@@ -349,14 +349,20 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
 
     # ── Phase 8: AIPTransport adapter registration ──
     # PR-AIP-UNIFIED: Register all transport adapters for unified sending.
+    # Migrated from nodes/: MQTT(Node_41), BLE(Node_38), Serial(Node_48)
     try:
-        from core.aip_transport import get_aip_transport, AIPTransport
-        from core.adapters.websocket_adapter import WebSocketAdapter
-        from core.adapters.nats_adapter import NATSAdapter
+        from core.aip_transport import get_aip_transport
+        from core.adapters import (
+            WebSocketAdapter, NATSAdapter,
+            MQTTAdapter, BLEAdapter, SerialAdapter,
+        )
 
         aip_transport = get_aip_transport()
         aip_transport.register_adapter(WebSocketAdapter(websocket_manager))
         aip_transport.register_adapter(NATSAdapter())
+        aip_transport.register_adapter(MQTTAdapter())
+        aip_transport.register_adapter(BLEAdapter())
+        aip_transport.register_adapter(SerialAdapter())
 
         app.state.aip_transport = aip_transport
         logger.info(
