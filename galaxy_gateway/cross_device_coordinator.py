@@ -823,7 +823,7 @@ class CrossDeviceCoordinator:
                 return {"success": False, "error": f"没有可用的{target_type}设备"}
 
             # 步骤 1: 从源设备拉取文件到中转目录
-            safe_transfer_name = f"{hashlib.md5(file_name.encode()).hexdigest()}_{os.path.basename(file_name)}"
+            safe_transfer_name = f"{hashlib.sha256(file_name.encode()).hexdigest()}_{os.path.basename(file_name)}"
             transfer_path = os.path.join(transfer_dir, safe_transfer_name)
 
             if source_type == DeviceType.ANDROID:
@@ -943,7 +943,9 @@ class CrossDeviceCoordinator:
                     device_router.dispatch_task({"task_id": f"media_{device.device_id}", "payload": task}, device)
                 )
 
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True), timeout=30
+            )
 
             success_count = sum(1 for r in results if isinstance(r, dict) and r.get("success"))
 
@@ -952,6 +954,9 @@ class CrossDeviceCoordinator:
                 "message": f"媒体控制已同步到 {success_count}/{len(all_devices)} 个设备",
             }
 
+        except asyncio.TimeoutError:
+            logger.error("❌ 媒体控制同步超时")
+            return {"success": False, "error": "媒体控制同步超时"}
         except Exception as e:
             logger.error(f"❌ 媒体控制同步失败: {e}")
             return {"success": False, "error": str(e)}
@@ -990,12 +995,17 @@ class CrossDeviceCoordinator:
                     device_router.dispatch_task({"task_id": f"notify_{device.device_id}", "payload": task}, device)
                 )
 
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True), timeout=30
+            )
 
             success_count = sum(1 for r in results if isinstance(r, dict) and r.get("success"))
 
             return {"success": success_count > 0, "message": f"通知已发送到 {success_count}/{len(all_devices)} 个设备"}
 
+        except asyncio.TimeoutError:
+            logger.error("❌ 通知同步超时")
+            return {"success": False, "error": "通知同步超时"}
         except Exception as e:
             logger.error(f"❌ 通知同步失败: {e}")
             return {"success": False, "error": str(e)}

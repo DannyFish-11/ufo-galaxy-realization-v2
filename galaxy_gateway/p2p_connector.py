@@ -209,12 +209,29 @@ class STUNClient:
 
 class P2PConnector:
     """P2P 连接器 - 管理设备间的 P2P 连接"""
-    
+
+    # 读取超时（秒），防止连接永久挂起
+    READ_TIMEOUT = 30
+
     def __init__(self, local_device: PeerInfo):
         self.local_device = local_device
         self.connections: Dict[str, P2PConnection] = {}
         self.server_task: Optional[asyncio.Task] = None
         self.heartbeat_task: Optional[asyncio.Task] = None
+        self._background_tasks: set = set()
+
+    def _spawn_task(self, coro, name: str = "") -> asyncio.Task:
+        """创建后台任务，保存引用并添加异常回调，防止 fire-and-forget 异常静默丢失。"""
+        task = asyncio.create_task(coro, name=name or "")
+        self._background_tasks.add(task)
+
+        def _done_callback(t: asyncio.Task):
+            self._background_tasks.discard(t)
+            if not t.cancelled() and t.exception() is not None:
+                logger.error("Background task %r failed: %s", name or t.get_name(), t.exception())
+
+        task.add_done_callback(_done_callback)
+        return task
     
     async def start(self):
         """启动 P2P 连接器"""
@@ -231,10 +248,10 @@ class P2PConnector:
             print("无法获取公网地址，将只支持局域网连接")
         
         # 启动服务器（监听连接）
-        self.server_task = asyncio.create_task(self._run_server())
-        
+        self.server_task = self._spawn_task(self._run_server(), name="p2p_server")
+
         # 启动心跳任务
-        self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        self.heartbeat_task = self._spawn_task(self._heartbeat_loop(), name="p2p_heartbeat")
     
     async def stop(self):
         """停止 P2P 连接器"""
@@ -307,8 +324,8 @@ class P2PConnector:
                 # 发送握手消息
                 await self._send_handshake(conn)
                 
-                # 启动接收任务
-                asyncio.create_task(self._receive_loop(conn))
+                # 启动接收任务（带异常跟踪）
+                self._spawn_task(self._receive_loop(conn), name=f"receive_loop_{peer.device_id}")
                 
                 return True
             else:
@@ -449,8 +466,10 @@ class P2PConnector:
         """接收循环"""
         try:
             while conn.state == ConnectionState.CONNECTED:
-                # 读取数据长度
-                length_data = await conn.reader.readexactly(4)
+                # 读取数据长度（带超时，防止永久挂起）
+                length_data = await asyncio.wait_for(
+                    conn.reader.readexactly(4), timeout=self.READ_TIMEOUT
+                )
                 length = struct.unpack('!I', length_data)[0]
 
                 # 检查消息长度上限，防止 OOM
@@ -459,8 +478,10 @@ class P2PConnector:
                     await self._close_connection(conn)
                     return
 
-                # 读取数据
-                data = await conn.reader.readexactly(length)
+                # 读取数据（带超时，防止永久挂起）
+                data = await asyncio.wait_for(
+                    conn.reader.readexactly(length), timeout=self.READ_TIMEOUT
+                )
 
                 # 处理数据
                 await self._handle_data(conn, data)
@@ -468,6 +489,9 @@ class P2PConnector:
                 # 更新心跳时间
                 conn.last_heartbeat = time.time()
 
+        except asyncio.TimeoutError:
+            logger.warning("P2P read timeout from %s, closing connection", conn.peer.device_id)
+            await self._close_connection(conn)
         except asyncio.CancelledError:
             pass
         except Exception as e:

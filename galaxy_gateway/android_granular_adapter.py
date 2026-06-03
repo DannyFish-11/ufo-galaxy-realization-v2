@@ -236,7 +236,11 @@ class AndroidGranularAdapter:
                            "echo", "grep", "pgrep", "pidof", "uiautomator ", "settings ")
         command_stripped = command.strip().lower()
         if not any(command_stripped.startswith(p) for p in ALLOWED_PREFIXES):
-            return {"status": "error", "action": "shell", "error": f"Command not in allowlist: {command.split()[0] if command else 'empty'}"}
+            try:
+                cmd_first = shlex.split(command)[0] if command else "empty"
+            except ValueError:
+                cmd_first = command.strip().split()[0] if command else "empty"
+            return {"status": "error", "action": "shell", "error": f"Command not in allowlist: {cmd_first}"}
         # 额外安全检查 - 禁止危险命令模式
         dangerous_patterns = [";", "&&", "||", "|", "$(", "`", ">", "<", "rm -rf", "dd if=/dev/zero", "mkfs", "format", "shred", "mkfs."]
         if any(p in command for p in dangerous_patterns):

@@ -107,7 +107,15 @@ class MessageBuilder:
           - data: Base64-encoded image bytes
           - from_device / to_device: source and destination device IDs for routing
           - any extra keys passed via *metadata*
+
+        Raises:
+            ValueError: 当 image_data 超过 MAX_IMAGE_SIZE_GATEWAY 限制时
         """
+        if len(image_data) > TransferConfig.MAX_IMAGE_SIZE_GATEWAY:
+            raise ValueError(
+                f"Image data too large for gateway transfer: {len(image_data)} bytes "
+                f"(max {TransferConfig.MAX_IMAGE_SIZE_GATEWAY}). Use P2P or chunked transfer."
+            )
         encoded = base64.b64encode(image_data).decode("utf-8")
         payload = {
             "data_type": "image",
@@ -171,19 +179,22 @@ class TransferConfig:
     """传输配置"""
     # 小于此大小的文件通过 Gateway 传输（Base64 编码）
     GATEWAY_MAX_SIZE = 1024 * 1024  # 1MB
-    
+
     # 分块大小
     CHUNK_SIZE = 1024 * 1024  # 1MB per chunk
-    
+
     # 图片压缩质量
     IMAGE_QUALITY = 85
-    
+
+    # 单张图片最大大小（Gateway 模式），超过则拒绝或改用 P2P/分片
+    MAX_IMAGE_SIZE_GATEWAY = 5 * 1024 * 1024  # 5MB
+
     # 支持的图片格式
     SUPPORTED_IMAGE_FORMATS = ['jpeg', 'jpg', 'png', 'webp', 'gif', 'bmp']
-    
+
     # 支持的视频格式
     SUPPORTED_VIDEO_FORMATS = ['mp4', 'webm', 'avi', 'mov', 'mkv']
-    
+
     # 支持的音频格式
     SUPPORTED_AUDIO_FORMATS = ['mp3', 'wav', 'opus', 'ogg', 'aac', 'm4a']
 
@@ -213,7 +224,7 @@ class MultimodalTransferManager:
     ) -> AIPMessage:
         """
         发送图片
-        
+
         Args:
             from_device: 发送设备
             to_device: 接收设备
@@ -221,30 +232,48 @@ class MultimodalTransferManager:
             image_data: 图片数据（与 image_path 二选一）
             compress: 是否压缩
             quality: 压缩质量（1-100）
-        
+
         Returns:
             AIPMessage: 图片消息
+
+        Raises:
+            ValueError: 图片超过 MAX_IMAGE_SIZE_GATEWAY 限制
         """
         # 读取图片
         if image_path:
+            file_size = os.path.getsize(image_path)
+            if file_size > self.config.MAX_IMAGE_SIZE_GATEWAY:
+                raise ValueError(
+                    f"Image file too large: {file_size / 1024 / 1024:.1f}MB "
+                    f"(max {self.config.MAX_IMAGE_SIZE_GATEWAY / 1024 / 1024}MB). "
+                    f"Use send_file() for large image transfer."
+                )
             with open(image_path, 'rb') as f:
                 image_data = f.read()
             filename = os.path.basename(image_path)
         else:
             filename = "image.jpg"
-        
+
         # 压缩图片（如果需要）
         if compress:
             image_data = await self._compress_image(
                 image_data,
                 quality=quality or self.config.IMAGE_QUALITY
             )
-        
+
+        # 检查压缩后大小
+        if len(image_data) > self.config.MAX_IMAGE_SIZE_GATEWAY:
+            raise ValueError(
+                f"Compressed image still too large: {len(image_data) / 1024 / 1024:.1f}MB "
+                f"(max {self.config.MAX_IMAGE_SIZE_GATEWAY / 1024 / 1024}MB). "
+                f"Use send_file() for large image transfer."
+            )
+
         # 获取图片信息
         image = Image.open(io.BytesIO(image_data))
         width, height = image.size
         format = image.format.lower()
-        
+
         # 创建消息
         message = MessageBuilder.create_image_message(
             from_device=from_device,
@@ -258,7 +287,7 @@ class MultimodalTransferManager:
                 "compressed": compress
             }
         )
-        
+
         return message
     
     async def _compress_image(self, image_data: bytes, quality: int) -> bytes:

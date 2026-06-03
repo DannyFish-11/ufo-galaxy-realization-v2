@@ -184,7 +184,7 @@ def main():
     except Exception:
         _default_gw_port = "8765"
 
-    host = os.getenv("HOST", "0.0.0.0")
+    host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", _default_gw_port))
 
     tls_cert = os.getenv("GALAXY_TLS_CERT", "").strip()
