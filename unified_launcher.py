@@ -307,6 +307,14 @@ class UnifiedWebUI:
             except Exception as e:
                 logger.warning("核心子系统引导失败（系统仍可运行）: %s", e)
 
+            # === 步骤 2.5：启动认知进化系统（PR-25/26/27）===
+            try:
+                from core.cognitive.evolution_system import init_cognitive_evolution
+                init_cognitive_evolution()
+                logger.info("认知进化系统已初始化")
+            except Exception as e:
+                logger.warning("认知进化系统初始化失败（非阻塞）: %s", e)
+
             # === 步骤 3：挂载 core.api_routes 作为主 API 层 ===
             # core/api_routes.py 是 Galaxy 的 **唯一权威 API 入口**。
             # 所有 REST 路由（system、devices、nodes、vision、tasks、chat、
@@ -799,6 +807,13 @@ class GalaxyUnified:
                 loop.run_until_complete(async_shutdown())
         except Exception as e:
             logger.warning(f"异步关闭失败: {e}")
+
+        # 关闭认知进化系统（PR-25/26/27）
+        try:
+            from core.cognitive.evolution_system import shutdown_cognitive_evolution
+            shutdown_cognitive_evolution()
+        except Exception:
+            pass
 
         self.service_manager.stop_all()
         self.service_manager.state = SystemState.STOPPED
