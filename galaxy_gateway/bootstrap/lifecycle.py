@@ -232,73 +232,12 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         logger.warning("NATS Gateway Adapter init error (non-fatal): %s", e, exc_info=True)  # H4 fixed
 
     # ── Phase C: MeshCoordinator sender injection ──
-    # PR-MESH-INJECT: Inject transport senders into MeshCoordinator so that
-    # P2P / Relay / WebSocket fallback paths are operational.
-    try:
-        from core.mesh_coordinator import inject_mesh_senders
-
-        # 1. ws_sender: WebSocket message delivery (all devices)
-        async def _ws_sender(device_id: str, message: Any) -> bool:
-            try:
-                await websocket_manager.send_message(device_id, message)
-                return True
-            except Exception:
-                return False
-
-        # 2. relay_sender: Server relay for cross-LAN / NAT devices
-        from core.proxy_relay import ProxyRelay, RelayRequest
-
-        _proxy_relay = ProxyRelay()
-        async def _relay_sender(source: str, target: str, payload_type: str, payload: Any) -> bool:
-            try:
-                request = RelayRequest(
-                    source_device=source,
-                    target_device=target,
-                    payload_type=payload_type,
-                    payload=payload,
-                )
-                result = await _proxy_relay.relay(request)
-                return result.success
-            except Exception:
-                return False
-
-        # 3. p2p_sender: LAN direct TCP connection to peer devices
-        from galaxy_gateway.p2p_connector import P2PConnector
-
-        _p2p_connector = P2PConnector()
-        async def _p2p_sender(device_id: str, message_bytes: bytes) -> bool:
-            try:
-                return await _p2p_connector.send(device_id, message_bytes)
-            except Exception:
-                return False
-
-        inject_mesh_senders(
-            p2p_sender=_p2p_sender,
-            relay_sender=_relay_sender,
-            ws_sender=_ws_sender,
-        )
-        app.state.mesh_senders_injected = True
-        logger.info("MeshCoordinator senders injected (P2P + Relay + WS)")
-
-        # Also inject into AIPTransportRouter
-        try:
-            from core.aip_transport_router import inject_transport_senders
-
-            async def _nats_pub(topic: str, payload: Any) -> None:
-                from core.nats_bus import nats_bus
-                if nats_bus.is_connected():
-                    await nats_bus._publish(topic, payload)
-
-            inject_transport_senders(
-                mesh_sender=mesh.send if mesh else None,
-                nats_publisher=_nats_pub,
-                ws_sender=_ws_sender,
-            )
-            logger.info("AIPTransportRouter senders injected")
-        except Exception as _aip_inj_err:
-            logger.debug("AIPTransportRouter injection skipped: %s", _aip_inj_err)
-    except Exception as _mesh_inj_err:
-        logger.warning("Mesh sender injection failed (non-fatal): %s", _mesh_inj_err, exc_info=True)
+    # NOTE: Mesh senders are already injected by core/routes/hybrid.py
+    # at application startup. The hybrid module provides P2P (WS-simulated),
+    # Relay, and WS senders with full API endpoints.
+    # Lifecycle injection here would conflict with hybrid.py's setup.
+    # See: core/routes/hybrid.py Phase 5 for the canonical injection point.
+    logger.debug("Mesh senders: using hybrid.py canonical injection")
 
     # ── Stale-device cleanup background task ──
     # Periodically calls android_bridge.cleanup_stale_devices() to mark
