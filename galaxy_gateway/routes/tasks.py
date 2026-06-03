@@ -170,7 +170,19 @@ async def send_command(
         device_id=request.device_id,
         payload=request.parameters,
     )
-    success = await wsm.send_message(request.device_id, message)
+    # PR-28: Route through AIPTransport for smart transport selection
+    try:
+        from core.aip_transport import get_aip_transport
+        result = await get_aip_transport().send(
+            message,
+            request.device_id,
+            transport="auto",
+        )
+        success = result.get("success", False)
+    except Exception as exc:
+        logger.warning("AIPTransport send failed for command: %s", exc)
+        # Fallback: direct WS
+        success = await wsm.send_message(request.device_id, message)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to send command")
     return {"status": "sent", "message_id": message.message_id}

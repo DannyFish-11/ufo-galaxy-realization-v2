@@ -874,6 +874,23 @@ async def handle_device_register(
         except Exception:
             pass
 
+        # PR-28: Sync tailscale_ip to MeshCoordinator + TailscaleP2PAdapter
+        try:
+            device = bridge._devices.get(device_id)
+            if device and device.tailscale_ip:
+                from core.mesh_coordinator import get_mesh_coordinator
+                mesh = get_mesh_coordinator()
+                mesh.register_peer(
+                    device_id=device_id,
+                    tailscale_ip=device.tailscale_ip,
+                )
+                logger.debug(
+                    "PR-28: Device %s tailscale_ip=%s synced to MeshCoordinator",
+                    device_id, device.tailscale_ip,
+                )
+        except Exception:
+            pass
+
         # PR-B: Create and activate a durable mesh session for this device so that
         # the MeshSessionLifecycleCoordinator is aware of the device's registration.
         # The session tracks this device as both source and primary participant so

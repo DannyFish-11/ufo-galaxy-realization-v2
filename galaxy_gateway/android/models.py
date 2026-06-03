@@ -109,6 +109,9 @@ class AndroidDevice:
     last_heartbeat: float = 0
     websocket: Any = None
 
+    # PR-28: Tailscale IP for P2P direct transport
+    tailscale_ip: Optional[str] = None
+
     # 任务状态
     current_task_id: Optional[str] = None
     pending_tasks: List[str] = field(default_factory=list)
@@ -130,6 +133,7 @@ class AndroidDevice:
             "supported_actions": self.supported_actions,
             "connected": self.connected,
             "last_heartbeat": self.last_heartbeat,
+            "tailscale_ip": self.tailscale_ip,
             "current_task_id": self.current_task_id,
         }
 
@@ -165,4 +169,5 @@ class AndroidDevice:
             capabilities_explicitly_reported=caps_reported,
             connected=True,
             last_heartbeat=time.time(),
+            tailscale_ip=data.get("tailscale_ip") or (data.get("payload") or {}).get("tailscale_ip"),
         )
