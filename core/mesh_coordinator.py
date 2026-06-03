@@ -1,24 +1,19 @@
 """
-MeshCoordinator — P2P 混合组网协调器
-=====================================
+MeshCoordinator — 设备协同网络层
+==================================
 
-Phase 5 Matrix OS 核心组件。
+职责: 设备组网、状态同步、多设备协同
+不负责: 消息传输（已移至 AIPTransport）
 
-在现有星型拓扑 (所有设备 → 服务端 WebSocket) 之上构建 P2P 加速层:
-- 同一 LAN 内的设备建立 TCP 直连 (复用 p2p_connector.py)
-- 不同 LAN / NAT 受限的设备走服务端中继 (复用 proxy_relay.py)
-- 自动选路: 查 peer 表 → 直连可达? P2P : Relay
-
-核心流程:
-1. 设备连接 WS 时上报 peer_announce (LAN IP/port)
-2. 服务端收集所有 peer 信息, 通过 peer_exchange 下发给每台设备
-3. 设备端的 MeshCoordinator 尝试 TCP 探测 LAN peer
-4. 发送消息时: 直连可达 → P2P; 否则 → 服务端 Relay
+核心功能:
+1. 设备发现 — peer_announce / peer_exchange
+2. 拓扑维护 — get_topology / build_peer_exchange
+3. 多设备协同 — 同步设备状态、协同决策
 
 与现有组件的关系:
-- 复用 galaxy_gateway/p2p_connector.py 的 TCP 连接 / STUN
-- 复用 core/proxy_relay.py 作为 fallback
-- 复用 core/node_discovery.py 的 UDP 广播发现
+- p2p_connector.py: 真正的 P2P TCP 直连（独立组件）
+- proxy_relay.py: 服务端中继（独立组件）
+- AIPTransport: 统一传输入口（新建）
 """
 
 import asyncio
@@ -82,9 +77,9 @@ class PeerEntry:
 
 @dataclass
 class MeshSendResult:
-    """消息发送结果"""
+    """DEPRECATED: mesh.send() 已删除，此类保留用于向后兼容"""
     success: bool
-    via: ConnectionType            # 实际使用的路径
+    via: ConnectionType
     target_device: str = ""
     latency_ms: float = 0
     error: str = ""
@@ -101,10 +96,6 @@ class MeshSendResult:
             "target_device": self.target_device,
             "latency_ms": self.latency_ms,
             "error": self.error,
-            "direct_attempted": self.direct_attempted,
-            "direct_health_checked": self.direct_health_checked,
-            "fallback_used": self.fallback_used,
-            "fallback_reason": self.fallback_reason,
             "route_decision": self.route_decision,
         }
 
@@ -143,9 +134,10 @@ class MeshCoordinator:
         ws_sender: WSSender = None,
     ):
         self._local_id = local_device_id
-        self._p2p_send = p2p_sender
-        self._relay_send = relay_sender
-        self._ws_send = ws_sender
+        # DEPRECATED: senders 已移至 AIPTransport，保留兼容
+        self._p2p_send = p2p_sender   # legacy, do not use
+        self._relay_send = relay_sender  # legacy, do not use
+        self._ws_send = ws_sender  # legacy, do not use
         self._peers: Dict[str, PeerEntry] = {}
         self._stats = {
             "total_sent": 0,
@@ -247,174 +239,6 @@ class MeshCoordinator:
                 return False, True, "direct_probe_failed"
             return True, True, ""
         return True, False, ""
-
-    async def send(
-        self,
-        target_device: str,
-        payload: Dict[str, Any],
-        payload_type: str = "task",
-        source_device: str = "",
-    ) -> MeshSendResult:
-        """
-        发送消息到目标设备 — 自动选路 (overlay / enrichment path)
-
-        Transport hierarchy note (PR-4):
-        This method operates as an overlay send path — it is subordinate to
-        canonical transport (direct WS = primary, relay = fallback).  Callers
-        must not use this path as a substitute for canonical dispatch authority.
-        Successful delivery here does not imply canonical routability.
-
-        策略:
-        1. 如果目标 peer 标记为 direct reachable → 尝试 P2P
-        2. P2P 失败 → 标记不可达 → fallback Relay
-        3. 如果目标不在 peer 表或非 direct → 直接 Relay
-        """
-        start = time.time()
-        self._stats["total_sent"] += 1
-        source = source_device or self._local_id
-
-        peer = self._peers.get(target_device)
-        direct_attempted = False
-        direct_health_checked = False
-        fallback_reason = ""
-
-        def _return_with_dispatch_tracking(result: MeshSendResult) -> MeshSendResult:
-            self._last_overlay_dispatch = {
-                "available": True,
-                "source_device": source,
-                "target_device": target_device,
-                "payload_type": payload_type,
-                "success": bool(result.success),
-                "via": result.via.value,
-                "route_decision": result.route_decision,
-                "fallback_used": bool(result.fallback_used),
-                "fallback_reason": result.fallback_reason,
-                "latency_ms": result.latency_ms,
-                "error": result.error,
-                "timestamp": time.time(),
-                "authority": "mesh_overlay_coordination",
-            }
-            return result
-
-        # 策略 1: P2P 直连
-        direct_ok, direct_health_checked, direct_reason = await self._check_direct_viability(target_device, peer)
-        if direct_ok:
-            self._stats["direct_attempted"] += 1
-            direct_attempted = True
-            try:
-                msg_bytes = json.dumps({
-                    "type": "mesh_message",
-                    "source": source,
-                    "payload_type": payload_type,
-                    "payload": payload,
-                }, ensure_ascii=False).encode("utf-8")
-
-                ok = await self._p2p_send(target_device, msg_bytes)
-                if ok:
-                    self._stats["via_direct"] += 1
-                    return _return_with_dispatch_tracking(MeshSendResult(
-                        success=True,
-                        via=ConnectionType.DIRECT,
-                        target_device=target_device,
-                        latency_ms=(time.time() - start) * 1000,
-                        direct_attempted=True,
-                        direct_health_checked=direct_health_checked,
-                        route_decision="direct_p2p",
-                    ))
-                # P2P 失败 → 标记
-                peer.reachable_direct = False
-                peer.probe_failures += 1
-                fallback_reason = "direct_send_failed"
-                logger.warning(f"P2P send failed to {target_device}, falling back to relay")
-            except Exception as e:
-                logger.warning(f"P2P send error: {e}")
-                if peer:
-                    peer.reachable_direct = False
-                    peer.probe_failures += 1
-                fallback_reason = "direct_send_error"
-        else:
-            fallback_reason = direct_reason
-            if direct_reason:
-                self._stats["direct_unavailable"] += 1
-
-        # 策略 2: 服务端 Relay
-        if self._relay_send:
-            try:
-                result = await self._relay_send(source, target_device, payload_type, payload)
-                success = result.get("status") != "failed"
-                self._stats["via_relay"] += 1
-                self._stats["fallback_relay"] += 1
-                return _return_with_dispatch_tracking(MeshSendResult(
-                    success=success,
-                    via=ConnectionType.RELAY,
-                    target_device=target_device,
-                    latency_ms=(time.time() - start) * 1000,
-                    error=result.get("error", ""),
-                    direct_attempted=direct_attempted,
-                    direct_health_checked=direct_health_checked,
-                    fallback_used=True,
-                    fallback_reason=fallback_reason or "relay_path_selected",
-                    route_decision="relay_fallback",
-                ))
-            except Exception as e:
-                return _return_with_dispatch_tracking(MeshSendResult(
-                    success=False,
-                    via=ConnectionType.RELAY,
-                    target_device=target_device,
-                    error=f"Relay failed: {e}",
-                    latency_ms=(time.time() - start) * 1000,
-                    direct_attempted=direct_attempted,
-                    direct_health_checked=direct_health_checked,
-                    fallback_used=True,
-                    fallback_reason=fallback_reason or "relay_send_error",
-                    route_decision="relay_fallback_failed",
-                ))
-
-        # 策略 3: WS fallback (服务端直接推送)
-        if self._ws_send:
-            try:
-                ok = await self._ws_send(target_device, {
-                    "type": "mesh_message",
-                    "source": source,
-                    "payload_type": payload_type,
-                    "payload": payload,
-                })
-                return _return_with_dispatch_tracking(MeshSendResult(
-                    success=ok,
-                    via=ConnectionType.RELAY,
-                    target_device=target_device,
-                    latency_ms=(time.time() - start) * 1000,
-                    direct_attempted=direct_attempted,
-                    direct_health_checked=direct_health_checked,
-                    fallback_used=True,
-                    fallback_reason=fallback_reason or "ws_path_selected",
-                    route_decision="ws_fallback",
-                ))
-            except Exception as e:
-                return _return_with_dispatch_tracking(MeshSendResult(
-                    success=False,
-                    via=ConnectionType.RELAY,
-                    target_device=target_device,
-                    error=str(e),
-                    latency_ms=(time.time() - start) * 1000,
-                    direct_attempted=direct_attempted,
-                    direct_health_checked=direct_health_checked,
-                    fallback_used=True,
-                    fallback_reason=fallback_reason or "ws_send_error",
-                    route_decision="ws_fallback_failed",
-                ))
-
-        return _return_with_dispatch_tracking(MeshSendResult(
-            success=False,
-            via=ConnectionType.UNKNOWN,
-            target_device=target_device,
-            error="No sender available (P2P/Relay/WS all unconfigured)",
-            direct_attempted=direct_attempted,
-            direct_health_checked=direct_health_checked,
-            fallback_used=bool(fallback_reason),
-            fallback_reason=fallback_reason,
-            route_decision="no_sender_available",
-        ))
 
     # ================================================================
     # Peer 探测
