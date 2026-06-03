@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Phase, PhaseLabel, WebSocketMessage } from '@/types/phase';
 import { PHASE_CONFIG } from '@/types/phase';
 
@@ -16,7 +16,9 @@ function isPhaseMessage(msg: WebSocketMessage | null): msg is WebSocketMessage &
     type === 'PHASE_SILENT' || type === 'phase_silent' ||
     type === 'PHASE_LIMINAL' || type === 'phase_liminal' ||
     type === 'PHASE_MANIFEST' || type === 'phase_manifest' ||
-    type === 'PHASE_TRANSITION' || type === 'phase_transition'
+    type === 'PHASE_TRANSITION' || type === 'phase_transition' ||
+    // P30: 兼容主窗口 app.js 的消息类型
+    type === 'phase_change' || type === 'state_event'
   );
 }
 
@@ -24,16 +26,16 @@ function extractPhase(msg: WebSocketMessage): Phase | null {
   const type = (msg.type || msg.event_type || '').toLowerCase();
 
   if (type.includes('silent')) return 'silent';
-  if (type.includes('liminal')) return 'liminal';
-  if (type.includes('manifest')) return 'manifest';
+  if (type.includes('liminal') || type.includes('processing')) return 'liminal';
+  if (type.includes('manifest') || type.includes('completed')) return 'manifest';
 
   // transition 消息中的 target_phase
   const target = msg.target_phase || msg.phase;
   if (target && typeof target === 'string') {
     const t = target.toLowerCase();
     if (t.includes('silent')) return 'silent';
-    if (t.includes('liminal')) return 'liminal';
-    if (t.includes('manifest')) return 'manifest';
+    if (t.includes('liminal') || t.includes('processing')) return 'liminal';
+    if (t.includes('manifest') || t.includes('completed')) return 'manifest';
   }
 
   return null;
@@ -41,6 +43,9 @@ function extractPhase(msg: WebSocketMessage): Phase | null {
 
 export function usePhase(): UsePhaseReturn {
   const [phase, setPhaseState] = useState<Phase>('silent');
+  // P28 修复：使用 ref 避免 handleMessage 闭包陷阱
+  const phaseRef = useRef<Phase>(phase);
+  phaseRef.current = phase;
 
   const setPhase = useCallback((p: Phase) => {
     setPhaseState(p);
@@ -67,13 +72,15 @@ export function usePhase(): UsePhaseReturn {
     return () => document.removeEventListener('keydown', handler);
   }, [setPhase]);
 
+  // P28 修复：handleMessage 不再依赖 phase，使用 ref 获取最新值
   const handleMessage = useCallback((msg: WebSocketMessage | null) => {
     if (!isPhaseMessage(msg)) return;
     const newPhase = extractPhase(msg);
-    if (newPhase && newPhase !== phase) {
+    // 使用 ref 比较，避免闭包陷阱
+    if (newPhase && newPhase !== phaseRef.current) {
       setPhase(newPhase);
     }
-  }, [phase, setPhase]);
+  }, [setPhase]);
 
   return {
     phase,

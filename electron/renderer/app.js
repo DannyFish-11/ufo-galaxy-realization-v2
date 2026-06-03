@@ -92,10 +92,11 @@ class ThreeStateManager {
     }
 
     /** 窗口大小变化 — 通知各态 */
+    // P32 修复：通知所有态，即使当前是纯CSS也可能需要动态调整
     onWindowResize() {
-        // Silent态需要更新WebGL渲染器尺寸
         if (this.silentState) this.silentState.onResize();
-        // Liminal和Manifest是纯CSS，自适应无需处理
+        if (this.liminalState) this.liminalState.onResize();
+        if (this.manifestState) this.manifestState.onResize();
     }
 
     // ============================================

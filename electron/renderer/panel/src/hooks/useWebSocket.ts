@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { WebSocketMessage } from '@/types/phase';
 
-const WS_URL = 'ws://localhost:8765/ws/desktop-presence';
-const RECONNECT_INTERVAL = 3000;
-const MAX_RECONNECT_ATTEMPTS = 10;
+// P25 修复：端口统一为 9000（与主窗口 app.js 一致）
+const WS_URL = 'ws://localhost:9000/ws/desktop-presence';
+// P26 修复：指数退避参数（与主窗口 app.js 保持一致）
+const RECONNECT_BASE_INTERVAL = 1000;
+const RECONNECT_MAX_INTERVAL = 30000;
 
 interface UseWebSocketReturn {
   connected: boolean;
@@ -50,11 +52,14 @@ export function useWebSocket(): UseWebSocketReturn {
         setConnected(false);
         wsRef.current = null;
 
-        // 自动重连
-        if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-          reconnectAttemptsRef.current++;
-          reconnectTimerRef.current = setTimeout(connect, RECONNECT_INTERVAL);
-        }
+        // P26+P27 修复：指数退避重连，无上限
+        const interval = Math.min(
+          RECONNECT_BASE_INTERVAL * Math.pow(2, reconnectAttemptsRef.current),
+          RECONNECT_MAX_INTERVAL
+        );
+        reconnectAttemptsRef.current++;
+        console.log(`[Panel] ${interval}ms 后重连 (第${reconnectAttemptsRef.current}次)...`);
+        reconnectTimerRef.current = setTimeout(connect, interval);
       };
 
       ws.onerror = (err) => {
@@ -79,11 +84,4 @@ export function useWebSocket(): UseWebSocketReturn {
     connect();
 
     return () => {
-      isMountedRef.current = false;
-      clearTimeout(reconnectTimerRef.current);
-      wsRef.current?.close();
-    };
-  }, [connect]);
-
-  return { connected, lastMessage, send };
-}
+      isMountedRef.current = fal

@@ -71,6 +71,9 @@ class SilentState {
             this.renderer.domElement.style.display = 'block';
             container.appendChild(this.renderer.domElement);
 
+            // P31 修复：监听 WebGL 上下文丢失事件，自动降级到 CSS fallback
+            this.renderer.domElement.addEventListener('webglcontextlost', this._onContextLost, false);
+
             // 场景和相机
             this.scene = new window.THREE.Scene();
             this.camera = new window.THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -97,6 +100,22 @@ class SilentState {
         } catch (err) {
             console.error('[SilentState] WebGL 初始化失败:', err);
             this._cleanupPartial();
+        }
+    }
+
+    /** P31 修复：WebGL 上下文丢失处理 — 自动降级到 CSS fallback */
+    _onContextLost = (event) => {
+        console.warn('[SilentState] WebGL 上下文丢失 — 降级到 CSS fallback');
+        event.preventDefault();
+        // 清理 WebGL 资源但保持激活状态
+        this.useWebGL = false;
+        this._disposeWebGL();
+        // 激活 CSS fallback
+        if (this.canvasContainer) {
+            this.canvasContainer.classList.remove('active');
+        }
+        if (this.fallbackEl) {
+            this.fallbackEl.classList.add('active');
         }
     }
 
@@ -295,8 +314,12 @@ class SilentState {
         if (this.renderer) {
             // 移除 canvas
             const canvas = this.renderer.domElement;
-            if (canvas && canvas.parentNode) {
-                canvas.parentNode.removeChild(canvas);
+            // P31 修复：移除上下文丢失监听器
+            if (canvas) {
+                canvas.removeEventListener('webglcontextlost', this._onContextLost, false);
+                if (canvas.parentNode) {
+                    canvas.parentNode.removeChild(canvas);
+                }
             }
             this.renderer.dispose();
             this.renderer = null;
