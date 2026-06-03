@@ -365,12 +365,33 @@ class MeshCoordinator:
         return peers
 
     async def broadcast_peer_exchange(self):
-        """向所有在线设备广播 peer 列表（通过 AIPTransport）。"""
+        """向所有在线设备广播 peer 列表（通过 AIPTransport）。
+
+        PR-28: Includes server's own tailscale_ip so devices can P2P back.
+        """
         from core.aip_transport import get_aip_transport
 
         aip_transport = get_aip_transport()
+
+        # PR-28: Get server's own tailscale_ip for inclusion in peer list
+        server_ts_ip = ""
+        try:
+            from core.adapters.tailscale_p2p_adapter import TailscaleP2PAdapter
+            ts_adapter = aip_transport.get_adapter("tailscale_p2p")
+            if ts_adapter and hasattr(ts_adapter, '_my_ts_ip'):
+                server_ts_ip = ts_adapter._my_ts_ip or ""
+        except Exception:
+            pass
+
         for device_id in list(self._peers.keys()):
             peer_list = self.build_peer_exchange(exclude_device=device_id)
+            # PR-28: Add server itself to peer list with tailscale_ip
+            if server_ts_ip:
+                peer_list.insert(0, {
+                    "device_id": "server",
+                    "tailscale_ip": server_ts_ip,
+                    "role": "gateway",
+                })
             if peer_list:
                 await aip_transport.send({
                     "type": "peer_exchange",

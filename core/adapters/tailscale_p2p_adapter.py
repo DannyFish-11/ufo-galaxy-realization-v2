@@ -47,6 +47,8 @@ _READ_TIMEOUT = 10.0                # seconds for inbound read
 _PEER_CACHE_TTL = 60.0              # seconds: peer cache freshness
 _HEALTH_CHECK_INTERVAL = 60.0       # seconds: connection pool health check
 _MAX_MSG_SIZE = 10 * 1024 * 1024    # 10MB max message
+_MAX_CONNECTIONS = 50               # max pooled connections (LRU eviction)
+_CONN_IDLE_TIMEOUT = 300.0          # seconds: idle connection eviction
 
 
 class _ConnectionEntry:
@@ -280,7 +282,10 @@ class TailscaleP2PAdapter(TransportAdapter):
     # ── Internal: connection management ─────────────────────────────
 
     async def _acquire_connection(self, device_id: str, ts_ip: str) -> _ConnectionEntry:
-        """Get or create a pooled connection (thread-safe)."""
+        """Get or create a pooled connection (thread-safe).
+
+        Enforces MAX_CONNECTIONS limit via LRU eviction of oldest idle connections.
+        """
         async with self._conn_lock:
             # Check existing connection
             entry = self._connections.get(device_id)
@@ -293,6 +298,20 @@ class TailscaleP2PAdapter(TransportAdapter):
                 except Exception:
                     pass
                 del self._connections[device_id]
+
+            # Capacity check: LRU eviction if at limit
+            if len(self._connections) >= _MAX_CONNECTIONS:
+                # Evict oldest idle connection
+                lru_device = min(
+                    self._connections,
+                    key=lambda did: self._connections[did].last_used,
+                )
+                lru_entry = self._connections.pop(lru_device)
+                try:
+                    lru_entry.writer.close()
+                except Exception:
+                    pass
+                logger.debug("LRU evicted P2P connection to %s", lru_device)
 
             # Create new connection
             reader, writer = await asyncio.wait_for(
@@ -314,20 +333,22 @@ class TailscaleP2PAdapter(TransportAdapter):
             if not self._running:
                 break
 
-            # Purge dead connections
+            # Purge dead + idle connections
+            now = time.time()
             async with self._conn_lock:
-                dead = [
+                to_remove = [
                     did for did, e in list(self._connections.items())
-                    if not e.is_alive
+                    if not e.is_alive or (now - e.last_used) > _CONN_IDLE_TIMEOUT
                 ]
-                for did in dead:
+                for did in to_remove:
                     entry = self._connections.pop(did, None)
                     if entry:
                         try:
                             entry.writer.close()
                         except Exception:
                             pass
-                    logger.debug("Health check: purged dead connection to %s", did)
+                    reason = "dead" if (entry and not entry.is_alive) else "idle"
+                    logger.debug("Health check: purged %s connection to %s", reason, did)
 
             # Refresh peer cache
             try:
@@ -451,6 +472,22 @@ class TailscaleP2PAdapter(TransportAdapter):
                     break
 
                 message = json.loads(payload_bytes.decode("utf-8"))
+                msg_type = message.get("type", "unknown")
+                logger.debug("P2P msg from %s: type=%s", peer_addr, msg_type)
+
+                # PR-28: Reply ACK so sender knows delivery succeeded
+                try:
+                    ack = json.dumps({
+                        "type": "ack",
+                        "ack_for": message.get("id", message.get("message_id", "")),
+                        "received_via": "tailscale_p2p",
+                        "timestamp": time.time(),
+                    }, default=str).encode("utf-8")
+                    writer.write(len(ack).to_bytes(4, "big") + ack)
+                    await writer.drain()
+                except Exception as ack_err:
+                    logger.debug("P2P ACK failed to %s: %s", peer_addr, ack_err)
+
                 await self._dispatch_inbound(message, peer_addr)
 
         except asyncio.TimeoutError:
