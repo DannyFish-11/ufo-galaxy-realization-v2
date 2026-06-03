@@ -8,37 +8,38 @@
 </head>
 <body>
     <!-- ============================================
-         桌面层 — 真实桌面始终可见
+         SPACE 空间层 — 在桌面背后，CSS 3D纵深
+         ============================================ -->
+    <div class="space" id="spaceLayer">
+        <div class="space-plane">
+            <div class="ceiling-line"></div>
+            <div class="floor-line"></div>
+        </div>
+    </div>
+
+    <!-- ============================================
+         DESKTOP 桌面层 — 最前面，不动，半透明背景
          ============================================ -->
     <div class="desktop" id="desk">
         <div class="bg"></div>
     </div>
 
     <!-- ============================================
-         SILENT 静默态 — WebGL Shader有机波动
+         LIMINAL 阈限态 — 蓝紫粉边缘光雾叠加
          ============================================ -->
-    <div class="s on" id="sLayer">
-        <!-- WebGL Canvas容器 -->
-        <div id="silent-canvas-container"></div>
-        <!-- CSS辅助：屏幕边缘氛围灯 -->
-        <div class="s-bezel"></div>
+    <div class="l" id="lLayer">
+        <div class="l-wrap">
+            <div class="l-glow"></div>
+        </div>
+        <div class="l-text">正在理解</div>
     </div>
 
     <!-- ============================================
-         LIMINAL 阈限态 — CSS 3D深度空间
+         SILENT 静默态 — WebGL Shader有机波动
          ============================================ -->
-    <div class="l" id="lLayer">
-        <div class="corridor">
-            <div class="room">
-                <div class="wall-floor"></div>
-                <div class="wall-ceil"></div>
-                <div class="wall-left"></div>
-                <div class="wall-right"></div>
-                <div class="vanish"></div>
-            </div>
-        </div>
-        <div class="l-fog"></div>
-        <div class="l-text">正在理解</div>
+    <div class="s on" id="sLayer">
+        <div id="silent-canvas-container"></div>
+        <div class="s-bezel"></div>
     </div>
 
     <!-- ============================================

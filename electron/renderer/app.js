@@ -142,16 +142,20 @@ class ThreeStateManager {
     _enterState(phase, data) {
         switch (phase) {
             case Phase.SILENT:
+                // Silent态：桌面壁纸正常显示
+                document.body.classList.remove('liminal-active');
                 this.silentState.enter();
                 break;
 
             case Phase.LIMINAL:
-                // 确保Silent态停止
+                // Liminal态：桌面背景变暗，空间层透过来
                 if (this.silentState) this.silentState.exit();
+                document.body.classList.add('liminal-active');
                 this.liminalState.enter();
                 break;
 
             case Phase.MANIFEST:
+                document.body.classList.remove('liminal-active');
                 this.manifestState.enter();
                 break;
 

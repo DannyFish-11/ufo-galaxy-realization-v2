@@ -110,15 +110,17 @@ void main(){
   // smoothstep将光晕限制在边缘附近，noise增加边缘不规则感
   float glow = smoothstep(0.4, 0.0, edgeDist + noise * 0.15);
   
-  // ---------- 8秒慢呼吸 ----------
+  // ---------- 8秒慢呼吸（增强）----------
   // sin周期 = 2π/0.785 ≈ 8秒
-  float breathe = sin(uTime * 0.785) * 0.3 + 0.7;
+  // 振幅加大：0.3→0.35，呼吸更明显
+  float breathe = sin(uTime * 0.785) * 0.35 + 0.65;
   
   // ---------- 颜色输出 ----------
   // 纯宇宙蓝 rgb(40,75,180) → vec3(0.157, 0.294, 0.706)
   vec3 color = vec3(0.157, 0.294, 0.706);
-  // opacity 4-10%: glow(0~1) * 0.08 * breathe(0.4~1.0) → 0~0.08
-  float alpha = glow * 0.08 * breathe;
+  // opacity 6-15%: glow(0~1) * 0.12 * breathe(0.3~1.0) → 0~0.12
+  // 之前0.08(4-10%)，现在0.12(6-15%)，更明显但不过度
+  float alpha = glow * 0.12 * breathe;
   
   gl_FragColor = vec4(color, alpha);
 }

@@ -1,18 +1,16 @@
 /* =============================================
-   Galaxy V2 Desktop Presence — v18
+   Galaxy V2 Desktop Presence — v39 Final
    三态视觉系统：Silent(WebGL) / Liminal(CSS3D) / Manifest
-   
-   Silent:  WebGL Fragment Shader + Three.js（保持不变）
-   Liminal: 纯CSS 3D Transforms（v18重写）
-   
-   色调系统：粉→紫→蓝 连续光谱
-   --c-pink:     255,107,157  (粉)
-   --c-purple:   168,85,247   (紫)
-   --c-blue:     59,130,246   (蓝)
-   --c-deepblue: 30,60,180    (深蓝)
-   --c-cyan:     100,200,255  (青)
-   
-   缓动：cubic-bezier(0.16, 1, 0.3, 1) — ease-out-expo
+
+   架构：
+   z-index 0:  .space — 背后空间层（CSS 3D纵深）
+   z-index 10: .desktop — 桌面层（不动，半透明）
+   z-index 20: #lLayer — Liminal光雾叠加
+   z-index 30: #sLayer — Silent态（WebGL Shader）
+   z-index 40: #mLayer — Manifest态
+
+   色调：粉→紫→蓝 连续光谱
+   缓动：cubic-bezier(0.16, 1, 0.3, 1)
    ============================================= */
 
 :root{
@@ -20,106 +18,171 @@
   --c-purple:168,85,247;
   --c-blue:59,130,246;
   --c-deepblue:30,60,180;
-  --c-cyan:100,200,255;
-  --space-bg:#0a0e1a;
-  --space-mid:#0d1025;
-  --space-deep:#070a14;
   --ease-expo:cubic-bezier(0.16,1,0.3,1);
 }
 
 /* ---------- 全局重置 ---------- */
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-html, body { width:100%; height:100%; overflow:hidden; background:var(--space-bg); font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif; cursor:none; }
+html, body { width:100%; height:100%; overflow:hidden; background:#080810; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif; cursor:none; }
 
-/* =============================================
-   DESKTOP 桌面层
-   ============================================= */
-.desktop { position:fixed; inset:0; z-index:0; transform-origin:center 40%; transition:transform 2.5s var(--ease-expo), filter 2.5s ease; }
-.desktop .bg { position:absolute; inset:0; background: radial-gradient(ellipse 60% 50% at 25% 25%, rgba(var(--c-pink),0.12) 0%, rgba(var(--c-purple),0.06) 40%, transparent 70%), radial-gradient(ellipse 55% 45% at 75% 75%, rgba(var(--c-blue),0.10) 0%, rgba(var(--c-deepblue),0.05) 45%, transparent 70%), radial-gradient(ellipse 40% 35% at 55% 35%, rgba(var(--c-cyan),0.04) 0%, transparent 60%), linear-gradient(160deg, var(--space-bg) 0%, var(--space-mid) 40%, #0f1228 70%, var(--space-deep) 100%); }
+/* ═══════════════════════════════════════════
+   SPACE 空间层 — z-index:0，在桌面背后
+   ═══════════════════════════════════════════ */
 
-/* Liminal态：桌面推入深度空间 */
-.perspective-mode .desktop { transform:perspective(1400px) rotateX(14deg) scale(0.82) translateY(-4%); filter:brightness(0.50) saturate(0.55); }
+.space{position:fixed;inset:0;z-index:0;
+  perspective:1000px;
+  perspective-origin:50% 42%;
+  overflow:hidden;}
 
-/* =============================================
-   SILENT 静默态 — WebGL Shader（保持不变）
-   ============================================= */
+/* 空间平面 — 往深处倾斜 */
+.space-plane{position:absolute;
+  top:-30%;left:-30%;right:-30%;bottom:-30%;
+  background:
+    /* 消失点光雾 */
+    radial-gradient(ellipse 35% 30% at 50% 38%,
+      rgba(var(--c-pink),0.15) 0%,
+      rgba(var(--c-purple),0.12) 15%,
+      rgba(var(--c-blue),0.08) 35%,
+      transparent 65%),
+    /* 整体蓝紫粉氛围 */
+    radial-gradient(ellipse 80% 70% at 50% 45%,
+      rgba(var(--c-blue),0.06) 0%,
+      rgba(var(--c-purple),0.04) 40%,
+      transparent 75%),
+    /* 基础暗色 */
+    radial-gradient(ellipse 60% 55% at 50% 42%,
+      rgba(6,6,16,0.4) 0%,
+      transparent 70%),
+    #080810;
+  transform:rotateX(8deg) translateZ(-400px);
+  transform-style:preserve-3d;}
 
-.s { position:fixed; inset:0; z-index:10; pointer-events:none; opacity:0; transition:opacity 0.8s ease; }
-.s.on { opacity:1; }
+/* 天花板线条 — 往消失点汇聚 */
+.ceiling-line{position:absolute;top:0;left:0;right:0;height:35%;
+  background:linear-gradient(180deg,
+    rgba(var(--c-blue),0.08) 0%,
+    rgba(var(--c-purple),0.05) 8%,
+    rgba(8,8,20,0) 25%);
+  transform-origin:top center;
+  transform:rotateX(-55deg) scale(1.3);}
+
+/* 地板线条 — 往消失点汇聚 */
+.floor-line{position:absolute;bottom:0;left:0;right:0;height:40%;
+  background:linear-gradient(0deg,
+    rgba(var(--c-blue),0.1) 0%,
+    rgba(var(--c-purple),0.08) 6%,
+    rgba(var(--c-pink),0.04) 14%,
+    rgba(8,8,20,0) 28%);
+  transform-origin:bottom center;
+  transform:rotateX(65deg) scale(1.5);}
+
+/* ═══════════════════════════════════════════
+   DESKTOP 桌面层 — z-index:10，不动
+   ═══════════════════════════════════════════ */
+
+.desktop{position:fixed;inset:0;z-index:10;}
+
+/* 半透明背景 — 让背后空间透过来 */
+.desktop .bg{position:absolute;inset:0;
+  background:rgba(10,10,18,0.75);}
+
+/* ═══════════════════════════════════════════
+   SILENT 静默态 — z-index:30
+   WebGL Shader + CSS边缘氛围灯
+   ═══════════════════════════════════════════ */
+
+.s{position:fixed;inset:0;z-index:30;pointer-events:none;opacity:0;
+  transition:opacity 2.5s var(--ease-expo);}
+.s.on{opacity:1;}
 
 /* WebGL Canvas容器 */
-#silent-canvas-container { position:absolute; inset:0; z-index:10; opacity:0; display:none; transition:opacity 400ms ease-out; pointer-events:none; }
-#silent-canvas-container.active { display:block; opacity:1; }
-#silent-canvas-container canvas { width:100%; height:100%; display:block; }
+#silent-canvas-container{position:absolute;inset:0;z-index:10;opacity:0;display:none;
+  transition:opacity 400ms ease-out;pointer-events:none;}
+#silent-canvas-container.active{display:block;opacity:1;}
+#silent-canvas-container canvas{width:100%;height:100%;display:block;}
 
 /* 屏幕边缘氛围灯 */
-.s-bezel { position:absolute; inset:0; box-shadow: inset 0 0 120px rgba(40, 75, 180, 0.04), inset 0 0 60px rgba(55, 95, 200, 0.05), inset 0 0 30px rgba(45, 80, 175, 0.06); animation:sBezelBreath 8s ease-in-out infinite; pointer-events:none; z-index:11; }
-@keyframes sBezelBreath {
-    0%, 100% { box-shadow: inset 0 0 120px rgba(40, 75, 180, 0.025), inset 0 0 60px rgba(55, 95, 200, 0.03), inset 0 0 30px rgba(45, 80, 175, 0.04); }
-    50%      { box-shadow: inset 0 0 120px rgba(40, 75, 180, 0.06),  inset 0 0 60px rgba(55, 95, 200, 0.07), inset 0 0 30px rgba(45, 80, 175, 0.08); }
+.s-bezel{position:absolute;inset:0;
+  box-shadow:
+    inset 0 0 120px rgba(40,75,180,0.04),
+    inset 0 0 60px rgba(55,95,200,0.05),
+    inset 0 0 30px rgba(45,80,175,0.06);
+  animation:sBezelBreath 8s ease-in-out infinite;
+  pointer-events:none;z-index:11;}
+@keyframes sBezelBreath{
+  0%,100%{box-shadow:inset 0 0 120px rgba(40,75,180,0.025),inset 0 0 60px rgba(55,95,200,0.03),inset 0 0 30px rgba(45,80,175,0.04);}
+  50%{box-shadow:inset 0 0 120px rgba(40,75,180,0.06),inset 0 0 60px rgba(55,95,200,0.07),inset 0 0 30px rgba(45,80,175,0.08);}
 }
 
-/* =============================================
-   LIMINAL 阈限态 — CSS 3D深度空间（v18重写）
-   ============================================= */
+/* ═══════════════════════════════════════════
+   LIMINAL 阈限态 — z-index:20
+   v39架构：边缘蓝紫粉光雾叠加
+   ═══════════════════════════════════════════ */
 
-.l { position:fixed; inset:0; z-index:20; pointer-events:none; opacity:0; display:none; }
-.l.active   { display:block; animation:lFadeIn 800ms ease-out forwards; }
-.l.exiting  { display:block; animation:lFadeOut 600ms ease-in forwards; }
-@keyframes lFadeIn   { from { opacity:0; } to { opacity:1; } }
-@keyframes lFadeOut  { from { opacity:1; } to { opacity:0; } }
+.l{position:fixed;inset:0;z-index:20;pointer-events:none;opacity:0;
+  transition:opacity 3s var(--ease-expo);}
+.l.on{opacity:1;}
 
-/* 3D走廊 — 更大perspective创造更深空间 */
-.corridor { position:absolute; inset:0; perspective:1400px; perspective-origin:50% 38%; overflow:hidden; }
-.room { position:absolute; inset:0; transform-style:preserve-3d; }
+/* 边缘蓝紫粉光雾 */
+.l-glow{position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 130% 60% at 50% 100%,
+      rgba(var(--c-blue),0.12) 0%,
+      rgba(var(--c-purple),0.08) 10%,
+      transparent 40%),
+    radial-gradient(ellipse 110% 40% at 50% 0%,
+      rgba(var(--c-purple),0.06) 0%,
+      transparent 35%),
+    radial-gradient(ellipse 40% 90% at 0% 55%,
+      rgba(var(--c-pink),0.06) 0%,
+      transparent 45%),
+    radial-gradient(ellipse 40% 90% at 100% 55%,
+      rgba(var(--c-blue),0.08) 0%,
+      transparent 45%);
+  opacity:0;transition:opacity 3s var(--ease-expo) 0.2s;
+}
+.l.on .l-glow{opacity:1;}
 
-/* ═══ Floor — 蓝紫粉渐变光谱，无透视线 ═══ */
-.wall-floor { position:absolute; bottom:0; left:-10%; right:-10%; height:50%; background:linear-gradient(180deg, rgba(var(--c-blue),0.06) 0%, rgba(var(--c-purple),0.05) 12%, rgba(var(--c-pink),0.04) 22%, rgba(20,16,45,0.6) 40%, rgba(12,10,30,0.8) 65%, rgba(8,8,20,0.95) 100%); transform-origin:bottom center; transform:rotateX(72deg) scale(1.6); -webkit-mask-image:linear-gradient(90deg, transparent 0%, black 10%, black 90%, transparent 100%); mask-image:linear-gradient(90deg, transparent 0%, black 10%, black 90%, transparent 100%); }
-
-/* ═══ Ceiling — 蓝紫粉渐变光谱 ═══ */
-.wall-ceil { position:absolute; top:0; left:-10%; right:-10%; height:42%; background:linear-gradient(0deg, rgba(var(--c-blue),0.04) 0%, rgba(var(--c-purple),0.035) 10%, rgba(var(--c-pink),0.025) 20%, rgba(15,12,35,0.4) 35%, rgba(10,10,25,0.7) 60%, rgba(8,8,18,0.9) 100%); transform-origin:top center; transform:rotateX(-62deg) scale(1.45); -webkit-mask-image:linear-gradient(90deg, transparent 0%, black 10%, black 90%, transparent 100%); mask-image:linear-gradient(90deg, transparent 0%, black 10%, black 90%, transparent 100%); }
-
-/* ═══ Left wall — 粉→紫→蓝渐变 ═══ */
-.wall-left { position:absolute; top:-10%; left:0; bottom:-10%; width:35%; background:linear-gradient(90deg, rgba(var(--c-pink),0.05) 0%, rgba(var(--c-purple),0.06) 8%, rgba(var(--c-blue),0.035) 25%, rgba(14,12,32,0.35) 45%, rgba(10,10,22,0.12) 65%, transparent 100%); transform-origin:left center; transform:rotateY(58deg) scale(1.35); -webkit-mask-image:linear-gradient(180deg, transparent 0%, black 8%, black 92%, transparent 100%); mask-image:linear-gradient(180deg, transparent 0%, black 8%, black 92%, transparent 100%); }
-
-/* ═══ Right wall — 蓝→紫→粉渐变 ═══ */
-.wall-right { position:absolute; top:-10%; right:0; bottom:-10%; width:35%; background:linear-gradient(270deg, rgba(var(--c-blue),0.06) 0%, rgba(var(--c-purple),0.05) 8%, rgba(var(--c-pink),0.03) 25%, rgba(14,12,32,0.35) 45%, rgba(10,10,22,0.12) 65%, transparent 100%); transform-origin:right center; transform:rotateY(-58deg) scale(1.35); -webkit-mask-image:linear-gradient(180deg, transparent 0%, black 8%, black 92%, transparent 100%); mask-image:linear-gradient(180deg, transparent 0%, black 8%, black 92%, transparent 100%); }
-
-/* ═══ 消失点光球 — 蓝紫粉连续光谱呼吸 ═══ */
-.vanish { position:absolute; top:36%; left:50%; transform:translate(-50%,-50%) scale(0.4); width:35vw; height:25vw; max-width:500px; max-height:350px; border-radius:50%; background:radial-gradient(ellipse 45% 50% at 45% 55%, rgba(var(--c-pink),0.12) 0%, rgba(var(--c-purple),0.09) 20%, rgba(var(--c-blue),0.06) 45%, rgba(var(--c-deepblue),0.02) 75%, transparent 100%); filter:blur(60px); animation:vanishAppear 2.5s var(--ease-expo) 0.5s forwards, breathe 5s ease-in-out infinite 3s; opacity:0; }
-.l.active .vanish { }
-@keyframes vanishAppear { from { opacity:0; transform:translate(-50%,-50%) scale(0.4); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
-@keyframes breathe { 0%,100% { opacity:0.55; transform:translate(-50%,-50%) scale(1); } 50% { opacity:1; transform:translate(-50%,-50%) scale(1.1); } }
-
-/* ═══ 空间雾效 ═══ */
-.l-fog { position:absolute; inset:0; background:radial-gradient(ellipse 80% 60% at 50% 40%, transparent 20%, rgba(8,10,22,0.3) 50%, rgba(6,8,18,0.7) 80%); pointer-events:none; }
+/* 空间呼吸 */
+.l-wrap{position:absolute;inset:0;
+  animation:airFlow 10s ease-in-out infinite;}
+@keyframes airFlow{
+  0%,100%{opacity:0.8}
+  50%{opacity:1}
+}
 
 /* "正在理解" 文字 */
-.l-text { position:absolute; bottom:12%; left:50%; transform:translateX(-50%); font-size:13px; color:rgba(180,195,240,0.30); letter-spacing:6px; text-transform:uppercase; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif; font-weight:300; }
+.l-text{position:absolute;bottom:12%;left:50%;transform:translateX(-50%);
+  font-size:13px;color:rgba(200,210,255,0.5);letter-spacing:5px;text-transform:uppercase;
+  opacity:0;transition:opacity 2s var(--ease-expo) 0.8s;
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;font-weight:300;
+}
+.l.on .l-text{opacity:1;}
 
-/* =============================================
-   MANIFEST 显现态
-   ============================================= */
+/* ═══════════════════════════════════════════
+   MANIFEST 显现态 — z-index:40
+   ═══════════════════════════════════════════ */
 
-.m { position:fixed; inset:0; z-index:30; pointer-events:none; display:none; opacity:0; }
-.m.active  { display:block; animation:mFadeIn 600ms ease-out forwards; }
-.m.exiting { display:block; animation:mFadeOut 600ms ease-in forwards; }
-@keyframes mFadeIn  { from { opacity:0; } to { opacity:1; } }
-@keyframes mFadeOut { from { opacity:1; } to { opacity:0; } }
+.m{position:fixed;inset:0;z-index:40;pointer-events:none;opacity:0;
+  transition:opacity 2s var(--ease-expo);}
+.m.on{opacity:1;}
 
-/* =============================================
+/* ═══════════════════════════════════════════
    辅助样式
-   ============================================= */
+   ═══════════════════════════════════════════ */
 
-.content-fade-in { animation:contentFadeIn 0.4s ease-out 0.3s both; }
-@keyframes contentFadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+.content-fade-in{animation:contentFadeIn 0.4s ease-out 0.3s both;}
+@keyframes contentFadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
 
-/* =============================================
+/* ═══════════════════════════════════════════
    WEBSOCKET 状态指示器
-   ============================================= */
-#ws-status { position:fixed; bottom:12px; right:12px; display:flex; align-items:center; gap:6px; z-index:100; padding:4px 10px; border-radius:2px; background:rgba(0,0,0,0.3); transition:all 0.5s ease; }
-.ws-dot { width:6px; height:6px; border-radius:50%; background:rgba(255,80,80,0.8); box-shadow:0 0 6px rgba(255,80,80,0.5); transition:all 0.5s ease; }
-.ws-connected  .ws-dot { background:rgba(80,200,120,0.8); box-shadow:0 0 6px rgba(80,200,120,0.5); }
-.ws-connecting .ws-dot { background:rgba(200,180,80,0.8); box-shadow:0 0 6px rgba(200,180,80,0.5); animation:wsDotPulse 1s ease-in-out infinite; }
-@keyframes wsDotPulse { 0%,100% { opacity:0.5; transform:scale(1); } 50% { opacity:1; transform:scale(1.3); } }
-#ws-status-text { color:rgba(138,155,168,0.5); font-size:9px; letter-spacing:2px; font-family:'Courier New',monospace; }
+   ═══════════════════════════════════════════ */
+#ws-status{position:fixed;bottom:12px;right:12px;display:flex;align-items:center;gap:6px;z-index:100;padding:4px 10px;border-radius:2px;background:rgba(0,0,0,0.3);transition:all 0.5s ease;}
+.ws-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,80,80,0.8);box-shadow:0 0 6px rgba(255,80,80,0.5);transition:all 0.5s ease;}
+.ws-connected .ws-dot{background:rgba(80,200,120,0.8);box-shadow:0 0 6px rgba(80,200,120,0.5);}
+.ws-connecting .ws-dot{background:rgba(200,180,80,0.8);box-shadow:0 0 6px rgba(200,180,80,0.5);animation:wsDotPulse 1s ease-in-out infinite;}
+@keyframes wsDotPulse{0%,100%{opacity:0.5;transform:scale(1);}50%{opacity:1;transform:scale(1.3);}}
+#ws-status-text{color:rgba(138,155,168,0.5);font-size:9px;letter-spacing:2px;font-family:'Courier New',monospace;}
+
+.cursor-blink{animation:cursorBlink 1s step-end infinite;}
+@keyframes cursorBlink{0%,100%{opacity:1;}50%{opacity:0;}}
