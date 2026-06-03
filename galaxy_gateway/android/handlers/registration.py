@@ -153,7 +153,7 @@ def _schedule_pending_delivery_replay_on_canonical_reconnect(
             # PR-AIP-UNIFIED: Wrap send through AIPTransport instead of direct WS
             from core.aip_transport import get_aip_transport
             async def _aip_send(msg_dict):
-                msg_dict["transport"] = "websocket"
+                msg_dict["_transport"] = "auto"
                 msg_dict["version"] = "3.0"
                 await get_aip_transport().send(msg_dict, device_id)
 
@@ -1104,8 +1104,7 @@ async def handle_device_register(
                     "event_category": "phase",
                     "event_action": current_phase,
                     "device_id": "v2_desktop",
-                    "transport": "websocket",
-                    "version": "3.0",
+                    "_transport": "auto",
                     "timestamp": time.time(),
                 }
                 try:

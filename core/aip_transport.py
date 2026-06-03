@@ -196,16 +196,30 @@ class AIPTransport:
     ) -> Optional[TransportAdapter]:
         """选择最佳适配器。
 
-        1. 优先使用 caller 指定的传输
-        2. 如果不可用，按优先级 fallback
-        3. 如果都不通，返回默认传输适配器
+        1. "auto" 模式：按优先级自动探测
+        2. 优先使用 caller 指定的传输
+        3. 如果不可用，按优先级 fallback
+        4. 如果都不通，返回默认传输适配器
         """
-        # 1. 尝试首选
+        # 1. "auto" 模式：按优先级探测第一个可用的
+        if preferred == "auto":
+            for ttype in self._transport_priority:
+                adapter = self._adapters.get(ttype)
+                if adapter and await adapter.is_available(target):
+                    logger.debug("Auto-selected '%s' for target '%s'", ttype, target)
+                    return adapter
+            # 没有可用的，fallback 到默认
+            default = self._adapters.get(self._default_transport)
+            if default:
+                return default
+            return None
+
+        # 2. 尝试首选
         adapter = self._adapters.get(preferred)
         if adapter and await adapter.is_available(target):
             return adapter
 
-        # 2. 按优先级 fallback
+        # 3. 按优先级 fallback
         for ttype in self._transport_priority:
             if ttype == preferred:
                 continue  # 已试过
@@ -214,7 +228,7 @@ class AIPTransport:
                 logger.debug("Fallback: '%s' → '%s' for target '%s'", preferred, ttype, target)
                 return adapter
 
-        # 3. 最后尝试默认（不检查 is_available，尽最大努力）
+        # 4. 最后尝试默认（不检查 is_available，尽最大努力）
         default = self._adapters.get(self._default_transport)
         if default:
             logger.debug("Force default '%s' for target '%s'", self._default_transport, target)

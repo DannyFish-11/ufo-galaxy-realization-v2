@@ -1499,7 +1499,7 @@ class DeviceRouter:
                 command=task.get("command", ""),
                 payload=task.get("payload"),
             )
-            _aip_message["transport"] = "websocket"  # Mark transport type
+            _aip_message["_transport"] = "auto"  # Auto-select best transport
 
             try:
                 from core.aip_transport import get_aip_transport
@@ -1621,7 +1621,7 @@ class DeviceRouter:
             command=command,
             payload=payload,
         )
-        message["transport"] = "websocket"  # Mark as WS transport
+        message["_transport"] = "auto"  # Auto-select best transport
 
         try:
             from core.aip_transport import get_aip_transport

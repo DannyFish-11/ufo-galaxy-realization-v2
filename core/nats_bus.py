@@ -421,10 +421,12 @@ class NATSBus:
     # Publishers use AIPMessage subclasses directly; legacy models auto-convert.
 
     async def publish_aip_v3(self, subject: str, aip_message: "AIPMessage") -> dict:
-        """Publish a canonical AIP v3 message to NATS.
+        """Publish a canonical AIP v3 message to NATS JetStream.
 
-        PR-AIP-UNIFIED: All publishes go through AIPTransport.
-        NATSAdapter handles the actual NATS JetStream publish.
+        PR-AIP-UNIFIED: NATS is a task distribution layer, NOT a transport layer.
+        NATS messages go directly to JetStream, NOT through AIPTransport.
+        AIPTransport handles physical transports (WS/MQTT/BLE/TCP/UDP/Serial).
+        NATS handles logical pub/sub for task dispatch and mesh state sync.
 
         Args:
             subject: NATS subject (e.g. "galaxy.tasks.dispatch.worker_01")
@@ -434,17 +436,11 @@ class NATSBus:
             {"success": bool, "seq": int} or {"success": False, "error": str}
         """
         data = aip_message.model_dump(mode="json", exclude_none=True)
-        data["transport"] = "nats"  # Mark as NATS transport
+        # Mark internal transport hint for tracing (not used by AIPTransport)
+        data["_transport"] = "nats"
 
-        # Route through AIPTransport (unified entry)
-        try:
-            from core.aip_transport import get_aip_transport
-            result = await get_aip_transport().send(data, subject, transport="nats")
-            if result.get("success"):
-                return {"success": True, "seq": result.get("seq", 0)}
-        except Exception:
-            pass  # Fallback to direct publish
-
+        # NATS is independent layer — direct JetStream publish
+        # Do NOT route through AIPTransport (no "nats" adapter registered)
         return await self._publish(subject, data)
 
     # ── Device lifecycle ──

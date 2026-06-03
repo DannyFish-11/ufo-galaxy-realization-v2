@@ -109,7 +109,7 @@ class DaemonNotifier:
                         msg = {
                             "type": "daemon_notification",
                             "payload": payload,
-                            "transport": "websocket",
+                            "_transport": "auto",
                             "version": "3.0",
                         }
                         result = await get_aip_transport().send(msg, device_id)

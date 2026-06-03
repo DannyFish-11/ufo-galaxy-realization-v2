@@ -650,7 +650,7 @@ class TaskOrchestrator:
                 "type": "task_cancel",
                 "device_id": task.assigned_device,
                 "task_id": task_id,
-                "transport": "websocket",
+                "_transport": "auto",
                 "version": "3.0",
             }
             try:

@@ -401,7 +401,7 @@ class AndroidBridge:
                     }
                     # PR-AIP-UNIFIED: Route through AIPTransport
                     from core.aip_transport import get_aip_transport
-                    _msg = {**liquid_msg, "transport": "websocket", "version": "3.0"}
+                    _msg = {**liquid_msg, "_transport": "auto"}
                     try:
                         result = await get_aip_transport().send(_msg, target)
                         if result.get("success"):
@@ -438,7 +438,7 @@ class AndroidBridge:
                         }
                         # PR-AIP-UNIFIED: Route through AIPTransport
                         from core.aip_transport import get_aip_transport
-                        _msg = {**liquid_msg, "transport": "websocket", "version": "3.0"}
+                        _msg = {**liquid_msg, "_transport": "auto"}
                         try:
                             result = await get_aip_transport().send(_msg, did)
                             results[did] = result.get("success", False)
@@ -1264,7 +1264,7 @@ class AndroidBridge:
         try:
             # PR-AIP-UNIFIED: Route through AIPTransport
             from core.aip_transport import get_aip_transport
-            _msg = {**message, "transport": "websocket", "version": "3.0"}
+            _msg = {**message, "_transport": "auto"}
             try:
                 result = await get_aip_transport().send(_msg, device_id)
                 if not result.get("success"):
@@ -1673,8 +1673,7 @@ class AndroidBridge:
                     "device_id": "v2_desktop",
                     "timestamp": int(_time.time() * 1000),
                     "aip_version": "3.0",
-                    "transport": "websocket",
-                    "version": "3.0",
+                    "_transport": "auto",
                     "payload": {
                 }
                 try:
@@ -1770,7 +1769,7 @@ class AndroidBridge:
             # PR-AIP-UNIFIED: Route buffer flush through AIPTransport
             from core.aip_transport import get_aip_transport
             async def _aip_send(msg: Dict[str, Any]) -> None:
-                msg["transport"] = "websocket"
+                msg["_transport"] = "auto"
                 msg["version"] = "3.0"
                 result = await get_aip_transport().send(msg, device_id)
                 if not result.get("success"):

@@ -326,7 +326,7 @@ class MeshCoordinator:
             if peer_list:
                 await aip_transport.send({
                     "type": "peer_exchange",
-                    "transport": "websocket",
+                    "_transport": "auto",
                     "peers": peer_list,
                     "timestamp": time.time(),
                 }, device_id)

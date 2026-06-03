@@ -63,7 +63,7 @@ async def handle_wearos_state_sync(
         from core.aip_transport import get_aip_transport
         msg = {
             **wear_msg,
-            "transport": "websocket",
+            "_transport": "auto",
             "version": "3.0",
         }
         result = await get_aip_transport().send(msg, device_id)

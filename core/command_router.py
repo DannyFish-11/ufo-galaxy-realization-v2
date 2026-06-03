@@ -3464,7 +3464,7 @@ class CommandRouter:
                                     "command": command,
                                     "result": result,
                                     "mesh_advice": _mesh_advice,
-                                    "transport": "websocket",
+                                    "_transport": "auto",
                                 },
                             )
                             logger.debug("Result backflow published to NATS: %s", task_id)

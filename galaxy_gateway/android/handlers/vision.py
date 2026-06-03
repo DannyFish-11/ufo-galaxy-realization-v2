@@ -86,7 +86,7 @@ async def handle_vision_request(
             from core.aip_transport import get_aip_transport
             _msg = {
                 **response,
-                "transport": "websocket",
+                "_transport": "auto",
                 "version": "3.0",
             }
             try:
