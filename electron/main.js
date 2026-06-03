@@ -59,9 +59,11 @@ app.whenReady().then(() => {
     createWindow();
 
     // PR-D5: Start system tray alongside Electron GUI
+    // P22 修复：根据平台选择 python/python3，避免硬编码
     try {
         const { spawn } = require('child_process');
-        const trayProcess = spawn('python', ['-m', 'windows_service.tray_icon'], {
+        const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+        const trayProcess = spawn(pythonCmd, ['-m', 'windows_service.tray_icon'], {
             cwd: path.join(__dirname, '..'),
             detached: true,
             stdio: 'ignore'
@@ -73,9 +75,13 @@ app.whenReady().then(() => {
     }
 
     // F12: Toggle AI Control Panel (Colorless Lens)
-    globalShortcut.register('F12', () => {
+    // P21 修复：检查快捷键注册是否成功
+    const f12Registered = globalShortcut.register('F12', () => {
         togglePanel();
     });
+    if (!f12Registered) {
+        console.warn('[Main] F12 快捷键注册失败，可能已被系统或其他应用占用');
+    }
 
     app.on('browser-window-created', (event, window) => {
         if (mainWindow) {

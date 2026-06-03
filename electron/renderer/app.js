@@ -74,8 +74,13 @@ class ThreeStateManager {
     }
 
     /** 显示错误信息 */
+    // P20 修复：添加唯一 ID，防止重复创建错误元素
     _showError(message) {
+        const existing = document.getElementById('app-error-display');
+        if (existing) existing.remove();
+
         const el = document.createElement('div');
+        el.id = 'app-error-display';
         el.style.cssText = `
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: rgba(255, 80, 80, 0.8); font-family: monospace; font-size: 14px;

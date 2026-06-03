@@ -1,18 +1,16 @@
 /**
- * manifest-state.js
+ * manifest-state.js — v40 Fixed
  * Manifest 显现态 — 极简
  *
  * 设计哲学：
  *   Manifest态是"结果"态——所有视觉完全由外部承载（后端推流、
  *   桌面窗口、用户应用）。覆盖层只需干净地让出空间。
  *
- * 行为：
- *   1. 进入时：确保Liminal态的所有元素（Three.js场景、CSS覆盖层）
- *      在0.6秒内完全淡出
- *   2. 激活时：什么都不做——桌面完全可见
- *   3. 退出时：准备进入下一个态
- *
- * 色调：无——Manifest态没有自己的视觉表现
+ * 修复：
+ * - P16: 移除不存在的 three-container 引用（v18 遗留代码）
+ * - P17: 统一使用 .on class（与 liminal-state.js 和 style.css 保持一致）
+ * - P18: setVisible 方法使用 .on 而非 .active
+ * - P19: 添加 silent-canvas-fallback 清理
  */
 
 class ManifestState {
@@ -23,10 +21,10 @@ class ManifestState {
         this.element = cssOverlay?.element || document.getElementById('mLayer');
         this.isActive = false;
 
-        // DOM 引用 — 用于控制Liminal态元素的淡出
+        // DOM 引用 — 用于控制其他态元素的淡出（双重保险）
         this.liminalLayer = document.getElementById('lLayer');
-        this.threeContainer = document.getElementById('three-container');
-        this.silentLayer = document.getElementById('sLayer');
+        this.silentCanvasContainer = document.getElementById('silent-canvas-container');
+        this.silentFallback = document.getElementById('silent-canvas-fallback');
     }
 
     // ---------- 生命周期 ----------
@@ -36,30 +34,24 @@ class ManifestState {
         if (this.isActive) return;
         this.isActive = true;
 
-        // 激活Manifest层（虽然它是空的，但保持状态一致性）
+        // P17 修复：激活 Manifest 层使用 .on（与 style.css .m.on 一致）
         if (this.element) {
-            this.element.classList.remove('exiting');
-            this.element.classList.add('active');
+            this.element.classList.add('on');
         }
 
-        // 确保 Silent 态隐藏
-        const silentCanvas = document.getElementById('silent-canvas-container');
-        if (silentCanvas) {
-            silentCanvas.classList.remove('active');
+        // 确保 Silent 态的所有视觉元素完全淡出
+        // （注：silentState.exit() 已在 _exitState() 中调用，此处作为双重保险）
+        if (this.silentCanvasContainer) {
+            this.silentCanvasContainer.classList.remove('active');
         }
-        if (this.silentLayer) {
-            // 不直接操作类，而是通过app.js调用silentState.exit()
+        if (this.silentFallback) {
+            this.silentFallback.classList.remove('active');
         }
 
         // 确保 Liminal 态的 CSS 覆盖层完全淡出
+        // P17 修复：使用 .on 而非 .active（与 liminal-state.js 和 style.css 保持一致）
         if (this.liminalLayer) {
-            this.liminalLayer.classList.remove('active');
-            this.liminalLayer.classList.add('exiting');
-        }
-
-        // 确保 Three.js 容器隐藏
-        if (this.threeContainer) {
-            this.threeContainer.classList.remove('active');
+            this.liminalLayer.classList.remove('on');
         }
 
         console.log('[ManifestState] 进入 Manifest 态 — 所有覆盖层淡出，桌面完全可见');
@@ -70,28 +62,21 @@ class ManifestState {
         if (!this.isActive) return;
         this.isActive = false;
 
-        // 添加退出动画类
+        // P17 修复：使用 .on 而非 .active/.exiting
         if (this.element) {
-            this.element.classList.remove('active');
-            this.element.classList.add('exiting');
+            this.element.classList.remove('on');
         }
-
-        // 清理退出动画类
-        setTimeout(() => {
-            if (this.element) {
-                this.element.classList.remove('exiting');
-            }
-        }, 600);
 
         console.log('[ManifestState] 退出 Manifest 态');
     }
 
     /** 切换可见性 — Manifest态无视觉表现，仅记录状态 */
+    // P18 修复：使用 .on 而非 .active（与 style.css 中 .m.on 保持一致）
     setVisible(bool) {
         if (bool) {
-            if (this.element) this.element.classList.add('active');
+            if (this.element) this.element.classList.add('on');
         } else {
-            if (this.element) this.element.classList.remove('active');
+            if (this.element) this.element.classList.remove('on');
         }
     }
 
@@ -103,9 +88,9 @@ class ManifestState {
     /** 清理 */
     dispose() {
         this.isActive = false;
+        // P17 修复：统一使用 .on
         if (this.element) {
-            this.element.classList.remove('active');
-            this.element.classList.remove('exiting');
+            this.element.classList.remove('on');
         }
         console.log('[ManifestState] 已清理');
     }
