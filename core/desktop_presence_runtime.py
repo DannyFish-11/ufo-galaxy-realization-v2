@@ -354,6 +354,167 @@ class DesktopPresenceRuntime:
         self._try_start_ingest_bus()
         self._try_init_webrtc_session_manager()
 
+        # PR-CROSS-DEVICE: Auto-detect and register for cross-device mode.
+        # When the desktop is configured for cross-device operation,
+        # register itself as a UDM device so other devices can discover
+        # and interact with it.
+        self._cross_device_enabled: bool = False
+        self._device_id: Optional[str] = None
+        self._device_name: Optional[str] = None
+        try:
+            self._maybe_enable_cross_device()
+        except Exception as _xc_err:
+            logger.debug("Cross-device auto-registration skipped: %s", _xc_err)
+
+    # ------------------------------------------------------------------
+    # Cross-device registration (PR-CROSS-DEVICE)
+    # ------------------------------------------------------------------
+
+    def _maybe_enable_cross_device(self) -> None:
+        """Auto-detect cross-device mode and register to UDM/UCM.
+
+        Cross-device mode is enabled when any of the following is true:
+        - Environment variable GALAXY_CROSS_DEVICE_ENABLED is set
+        - Config file has cross_device.enabled = true
+        - A mesh/nats endpoint is configured
+
+        When enabled, this Windows desktop registers as a UnifiedDevice
+        so other devices (Android, WearOS, Home Assistant, etc.) can
+        discover and interact with it via Mesh + NATS.
+        """
+        import os
+        import socket
+        import uuid as _uuid
+
+        # Detection logic
+        _env_enabled = os.environ.get("GALAXY_CROSS_DEVICE_ENABLED", "").strip().lower() in {
+            "1", "true", "yes", "on",
+        }
+        _config_enabled = False
+        try:
+            import tomllib
+            _config_path = os.path.join(os.path.dirname(__file__), "..", "config", "settings.toml")
+            if os.path.exists(_config_path):
+                with open(_config_path, "rb") as _f:
+                    _config = tomllib.load(_f)
+                    _config_enabled = _config.get("cross_device", {}).get("enabled", False)
+        except Exception:
+            pass
+
+        if not (_env_enabled or _config_enabled):
+            logger.debug("Cross-device mode not enabled (set GALAXY_CROSS_DEVICE_ENABLED=1 to enable)")
+            return
+
+        # Generate device identity (hostname + uuid suffix)
+        _hostname = socket.gethostname() or "galaxy-desktop"
+        _uuid_suffix = _uuid.uuid5(_uuid.NAMESPACE_DNS, f"galaxy-desktop-{_hostname}").hex[:8]
+        self._device_id = f"galaxy_desktop_{_hostname}_{_uuid_suffix}"
+        self._device_name = f"Galaxy Desktop ({_hostname})"
+        self._cross_device_enabled = True
+
+        # Register to UDM (Unified Device Manager)
+        try:
+            from core.unified.device_manager import UnifiedDeviceManager
+            from core.unified.models import UnifiedDevice, UnifiedDeviceType, UnifiedDeviceStatus
+
+            _udm = UnifiedDeviceManager()
+            _udm.register_device(
+                UnifiedDevice(
+                    device_id=self._device_id,
+                    device_name=self._device_name,
+                    device_type=UnifiedDeviceType.WINDOWS,
+                    status=UnifiedDeviceStatus.ONLINE,
+                    ip_address="127.0.0.1",
+                    port=9000,
+                    capabilities=[
+                        "LLM_HOST",
+                        "GUI_DISPLAY",
+                        "INPUT_KEYBOARD",
+                        "INPUT_MOUSE",
+                        "INPUT_VOICE",
+                        "LOCAL_EXECUTION",
+                        "CROSS_DEVICE_COORD",
+                        "TRISTATE_MANIFEST",
+                        "WEBRTC_HOST",
+                        "NATIVE_MULTIMODAL_INGRESS",
+                    ],
+                    metadata={
+                        "has_openclawd": True,
+                        "has_presence_runtime": True,
+                        "has_electron": True,
+                        "supported_transports": ["websocket", "mesh", "nats"],
+                        "entry_modes": ["local", "cross_device", "hybrid"],
+                        "auto_registered": True,
+                        "registration_trigger": "cross_device_auto_detect",
+                    },
+                    source="desktop_presence_runtime",
+                )
+            )
+            logger.info(
+                "Cross-device mode enabled | device_id=%s registered to UDM",
+                self._device_id,
+            )
+        except Exception as _udm_err:
+            logger.warning("UDM registration failed (non-fatal): %s", _udm_err)
+
+        # Register capabilities to CapabilityRegistry (canonical truth source)
+        try:
+            from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+
+            _registry = CapabilityRegistry.get_instance()
+            _registry.inject_item(
+                CapabilityItem(
+                    device_id=self._device_id,
+                    capability="llm_host",
+                    metadata={"description": "Local LLM execution host", "priority": 1},
+                )
+            )
+            _registry.inject_item(
+                CapabilityItem(
+                    device_id=self._device_id,
+                    capability="cross_device_coord",
+                    metadata={"description": "Cross-device coordination authority", "priority": 1},
+                )
+            )
+            logger.info(
+                "Capabilities registered for device_id=%s",
+                self._device_id,
+            )
+        except Exception as _cap_err:
+            logger.warning("Capability registration failed (non-fatal): %s", _cap_err)
+
+        # Register to MeshCoordinator as a local peer
+        try:
+            from core.mesh_coordinator import get_mesh_coordinator
+
+            _mesh = get_mesh_coordinator()
+            _mesh.register_peer(
+                device_id=self._device_id,
+                local_ip="127.0.0.1",
+                local_port=9000,
+                metadata={
+                    "role": "host",
+                    "device_type": "windows_desktop",
+                    "transports": ["websocket", "mesh", "nats"],
+                    "has_openclawd": True,
+                },
+            )
+            logger.info(
+                "Mesh peer registered | device_id=%s @ 127.0.0.1:9000",
+                self._device_id,
+            )
+        except Exception as _mesh_err:
+            logger.warning("Mesh peer registration failed (non-fatal): %s", _mesh_err)
+
+    def is_cross_device_enabled(self) -> bool:
+        """Return whether cross-device mode is enabled."""
+        return self._cross_device_enabled
+
+    @property
+    def device_id(self) -> Optional[str]:
+        """Return the device ID when cross-device mode is enabled."""
+        return self._device_id
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

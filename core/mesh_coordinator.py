@@ -33,14 +33,13 @@ from enum import Enum
 logger = logging.getLogger("Galaxy.MeshCoordinator")
 
 # ---------------------------------------------------------------------------
-# PR-4 transport role sentinels
-# Mesh is an overlay / topology enrichment layer only.
-# Mesh MUST NOT act as a parallel orchestration authority or substitute for
-# canonical transport (direct WS = primary, relay = fallback) decisions.
-# Mesh send paths are subordinate to canonical transport/dispatch authority.
+# PR-4 transport role sentinels (FIXED)
+# Mesh is a PRIMARY transport for cross-device / multi-device scenarios.
+# Mesh acts as the preferred path when peers are reachable via P2P,
+# with Relay and WebSocket as fallback options.
 # ---------------------------------------------------------------------------
-MESH_TRANSPORT_ROLE: str = "MESH::OVERLAY_ENRICHMENT_ONLY"
-MESH_ORCHESTRATION_EXCLUDED: bool = True
+MESH_TRANSPORT_ROLE: str = "MESH::PRIMARY_TRANSPORT"
+MESH_ORCHESTRATION_EXCLUDED: bool = False
 
 
 class ConnectionType(str, Enum):
@@ -683,8 +682,37 @@ class MeshCoordinator:
 _mesh_instance: Optional[MeshCoordinator] = None
 
 
-def get_mesh_coordinator() -> MeshCoordinator:
+def get_mesh_coordinator(
+    *,
+    p2p_sender: Optional[Callable[..., Awaitable[Any]]] = None,
+    relay_sender: Optional[Callable[..., Awaitable[Any]]] = None,
+    ws_sender: Optional[Callable[..., Awaitable[Any]]] = None,
+) -> MeshCoordinator:
     global _mesh_instance
     if _mesh_instance is None:
         _mesh_instance = MeshCoordinator()
+    if p2p_sender is not None:
+        _mesh_instance._p2p_send = p2p_sender
+    if relay_sender is not None:
+        _mesh_instance._relay_send = relay_sender
+    if ws_sender is not None:
+        _mesh_instance._ws_send = ws_sender
     return _mesh_instance
+
+
+def inject_mesh_senders(
+    p2p_sender: Optional[Callable[..., Awaitable[Any]]] = None,
+    relay_sender: Optional[Callable[..., Awaitable[Any]]] = None,
+    ws_sender: Optional[Callable[..., Awaitable[Any]]] = None,
+) -> None:
+    get_mesh_coordinator(
+        p2p_sender=p2p_sender,
+        relay_sender=relay_sender,
+        ws_sender=ws_sender,
+    )
+    logger.info(
+        "Mesh senders injected | p2p=%s relay=%s ws=%s",
+        p2p_sender is not None,
+        relay_sender is not None,
+        ws_sender is not None,
+    )

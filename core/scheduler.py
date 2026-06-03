@@ -1339,12 +1339,17 @@ CROSS-DEVICE:
             return json.dumps({"error": f"Code execution failed: {e}"})
 
     async def _exec_mesh_send(self, args: Dict) -> str:
-        """P2P Mesh 发送 — 自动选路 (直连 / 中继)
+        """P2P Mesh 发送 — 自动选路 (直连 / 中继 / WebSocket 兜底)
 
         PR-3: Ingress recorded in execution spine log.
         PR-513 / GAP-512-002: CanonicalTask registered in TaskGraphRuntime.
-        PR-B: Spine routing attempted via CommandRouter.route_envelope() before
-        falling back to the MeshCoordinator path.
+        PR-B-FIXED: MeshCoordinator.send() is now the PRIMARY path.
+        CommandRouter.route_envelope() is the FALLBACK for devices that
+        only support WebSocket (e.g., WearOS).
+
+        Routing order:
+        1. MeshCoordinator.send() → P2P直连 / Relay中继 / WS兜底
+        2. CommandRouter.route_envelope() → WebSocket (fallback)
         """
         # PR-3: Record ingress in execution spine log.
         try:
@@ -1352,15 +1357,13 @@ CROSS-DEVICE:
             record_legacy_ingress(
                 ExecutionIngressSource.SCHEDULER,
                 args,
-                reason="scheduler._exec_mesh_send (mesh_send) → canonical spine",
+                reason="scheduler._exec_mesh_send (mesh_send) → mesh primary",
             )
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
         _mesh_task_id = args.get("task_id")
         if not _mesh_task_id:
             _mesh_task_id = f"mesh_{uuid.uuid4().hex[:16]}"
-        # Shallow copy is sufficient: this path mutates only top-level task_id
-        # and never mutates nested payload objects.
         _mesh_args = dict(args)
         _mesh_args["task_id"] = _mesh_task_id
 
@@ -1384,88 +1387,16 @@ CROSS-DEVICE:
             )
             _get_tgr_mesh().register_envelope(
                 _mesh_canonical,
-                contributor=_WCK_mesh.COMMAND_ROUTER,
+                contributor=_WCK_mesh.SCHEDULER,
             )
         except Exception as _mesh_tgr_err:
             logger.debug(
                 "_exec_mesh_send: TaskGraphRuntime registration skipped: %s", _mesh_tgr_err
             )
 
-        # PR-B: Attempt canonical spine routing via CommandRouter.route_envelope()
-        # before falling back to the MeshCoordinator implementation.  This ensures
-        # mesh_send participates in the execution spine rather than bypassing it.
-        try:
-            from core.command_router import get_command_router as _gcr_mesh
-            _cmd_router_mesh = _gcr_mesh()
-        except Exception as exc:
-            logger.debug("Fallback triggered: %s", exc)
-            _cmd_router_mesh = None
-
-        if _cmd_router_mesh is not None:
-            try:
-                from core.execution_spine import (
-                    ExecutionIngressSource as _EIS_mesh,
-                    normalize_ingress_to_envelope as _norm_mesh,
-                )
-                _envelope_mesh = _norm_mesh(
-                    {
-                        "task_id": _mesh_task_id,
-                        "trace_id": _mesh_args.get("trace_id") or "",
-                        "tool_name": "mesh_send",
-                        "targets": [_mesh_args.get("target_device", "")] if _mesh_args.get("target_device") else [],
-                        "args": _mesh_args,
-                    },
-                    source=_EIS_mesh.SCHEDULER,
-                )
-                _mesh_spine_result = await _cmd_router_mesh.route_envelope(_envelope_mesh)
-                if isinstance(_mesh_spine_result, dict):
-                    _mesh_spine_result.setdefault("task_id", _mesh_task_id)
-                    _mesh_spine_result.setdefault("canonical_router_owner", "core.command_router.CommandRouter")
-                    _mesh_spine_result.setdefault("routing_plane", "canonical")
-                return json.dumps(_mesh_spine_result, ensure_ascii=False)
-            except Exception as _spine_mesh_err:
-                logger.debug(
-                    "_exec_mesh_send: spine routing failed (%s); falling back to MeshCoordinator",
-                    _spine_mesh_err,
-                )
-
-        _allow_legacy_fallback = str(
-            _mesh_args.get("allow_legacy_scheduler_fallback")
-            or os.environ.get("GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK", "")
-        ).strip().lower() in {"1", "true", "yes", "on"}
-        if not _allow_legacy_fallback:
-            try:
-                from core.task_graph_runtime import (
-                    GraphNodeState as _GraphNodeState_mesh_blocked,
-                    WorkflowContributorKind as _WCK_mesh_blocked,
-                    get_task_graph_runtime as _get_tgr_mesh_blocked,
-                )
-                _get_tgr_mesh_blocked().transition(
-                    _mesh_task_id,
-                    _GraphNodeState_mesh_blocked.DEGRADED,
-                    reason="mesh_blocked_noncanonical_fallback",
-                    contributor=_WCK_mesh_blocked.SCHEDULER,
-                    error="CANONICAL_ROUTE_REQUIRED",
-                )
-            except Exception as _mesh_blocked_tgr_exc:
-                logger.debug("_exec_mesh_send: blocked fallback graph transition skipped: %s", _mesh_blocked_tgr_exc)
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": (
-                        "canonical_command_router_unavailable: mesh legacy fallback blocked "
-                        "(set allow_legacy_scheduler_fallback=true to opt in)"
-                    ),
-                    "error_code": "CANONICAL_ROUTE_REQUIRED",
-                    "legacy_fallback_blocked": True,
-                    "canonical_route_required": True,
-                    "canonical_router_owner": "core.command_router.CommandRouter",
-                    "blocked_legacy_route": "core.mesh_coordinator.MeshCoordinator",
-                    "task_id": _mesh_task_id,
-                },
-                ensure_ascii=False,
-            )
-
+        # ------------------------------------------------------------------
+        # PRIMARY: MeshCoordinator (P2P / Relay / WS auto-select)
+        # ------------------------------------------------------------------
         try:
             from core.mesh_coordinator import get_mesh_coordinator
             mesh = get_mesh_coordinator()
@@ -1478,8 +1409,55 @@ CROSS-DEVICE:
             result_dict = result.to_dict()
             result_dict.setdefault("task_id", _mesh_task_id)
             result_dict.setdefault("canonical_router_owner", "core.command_router.CommandRouter")
-            result_dict["routing_plane"] = "legacy_fallback"
-            result_dict["legacy_route_delegate"] = "core.mesh_coordinator.MeshCoordinator"
+            result_dict["routing_plane"] = "mesh_primary"
+            result_dict["mesh_delegate"] = "core.mesh_coordinator.MeshCoordinator"
+            try:
+                from core.task_graph_runtime import (
+                    GraphNodeState as _GraphNodeState_mesh,
+                    WorkflowContributorKind as _WCK_mesh,
+                    get_task_graph_runtime as _get_tgr_mesh_r,
+                )
+                _get_tgr_mesh_r().transition(
+                    _mesh_task_id,
+                    _GraphNodeState_mesh.ROUTED,
+                    reason="mesh_send_via_mesh_coordinator_primary",
+                    contributor=_WCK_mesh.SCHEDULER,
+                )
+            except Exception as _mesh_tgr_exc:
+                logger.debug("_exec_mesh_send: primary mesh graph transition skipped: %s", _mesh_tgr_exc)
+            return json.dumps(result_dict, ensure_ascii=False)
+        except Exception as _mesh_primary_err:
+            logger.debug(
+                "_exec_mesh_send: MeshCoordinator primary failed (%s); falling back to CommandRouter",
+                _mesh_primary_err,
+            )
+
+        # ------------------------------------------------------------------
+        # FALLBACK: CommandRouter.route_envelope() (WebSocket)
+        # Only for devices that don't support Mesh (e.g., WearOS)
+        # ------------------------------------------------------------------
+        try:
+            from core.command_router import get_command_router as _gcr_mesh
+            from core.execution_spine import (
+                ExecutionIngressSource as _EIS_mesh,
+                normalize_ingress_to_envelope as _norm_mesh,
+            )
+            _cmd_router_mesh = _gcr_mesh()
+            _envelope_mesh = _norm_mesh(
+                {
+                    "task_id": _mesh_task_id,
+                    "trace_id": _mesh_args.get("trace_id") or "",
+                    "tool_name": "mesh_send",
+                    "targets": [_mesh_args.get("target_device", "")] if _mesh_args.get("target_device") else [],
+                    "args": _mesh_args,
+                },
+                source=_EIS_mesh.SCHEDULER,
+            )
+            _mesh_spine_result = await _cmd_router_mesh.route_envelope(_envelope_mesh)
+            if isinstance(_mesh_spine_result, dict):
+                _mesh_spine_result.setdefault("task_id", _mesh_task_id)
+                _mesh_spine_result.setdefault("canonical_router_owner", "core.command_router.CommandRouter")
+                _mesh_spine_result.setdefault("routing_plane", "websocket_fallback")
             try:
                 from core.task_graph_runtime import (
                     GraphNodeState as _GraphNodeState_mesh_fb,
@@ -1489,14 +1467,44 @@ CROSS-DEVICE:
                 _get_tgr_mesh_fb().transition(
                     _mesh_task_id,
                     _GraphNodeState_mesh_fb.ROUTED,
-                    reason="mesh_send_via_legacy_fallback_mesh_coordinator",
+                    reason="mesh_send_via_websocket_fallback",
                     contributor=_WCK_mesh_fb.SCHEDULER,
                 )
             except Exception as _mesh_fb_tgr_exc:
-                logger.debug("_exec_mesh_send: legacy fallback graph transition skipped: %s", _mesh_fb_tgr_exc)
-            return json.dumps(result_dict, ensure_ascii=False)
-        except Exception as e:
-            return json.dumps({"error": f"Mesh send failed: {e}"})
+                logger.debug("_exec_mesh_send: fallback graph transition skipped: %s", _mesh_fb_tgr_exc)
+            return json.dumps(_mesh_spine_result, ensure_ascii=False)
+        except Exception as _spine_mesh_err:
+            logger.debug(
+                "_exec_mesh_send: fallback WebSocket routing failed (%s)",
+                _spine_mesh_err,
+            )
+
+        # Both primary and fallback failed
+        try:
+            from core.task_graph_runtime import (
+                GraphNodeState as _GraphNodeState_mesh_fail,
+                WorkflowContributorKind as _WCK_mesh_fail,
+                get_task_graph_runtime as _get_tgr_mesh_fail,
+            )
+            _get_tgr_mesh_fail().transition(
+                _mesh_task_id,
+                _GraphNodeState_mesh_fail.DEGRADED,
+                reason="mesh_send_all_routes_failed",
+                contributor=_WCK_mesh_fail.SCHEDULER,
+                error="ALL_ROUTES_FAILED",
+            )
+        except Exception as _mesh_fail_tgr_exc:
+            logger.debug("_exec_mesh_send: fail graph transition skipped: %s", _mesh_fail_tgr_exc)
+
+        return json.dumps(
+            {
+                "success": False,
+                "error": "mesh_send failed: MeshCoordinator and CommandRouter both unavailable",
+                "error_code": "ALL_ROUTES_FAILED",
+                "task_id": _mesh_task_id,
+            },
+            ensure_ascii=False,
+        )
 
     async def _exec_find_device(self, args: Dict, context: Dict) -> str:
         """按类型或名称查找在线设备"""
