@@ -366,17 +366,36 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         from core.aip_transport import get_aip_transport
         from core.adapters import (
             WebSocketAdapter,
-            MQTTAdapter, BLEAdapter, SerialAdapter,
+            MQTTAdapter, TCPAdapter, UDPAdapter,
+            BLEAdapter, SerialAdapter,
             DBusAdapter, CANBusAdapter,
         )
 
         aip_transport = get_aip_transport()
         aip_transport.register_adapter(WebSocketAdapter(websocket_manager))
         aip_transport.register_adapter(MQTTAdapter())
+        aip_transport.register_adapter(TCPAdapter())
+        aip_transport.register_adapter(UDPAdapter())
         aip_transport.register_adapter(BLEAdapter())
         aip_transport.register_adapter(SerialAdapter())
         aip_transport.register_adapter(DBusAdapter())
         aip_transport.register_adapter(CANBusAdapter())
+
+        # PR-AIP-v52: 启动 TCP P2P 和 UDP 监听服务
+        try:
+            tcp_adapter = aip_transport.get_adapter("tcp")
+            if tcp_adapter:
+                await tcp_adapter.start_server()
+                tcp_adapter.register_local_service(device_id)
+        except Exception as _tcp_err:
+            logger.debug("TCP P2P server start failed (non-fatal): %s", _tcp_err)
+
+        try:
+            udp_adapter = aip_transport.get_adapter("udp")
+            if udp_adapter:
+                await udp_adapter.start()
+        except Exception as _udp_err:
+            logger.debug("UDP listener start failed (non-fatal): %s", _udp_err)
 
         app.state.aip_transport = aip_transport
         logger.info(
@@ -447,6 +466,15 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     await task_orchestrator.stop()
     await websocket_manager.stop()
 
+    # PR-AIP-v52: 关闭 AIPTransport 适配器（TCP P2P, UDP, BLE, etc.）
+    aip_transport = getattr(app.state, "aip_transport", None)
+    if aip_transport is not None:
+        try:
+            await aip_transport.close_all()
+            logger.debug("AIPTransport adapters closed")
+        except Exception:
+            pass
+
     # Clear module-level backward-compat globals
     try:
         import galaxy_gateway.app as _gw_app
@@ -458,6 +486,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         _gw_app.llm_router_instance = None
         _gw_app.nats_adapter = None
         _gw_app.heartbeat_scheduler = None
+        _gw_app.aip_transport = None
     except Exception:
         pass
 
