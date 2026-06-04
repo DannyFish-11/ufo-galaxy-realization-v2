@@ -7,12 +7,21 @@
 # Gateway: 100.64.0.1 (V2 Galaxy Gateway)
 # Wear OS: 100.64.0.10+ (auto-assigned)
 # Android: 100.64.0.20+ (auto-assigned)
+#
+# IMPORTANT: Replace server_url with your actual server IP/hostname
+# before deploying. The devices need a reachable URL.
+#
+# Example: server_url: http://192.168.1.100:8080
+# Example: server_url: https://headscale.yourdomain.com
 # ============================================================
 
-server_url: http://localhost:8080
+# NOTE: Replace YOUR_SERVER_IP with your actual server IP or hostname.
+# 0.0.0.0 is invalid for server_url — devices need a reachable address.
+# Example: http://192.168.1.100:8080 or https://headscale.example.com
+server_url: http://YOUR_SERVER_IP:8080
 listen_addr: 0.0.0.0:8080
-metrics_listen_addr: 127.0.0.1:9090
-grpc_listen_addr: 127.0.0.1:50443
+metrics_listen_addr: 0.0.0.0:9090
+grpc_listen_addr: 0.0.0.0:50443
 grpc_allow_insecure: true
 
 # Private key for noise protocol

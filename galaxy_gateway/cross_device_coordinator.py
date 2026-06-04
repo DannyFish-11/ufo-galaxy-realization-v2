@@ -1092,4 +1092,4 @@ class CrossDeviceCoordinator:
 
 
 # 全局跨设备协调器实例
-cross_device_coordinator = CrossDeviceCoor
+cross_device_coordinator = CrossDeviceCoordinator()

@@ -111,6 +111,8 @@ class TailscaleManager:
                     self._emit_state_change("disconnected", {"reason": "tailscale_not_running"})
                     logger.info("Tailscale disconnected (not running)")
                 return None
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
             if self._available:
                 self._available = False
@@ -139,6 +141,8 @@ class TailscaleManager:
             await asyncio.sleep(self._CHECK_INTERVAL_SECONDS)
             try:
                 await self._check_tailscale()
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
                 logger.debug("Tailscale monitor loop error: %s", exc)
 
