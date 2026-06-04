@@ -13,6 +13,8 @@ core/adapters/tcp_adapter.py — TCP P2P 传输适配器
 import asyncio
 import json
 import logging
+import os
+import time
 from typing import Any, Dict, List, Optional
 
 from core.aip_transport import TransportAdapter
@@ -30,6 +32,8 @@ except ImportError:
 GALAXY_SERVICE_TYPE = "_galaxy-aip3._tcp.local."
 DEFAULT_PORT = 19421
 HEARTBEAT_INTERVAL = 30.0
+# 可配置的最大消息大小（字节），默认 10MB
+MAX_MESSAGE_SIZE = int(os.getenv("GALAXY_MAX_MESSAGE_SIZE", "10485760"))
 
 
 class TCPAdapter(TransportAdapter):
@@ -73,10 +77,14 @@ class TCPAdapter(TransportAdapter):
             peer.writer.write(payload)
             await peer.writer.drain()
             return {"success": True, "via": "tcp", "bytes": len(payload)}
-        except Exception as e:
+        except (ConnectionError, TimeoutError, OSError) as e:
             logger.warning("TCP send to '%s' failed: %s", target, e)
             peer.connected = False
             return {"success": False, "error": str(e)}
+        except Exception as e:
+            logger.error("TCP send to '%s' unexpected error: %s", target, e)
+            peer.connected = False
+            raise
 
     async def is_available(self, target: str) -> bool:
         peer = self._peers.get(target)
@@ -129,7 +137,7 @@ class TCPAdapter(TransportAdapter):
                 # 读取 4 字节长度头
                 len_bytes = await reader.readexactly(4)
                 msg_len = int.from_bytes(len_bytes, "big")
-                if msg_len > 10 * 1024 * 1024:  # 10MB 上限
+                if msg_len > MAX_MESSAGE_SIZE:  # 可配置的消息大小上限
                     logger.warning("TCP message too large: %d bytes", msg_len)
                     break
 

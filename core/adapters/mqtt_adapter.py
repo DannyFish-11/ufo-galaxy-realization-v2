@@ -46,7 +46,7 @@ class MQTTAdapter(TransportAdapter):
 
     def _setup_client(self) -> None:
         """Setup MQTT client"""
-        self._client = mqtt.Client()
+        self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         if self._username:
             self._client.username_pw_set(self._username, self._password)
         self._client.on_connect = self._on_connect

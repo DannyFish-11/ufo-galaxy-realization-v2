@@ -50,6 +50,8 @@ NOTE — Device WebSocket ingress authority:
 """
 
 import asyncio
+import base64
+import binascii
 import logging
 import time
 
@@ -1055,19 +1057,43 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                     image_b64 = data.get("image", "")
                     mode = data.get("mode", "full")
                     instruction = data.get("instruction", "")
+                    # 最大允许图片大小 5MB（base64 编码后约 6.67MB）
+                    MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
                     try:
-                        image_data = base64.b64decode(image_b64)
+                        # 限制 base64 图片大小防止 OOM
+                        if len(image_b64) > MAX_IMAGE_SIZE * 4 // 3:
+                            raise ValueError(f"Image too large: exceeds {MAX_IMAGE_SIZE} bytes limit")
+                        image_data = base64.b64decode(image_b64, validate=True)
+                        if len(image_data) > MAX_IMAGE_SIZE:
+                            raise ValueError(f"Image too large: {len(image_data)} bytes exceeds {MAX_IMAGE_SIZE} bytes limit")
                         from core.vision_pipeline import VisionPipeline
                         pipeline = VisionPipeline()
-                        result = await asyncio.get_running_loop().run_in_executor(
-                            None, pipeline.understand, image_data, mode, instruction
+                        result = await asyncio.wait_for(
+                            asyncio.get_running_loop().run_in_executor(
+                                None, pipeline.understand, image_data, mode, instruction
+                            ),
+                            timeout=30.0
                         )
                         await websocket.send_json({
                             "type": "ocr_result",
                             "request_id": data.get("request_id", ""),
                             "success": True,
                             "result": result
+                        })
+                    except (ValueError, binascii.Error) as e:
+                        await websocket.send_json({
+                            "type": "ocr_result",
+                            "request_id": data.get("request_id", ""),
+                            "success": False,
+                            "error": f"Invalid image data: {e}"
+                        })
+                    except asyncio.TimeoutError:
+                        await websocket.send_json({
+                            "type": "ocr_result",
+                            "request_id": data.get("request_id", ""),
+                            "success": False,
+                            "error": "Image processing timed out after 30 seconds"
                         })
                     except Exception as e:
                         await websocket.send_json({

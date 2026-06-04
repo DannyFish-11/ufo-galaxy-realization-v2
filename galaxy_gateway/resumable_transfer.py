@@ -18,10 +18,14 @@ import asyncio
 import hashlib
 import json
 import time
+import tempfile
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+
+# Default state directory uses app-private path under system temp to avoid hijacking
+DEFAULT_STATE_DIR = os.path.join(tempfile.gettempdir(), 'galaxy_transfer_states')
 
 # ============================================================================
 # 配置
@@ -139,7 +143,7 @@ class TransferSession:
 class ResumableTransferManager:
     """断点续传管理器"""
     
-    def __init__(self, state_dir: str = "/tmp/transfer_states"):
+    def __init__(self, state_dir: str = DEFAULT_STATE_DIR):
         self.state_dir = state_dir
         self.sessions: Dict[str, TransferSession] = {}
         self.config = TransferConfig()
@@ -312,21 +316,28 @@ class ResumableTransferManager:
                 
                 # 更新进度
                 current_time = time.time()
-                if progress_callback and current_time - last_progress_time >= self.config.PROGRESS_INTERVAL:
-                    progress = session.transferred_bytes / session.file_size
-                    speed = (session.transferred_bytes - last_transferred_bytes) / (current_time - last_progress_time)
+                time_delta = current_time - last_progress_time
+                if progress_callback and time_delta >= self.config.PROGRESS_INTERVAL:
+                    progress = (session.transferred_bytes / session.file_size) if session.file_size > 0 else 0.0
+                    speed = ((session.transferred_bytes - last_transferred_bytes) / time_delta) if time_delta > 0 else 0.0
                     progress_callback(progress, speed)
-                    
+
                     last_progress_time = current_time
                     last_transferred_bytes = session.transferred_bytes
-            
+
             # 完成
             session.state = TransferState.COMPLETED
             session.end_time = time.time()
             self._save_session(session)
-            
+
             return True
-        
+
+        except asyncio.CancelledError:
+            session.state = TransferState.CANCELLED
+            session.error = "cancelled"
+            self._save_session(session)
+            raise
+
         except Exception as e:
             session.state = TransferState.FAILED
             session.error = str(e)
@@ -371,13 +382,16 @@ class ResumableTransferManager:
         Returns:
             bool: 是否成功
         """
+        # Validate output_path to prevent path traversal
+        output_path = self._validate_output_path(output_path)
+
         # 尝试加载已存在的会话
         session = self.load_session(session_id)
-        
+
         if not session:
             # 创建新会话
             chunk_size = chunk_size or self.config.CHUNK_SIZE
-            
+
             # 创建空文件
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             with open(output_path, 'wb') as f:
@@ -474,6 +488,16 @@ class ResumableTransferManager:
     # 工具方法
     # ========================================================================
     
+    def _validate_output_path(self, output_path: str) -> str:
+        """Validate output_path is safe (no path traversal)."""
+        abs_path = os.path.abspath(output_path)
+        abs_state_dir = os.path.abspath(self.state_dir)
+        # Allow writes within state_dir or explicit allowed prefixes
+        allowed_prefixes = (abs_state_dir, tempfile.gettempdir())
+        if not any(abs_path.startswith(os.path.abspath(p)) for p in allowed_prefixes):
+            raise ValueError(f"Invalid output_path (path traversal detected): {output_path}")
+        return abs_path
+
     def _calculate_checksum(self, data: bytes) -> str:
         """计算校验和"""
         return hashlib.sha256(data).hexdigest()
@@ -494,10 +518,13 @@ class ResumableTransferManager:
     def get_progress(self, session_id: str) -> Optional[float]:
         """获取传输进度"""
         session = self.load_session(session_id)
-        
+
         if not session:
             return None
-        
+
+        if session.file_size == 0:
+            return 0.0
+
         return session.transferred_bytes / session.file_size
     
     def get_speed(self, session_id: str) -> Optional[float]:

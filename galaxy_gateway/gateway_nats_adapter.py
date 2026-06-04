@@ -140,7 +140,7 @@ class GatewayNATSAdapter:
                 )
                 return
 
-            result = await nats_bus._subscribe(
+            result = await nats_bus.subscribe(
                 _SUBSCRIBE_SUBJECT,
                 self._handle_task_dispatch,
                 durable=_DURABLE_NAME,
@@ -536,7 +536,7 @@ class GatewayNATSAdapter:
                 "trace_id": trace_id or "",
                 "metadata": result_metadata,
             }
-            await nats_bus._publish(f"galaxy.tasks.result.{task_id}", unified)
+            await nats_bus.publish(f"galaxy.tasks.result.{task_id}", unified)
         except Exception as exc:
             logger.error("GatewayNATSAdapter: failed to publish result for %s: %s", task_id, exc)
 
@@ -552,7 +552,7 @@ class GatewayNATSAdapter:
                 "reason": reason,
                 "gateway_ts": time.time(),
             }
-            await nats_bus._publish(self._dlq_subject, dlq_payload)
+            await nats_bus.publish(self._dlq_subject, dlq_payload)
             logger.warning(
                 "GatewayNATSAdapter: task %s sent to DLQ (%s) — %s",
                 task_id,

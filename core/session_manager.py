@@ -17,6 +17,7 @@ Galaxy - 跨设备统一会话管理器
     history = sm.get_history(session.id, max_turns=20)
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -137,6 +138,7 @@ class SessionManager:
         self._user_active_session: Dict[str, str] = {}
         # 会话更新回调（用于 WebSocket 广播）
         self._on_update_callback = None
+        self._lock = asyncio.Lock()
         self._load_state()
         logger.info("SessionManager 已初始化")
 
@@ -146,97 +148,101 @@ class SessionManager:
 
     # ═══════════════════ 会话生命周期 ═══════════════════
 
-    def create_session(self, user_id: str, device_id: str = "") -> Session:
+    async def create_session(self, user_id: str, device_id: str = "") -> Session:
         """创建新会话"""
-        session_id = f"session_{uuid.uuid4().hex[:12]}"
-        devices = [device_id] if device_id else []
-        session = Session(
-            id=session_id,
-            user_id=user_id,
-            devices=devices,
-            active_device=device_id,
-        )
-        self._sessions[session_id] = session
-        self._user_active_session[user_id] = session_id
-        self._persist_state()
-        logger.info(f"会话已创建: {session_id} (user={user_id}, device={device_id})")
-        return session
+        async with self._lock:
+            session_id = f"session_{uuid.uuid4().hex[:12]}"
+            devices = [device_id] if device_id else []
+            session = Session(
+                id=session_id,
+                user_id=user_id,
+                devices=devices,
+                active_device=device_id,
+            )
+            self._sessions[session_id] = session
+            self._user_active_session[user_id] = session_id
+            self._persist_state()
+            logger.info(f"会话已创建: {session_id} (user={user_id}, device={device_id})")
+            return session
 
-    def ensure_session(
+    async def ensure_session(
         self,
         session_id: str,
         user_id: str = "",
         device_id: str = "",
     ) -> Session:
         """确保指定 ID 的会话存在，并将设备加入该会话。"""
-        session = self._sessions.get(session_id)
-        if session is None:
-            owner = user_id or f"session::{session_id}"
-            devices = [device_id] if device_id else []
-            session = Session(
-                id=session_id,
-                user_id=owner,
-                devices=devices,
-                active_device=device_id,
-            )
-            self._sessions[session_id] = session
-            if owner:
-                self._user_active_session[owner] = session_id
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                owner = user_id or f"session::{session_id}"
+                devices = [device_id] if device_id else []
+                session = Session(
+                    id=session_id,
+                    user_id=owner,
+                    devices=devices,
+                    active_device=device_id,
+                )
+                self._sessions[session_id] = session
+                if owner:
+                    self._user_active_session[owner] = session_id
+                self._persist_state()
+                logger.info(
+                    "会话已确保存在: %s (user=%s, device=%s)",
+                    session_id,
+                    owner,
+                    device_id,
+                )
+                return session
+
+            if user_id:
+                self._user_active_session[user_id] = session_id
+            if device_id and device_id not in session.devices:
+                session.devices.append(device_id)
+            if device_id:
+                session.active_device = device_id
+            session.updated_at = time.time()
             self._persist_state()
-            logger.info(
-                "会话已确保存在: %s (user=%s, device=%s)",
-                session_id,
-                owner,
-                device_id,
-            )
             return session
 
-        if user_id:
-            self._user_active_session[user_id] = session_id
-        if device_id and device_id not in session.devices:
-            session.devices.append(device_id)
-        if device_id:
-            session.active_device = device_id
-        session.updated_at = time.time()
-        self._persist_state()
-        return session
-
-    def get_or_create_session(
+    async def get_or_create_session(
         self, user_id: str, device_id: str = ""
     ) -> Session:
         """
         获取用户的活跃会话，如果不存在则创建。
         设备自动加入会话。
         """
-        session_id = self._user_active_session.get(user_id)
-        if session_id and session_id in self._sessions:
-            session = self._sessions[session_id]
-            # 确保设备已加入
-            if device_id and device_id not in session.devices:
-                session.devices.append(device_id)
-                logger.info(f"设备 {device_id} 已加入会话 {session_id}")
-            if device_id:
-                session.active_device = device_id
-            return session
+        async with self._lock:
+            session_id = self._user_active_session.get(user_id)
+            if session_id and session_id in self._sessions:
+                session = self._sessions[session_id]
+                # 确保设备已加入
+                if device_id and device_id not in session.devices:
+                    session.devices.append(device_id)
+                    logger.info(f"设备 {device_id} 已加入会话 {session_id}")
+                if device_id:
+                    session.active_device = device_id
+                return session
 
-        return self.create_session(user_id, device_id)
+            return await self.create_session(user_id, device_id)
 
     def get_session(self, session_id: str) -> Optional[Session]:
         """获取会话"""
         return self._sessions.get(session_id)
 
-    def join_session(self, session_id: str, device_id: str) -> bool:
+    async def join_session(self, session_id: str, device_id: str) -> bool:
         """设备加入已有会话"""
-        session = self._sessions.get(session_id)
-        if not session:
-            return False
-        if device_id not in session.devices:
-            session.devices.append(device_id)
-        session.active_device = device_id
-        session.updated_at = time.time()
-        self._persist_state()
-        logger.info(f"设备 {device_id} 加入会话 {session_id}")
-        return True
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            if not session:
+                return False
+            if device_id not in session.devices:
+                session.devices.append(device_id)
+            session.active_device = device_id
+            session.updated_at = time.time()
+            self._persist_state()
+            logger.info(f"设备 {device_id} 加入会话 {session_id}")
+            return True
 
     def list_sessions(self, user_id: Optional[str] = None) -> List[Dict]:
         """列出会话（可按 user_id 过滤）"""
@@ -255,7 +261,7 @@ class SessionManager:
 
     # ═══════════════════ 消息管理 ═══════════════════
 
-    def add_message(
+    async def add_message(
         self,
         session_id: str,
         role: str,
@@ -264,35 +270,36 @@ class SessionManager:
         metadata: Optional[Dict] = None,
     ) -> bool:
         """添加消息到会话"""
-        session = self._sessions.get(session_id)
-        if not session:
-            return False
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            if not session:
+                return False
 
-        msg = SessionMessage(
-            role=role,
-            content=content,
-            device_id=device_id,
-            metadata=metadata or {},
-        )
-        session.history.append(msg)
-        session.updated_at = time.time()
-        if device_id:
-            session.active_device = device_id
+            msg = SessionMessage(
+                role=role,
+                content=content,
+                device_id=device_id,
+                metadata=metadata or {},
+            )
+            session.history.append(msg)
+            session.updated_at = time.time()
+            if device_id:
+                session.active_device = device_id
 
-        # 历史超限时截断
-        if len(session.history) > self.MAX_HISTORY:
-            session.history = session.history[-self.MAX_HISTORY:]
+            # 历史超限时截断
+            if len(session.history) > self.MAX_HISTORY:
+                session.history = session.history[-self.MAX_HISTORY:]
 
-        self._persist_state()
+            self._persist_state()
 
-        # 通知所有关联设备
-        if self._on_update_callback:
-            try:
-                self._on_update_callback(session_id, msg.to_dict(), session.devices)
-            except Exception as e:
-                logger.debug(f"会话更新回调失败: {e}")
+            # 通知所有关联设备
+            if self._on_update_callback:
+                try:
+                    self._on_update_callback(session_id, msg.to_dict(), session.devices)
+                except Exception as e:
+                    logger.debug(f"会话更新回调失败: {e}")
 
-        return True
+            return True
 
     def get_history(
         self, session_id: str, max_turns: int = 20

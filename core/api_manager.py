@@ -20,7 +20,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import httpx
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("APIManager")
 
 
@@ -271,8 +270,8 @@ class APIManager:
         if oneapi.get("api_key"):
             os.environ["ONEAPI_API_KEY"] = oneapi["api_key"]
             results["ONEAPI_API_KEY"] = True
-            logger.info("已同步 ONEAPI_API_KEY 到环境变量")
-        
+            logger.debug("已同步 ONEAPI_API_KEY 到环境变量")
+
         # 同步直接模型
         direct_models = self.config.get("direct_models", {})
         for provider, config in direct_models.items():
@@ -280,8 +279,8 @@ class APIManager:
                 env_key = config.get("env_key", f"{provider.upper()}_API_KEY")
                 os.environ[env_key] = config["api_key"]
                 results[env_key] = True
-                logger.info(f"已同步 {env_key} 到环境变量")
-        
+                logger.debug("已同步 %s 到环境变量", env_key)
+
         # 同步工具
         tools = self.config.get("tools", {})
         for tool_id, config in tools.items():
@@ -289,7 +288,7 @@ class APIManager:
                 env_key = config.get("env_key", f"{tool_id.upper()}_API_KEY")
                 os.environ[env_key] = config["api_key"]
                 results[env_key] = True
-                logger.info(f"已同步 {env_key} 到环境变量")
+                logger.debug("已同步 %s 到环境变量", env_key)
         
         return results
     
@@ -628,9 +627,10 @@ class APIManager:
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 if provider == "gemini":
-                    # Gemini 使用不同的 API 格式
+                    # Gemini 使用 HTTP Header 传递 API Key
                     response = await client.post(
-                        f"{url}?key={api_key}",
+                        url,
+                        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
                         json={"contents": [{"parts": [{"text": "Hi"}]}]}
                     )
                 elif provider == "anthropic":

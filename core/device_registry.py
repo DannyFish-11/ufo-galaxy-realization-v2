@@ -61,6 +61,7 @@ import json
 import logging
 import os
 import socket
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -133,6 +134,7 @@ class DeviceRegistry:
     """
     
     _instance = None
+    _instance_lock = threading.Lock()
     
     def __init__(self):
         # 设备存储
@@ -168,7 +170,9 @@ class DeviceRegistry:
         # possible to improve testability.  See ARCHITECTURE_REVIEW.md
         # (Singleton Guardrails section) for the planned refactor strategy.
         if cls._instance is None:
-            cls._instance = DeviceRegistry()
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = DeviceRegistry()
         return cls._instance
     
     # ========================================================================
@@ -1052,4 +1056,4 @@ class DeviceRegistry:
 # 全局实例
 # ============================================================================
 
-device_registry = DeviceRegistry.get_instance()
+device_reg

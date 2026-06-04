@@ -25,6 +25,10 @@ except ImportError:
 logger = logging.getLogger("Galaxy.AgentFactory")
 
 
+class SecurityPolicyViolation(Exception):
+    """编排边界安全策略违规异常。"""
+
+
 # ───────────────────── Agent 消息通信 ─────────────────────
 
 @dataclass
@@ -699,7 +703,8 @@ class AgentFactory:
             )
             assert_center_authority_intact(AuthorityDomain.ORCHESTRATION_TRUTH)
         except Exception as exc:
-            pass  # 非致命：编排边界不可用时允许分裂（fail-open for availability）
+            logger.error("Security policy check failed", exc_info=True)
+            raise SecurityPolicyViolation("编排边界安全检查失败") from exc
 
         parent = self.agents.get(agent_id)
         if not parent:
