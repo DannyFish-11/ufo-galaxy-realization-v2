@@ -33,6 +33,9 @@ docker compose up -d
 ### 2. Initialize (create user + auth key)
 
 ```bash
+# Make scripts executable (git does not preserve permissions)
+chmod +x init.sh connect-watch.sh
+
 ./init.sh
 ```
 
