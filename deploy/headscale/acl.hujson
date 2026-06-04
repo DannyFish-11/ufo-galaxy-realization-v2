@@ -1,0 +1,38 @@
+// ACL Policy — Galaxy Tailnet
+// Open policy: all devices can communicate with each other
+// Production: restrict by tags for security
+{
+  // Host definitions (static IPs)
+  "hosts": {
+    "gateway": "100.64.0.1/32",
+    "watch-001": "100.64.0.10/32",
+    "android-001": "100.64.0.20/32"
+  },
+
+  // Tag definitions
+  "tagOwners": {
+    "tag:gateway": ["galaxy-admin"],
+    "tag:watch": ["galaxy-admin"],
+    "tag:phone": ["galaxy-admin"],
+    "tag:desktop": ["galaxy-admin"]
+  },
+
+  // Access control: allow all tailnet devices to communicate
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["*"],
+      "dst": ["*:*"]
+    }
+  ],
+
+  // SSH policy (Tailscale SSH)
+  "ssh": [
+    {
+      "action": "accept",
+      "src": ["tag:desktop"],
+      "dst": ["tag:gateway"],
+      "users": ["galaxy"]
+    }
+  ]
+}

@@ -38,6 +38,8 @@ class TailscaleManager:
 
     # PR-STABILITY: Configurable check interval (env var override)
     _CHECK_INTERVAL_SECONDS = float(os.environ.get("GALAXY_TAILSCALE_CHECK_INTERVAL", "30.0"))
+    # PR-HEADSCALE: Support custom control server (Headscale)
+    _HEADSCALE_URL = os.environ.get("GALAXY_HEADSCALE_URL", "")
     _instance = None
 
     def __new__(cls):
@@ -238,3 +240,98 @@ class TailscaleManager:
     def is_tailscale_installed() -> bool:
         """检查tailscale命令是否安装。"""
         return shutil.which("tailscale") is not None
+
+    # ── Headscale Integration ──
+
+    def is_headscale_mode(self) -> bool:
+        """Check if using custom Headscale control server."""
+        return bool(self._HEADSCALE_URL)
+
+    def get_login_server(self) -> Optional[str]:
+        """Get the control server URL (Headscale or Tailscale official)."""
+        return self._HEADSCALE_URL if self._HEADSCALE_URL else None
+
+    def get_device_setup_command(self, hostname: str, ephemeral: bool = True) -> str:
+        """Generate tailscale up command for a new device.
+
+        Usage for Wear OS watch via adb:
+            adb shell <command>
+        """
+        cmd_parts = ["tailscale up"]
+
+        if self._HEADSCALE_URL:
+            cmd_parts.append(f"--login-server={self._HEADSCALE_URL}")
+
+        cmd_parts.append(f"--hostname={hostname}")
+        cmd_parts.append("--accept-routes")
+
+        if ephemeral:
+            cmd_parts.append("--ephemeral")
+
+        # Auth key hint
+        if self._HEADSCALE_URL:
+            cmd_parts.append("--authkey=<GET_FROM_HEADSCALE_ADMIN>")
+
+        return " ".join(cmd_parts)
+
+    def get_gateway_url_for_watch(self) -> Optional[str]:
+        """Get the WebSocket URL for watches to connect via Tailscale.
+
+        Returns wss://100.64.0.1:9000 if Tailscale is active and
+        we are the gateway, else None.
+        """
+        if not self._available:
+            return None
+        # Gateway is typically 100.64.0.1 in our allocation scheme
+        return f"wss://100.64.0.1:9000"
+
+    def get_peer_by_hostname(self, hostname: str) -> Optional[Dict[str, Any]]:
+        """Get peer info from tailscale status by hostname."""
+        if not self._available:
+            return None
+        try:
+            result = subprocess.run(
+                ["tailscale", "status", "--json"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                status = json.loads(result.stdout)
+                peers = status.get("Peer", {})
+                for key, peer in peers.items():
+                    if peer.get("HostName", "") == hostname:
+                        ts_ips = peer.get("TailscaleIPs", [])
+                        return {
+                            "hostname": hostname,
+                            "tailscale_ip": ts_ips[0] if ts_ips else None,
+                            "os": peer.get("OS", ""),
+                            "online": peer.get("Online", False),
+                            "relay": peer.get("Relay", ""),
+                        }
+        except Exception as exc:
+            logger.debug("Peer lookup failed: %s", exc)
+        return None
+
+    def get_all_peers(self) -> List[Dict[str, Any]]:
+        """Get all tailnet peers."""
+        peers_list = []
+        if not self._available:
+            return peers_list
+        try:
+            result = subprocess.run(
+                ["tailscale", "status", "--json"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                status = json.loads(result.stdout)
+                peers = status.get("Peer", {})
+                for key, peer in peers.items():
+                    ts_ips = peer.get("TailscaleIPs", [])
+                    peers_list.append({
+                        "hostname": peer.get("HostName", key),
+                        "tailscale_ip": ts_ips[0] if ts_ips else None,
+                        "os": peer.get("OS", ""),
+                        "online": peer.get("Online", False),
+                    })
+        except Exception as exc:
+            logger.debug("Peers list failed: %s", exc)
+        return peers_list

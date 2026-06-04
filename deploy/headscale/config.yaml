@@ -1,0 +1,70 @@
+# Headscale Configuration — Galaxy Private Tailnet
+# ============================================================
+# This config creates a private Tailscale tailnet for Galaxy
+# devices, integrated with the V2 gateway.
+#
+# IP range: 100.64.0.0/10 (carrier-grade NAT, Tailscale default)
+# Gateway: 100.64.0.1 (V2 Galaxy Gateway)
+# Wear OS: 100.64.0.10+ (auto-assigned)
+# Android: 100.64.0.20+ (auto-assigned)
+# ============================================================
+
+server_url: http://localhost:8080
+listen_addr: 0.0.0.0:8080
+metrics_listen_addr: 127.0.0.1:9090
+grpc_listen_addr: 127.0.0.1:50443
+grpc_allow_insecure: true
+
+# Private key for noise protocol
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+# IP allocation for tailnet devices
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+  allocation: sequential
+
+# DERP (relay) configuration
+# Use Tailscale's public DERP servers as fallback + our local DERP
+derp:
+  server:
+    enabled: false
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+  auto_update_enabled: true
+  update_frequency: 24h
+
+# Ephemeral nodes (auto-remove when offline)
+ephemeral_node_inactivity_timeout: 30m
+
+# Database
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+
+# Logging
+log:
+  level: info
+  format: text
+
+# DNS (MagicDNS)
+dns:
+  magic_dns: true
+  base_domain: galaxy.tailnet
+  nameservers:
+    global:
+      - 1.1.1.1
+      - 8.8.8.8
+  search_domains: []
+
+# Unix socket for CLI
+unix_socket: /var/run/headscale/headscale.sock
+unix_socket_permission: "0770"
+
+# ACL (Access Control List) — allow all within tailnet
+# Production: restrict which devices can talk to which
+policy:
+  mode: file
+  path: /var/lib/headscale/acl.hujson
