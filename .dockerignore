@@ -1,41 +1,88 @@
-# Git
-.git
+# ============================================================================
+# Galaxy Docker Ignore — Exclude sensitive files from build context
+# ============================================================================
+
+# Environment / Secrets
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+config/secrets/
+
+# Version control
+.git/
 .gitignore
+.gitattributes
+.svn/
+.hg/
 
-# Python
-__pycache__
-*.pyc
-*.pyo
-venv/
-.venv/
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 *.egg-info/
-.pytest_cache
-
-# Node
-node_modules
-
-# Build artefacts
 dist/
 build/
+*.egg
+.eggs/
 
-# IDE
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE / Editor
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
+.DS_Store
 
-# Runtime data
-data/
+# Logs and data
 logs/
 *.log
+data/
+*.db
+*.sqlite
+*.sqlite3
 
-# Secrets
-.env
-*.bak
+# Docker itself
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+docker-compose*.yaml
 
-# Tests (not needed in image)
-tests/
-test_*.py
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
 
-# Docs
+# Documentation (not needed in image)
 *.md
-!SKILL.md
+docs/
+
+# Test files
+tests/
+test/
+*_test.py
+*_tests.py
+pytest.ini
+tox.ini
+.coverage
+htmlcov/
+
+# Installer output
+installer/
+installer_output/
+*.iss
+
+# Assets not needed at runtime
+assets/

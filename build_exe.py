@@ -155,9 +155,25 @@ def create_icon():
         return None
 
 
+def _escape_string(value: str) -> str:
+    """Escape a string for safe insertion into generated Python/INI files.
+
+    Replaces backslash with forward slash and escapes single quotes.
+    """
+    return value.replace("\\", "/").replace("'", "\\'")
+
+
 def generate_spec_file(onefile: bool = False) -> Path:
     """生成 PyInstaller spec 文件"""
-    spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
+    # Safely escape all dynamic values
+    project_root_escaped = _escape_string(str(PROJECT_ROOT))
+    app_name_escaped = _escape_string(APP_NAME)
+    app_icon_escaped = _escape_string(str(APP_ICON))
+    app_author_escaped = _escape_string(APP_AUTHOR)
+    app_description_escaped = _escape_string(APP_DESCRIPTION)
+    app_version_escaped = _escape_string(APP_VERSION)
+
+    spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
 # Galaxy PyInstaller Spec File
 # 自动生成，请勿手动修改
 
@@ -166,7 +182,7 @@ import sys
 from pathlib import Path
 
 # 项目根目录
-PROJECT_ROOT = Path(r'{PROJECT_ROOT}')
+PROJECT_ROOT = Path(r'{project_root_escaped}')
 
 # 分析配置
 a = Analysis(
@@ -174,13 +190,13 @@ a = Analysis(
     pathex=[str(PROJECT_ROOT)],
     binaries=[],
     datas=[
-        {', '.join([f"(str(PROJECT_ROOT / '{src}'), '{dst}')" for src, dst in DATA_FILES])}
+        {', '.join([f"(str(PROJECT_ROOT / '{_escape_string(src)}'), '{_escape_string(dst)}')" for src, dst in DATA_FILES])}
     ],
-    hiddenimports={HIDDEN_IMPORTS},
+    hiddenimports={HIDDEN_IMPORTS!r},
     hookspath=[],
     hooksconfig={{}},
     runtime_hooks=[],
-    excludes={EXCLUDED_MODULES},
+    excludes={EXCLUDED_MODULES!r},
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=None,
@@ -189,10 +205,10 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
-'''
-    
+"""
+
     if onefile:
-        spec_content += f'''
+        spec_content += f"""
 exe = EXE(
     pyz,
     a.scripts,
@@ -200,7 +216,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='{APP_NAME}',
+    name='{app_name_escaped}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -213,24 +229,24 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=r'{APP_ICON}' if Path(r'{APP_ICON}').exists() else None,
+    icon=r'{app_icon_escaped}' if Path(r'{app_icon_escaped}').exists() else None,
     version_info={{
-        'CompanyName': '{APP_AUTHOR}',
-        'FileDescription': '{APP_DESCRIPTION}',
-        'FileVersion': '{APP_VERSION}',
-        'ProductName': '{APP_NAME}',
-        'ProductVersion': '{APP_VERSION}',
+        'CompanyName': '{app_author_escaped}',
+        'FileDescription': '{app_description_escaped}',
+        'FileVersion': '{app_version_escaped}',
+        'ProductName': '{app_name_escaped}',
+        'ProductVersion': '{app_version_escaped}',
     }},
 )
-'''
+"""
     else:
-        spec_content += f'''
+        spec_content += f"""
 exe = EXE(
     pyz,
     a.scripts,
     [],
     exclude_binaries=True,
-    name='{APP_NAME}',
+    name='{app_name_escaped}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -241,7 +257,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=r'{APP_ICON}' if Path(r'{APP_ICON}').exists() else None,
+    icon=r'{app_icon_escaped}' if Path(r'{app_icon_escaped}').exists() else None,
 )
 
 coll = COLLECT(
@@ -252,14 +268,14 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='{APP_NAME}',
+    name='{app_name_escaped}',
 )
-'''
-    
+"""
+
     spec_path = PROJECT_ROOT / f"{APP_NAME}.spec"
     with open(spec_path, 'w', encoding='utf-8') as f:
         f.write(spec_content)
-        
+
     print_status(f"Spec 文件已生成: {spec_path}", "success")
     return spec_path
 
@@ -335,27 +351,32 @@ def build_exe(onefile: bool = False) -> bool:
 def create_installer():
     """创建安装程序（使用 NSIS 或 Inno Setup）"""
     print_status("创建安装程序...", "loading")
-    
-    # 生成 Inno Setup 脚本
-    iss_content = f'''
+
+    # 生成 Inno Setup 脚本 (safely escaped)
+    project_root_iss = _escape_string(str(PROJECT_ROOT))
+    app_name_iss = _escape_string(APP_NAME)
+    app_version_iss = _escape_string(APP_VERSION)
+    app_author_iss = _escape_string(APP_AUTHOR)
+
+    iss_content = f"""
 ; Galaxy Inno Setup Script
 ; 自动生成
 
-#define MyAppName "{APP_NAME}"
-#define MyAppVersion "{APP_VERSION}"
-#define MyAppPublisher "{APP_AUTHOR}"
-#define MyAppExeName "{APP_NAME}.exe"
+#define MyAppName "{app_name_iss}"
+#define MyAppVersion "{app_version_iss}"
+#define MyAppPublisher "{app_author_iss}"
+#define MyAppExeName "{app_name_iss}.exe"
 
 [Setup]
 AppId={{{{8F3B9A2E-1234-5678-9ABC-DEF012345678}}}}
-AppName={{#MyAppName}}
-AppVersion={{#MyAppVersion}}
-AppPublisher={{#MyAppPublisher}}
-DefaultDirName={{autopf}}\\{{#MyAppName}}
-DefaultGroupName={{#MyAppName}}
+AppName={{{{MyAppName}}}}
+AppVersion={{{{MyAppVersion}}}}
+AppPublisher={{{{MyAppPublisher}}}}
+DefaultDirName={{{{autopf}}}}\\{{{MyAppName}}}
+DefaultGroupName={{{{MyAppName}}}}
 AllowNoIcons=yes
-OutputDir={PROJECT_ROOT}\\installer_output
-OutputBaseFilename={APP_NAME}-Setup-{APP_VERSION}
+OutputDir={project_root_iss}\\installer_output
+OutputBaseFilename={app_name_iss}-Setup-{app_version_iss}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -368,22 +389,22 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"
 
 [Files]
-Source: "{PROJECT_ROOT}\\dist\\{APP_NAME}\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{project_root_iss}\\dist\\{app_name_iss}\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{{group}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}"
-Name: "{{autodesktop}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}"; Tasks: desktopicon
+Name: "{{group}}\\{{{MyAppName}}}"; Filename: "{{app}}\\{{{MyAppExeName}}}"
+Name: "{{autodesktop}}\\{{{MyAppName}}}"; Filename: "{{app}}\\{{{MyAppExeName}}}"; Tasks: desktopicon
 
 [Run]
-Filename: "{{app}}\\{{#MyAppExeName}}"; Description: "启动 {{#MyAppName}}"; Flags: nowait postinstall skipifsilent
-'''
-    
+Filename: "{{app}}\\{{{MyAppExeName}}}"; Description: "启动 {{{MyAppName}}}"; Flags: nowait postinstall skipifsilent
+"""
+
     iss_path = PROJECT_ROOT / "installer" / f"{APP_NAME}.iss"
     iss_path.parent.mkdir(exist_ok=True)
-    
+
     with open(iss_path, 'w', encoding='utf-8') as f:
         f.write(iss_content)
-        
+
     print_status(f"Inno Setup 脚本已生成: {iss_path}", "success")
     print_status("请使用 Inno Setup 编译此脚本生成安装程序", "info")
     print_status("下载 Inno Setup: https://jrsoftware.org/isinfo.php", "info")

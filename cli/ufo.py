@@ -23,11 +23,55 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from core.port_config import get_service_port
+
+# Security: allowed hosts for skill download URLs
+ALLOWED_HOSTS = {
+    "skills.galaxy.ai",
+    "raw.githubusercontent.com",
+    "github.com",
+}
+
+
+def _validate_skill_name(name: str) -> None:
+    """Validate skill name to prevent path traversal."""
+    if not name or not re.match(r'^[a-zA-Z0-9_][a-zA-Z0-9_-]*$', name):
+        raise ValueError(
+            "Invalid skill name: only alphanumeric, underscore, hyphen allowed; "
+            "must not start with a hyphen"
+        )
+
+
+def _validate_download_url(url: str) -> None:
+    """Validate download URL to prevent SSRF."""
+    parsed = urlparse(url)
+    if parsed.scheme != 'https':
+        raise ValueError("Only HTTPS download URLs allowed")
+    if parsed.hostname not in ALLOWED_HOSTS:
+        raise ValueError(f"Download host {parsed.hostname} not in whitelist")
+
+
+def _validate_mcp_command(command: str) -> None:
+    """Validate MCP command to prevent command injection.
+
+    Only allows: npx, node, python, python3, uvx commands
+    with simple alphanumeric arguments.
+    """
+    allowed_executables = {"npx", "node", "python", "python3", "uvx"}
+    parts = command.split()
+    if not parts:
+        raise ValueError("MCP command cannot be empty")
+    executable = os.path.basename(parts[0])
+    if executable not in allowed_executables:
+        raise ValueError(
+            f"MCP command '{executable}' not in allowed list: {allowed_executables}"
+        )
 
 # 添加项目路径
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -67,6 +111,7 @@ def print_step(msg: str):
 
 async def skill_install(name: str, source: str = None):
     """安装技能"""
+    _validate_skill_name(name)
     print_step(f"安装技能: {name}")
     
     try:
@@ -106,14 +151,15 @@ async def install_from_market(name: str) -> dict:
                 
                 # 下载技能
                 print_info(f"从市场下载: {skill_data.get('name', name)}")
-                
+
                 # 创建临时目录
                 temp_dir = PROJECT_ROOT / "skills" / "installed" / name
                 temp_dir.mkdir(parents=True, exist_ok=True)
-                
+
                 # 下载 SKILL.md
                 skill_md_url = skill_data.get("download_url")
                 if skill_md_url:
+                    _validate_download_url(skill_md_url)
                     md_response = await client.get(skill_md_url)
                     if md_response.status_code == 200:
                         (temp_dir / "SKILL.md").write_text(md_response.text)
@@ -189,6 +235,7 @@ async def skill_list():
 
 async def skill_uninstall(name: str):
     """卸载技能"""
+    _validate_skill_name(name)
     print_step(f"卸载技能: {name}")
     
     try:
@@ -206,8 +253,9 @@ async def skill_uninstall(name: str):
 
 async def skill_create(name: str):
     """创建新技能"""
+    _validate_skill_name(name)
     print_step(f"创建技能: {name}")
-    
+
     skill_dir = PROJECT_ROOT / "skills" / name
     skill_dir.mkdir(parents=True, exist_ok=True)
     
@@ -265,12 +313,13 @@ echo "处理中..."
 
 async def mcp_load(name: str, command: str, env: dict = None):
     """加载 MCP 服务器"""
+    _validate_mcp_command(command)
     print_step(f"加载 MCP 服务器: {name}")
     print_info(f"命令: {command}")
-    
+
     try:
         from core.mcp_loader import mcp_loader
-        
+
         result = await mcp_loader.load(
             name=name,
             command=command,

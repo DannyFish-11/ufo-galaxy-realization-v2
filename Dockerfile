@@ -48,8 +48,16 @@ RUN groupadd -r galaxy && useradd -r -g galaxy -m -u 1000 galaxy \
     && mkdir -p /app/data /app/logs /app/config \
     && chown -R galaxy:galaxy /app
 
-# Copy project files
-COPY --chown=galaxy:galaxy . .
+# Copy project files (precise COPY, no whole project)
+COPY --chown=galaxy:galaxy requirements.txt main.py ./
+COPY --chown=galaxy:galaxy core/ ./core/
+COPY --chown=galaxy:galaxy galaxy_gateway/ ./galaxy_gateway/
+COPY --chown=galaxy:galaxy contracts/ ./contracts/
+COPY --chown=galaxy:galaxy config/ ./config/
+COPY --chown=galaxy:galaxy cli/ ./cli/
+COPY --chown=galaxy:galaxy nodes/ ./nodes/
+COPY --chown=galaxy:galaxy enhancements/ ./enhancements/
+COPY --chown=galaxy:galaxy audit/ ./audit/
 
 USER galaxy
 
