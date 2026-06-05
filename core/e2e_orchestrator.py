@@ -360,14 +360,10 @@ async def process_user_input(
         import uuid as _uuid
         _ctx0 = context[0] if context and isinstance(context[0], dict) else {}
         _trace_id = _ctx0.get("trace_id") or _uuid.uuid4().hex[:12]
-        logger.warning(
-            "LEGACY PATH GUARDRAIL [E2EOrchestrator]: use_constellation=False — "
-            "ConstellationRuntime is being bypassed in favour of EndToEndPipeline. "
-            "trace_id=%s  message=%r  "
-            "Recommendation: remove use_constellation=False and migrate to "
-            "core.constellation_runtime.get_constellation_runtime().",
+        # PR-R9-CLEAN: Demoted to DEBUG — legacy path still functional.
+        logger.debug(
+            "LEGACY [E2EOrchestrator]: use_constellation=False trace_id=%s",
             _trace_id,
-            message[:80],
         )
 
     # ── PR-5 EntryMode: resolve execution mode (with target_device support) ──

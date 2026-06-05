@@ -943,11 +943,12 @@ def emit_legacy_guardrail(
         )
 
     status_tag = entry.status.value if entry else "unregistered"
-    logger.warning(
-        "LEGACY PATH GUARDRAIL | caller=%r | status=%s | trace_id=%s | %s",
+    # PR-R9-CLEAN: Demoted from WARNING to DEBUG to reduce console clutter.
+    # Legacy compatibility paths are tracked in __init__.py lifecycle events.
+    logger.debug(
+        "LEGACY GUARDRAIL | caller=%r | status=%s | %s",
         caller,
         status_tag,
-        trace_id or "n/a",
         recommendation,
     )
 

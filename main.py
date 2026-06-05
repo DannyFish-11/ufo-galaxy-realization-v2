@@ -96,14 +96,24 @@ def print_item(name: str, status: str = "ok", detail: str = "") -> None:
         detail: Optional detail text shown dimmed.
     """
     icon_map = {
-        "ok": ("✓", Colors.GREEN),
-        "warn": ("⚠", Colors.YELLOW),
-        "error": ("✗", Colors.RED),
-        "info": ("ℹ", Colors.BLUE),
+        "ok": ("[OK]", Colors.GREEN),
+        "warn": ("[WARN]", Colors.YELLOW),
+        "error": ("[ERR]", Colors.RED),
+        "info": ("[INFO]", Colors.BLUE),
     }
-    icon, color = icon_map.get(status, ("▶", Colors.CYAN))
+    icon, color = icon_map.get(status, ("[*]", Colors.CYAN))
     detail_str = f"  ({Colors.DIM}{detail}{Colors.ENDC})" if detail else ""
-    print(f"  {color}{icon}{Colors.ENDC} {name}{detail_str}")
+    msg = f"  {color}{icon}{Colors.ENDC} {name}{detail_str}"
+    # PR-WIN-SAFE-PRINT: Safe print for Windows cp1252 console
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        # Fallback: strip ANSI codes and encode with replace
+        clean = msg.replace(Colors.GREEN, "").replace(Colors.YELLOW, "").replace(Colors.RED, "").replace(Colors.BLUE, "").replace(Colors.CYAN, "").replace(Colors.DIM, "").replace(Colors.ENDC, "")
+        try:
+            print(clean.encode("cp1252", errors="replace").decode("cp1252"))
+        except Exception:
+            pass
     # L2 fixed: mirror status items to logger (without ANSI codes)
     logger.info("[%s] %s %s", status.upper(), name, detail)
 

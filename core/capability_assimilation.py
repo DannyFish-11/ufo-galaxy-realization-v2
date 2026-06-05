@@ -647,18 +647,16 @@ class CapabilityAssimilationLayer:
                 "port": port,
             },
         )
-        logger.info(
+        # PR-R9-CLEAN: Removed duplicate "Assimilated node" log.
+        # The node registration is already tracked via registry events.
+        # Only log at DEBUG level to avoid console clutter.
+        logger.debug(
             "Assimilated node %s as %s (%s capabilities)",
             node_id,
             participant_kind.value
             if isinstance(participant_kind, NodeParticipantKind)
             else participant_kind,
             len(caps),
-            extra={
-                "event": event_kind,
-                "node_id": node_id,
-                "capabilities": caps,
-            },
         )
         return record
 
