@@ -85,11 +85,42 @@ class EmbeddedNATSServer:
                              check=True, timeout=120, capture_output=True, encoding="utf-8", errors="replace")
             elif system == "windows":
                 import urllib.request
+                import json
                 nats_dir = Path.home() / ".galaxy" / "bin"
                 nats_dir.mkdir(parents=True, exist_ok=True)
                 nats_exe = nats_dir / "nats-server.exe"
-                url = "https://github.com/nats-io/nats-server/releases/latest/download/nats-server.exe"
-                urllib.request.urlretrieve(url, str(nats_exe))
+                # PR-NATS-FIX: Use specific version instead of 'latest' which returns 404
+                # Get latest release tag from GitHub API, then download
+                try:
+                    req = urllib.request.Request(
+                        "https://api.github.com/repos/nats-io/nats-server/releases/latest",
+                        headers={"Accept": "application/vnd.github.v3+json",
+                                 "User-Agent": "Galaxy-Installer"}
+                    )
+                    with urllib.request.urlopen(req, timeout=30) as resp:
+                        release = json.loads(resp.read().decode())
+                        tag = release.get("tag_name", "v2.10.24")
+                except Exception:
+                    tag = "v2.10.24"  # fallback to known good version
+                # Download Windows amd64 binary
+                url = f"https://github.com/nats-io/nats-server/releases/download/{tag}/nats-server-{tag}-windows-amd64.zip"
+                zip_path = nats_dir / "nats-server.zip"
+                try:
+                    urllib.request.urlretrieve(url, str(zip_path))
+                    import zipfile
+                    with zipfile.ZipFile(zip_path, 'r') as z:
+                        # Extract nats-server.exe from zip
+                        for name in z.namelist():
+                            if name.endswith("nats-server.exe"):
+                                z.extract(name, nats_dir)
+                                extracted = nats_dir / name
+                                extracted.rename(nats_exe)
+                                break
+                    zip_path.unlink(missing_ok=True)
+                except Exception:
+                    # Fallback: try direct exe download (older releases)
+                    url = f"https://github.com/nats-io/nats-server/releases/download/{tag}/nats-server.exe"
+                    urllib.request.urlretrieve(url, str(nats_exe))
                 # 添加到PATH
                 os.environ["PATH"] = str(nats_dir) + os.pathsep + os.environ.get("PATH", "")
             return shutil.which("nats-server") is not None
