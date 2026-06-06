@@ -1,0 +1,425 @@
+# =============================================================================
+# Galaxy V2 安全策略配置文件
+# Security Policy — Capability Boundaries, Dangerous Commands & Audit Rules
+# =============================================================================
+# PR-SECURITY-POLICY-V1: 运行时安全边界定义
+#
+# 本文件定义了 Galaxy 系统中设备权限边界、危险操作确认等级
+# 和审计规则。OpenClawd 在执行任何设备控制命令前必须检查
+# 本策略。违反策略的命令将被拒绝并记录。
+#
+# 安全原则:
+#   1. 最小权限 — 每个设备只能执行其权限边界内的操作
+#   2. 危险操作双重确认 — 高风险操作需要多重验证
+#   3. 全面审计 — 每个命令的完整决策链必须可追踪
+#   4. 失效保护 — 策略文件缺失时默认拒绝所有危险操作
+# =============================================================================
+
+policy_version: "1.0.0"
+effectivity_date: "2026-06-07"
+enforced_by: "OpenClawd.security_enforcer"
+
+# ---------------------------------------------------------------------------
+# Section 1: 设备权限边界 (Capability Boundaries)
+# ---------------------------------------------------------------------------
+# 每个设备类型的默认权限集合。OpenClawd 在路由命令前检查
+# 发起设备是否有权限执行该命令类别。
+# ---------------------------------------------------------------------------
+
+capability_boundaries:
+
+  # 手表 — 最小权限，只读为主
+  wear_os:
+    name: "Galaxy Watch"
+    description: "Wear OS 手表 — 查询和控制低危家居设备"
+    allowed_categories:
+      - query               # 查询设备状态
+      - light_control       # 开关灯、调亮度
+      - scene_trigger       # 触发预设场景（需场景白名单）
+      - media_playback      # 播放/暂停/下一首（仅媒体设备）
+    denied_categories:
+      - door_lock           # 门锁控制
+      - camera_control      # 摄像头控制
+      - hvac_control        # 暖通空调（温控）
+      - appliance_power     # 大功率电器
+      - security_arm        # 安防布防/撤防
+    scene_whitelist:        # 手表允许触发的场景（低风险场景）
+      - scene.goodnight     # 晚安模式（关灯关窗帘）
+      - scene.reading       # 阅读模式（开阅读灯）
+      - scene.morning       # 晨起模式（开窗帘开灯）
+    max_concurrent_commands: 3
+    rate_limit:
+      commands_per_minute: 30
+      burst_size: 5
+    requires_takeover_notification: false  # 手表发起接管不需要通知
+
+  # 手机 — 完整权限，主控设备
+  android:
+    name: "Android 手机"
+    description: "Android 手机 — 主控设备，完整权限"
+    allowed_categories:
+      - query
+      - light_control
+      - scene_trigger
+      - media_playback
+      - door_lock            # 门锁（需双重确认）
+      - camera_control       # 摄像头查看/旋转
+      - hvac_control         # 温控
+      - appliance_power      # 大功率电器
+      - security_arm         # 安防布防/撤防
+      - device_takeover      # 设备接管
+    denied_categories: []    # 无限制
+    max_concurrent_commands: 10
+    rate_limit:
+      commands_per_minute: 60
+      burst_size: 10
+    requires_takeover_notification: true  # 接管需通知被接管设备
+
+  # 平板 — 中等权限，媒体为主
+  tablet:
+    name: "Android 平板"
+    description: "Android 平板 — 媒体控制和查询为主"
+    allowed_categories:
+      - query
+      - light_control
+      - scene_trigger
+      - media_playback       # 完整媒体控制
+      - camera_control       # 仅查看，不能转动/控制
+    denied_categories:
+      - door_lock
+      - hvac_control
+      - appliance_power
+      - security_arm
+      - device_takeover
+    max_concurrent_commands: 5
+    rate_limit:
+      commands_per_minute: 40
+      burst_size: 8
+    requires_takeover_notification: true
+
+  # Windows 桌面 — 完整权限（V2 网关所在设备）
+  windows:
+    name: "Windows Desktop"
+    description: "Windows 桌面 — V2 网关宿主，最高权限"
+    allowed_categories:
+      - "*"                  # 所有类别
+    denied_categories: []
+    max_concurrent_commands: 20
+    rate_limit:
+      commands_per_minute: 120
+      burst_size: 20
+    requires_takeover_notification: false  # 网关本机不需要通知
+
+# ---------------------------------------------------------------------------
+# Section 2: 危险操作清单 (Dangerous Commands)
+# ---------------------------------------------------------------------------
+# 需要额外确认的高风险操作。每个命令定义:
+#   - confirmation_level: 确认等级
+#       none      — 无需额外确认
+#       voice     — 需要语音确认（TTS 播报 + 语音识别"确认"）
+#       watch_btn — 需要手表物理按键确认（侧键长按 2 秒）
+#       dual      — 双重确认（语音 + 手表按键）
+#       forbidden — 完全禁止
+#   - reason: 为什么标记为危险
+#   - audit_level: 审计级别 (info / warning / critical)
+#   - require_trace_id: 是否强制要求 trace_id（用于事后追查）
+# ---------------------------------------------------------------------------
+
+dangerous_commands:
+
+  # --- 门锁类（最高风险）---
+  door.unlock:
+    confirmation_level: dual
+    reason: "开锁允许物理入侵"
+    audit_level: critical
+    require_trace_id: true
+    notifications:
+      - channel: all_devices
+        message: "⚠️ 门锁已被 {source_device} 解锁"
+    max_daily_executions: 20
+
+  door.lock:
+    confirmation_level: voice
+    reason: "反锁可能将人锁在外面"
+    audit_level: warning
+    require_trace_id: true
+
+  # --- 安防类 ---
+  security.disarm:
+    confirmation_level: dual
+    reason: "撤防降低安全防护"
+    audit_level: critical
+    require_trace_id: true
+    notifications:
+      - channel: all_devices
+        message: "⚠️ 安防系统已被 {source_device} 撤防"
+
+  security.arm:
+    confirmation_level: voice
+    reason: "布防时可能有人在室内"
+    audit_level: warning
+    require_trace_id: true
+    pre_checks:
+      - rule: "presence_detected"
+        action: "warn_occupants"
+        message: "检测到室内有人，确定要布防吗？"
+
+  # --- 摄像头类 ---
+  camera.disable:
+    confirmation_level: dual
+    reason: "关闭监控可能掩盖入侵"
+    audit_level: critical
+    require_trace_id: true
+
+  camera.record_stop:
+    confirmation_level: voice
+    reason: "停止录像可能丢失证据"
+    audit_level: warning
+    require_trace_id: true
+
+  # --- 大功率电器 ---
+  heater.on:
+    confirmation_level: voice
+    reason: "长时间加热有火灾风险"
+    audit_level: warning
+    require_trace_id: true
+    safety_timeout_minutes: 120  # 自动关闭
+
+  oven.on:
+    confirmation_level: dual
+    reason: "烤箱高温有火灾隐患"
+    audit_level: critical
+    require_trace_id: true
+    safety_timeout_minutes: 60
+
+  outlet.high_power_on:
+    confirmation_level: voice
+    reason: "高功率插座可能过载"
+    audit_level: warning
+    require_trace_id: true
+
+  # --- 温控类 ---
+  hvac.off:
+    confirmation_level: none  # 关空调不需要确认（节能）
+    reason: ""
+    audit_level: info
+    require_trace_id: false
+
+  hvac.temperature_set:
+    confirmation_level: none
+    reason: ""
+    audit_level: info
+    require_trace_id: false
+    allowed_range: { min: 16, max: 30, unit: "celsius" }
+
+  # --- 设备接管 ---
+  device.takeover:
+    confirmation_level: dual
+    reason: "接管后源设备失去控制权"
+    audit_level: critical
+    require_trace_id: true
+    notifications:
+      - channel: target_device
+        message: "{source_device} 请求接管您的控制权"
+      - channel: all_devices
+        message: "🔄 {source_device} 已接管 {target_device}"
+    max_duration_minutes: 5
+    require_target_ack: true
+
+  device.takeover_release:
+    confirmation_level: none
+    reason: "释放接管恢复自主权"
+    audit_level: info
+    require_trace_id: true
+
+  # --- 照明类（低风险，通常无需确认）---
+  light.on:
+    confirmation_level: none
+    reason: ""
+    audit_level: info
+    require_trace_id: false
+
+  light.off:
+    confirmation_level: none
+    reason: ""
+    audit_level: info
+    require_trace_id: false
+
+  # --- 媒体类（无需确认）---
+  media.play:
+    confirmation_level: none
+    reason: ""
+    audit_level: info
+    require_trace_id: false
+
+  media.pause:
+    confirmation_level: none
+    reason: ""
+    audit_level: info
+    require_trace_id: false
+
+  # --- 场景类 ---
+  scene.goodnight:
+    confirmation_level: none
+    reason: "低风险批量操作"
+    audit_level: info
+    require_trace_id: false
+
+  scene.vacation:
+    confirmation_level: voice
+    reason: "离家模式影响所有设备"
+    audit_level: warning
+    require_trace_id: true
+    pre_checks:
+      - rule: "check_doors_locked"
+        action: "warn_if_unlocked"
+        message: "以下门未锁: {unlocked_doors}，仍然启用离家模式？"
+
+  # --- 默认规则（未在上述清单中的命令）---
+  _default:
+    confirmation_level: voice
+    reason: "未分类命令，默认需要语音确认"
+    audit_level: warning
+    require_trace_id: true
+
+# ---------------------------------------------------------------------------
+# Section 3: 审计规则 (Audit Rules)
+# ---------------------------------------------------------------------------
+# 定义每条命令需要记录的审计字段和日志保留策略。
+# 审计日志不可篡改，用于事后追溯。
+# ---------------------------------------------------------------------------
+
+audit_rules:
+
+  # 全局审计开关
+  enabled: true
+  log_level: verbose  # minimal / standard / verbose
+
+  # 每条记录必须包含的字段
+  required_fields:
+    - timestamp          # ISO 8601 格式
+    - trace_id           # 端到端追踪 ID
+    - source_device_id   # 发起设备
+    - source_device_type # 设备类型 (wear_os / android / tablet / windows)
+    - command            # 原始命令
+    - command_category   # 命令类别
+    - confirmation_level # 使用的确认等级
+    - confirmation_result # 确认是否通过
+    - target_device_id   # 目标设备（如果有）
+    - openclawd_decision # OpenClawd 路由决策
+    - execution_result   # 执行结果
+    - latency_ms         # 端到端延迟
+
+  # 审计级别对应的保留策略
+  retention_policy:
+    info:      { days: 7,   storage: "local_rotating" }
+    warning:   { days: 30,  storage: "local_persistent" }
+    critical:  { days: 90,  storage: "local_persistent+encrypted_backup" }
+
+  # 触发实时告警的规则
+  alert_rules:
+    - name: "repeated_dangerous_command"
+      condition: "same_command_count > 3 within 5 minutes"
+      severity: high
+      action: "block_source_device_temporarily"
+      duration_minutes: 10
+      notify: all_devices
+
+    - name: "after_hours_unlock"
+      condition: "command == 'door.unlock' AND hour NOT IN [6..23]"
+      severity: critical
+      action: "require_dual_confirmation"
+      notify: all_devices
+
+    - name: "unauthorized_takeover_attempt"
+      condition: "command == 'device.takeover' AND source_device_type == 'wear_os'"
+      severity: critical
+      action: "deny_and_alert"
+      notify: [admin_device]
+
+    - name: "rate_limit_exceeded"
+      condition: "command_rate > device_rate_limit"
+      severity: warning
+      action: "throttle_and_log"
+      notify: [source_device]
+
+  # 审计日志写入目标
+  sinks:
+    local_file:
+      enabled: true
+      path: "logs/audit/security_audit.log"
+      rotation: { max_size_mb: 10, max_files: 10 }
+
+    structured_json:
+      enabled: true
+      path: "logs/audit/security_audit.jsonl"
+      rotation: { max_size_mb: 50, max_files: 30 }
+
+    # 注意: 以下 sink 可选开启
+    syslog:
+      enabled: false
+      host: "localhost"
+      port: 514
+
+# ---------------------------------------------------------------------------
+# Section 4: 失效保护 (Fail-Safe)
+# ---------------------------------------------------------------------------
+# 当本策略文件损坏、缺失或解析失败时的默认行为。
+# 原则: 安全优先 — 不知道能不能做的事，默认拒绝。
+# ---------------------------------------------------------------------------
+
+failsafe:
+  policy_file_missing:
+    action: "deny_all_dangerous"  # 允许查询和低危操作，拒绝所有危险操作
+    log_level: critical
+    notify: true
+
+  policy_parse_error:
+    action: "deny_all_dangerous"
+    log_level: critical
+    notify: true
+    fallback_config_path: "config/security_policy.yaml.bak"
+
+  unknown_command:
+    confirmation_level: voice   # 未知命令默认需要语音确认
+    audit_level: warning
+
+  unknown_device_type:
+    capability_boundary: "wear_os"  # 未知设备按最小权限处理
+    log_level: warning
+
+# ---------------------------------------------------------------------------
+# Section 5: 紧急制动 (Emergency Stop)
+# ---------------------------------------------------------------------------
+# 定义紧急情况下的全局停止机制。
+# ---------------------------------------------------------------------------
+
+emergency_stop:
+  enabled: true
+
+  # 触发方式
+  triggers:
+    voice_phrase: "紧急停止"          # 语音触发词
+    watch_triple_press_side_key: true  # 手表侧键三连击
+    admin_command: "system.emergency_stop"  # 管理员命令
+
+  # 触发后的行为
+  actions:
+    - cancel_all_active_takeovers
+    - lock_all_doors
+    - arm_security
+    - turn_on_all_cameras
+    - notify_all_devices: "🚨 紧急停止已激活 — 所有接管已取消，门锁已上锁"
+
+  # 解除紧急停止
+  reset:
+    require_admin_device: true
+    confirmation_level: dual
+    audit_level: critical
+
+# ---------------------------------------------------------------------------
+# 文件完整性校验 (供自动化工具使用)
+# ---------------------------------------------------------------------------
+# sha256: <在首次部署后由部署工具填入>
+# last_modified: 2026-06-07T00:00:00Z
+# signed_by: <部署者 GPG 签名>
