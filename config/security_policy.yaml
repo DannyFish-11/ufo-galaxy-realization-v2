@@ -316,33 +316,6 @@ audit_rules:
     warning:   { days: 30,  storage: "local_persistent" }
     critical:  { days: 90,  storage: "local_persistent+encrypted_backup" }
 
-  # 触发实时告警的规则
-  alert_rules:
-    - name: "repeated_dangerous_command"
-      condition: "same_command_count > 3 within 5 minutes"
-      severity: high
-      action: "block_source_device_temporarily"
-      duration_minutes: 10
-      notify: all_devices
-
-    - name: "after_hours_unlock"
-      condition: "command == 'door.unlock' AND hour NOT IN [6..23]"
-      severity: critical
-      action: "require_dual_confirmation"
-      notify: all_devices
-
-    - name: "unauthorized_takeover_attempt"
-      condition: "command == 'device.takeover' AND source_device_type == 'wear_os'"
-      severity: critical
-      action: "deny_and_alert"
-      notify: [admin_device]
-
-    - name: "rate_limit_exceeded"
-      condition: "command_rate > device_rate_limit"
-      severity: warning
-      action: "throttle_and_log"
-      notify: [source_device]
-
   # 审计日志写入目标
   sinks:
     local_file:
