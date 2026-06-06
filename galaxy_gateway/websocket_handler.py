@@ -96,6 +96,20 @@ ANDROID_INGRESS_DELEGATION_AUTHORITY = (
     "WEBSOCKET_HANDLER::ANDROID_BUSINESS_MESSAGES_DELEGATED_TO_ANDROID_BRIDGE_CANONICAL_INGRESS"
 )
 
+# ---------------------------------------------------------------------------
+# PR-OPENCLAWD-ROUTING-AUTHORITY: OpenClawd routing authority sentinel
+# This sentinel declares that handle_command routes ALL device commands
+# through OpenClawd.send_gateway_command() —— the canonical gateway path.
+# Direct calls to device_router.route_task() from handle_command are
+# prohibited; they are legacy compat paths registered in
+# core.orchestration_authority.legacy_paths.
+# Canonical chain: OpenClawd → CommandRouter → DeviceRouter → device
+# ---------------------------------------------------------------------------
+OPENCLAWD_ROUTING_AUTHORITY = (
+    "WEBSOCKET_HANDLER::DEVICE_COMMANDS_ROUTED_THROUGH_OPENCLAWD_CANONICAL_CHAIN::"
+    "OpenClawd→CommandRouter→DeviceRouter→device"
+)
+
 import asyncio
 import json
 import logging
@@ -654,14 +668,28 @@ async def handle_response(connection_id: str, aip_msg):
 
 
 async def handle_command(connection_id: str, aip_msg):
-    """处理命令（设备发起的命令，接受 AIPMessage 对象）"""
+    """处理命令（设备发起的命令，接受 AIPMessage 对象）
+
+    PR-OPENCLAWD-ROUTING-AUTHORITY: 所有设备命令统一经过 OpenClawd 路由决策。
+    链路: OpenClawd → CommandRouter → DeviceRouter → device → ResultEnvelope
+    禁止直接调用 device_router.route_task() —— 那是遗留 compat 路径。
+    """
     try:
         command_text = aip_msg.payload.get("command", "")
-        # PR-WEAROS: pass full payload (voice text, source device) so the router
-        # can access the actual user transcript, not just the command name.
         _payload = aip_msg.payload.get("payload", {})
-        context = {"payload": _payload, "device_id": aip_msg.device_id}
-        result = await device_router.route_task(command_text, context)
+        device_id = aip_msg.device_id
+
+        # PR-OPENCLAWD-ROUTING-AUTHORITY: route through OpenClawd instead of
+        # directly calling device_router.route_task().
+        # Canonical chain: OpenClawd → CommandRouter → DeviceRouter → device
+        from core.openclawd import get_openclawd
+
+        openclawd = get_openclawd()
+        result = await openclawd.send_gateway_command(
+            device_id=device_id,
+            command=command_text,
+            payload=_payload,
+        )
 
         # 发送 AIP v3 命令结果响应
         response = {
