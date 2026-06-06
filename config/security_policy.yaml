@@ -9,8 +9,7 @@
 # 本策略。违反策略的命令将被拒绝并记录。
 #
 # 安全原则:
-#   1. 最小权限 — 每个设备只能执行其权限边界内的操作
-#   2. 危险操作双重确认 — 高风险操作需要多重验证
+#   #   2. 危险操作双重确认 — 高风险操作需要多重验证
 #   3. 全面审计 — 每个命令的完整决策链必须可追踪
 #   4. 失效保护 — 策略文件缺失时默认拒绝所有危险操作
 # =============================================================================
@@ -20,98 +19,7 @@ effectivity_date: "2026-06-07"
 enforced_by: "OpenClawd.security_enforcer"
 
 # ---------------------------------------------------------------------------
-# Section 1: 设备权限边界 (Capability Boundaries)
-# ---------------------------------------------------------------------------
-# 每个设备类型的默认权限集合。OpenClawd 在路由命令前检查
-# 发起设备是否有权限执行该命令类别。
-# ---------------------------------------------------------------------------
-
-capability_boundaries:
-
-  # 手表 — 最小权限，只读为主
-  wear_os:
-    name: "Galaxy Watch"
-    description: "Wear OS 手表 — 查询和控制低危家居设备"
-    allowed_categories:
-      - query               # 查询设备状态
-      - light_control       # 开关灯、调亮度
-      - scene_trigger       # 触发预设场景（需场景白名单）
-      - media_playback      # 播放/暂停/下一首（仅媒体设备）
-    denied_categories:
-      - door_lock           # 门锁控制
-      - camera_control      # 摄像头控制
-      - hvac_control        # 暖通空调（温控）
-      - appliance_power     # 大功率电器
-      - security_arm        # 安防布防/撤防
-    scene_whitelist:        # 手表允许触发的场景（低风险场景）
-      - scene.goodnight     # 晚安模式（关灯关窗帘）
-      - scene.reading       # 阅读模式（开阅读灯）
-      - scene.morning       # 晨起模式（开窗帘开灯）
-    max_concurrent_commands: 3
-    rate_limit:
-      commands_per_minute: 30
-      burst_size: 5
-    requires_takeover_notification: false  # 手表发起接管不需要通知
-
-  # 手机 — 完整权限，主控设备
-  android:
-    name: "Android 手机"
-    description: "Android 手机 — 主控设备，完整权限"
-    allowed_categories:
-      - query
-      - light_control
-      - scene_trigger
-      - media_playback
-      - door_lock            # 门锁（需双重确认）
-      - camera_control       # 摄像头查看/旋转
-      - hvac_control         # 温控
-      - appliance_power      # 大功率电器
-      - security_arm         # 安防布防/撤防
-      - device_takeover      # 设备接管
-    denied_categories: []    # 无限制
-    max_concurrent_commands: 10
-    rate_limit:
-      commands_per_minute: 60
-      burst_size: 10
-    requires_takeover_notification: true  # 接管需通知被接管设备
-
-  # 平板 — 中等权限，媒体为主
-  tablet:
-    name: "Android 平板"
-    description: "Android 平板 — 媒体控制和查询为主"
-    allowed_categories:
-      - query
-      - light_control
-      - scene_trigger
-      - media_playback       # 完整媒体控制
-      - camera_control       # 仅查看，不能转动/控制
-    denied_categories:
-      - door_lock
-      - hvac_control
-      - appliance_power
-      - security_arm
-      - device_takeover
-    max_concurrent_commands: 5
-    rate_limit:
-      commands_per_minute: 40
-      burst_size: 8
-    requires_takeover_notification: true
-
-  # Windows 桌面 — 完整权限（V2 网关所在设备）
-  windows:
-    name: "Windows Desktop"
-    description: "Windows 桌面 — V2 网关宿主，最高权限"
-    allowed_categories:
-      - "*"                  # 所有类别
-    denied_categories: []
-    max_concurrent_commands: 20
-    rate_limit:
-      commands_per_minute: 120
-      burst_size: 20
-    requires_takeover_notification: false  # 网关本机不需要通知
-
-# ---------------------------------------------------------------------------
-# Section 2: 危险操作清单 (Dangerous Commands)
+# Section 1: 危险操作清单 (Dangerous Commands)
 # ---------------------------------------------------------------------------
 # 需要额外确认的高风险操作。每个命令定义:
 #   - confirmation_level: 确认等级
@@ -283,7 +191,7 @@ dangerous_commands:
     require_trace_id: true
 
 # ---------------------------------------------------------------------------
-# Section 3: 审计规则 (Audit Rules)
+# Section 2: 审计规则 (Audit Rules)
 # ---------------------------------------------------------------------------
 # 定义每条命令需要记录的审计字段和日志保留策略。
 # 审计日志不可篡改，用于事后追溯。
@@ -335,7 +243,7 @@ audit_rules:
       port: 514
 
 # ---------------------------------------------------------------------------
-# Section 4: 失效保护 (Fail-Safe)
+# Section 3: 失效保护 (Fail-Safe)
 # ---------------------------------------------------------------------------
 # 当本策略文件损坏、缺失或解析失败时的默认行为。
 # 原则: 安全优先 — 不知道能不能做的事，默认拒绝。
@@ -362,7 +270,7 @@ failsafe:
     log_level: warning
 
 # ---------------------------------------------------------------------------
-# Section 5: 紧急制动 (Emergency Stop)
+# Section 4: 紧急制动 (Emergency Stop)
 # ---------------------------------------------------------------------------
 # 定义紧急情况下的全局停止机制。
 # ---------------------------------------------------------------------------
