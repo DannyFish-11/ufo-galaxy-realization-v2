@@ -132,22 +132,22 @@ class SecurityPolicy:
     # -- Public API --------------------------------------------------------
 
     def get_device_boundary(self, device_type: str) -> Dict[str, Any]:
-        """获取指定设备类型的权限边界。未知设备返回最小权限（wear_os）。"""
-        boundary = self._boundaries.get(device_type)
-        if boundary is None:
-            logger.warning("Unknown device_type '%s', falling back to wear_os boundary", device_type)
-            boundary = self._boundaries.get("wear_os", {})
-        return boundary
+        """获取指定设备类型的权限边界。
+
+        PR-SECURITY-V2: capability_boundaries removed. Returns empty dict
+        for backward compatibility; dangerous_commands is the sole gate.
+        """
+        return {}
 
     def is_category_allowed(self, device_type: str, category: str) -> bool:
-        """检查设备是否有权限执行某命令类别。"""
-        boundary = self.get_device_boundary(device_type)
-        allowed = set(boundary.get("allowed_categories", []))
-        denied = set(boundary.get("denied_categories", []))
+        """检查设备是否有权限执行某命令类别。
 
-        if "*" in allowed:
-            return category not in denied
-        return category in allowed and category not in denied
+        PR-SECURITY-V2: capability_boundaries removed from config.
+        All devices share the same category access; command-level
+        dangerous_commands control is the sole enforcement mechanism.
+        This method always returns True for backward compatibility.
+        """
+        return True
 
     def get_confirmation_level(self, command: str) -> CommandCheckResult:
         """查询命令的确认等级和安全配置。"""
@@ -207,24 +207,16 @@ class SecurityPolicy:
         command: str,
         command_category: str,
     ) -> CommandCheckResult:
-        """完整的命令权限检查 — OpenClawd 在执行前调用。
+        """命令权限检查 — OpenClawd 在执行前调用。
+
+        PR-SECURITY-V2: capability_boundaries removed. Enforcement is
+        solely via dangerous_commands (confirmation levels + daily limits).
 
         检查流程:
-          1. 设备权限边界（类别是否允许）
-          2. 危险命令确认等级
-          3. 每日执行上限
+          1. 危险命令确认等级
+          2. 每日执行上限
         """
-        # Step 1: category permission
-        if not self.is_category_allowed(device_type, command_category):
-            return CommandCheckResult(
-                allowed=False,
-                reason=f"设备类型 '{device_type}' 无权执行类别 '{command_category}'",
-                confirmation_level=ConfirmationLevel.FORBIDDEN,
-                audit_level=AuditLevel.WARNING,
-                require_trace_id=True,
-            )
-
-        # Step 2: dangerous command check
+        # Step 1: dangerous command check
         result = self.get_confirmation_level(command)
         if not result.allowed:
             return result
@@ -242,17 +234,20 @@ class SecurityPolicy:
         return result
 
     def get_scene_whitelist(self, device_type: str) -> Set[str]:
-        """获取设备允许触发的场景白名单。"""
-        boundary = self.get_device_boundary(device_type)
-        return set(boundary.get("scene_whitelist", []))
+        """获取设备允许触发的场景白名单。
+
+        PR-SECURITY-V2: capability_boundaries removed. Returns empty set
+        which causes is_scene_allowed to default-allow all scenes.
+        """
+        return set()
 
     def is_scene_allowed(self, device_type: str, scene_name: str) -> bool:
-        """检查设备是否有权限触发指定场景。"""
-        whitelist = self.get_scene_whitelist(device_type)
-        if not whitelist:
-            # 没有白名单 = 全部允许（兼容旧设备）
-            return True
-        return scene_name in whitelist
+        """检查设备是否有权限触发指定场景。
+
+        PR-SECURITY-V2: All scenes allowed. Scene-level control is via
+        dangerous_commands if a specific scene is deemed risky.
+        """
+        return True
 
     def get_emergency_triggers(self) -> Dict[str, Any]:
         """获取紧急制动触发配置。"""
@@ -282,7 +277,6 @@ class SecurityPolicy:
         """序列化为 dict（用于状态报告）。"""
         return {
             "version": self._version,
-            "boundaries": list(self._boundaries.keys()),
             "dangerous_commands": list(self._dangerous.keys()),
             "audit_enabled": self.should_log_audit(),
             "emergency_enabled": self.is_emergency_enabled(),
