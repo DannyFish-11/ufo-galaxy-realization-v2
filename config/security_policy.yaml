@@ -9,7 +9,7 @@
 # 本策略。违反策略的命令将被拒绝并记录。
 #
 # 安全原则:
-#   #   2. 危险操作双重确认 — 高风险操作需要多重验证
+#   #   2. 危险操作语音确认 — 高风险操作需要多重验证
 #   3. 全面审计 — 每个命令的完整决策链必须可追踪
 #   4. 失效保护 — 策略文件缺失时默认拒绝所有危险操作
 # =============================================================================
@@ -26,7 +26,7 @@ enforced_by: "OpenClawd.security_enforcer"
 #       none      — 无需额外确认
 #       voice     — 需要语音确认（TTS 播报 + 语音识别"确认"）
 #       watch_btn — 需要手表物理按键确认（侧键长按 2 秒）
-#       dual      — 双重确认（语音 + 手表按键）
+#       dual      — 语音确认（语音确认）
 #       forbidden — 完全禁止
 #   - reason: 为什么标记为危险
 #   - audit_level: 审计级别 (info / warning / critical)
@@ -37,7 +37,7 @@ dangerous_commands:
 
   # --- 门锁类（最高风险）---
   door.unlock:
-    confirmation_level: dual
+    confirmation_level: voice
     reason: "开锁允许物理入侵"
     audit_level: critical
     require_trace_id: true
@@ -54,7 +54,7 @@ dangerous_commands:
 
   # --- 安防类 ---
   security.disarm:
-    confirmation_level: dual
+    confirmation_level: voice
     reason: "撤防降低安全防护"
     audit_level: critical
     require_trace_id: true
@@ -74,7 +74,7 @@ dangerous_commands:
 
   # --- 摄像头类 ---
   camera.disable:
-    confirmation_level: dual
+    confirmation_level: voice
     reason: "关闭监控可能掩盖入侵"
     audit_level: critical
     require_trace_id: true
@@ -94,7 +94,7 @@ dangerous_commands:
     safety_timeout_minutes: 120  # 自动关闭
 
   oven.on:
-    confirmation_level: dual
+    confirmation_level: voice
     reason: "烤箱高温有火灾隐患"
     audit_level: critical
     require_trace_id: true
@@ -122,7 +122,7 @@ dangerous_commands:
 
   # --- 设备接管 ---
   device.takeover:
-    confirmation_level: dual
+    confirmation_level: voice
     reason: "接管后源设备失去控制权"
     audit_level: critical
     require_trace_id: true
@@ -295,7 +295,7 @@ emergency_stop:
   # 解除紧急停止
   reset:
     require_admin_device: true
-    confirmation_level: dual
+    confirmation_level: voice
     audit_level: critical
 
 # ---------------------------------------------------------------------------
