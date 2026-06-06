@@ -1073,37 +1073,6 @@ class OpenClawd:
                     logger.warning(f"LLM 路由器加载失败: {e2}")
         return self._router
 
-    def _infer_command_category(self, command: str) -> str:
-        """Infer command category from command name for security policy checks.
-
-        Maps common command prefixes to their security categories.
-        Unknown commands return a conservative default.
-        """
-        _cmd = command.lower().replace(".", "_")
-        if any(k in _cmd for k in ["door_lock", "door.unlock", "door_lock"]):
-            return "door_lock"
-        if "door" in _cmd and ("unlock" in _cmd or "lock" in _cmd):
-            return "door_lock"
-        if any(k in _cmd for k in ["camera", "cam_"]):
-            return "camera_control"
-        if any(k in _cmd for k in ["security", "alarm", "arm", "disarm"]):
-            return "security_arm"
-        if any(k in _cmd for k in ["hvac", "thermostat", "climate", "temperature", "ac.", "heat"]):
-            return "hvac_control"
-        if any(k in _cmd for k in ["light", "lamp", "bulb", "brightness"]):
-            return "light_control"
-        if any(k in _cmd for k in ["media", "play", "pause", "volume", "speaker", "tv.", "music"]):
-            return "media_playback"
-        if any(k in _cmd for k in ["oven", "heater", "outlet", "plug", "switch", "appliance"]):
-            return "appliance_power"
-        if any(k in _cmd for k in ["scene", "mode.", "preset"]):
-            return "scene_trigger"
-        if any(k in _cmd for k in ["takeover", "handoff", "delegate"]):
-            return "device_takeover"
-        if any(k in _cmd for k in ["query", "status", "get_", "check_", "list_"]):
-            return "query"
-        return "scene_trigger"  # conservative default
-
     def _get_kernel(self):
         """获取 OpenClawd 创建并持有的内嵌 AgentKernel（懒加载）。
 
@@ -8770,45 +8739,32 @@ class OpenClawd:
                 _gate_err,
             )
 
-        # PR-SECURITY-POLICY-V1: Security boundary enforcement
-        # Check command permission before entering the canonical routing chain.
+        # PR-SECURITY-POLICY-V2: Dangerous command enforcement
+        # Check command confirmation level and daily limits only.
+        # Device-type capability boundaries removed — all devices share
+        # the same access; command-level dangerous_commands is the gate.
         try:
             from core.security_policy_loader import get_security_policy
             sec = get_security_policy()
             if sec is not None:
-                _source_device_type = "unknown"
-                try:
-                    _dev = device_router.get_device(source_device_id)
-                    if _dev is not None:
-                        _dt = getattr(_dev, "device_type", None)
-                        _source_device_type = (
-                            _dt.value if hasattr(_dt, "value") else str(_dt)
-                        )
-                except Exception:
-                    pass
-                _command_category = self._infer_command_category(command)
                 _sec_result = sec.check_command_permission(
-                    device_type=_source_device_type,
+                    device_type="",  # capability_boundaries removed (PR-SECURITY-V2)
                     device_id=source_device_id,
                     command=command,
-                    command_category=_command_category,
+                    command_category="",
                 )
                 if not _sec_result.allowed:
                     latency_ms = (time.monotonic() - t0) * 1000
                     logger.warning(
-                        "SECURITY_POLICY_DENY | source=%s type=%s command=%s reason=%s",
-                        source_device_id, _source_device_type, command, _sec_result.reason,
+                        "SECURITY_POLICY_DENY | source=%s command=%s reason=%s",
+                        source_device_id, command, _sec_result.reason,
                     )
                     result.update(
                         {
                             "success": False,
                             "response": f"安全策略拒绝: {_sec_result.reason}",
                             "error": "security_policy_denied",
-                            "error_detail": {
-                                "reason": _sec_result.reason,
-                                "source_device_type": _source_device_type,
-                                "command_category": _command_category,
-                            },
+                            "error_detail": {"reason": _sec_result.reason},
                             "latency_ms": round(latency_ms, 1),
                             "via": "security_policy",
                         }
@@ -8817,7 +8773,7 @@ class OpenClawd:
                 if _sec_result.confirmation_level.value != "none":
                     result["security_confirmation_required"] = _sec_result.confirmation_level.value
             else:
-                logger.debug("Security policy not loaded, skipping permission check")
+                logger.debug("Security policy not loaded, skipping check")
         except Exception as _sec_err:
             logger.warning("Security policy check skipped (error): %s", _sec_err)
 
