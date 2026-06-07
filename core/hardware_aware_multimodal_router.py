@@ -371,20 +371,23 @@ class HardwareAwareMultimodalRouter:
 
     @staticmethod
     def _select_ollama_model(task_type: str, profile: Optional[Any]) -> str:
-        """根据任务类型和硬件选择 Ollama 模型"""
+        """根据任务类型和硬件选择 Ollama 模型 (Gemma 4 系列)"""
         if profile:
             if profile.max_model_size_mb > 8000:
-                # 大显存，可以用大模型
-                if task_type in ("coding", "reasoning"):
-                    return "qwen2:7b"
-                return "qwen2:7b"
+                # 大显存 (8GB+) → Gemma 4 12B
+                return "gemma4:12b"
             elif profile.max_model_size_mb > 4000:
-                # 中等显存
-                return "qwen2:7b-q4"
+                # 中等显存 (4-8GB) → Gemma 4 4B 或 MiniCPM-o 4.5
+                if task_type == "multimodal":
+                    return "minicpm-o4.5:9b"
+                return "gemma4:e4b"
+            elif profile.max_model_size_mb > 2000:
+                # 较小显存 (2-4GB) → Gemma 4 2B
+                return "gemma4:e2b"
             else:
-                # 小显存
-                return "qwen2:1.5b"
-        return "qwen2:7b"  # 默认
+                # 小显存 (<2GB) → Gemma 4 2B (量化版)
+                return "gemma4:e2b"
+        return "gemma4:12b"  # 默认
 
     @staticmethod
     def _reorder_by_source(preferences: List[Tuple[SourceType, List[str]]],

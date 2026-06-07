@@ -550,7 +550,7 @@ class LocalBrainManager:
         """根据任务类型获取推荐的主脑模型
 
         Args:
-            task_type: 任务类型（如 "coding", "fast", "creative", "reasoning"）
+            task_type: 任务类型（如 "coding", "fast", "creative", "reasoning", "multimodal"）
 
         Returns:
             str: 推荐的模型名称
@@ -561,15 +561,63 @@ class LocalBrainManager:
         if recommended in self.available_models:
             return recommended
 
-        # 否则找第一个可用的类似模型
-        for model in self.available_models:
-            if task_type == "coding" and "code" in model.lower():
-                return model
-            if task_type == "fast" and any(x in model.lower() for x in ["phi", "mini"]):
-                return model
+        # 未安装：按任务类型智能 fallback
+        if not self.available_models:
+            return recommended  # 无模型时返回推荐值（供下载参考）
 
-        # 兜底：返回第一个可用模型或默认
-        return self.available_models[0] if self.available_models else self.brain_model
+        # fast 任务 → 找最小的 gemma 模型（排除多模态模型）
+        if task_type == "fast":
+            # 优先找 gemma4:e 系列（小模型）
+            for candidate in ["gemma4:e2b", "gemma4:e4b"]:
+                if candidate in self.available_models:
+                    return candidate
+            # fallback：找最小的非多模态模型
+            non_mm = [m for m in self.available_models
+                      if not any(x in m.lower() for x in ["minicpm", "multimodal"])]
+            if non_mm:
+                return min(non_mm, key=lambda m: self.MODEL_SIZE_ESTIMATE_MB.get(m, float("inf")))
+            # 只有多模态模型时，fallback 到默认推荐
+            return self.RECOMMENDED_MODELS["default"]
+
+        # multimodal 任务 → 找任何多模态模型
+        if task_type == "multimodal":
+            for model in self.available_models:
+                if any(x in model.lower() for x in ["minicpm", "multimodal"]):
+                    return model
+            # 无多模态模型时返回推荐值（提示用户下载）
+            return recommended
+
+        # coding 任务 → 找代码模型
+        if task_type == "coding":
+            for model in self.available_models:
+                if any(x in model.lower() for x in ["code", "coder"]):
+                    return model
+
+        # 其他任务 → 返回已安装的默认推荐或最大模型
+        default_rec = self.RECOMMENDED_MODELS["default"]
+        if default_rec in self.available_models:
+            return default_rec
+
+        # 最终兜底：返回已安装的最大的模型（能力最强）
+        return self._largest_available_model()
+
+    def _smallest_available_model(self) -> str:
+        """返回已安装的最小模型（VRAM 占用最小）"""
+        if not self.available_models:
+            return self.brain_model
+        return min(
+            self.available_models,
+            key=lambda m: self.MODEL_SIZE_ESTIMATE_MB.get(m, float("inf"))
+        )
+
+    def _largest_available_model(self) -> str:
+        """返回已安装的最大模型（VRAM 占用最大，能力最强）"""
+        if not self.available_models:
+            return self.brain_model
+        return max(
+            self.available_models,
+            key=lambda m: self.MODEL_SIZE_ESTIMATE_MB.get(m, 0)
+        )
 
     # ───────── 内部方法 ─────────
 

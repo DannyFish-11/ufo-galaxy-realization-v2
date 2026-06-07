@@ -988,14 +988,14 @@ class MultiLLMRouter:
                 logger.warning("Exception suppressed: %s", exc)
         if ollama_url and not ollama_url.startswith("your-"):
             # 检测 Ollama 实际可用的模型（包括 VLM）
-            detected_models = ["llama3", "mistral", "codellama", "qwen2"]
+            detected_models = ["gemma4:12b", "gemma4:e4b"]
             try:
                 import httpx
                 r = httpx.get(f"{ollama_url}/api/tags", timeout=3.0)
                 if r.status_code == 200:
                     detected_models = [m["name"] for m in r.json().get("models", [])]
                     if not detected_models:
-                        detected_models = ["llama3", "qwen2"]
+                        detected_models = ["gemma4:12b"]
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
 
