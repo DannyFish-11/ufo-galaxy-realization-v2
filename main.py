@@ -471,46 +471,61 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             print_item(f".env 创建失败: {exc}", "warn")
 
     # 2.3 Node.js + npm auto-install
+    # PR-CROSS-PLATFORM: 优先检测系统是否已有 node/npm，避免重复安装
     if not env_status.get("npm_installed"):
-        print_item("Node.js + npm 未安装，正在自动安装...", "warn")
-        node_installed = False
-        try:
-            import platform
-            machine = platform.machine().lower()
-            node_ver = "v20.11.0"
-            node_arch = "linux-arm64" if "arm" in machine or "aarch64" in machine else "linux-x64"
-            node_tar = f"node-{node_ver}-{node_arch}.tar.xz"
-            node_url = f"https://nodejs.org/dist/{node_ver}/{node_tar}"
-            node_tmp = Path("/tmp") / node_tar
-            node_dest = Path.home() / ".local" / "node"
+        # 若用户已手动安装 Node.js（如 v24 等任意版本），直接复用
+        if shutil.which("node") and shutil.which("npm"):
+            node_ver = sp.run(["node", "--version"], capture_output=True, text=True, timeout=10).stdout.strip()
+            print_item(f"检测到 Node.js {node_ver}，跳过自动安装", "ok")
+            env_status["npm_installed"] = True
+        else:
+            print_item("Node.js + npm 未安装，正在自动安装...", "warn")
+            node_installed = False
+            # PR-CROSS-PLATFORM: 当前自动安装脚本仅支持 Linux
+            if sys.platform != "linux":
+                print_item(
+                    f"当前平台 {sys.platform} 暂不支持自动安装 Node.js",
+                    "warn",
+                    "请手动下载安装: https://nodejs.org/ (推荐 v20 LTS)",
+                )
+            else:
+                try:
+                    import platform
+                    machine = platform.machine().lower()
+                    node_ver = "v20.11.0"
+                    node_arch = "linux-arm64" if "arm" in machine or "aarch64" in machine else "linux-x64"
+                    node_tar = f"node-{node_ver}-{node_arch}.tar.xz"
+                    node_url = f"https://nodejs.org/dist/{node_ver}/{node_tar}"
+                    node_tmp = Path("/tmp") / node_tar
+                    node_dest = Path.home() / ".local" / "node"
 
-            print_item(f"正在下载 Node.js {node_ver}...", "ok")
-            rc = sp.run(
-                ["curl", "-fsSL", "-o", str(node_tmp), node_url],
-                capture_output=True, text=True, timeout=120,
-            ).returncode
-            if rc == 0:
-                node_dest.parent.mkdir(parents=True, exist_ok=True)
-                rc2 = sp.run(
-                    ["tar", "-xf", str(node_tmp), "-C", str(node_dest.parent), "--strip-components=1"],
-                    capture_output=True, text=True, timeout=30,
-                ).returncode
-                if rc2 == 0 or (node_dest.parent / "bin" / "node").exists():
-                    bin_dir = node_dest.parent / "bin"
-                    if bin_dir.exists():
-                        os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
-                        bashrc = Path.home() / ".bashrc"
-                        path_line = f'export PATH="{bin_dir}:$PATH"'
-                        if bashrc.exists():
-                            content = bashrc.read_text()
-                            if path_line not in content:
-                                bashrc.write_text(content + f"\n# Galaxy Node.js\n{path_line}\n")
-                        node_installed = True
-                        print_item(f"Node.js {node_ver} 已安装", "ok", str(bin_dir))
-        except Exception as exc:
-            print_item(f"Node.js 自动安装失败: {exc}", "warn")
-        if not node_installed:
-            print_item("Node.js 安装失败", "warn", "请手动安装: https://nodejs.org/")
+                    print_item(f"正在下载 Node.js {node_ver}...", "ok")
+                    rc = sp.run(
+                        ["curl", "-fsSL", "-o", str(node_tmp), node_url],
+                        capture_output=True, text=True, timeout=120,
+                    ).returncode
+                    if rc == 0:
+                        node_dest.parent.mkdir(parents=True, exist_ok=True)
+                        rc2 = sp.run(
+                            ["tar", "-xf", str(node_tmp), "-C", str(node_dest.parent), "--strip-components=1"],
+                            capture_output=True, text=True, timeout=30,
+                        ).returncode
+                        if rc2 == 0 or (node_dest.parent / "bin" / "node").exists():
+                            bin_dir = node_dest.parent / "bin"
+                            if bin_dir.exists():
+                                os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
+                                bashrc = Path.home() / ".bashrc"
+                                path_line = f'export PATH="{bin_dir}:$PATH"'
+                                if bashrc.exists():
+                                    content = bashrc.read_text()
+                                    if path_line not in content:
+                                        bashrc.write_text(content + f"\n# Galaxy Node.js\n{path_line}\n")
+                                node_installed = True
+                                print_item(f"Node.js {node_ver} 已安装", "ok", str(bin_dir))
+                except Exception as exc:
+                    print_item(f"Node.js 自动安装失败: {exc}", "warn")
+                if not node_installed:
+                    print_item("Node.js 安装失败", "warn", "请手动安装: https://nodejs.org/")
 
     # 2.4 Electron / npm deps
     npm_cmd = shutil.which("npm")
@@ -546,13 +561,13 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             else:
                 print_item("未检测到本地模型，正在下载推荐模型...", "ok")
                 rc2 = sp.run(
-                    ["ollama", "pull", "gemma4:e4b"],
+                    ["ollama", "pull", "gemma4:12b"],
                     capture_output=True, text=True, timeout=600,
                 ).returncode
                 if rc2 == 0:
-                    print_item("模型 gemma4:e4b 下载完成", "ok")
+                    print_item("模型 gemma4:12b 下载完成", "ok")
                 else:
-                    print_item("模型下载失败", "warn", "ollama pull gemma4:e4b 手动重试")
+                    print_item("模型下载失败", "warn", "ollama pull gemma4:12b 手动重试")
         except Exception as exc:
             print_item(f"Ollama 模型检查失败: {exc}", "warn")
 

@@ -46,7 +46,13 @@ except ImportError:
     _PORCUPINE_AVAILABLE = False
 
 try:
-    import webrtcvad  # type: ignore[import-untyped]
+    # PR-WARN-SUPPRESS: webrtcvad 内部使用已弃用的 pkg_resources，
+    # 触发 DeprecationWarning / UserWarning；在导入前临时过滤掉
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=DeprecationWarning)
+        warnings.simplefilter("ignore", category=UserWarning)
+        import webrtcvad  # type: ignore[import-untyped]
     _VAD_AVAILABLE = True
 except ImportError:
     _VAD_AVAILABLE = False
