@@ -145,17 +145,25 @@ from logging.handlers import RotatingFileHandler
 # PR-D6: Log rotation (10MB per file, keep 5 backups)
 log_dir = PROJECT_ROOT / "logs"
 log_dir.mkdir(exist_ok=True)
-handler = RotatingFileHandler(
-    str(log_dir / "galaxy.log"), maxBytes=10 * 1024 * 1024, backupCount=5
-)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    datefmt="%H:%M:%S",
-    handlers=[handler, logging.StreamHandler()],
-)
+# SECURITY: Only configure logging if no handlers exist yet.
+# Multiple entry points (main.py, galaxy_daemon.py, system_manager.py)
+# call basicConfig; repeated calls are no-ops after the first.
+if not logging.getLogger().handlers:
+    handler = RotatingFileHandler(
+        str(log_dir / "galaxy.log"), maxBytes=10 * 1024 * 1024, backupCount=5
+    )
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%H:%M:%S",
+        handlers=[handler, logging.StreamHandler()],
+    )
 logger = logging.getLogger("Galaxy")
+
+# Health / validation tracking (non-strict mode diagnostics)
+_health_status: str = "unknown"
+_failed_validations: list = []
 
 # ---------------------------------------------------------------------------
 # Authority declaration — referenced by validate_runtime.py and CI guardrails
@@ -196,24 +204,38 @@ def _run_orchestrator_preflight() -> bool:
     silently swallowed.  This prevents critically broken environments from
     appearing healthy at startup.
     """
+    global _health_status, _failed_validations
     strict = _is_strict_preflight()
     try:
         from core.system_orchestrator import SystemOrchestrator
         orch = SystemOrchestrator(continue_on_failure=False, strict_preflight=strict)
         summary = orch.run_startup_sequence()
         logger.info("Orchestrator bring-up complete:\n%s", summary)
+        _health_status = "healthy"
+        _failed_validations.clear()
         return summary.is_ready()
     except Exception as exc:
+        exc_str = str(exc)
+        _failed_validations.append(exc_str)
         if strict:
-            logger.error(
-                "Orchestrator pre-flight raised an exception "
-                "(GALAXY_STRICT_PREFLIGHT=1 — treating as hard failure): %s",
+            logger.critical(
+                "Startup validation failed (GALAXY_STRICT_PREFLIGHT=1 — hard failure): %s",
                 exc,
+                exc_info=True,
             )
+            _health_status = "failed"
             return False
-        logger.warning(
-            "Orchestrator pre-flight raised an exception (non-fatal): %s", exc
+        # Non-strict: log FULL exception details, then continue degraded
+        logger.critical(
+            "Startup validation failed: %s",
+            exc,
+            exc_info=True,
         )
+        logger.warning(
+            "CONTINUING IN DEGRADED MODE — some security features may not work correctly. "
+            "Set GALAXY_STRICT_PREFLIGHT=1 to abort startup on validation failures."
+        )
+        _health_status = "degraded"
         # Degraded but non-fatal — proceed with bring-up
         return True
 
@@ -496,13 +518,13 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             else:
                 print_item("未检测到本地模型，正在下载推荐模型...", "ok")
                 rc2 = sp.run(
-                    ["ollama", "pull", "gemma4:4b"],
+                    ["ollama", "pull", "gemma4:e4b"],
                     capture_output=True, text=True, timeout=600,
                 ).returncode
                 if rc2 == 0:
-                    print_item("模型 gemma4:4b 下载完成", "ok")
+                    print_item("模型 gemma4:e4b 下载完成", "ok")
                 else:
-                    print_item("模型下载失败", "warn", "ollama pull gemma4:4b 手动重试")
+                    print_item("模型下载失败", "warn", "ollama pull gemma4:e4b 手动重试")
         except Exception as exc:
             print_item(f"Ollama 模型检查失败: {exc}", "warn")
 

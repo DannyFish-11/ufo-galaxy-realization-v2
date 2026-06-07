@@ -260,7 +260,14 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL:       "llama-3.3-70b-versatile",
     },
     "ollama": {
-        TaskType.GENERAL: "llama3.3",
+        TaskType.REASONING:     "gemma4:12b",
+        TaskType.FAST_RESPONSE: "gemma4:e4b",
+        TaskType.CODING:        "gemma4:12b",
+        TaskType.CREATIVE:      "gemma4:12b",
+        TaskType.ANALYSIS:      "gemma4:12b",
+        TaskType.PLANNING:      "gemma4:12b",
+        TaskType.AGENT_CONTROL: "gemma4:12b",
+        TaskType.GENERAL:       "gemma4:12b",
     },
     "hf_local": {
         TaskType.REASONING:     "Qwen/Qwen2.5-14B-Instruct",

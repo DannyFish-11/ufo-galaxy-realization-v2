@@ -330,7 +330,8 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         )
 
     # ── Security posture logging ──
-    from core.auth import is_auth_enabled, get_active_tokens
+    from core.auth import is_auth_enabled, get_active_tokens, ensure_auth_config_validated
+    ensure_auth_config_validated()
     if is_auth_enabled():
         active = get_active_tokens()
         if active:

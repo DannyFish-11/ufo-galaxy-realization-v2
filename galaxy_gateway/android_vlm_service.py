@@ -195,14 +195,16 @@ class AndroidVLMService:
         """Lazy-load the LLM router singleton."""
         if self._router is not None:
             return self._router
-        try:
-            from core.unified.llm_router import get_unified_llm_router
-            return get_unified_llm_router()
-        except Exception:
-            pass
+        # 优先 canonical 路径（core.multi_llm_router）
         try:
             from core.multi_llm_router import get_llm_router
             return get_llm_router()
+        except Exception:
+            pass
+        # fallback 到 unified 路径（兼容旧部署）
+        try:
+            from core.unified.llm_router import get_unified_llm_router
+            return get_unified_llm_router()
         except Exception as exc:
             logger.warning("LLM router unavailable: %s", exc)
             return None

@@ -14,7 +14,7 @@ Production safety:
 Gateway Bearer auth:
   - GALAXY_AUTH_ENABLED=true enables Bearer token enforcement on the
     gateway's REST and WebSocket endpoints.
-  - Defaults to false (disabled) for backward compatibility.
+  - Defaults to true (secure-by-default); set to false to disable.
   - When enabled, unauthorized requests are rejected with HTTP 401.
 
 Key rotation:
@@ -35,7 +35,7 @@ import hmac
 import os
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Set
 from fastapi import Header, HTTPException, status
 
 logger = logging.getLogger("Galaxy.Auth")
@@ -49,13 +49,80 @@ _no_token_warning_issued: bool = False
 # ---------------------------------------------------------------------------
 
 def is_auth_enabled() -> bool:
-    """Return True when GALAXY_AUTH_ENABLED=true is explicitly set.
+    """Return True when GALAXY_AUTH_ENABLED is not explicitly disabled.
 
-    Defaults to False so that existing deployments are not broken by the
-    new security hardening.  Set ``GALAXY_AUTH_ENABLED=true`` in production
-    to enforce Bearer token validation on all gateway endpoints.
+    Defaults to True for secure-by-default behaviour.
+    Production mode forces authentication enabled regardless of settings.
+    Unknown values default to enabled (secure-by-default).
     """
-    return os.getenv("GALAXY_AUTH_ENABLED", "false").strip().lower() in ("1", "true", "yes")
+    # Production environment: force auth enabled, ignore all other settings
+    if os.environ.get("GALAXY_MODE", "").lower() == "production":
+        return True
+
+    dev_mode = os.environ.get("GALAXY_DEV_MODE", "").lower()
+    if dev_mode in ("1", "true", "yes"):
+        # DEV_MODE no longer bypasses authentication; only enables extra debug logging
+        logger.warning(
+            "GALAXY_DEV_MODE is deprecated for auth bypass. "
+            "Use proper test tokens instead."
+        )
+
+    env = os.environ.get("GALAXY_AUTH_ENABLED", "true").strip().lower()
+    if env in ("0", "false", "no", ""):
+        return False
+    if env in ("1", "true", "yes"):
+        return True
+    # Secure default: unknown values default to enabled
+    logger.warning("Unknown GALAXY_AUTH_ENABLED value '%s', defaulting to enabled", env)
+    return True
+
+
+def validate_auth_config() -> None:
+    """Startup validation: ensure auth configuration is consistent.
+
+    Raises:
+        RuntimeError: if auth is enabled but no API token is configured,
+                     or if production mode requirements are not met.
+    """
+    mode = os.environ.get("GALAXY_MODE", "").lower()
+
+    # Production mode: enforce strict auth requirements
+    if mode == "production":
+        token = os.environ.get("GALAXY_API_TOKEN", "")
+        if not token or len(token) < 32:
+            raise RuntimeError(
+                "Production mode requires GALAXY_API_TOKEN with minimum 32 characters. "
+                'Generate with: python3 -c "import secrets; print(secrets.token_urlsafe(32))"'
+            )
+        # Production mode: DEV_MODE not allowed
+        if os.environ.get("GALAXY_DEV_MODE", "").lower() in ("1", "true", "yes"):
+            raise RuntimeError(
+                "GALAXY_DEV_MODE is not allowed in production mode"
+            )
+        # Production mode: auth cannot be disabled
+        auth = os.environ.get("GALAXY_AUTH_ENABLED", "true").lower()
+        if auth in ("0", "false", "no", ""):
+            raise RuntimeError(
+                "Cannot disable authentication in production mode"
+            )
+
+    if is_auth_enabled() and not os.getenv("GALAXY_API_TOKEN"):
+        raise RuntimeError(
+            "GALAXY_AUTH_ENABLED=true (default) but GALAXY_API_TOKEN is not set. "
+            "Set a secure token or explicitly disable auth with GALAXY_AUTH_ENABLED=false"
+        )
+
+
+# Startup validation — called explicitly during launcher startup sequence.
+# Do NOT run at import time to avoid blocking module loading before .env is read.
+_auth_config_validated = False
+
+def ensure_auth_config_validated() -> None:
+    """Run auth validation once at startup. Idempotent."""
+    global _auth_config_validated
+    if not _auth_config_validated:
+        validate_auth_config()
+        _auth_config_validated = True
 
 
 # ---------------------------------------------------------------------------
@@ -140,18 +207,25 @@ def get_active_tokens() -> List[str]:
 # ---------------------------------------------------------------------------
 
 def _is_dev_mode() -> bool:
-    """Return True when GALAXY_DEV_MODE=1 is explicitly set."""
+    """Return True when GALAXY_DEV_MODE=1 is explicitly set.
+
+    Note: DEV_MODE no longer bypasses authentication. It only enables
+    extra debug logging and development conveniences.
+    """
     return os.getenv("GALAXY_DEV_MODE", "").strip() == "1"
 
 
 def _warn_dev_mode_once():
-    """Emit a one-time warning when the server runs in dev mode."""
+    """Emit a one-time warning when the server runs in dev mode.
+
+    DEV_MODE no longer disables authentication; it only enables extra debug logging.
+    """
     global _dev_mode_warning_issued
     if not _dev_mode_warning_issued:
         _dev_mode_warning_issued = True
         logger.warning(
-            "⚠️  Galaxy is running in DEV MODE (GALAXY_DEV_MODE=1). "
-            "Authentication is DISABLED. Do NOT use this mode in production."
+            "Galaxy is running in DEV MODE (GALAXY_DEV_MODE=1). "
+            "Authentication is still REQUIRED. DEV_MODE only enables extra debug logging."
         )
 
 
@@ -161,9 +235,8 @@ def _warn_no_token_once():
     if not _no_token_warning_issued:
         _no_token_warning_issued = True
         logger.warning(
-            "GALAXY_API_TOKEN is not set and GALAXY_DEV_MODE is not enabled. "  # M7 fixed
-            "Authentication is disabled. Set GALAXY_API_TOKEN for production "  # M7 fixed
-            "or GALAXY_DEV_MODE=1 to suppress this warning."  # M7 fixed
+            "GALAXY_API_TOKEN is not set. "
+            "Authentication is enabled by default. Set GALAXY_API_TOKEN for production."
         )
 
 
@@ -176,25 +249,43 @@ def verify_api_token(token: str) -> bool:
     (``GALAXY_API_TOKEN``) and the multi-token rotation list
     (``GALAXY_API_TOKENS``) work transparently.
 
+    Round-4 HIGH: defends against Unicode DoS — non-ASCII tokens are
+    rejected before ``hmac.compare_digest`` to avoid encoding exceptions.
+
     Args:
         token: API Token 字符串
 
     Returns:
         bool: Token 是否有效
     """
+    # Defence: reject non-ASCII tokens to prevent Unicode DoS
+    try:
+        token_bytes = token.encode("ascii")
+    except UnicodeEncodeError:
+        logger.warning("Token contains non-ASCII characters, rejecting")
+        return False
+
     active = get_active_tokens()
 
     if not active:
-        if _is_dev_mode():
-            _warn_dev_mode_once()
-            logger.debug("No active tokens configured; skipping token auth (dev mode)")
-            return True
-        # Production: no token set and not dev mode → refuse
-        logger.warning("No active API tokens configured and GALAXY_DEV_MODE is not enabled — token validation failed")
+        # No tokens configured → refuse (dev mode bypass removed for security)
+        logger.warning("No active API tokens configured — token validation failed")
         return False
 
     for expected in active:
-        if hmac.compare_digest(token, expected):
+        # Defence: constant-time comparison on ASCII-encoded bytes
+        try:
+            expected_bytes = expected.encode("ascii")
+        except UnicodeEncodeError:
+            # Skip invalid expected tokens rather than crash
+            continue
+
+        # Length check with constant-time fallback to mitigate timing attacks
+        if len(token_bytes) != len(expected_bytes):
+            hmac.compare_digest(b"0" * len(expected_bytes), expected_bytes)
+            continue
+
+        if hmac.compare_digest(token_bytes, expected_bytes):
             return True
 
     logger.warning("Invalid API token presented")
@@ -242,35 +333,23 @@ async def require_auth(
     Raises:
         HTTPException: 鉴权失败时抛出 401 异常
     """
-    # Gateway-level auth flag — default off for backward compatibility
+    # Gateway-level auth flag — secure by default (enabled unless explicitly disabled)
     if not is_auth_enabled():
         return {"authenticated": True, "device_id": x_device_id, "auth_enabled": False}
 
     active_tokens = get_active_tokens()
 
-    # Dev mode: no active tokens AND GALAXY_DEV_MODE=1 → allow through with warning
-    if not active_tokens and _is_dev_mode():
-        _warn_dev_mode_once()
-        logger.debug("No active tokens configured; skipping auth (dev mode)")
-        return {
-            "authenticated": True,
-            "device_id": x_device_id,
-            "dev_mode": True
-        }
-
-    # Production guard: no active tokens and NOT in dev mode → refuse
+    # Security: dev mode bypass removed — all requests require valid tokens
     if not active_tokens:
         logger.error(
-            "Protected endpoint accessed but no active API tokens are configured "
-            "and GALAXY_DEV_MODE is not enabled. Set GALAXY_API_TOKEN or GALAXY_API_TOKENS, "
-            "or set GALAXY_DEV_MODE=1 for local development."
+            "Protected endpoint accessed but no active API tokens are configured. "
+            "Set GALAXY_API_TOKEN or GALAXY_API_TOKENS."
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(
                 "Server is not configured for authentication. "
-                "Set GALAXY_API_TOKEN environment variable, "
-                "or set GALAXY_DEV_MODE=1 for local development."
+                "Set GALAXY_API_TOKEN environment variable."
             ),
             headers={"WWW-Authenticate": "Bearer"},
         )
