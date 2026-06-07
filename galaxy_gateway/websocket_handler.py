@@ -679,6 +679,45 @@ async def handle_command(connection_id: str, aip_msg):
         _payload = aip_msg.payload.get("payload", {})
         device_id = aip_msg.device_id
 
+        # PR-DEVICE-LIST-QUERY: Short-circuit for device status queries
+        if command_text == "query_device_list":
+            try:
+                result = device_router.get_device_status()
+            except Exception as _dev_err:
+                logger.error("query_device_list failed: %s", _dev_err)
+                result = {"error": "failed to retrieve device list"}
+            # Build and send response directly
+            response = {
+                "version": "3.0",
+                "message_id": str(uuid.uuid4()),
+                "correlation_id": aip_msg.message_id,
+                "type": MessageType.COMMAND_RESULT.value,
+                "device_id": aip_msg.device_id,
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "payload": result,
+            }
+            await connection_manager.send_message(connection_id, response)
+            return
+        elif command_text == "query_device_status":
+            try:
+                target_id = _payload.get("device_id", device_id)
+                dev = device_router.get_device(target_id)
+                result = dev.to_dict() if dev else {"error": "device not found"}
+            except Exception as _dev_err:
+                logger.error("query_device_status failed: %s", _dev_err)
+                result = {"error": "failed to retrieve device status"}
+            response = {
+                "version": "3.0",
+                "message_id": str(uuid.uuid4()),
+                "correlation_id": aip_msg.message_id,
+                "type": MessageType.COMMAND_RESULT.value,
+                "device_id": aip_msg.device_id,
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "payload": result,
+            }
+            await connection_manager.send_message(connection_id, response)
+            return
+
         # PR-OPENCLAWD-ROUTING-AUTHORITY: route through OpenClawd instead of
         # directly calling device_router.route_task().
         # Canonical chain: OpenClawd → CommandRouter → DeviceRouter → device
