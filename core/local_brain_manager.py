@@ -81,15 +81,30 @@ class LocalBrainManager:
 
     # 推荐的主脑模型（按任务类型）
     RECOMMENDED_MODELS = {
-        "default": "qwen2:7b",       # 默认主脑 — 均衡型
-        "coding": "codellama:7b",    # 代码任务
-        "fast": "phi3:mini",         # 快速响应
-        "creative": "llama3:8b",     # 创作任务
-        "reasoning": "qwen2:7b",     # 推理任务
+        "default": "gemma4:12b",          # Google Gemma 4 12B — 文本+视觉+工具调用
+        "coding": "gemma4:12b",           # 代码生成
+        "fast": "gemma4:e4b",             # 4B 快速响应
+        "creative": "gemma4:12b",         # 创意任务
+        "reasoning": "gemma4:12b",        # 推理任务
+        "multimodal": "minicpm-o4.5:9b",  # MiniCPM-o 4.5 全模态(看+听+说)
     }
 
     # 模型大小估算（MB，用于 VRAM 评估）
     MODEL_SIZE_ESTIMATE_MB = {
+        # Gemma 4 系列
+        "gemma4:12b": 8000,
+        "gemma4:26b": 16000,
+        "gemma4:31b": 20000,
+        "gemma4:e2b": 1800,
+        "gemma4:e4b": 3000,
+        "gemma4:27b": 18000,
+        # MiniCPM-o 4.5 全模态
+        "minicpm-o4.5:9b": 6000,
+        "minicpm-o4.5:3.5b": 2500,
+        "minicpm-o4.5:2.5b": 1800,
+        "minicpm-o4.5:8b": 5500,
+        "minicpm-o4.5:7.6b": 5000,
+        # 旧模型（兼容保留）
         "qwen2:7b": 4500,
         "qwen2:1.5b": 1000,
         "llama3:8b": 5000,
@@ -115,7 +130,7 @@ class LocalBrainManager:
         self._backend = None  # LocalModelBackend instance
         self.ollama_url = ollama_url or os.environ.get("OLLAMA_URL", self.OLLAMA_DEFAULT_URL)
         self.available_models: List[str] = []
-        self.brain_model: str = "qwen2:7b"  # 默认主脑
+        self.brain_model: str = "gemma4:12b"  # 默认主脑 (Gemma 4 12B)
         self._healthy = False
         self._status = LocalBrainStatus.STOPPED
         self._hardware_profile: Optional[HardwareProfile] = None
