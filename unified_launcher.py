@@ -76,7 +76,7 @@ from entrypoint_role_contract import (
 PROJECT_ROOT = Path(__file__).parent.absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
 try:
-    from nodes.common.cors_config import get_cors_origins
+    from nodes.common.cors_config import get_cors_origins, get_cors_methods, get_cors_headers
 except ImportError:
     logging.getLogger("Galaxy").warning(
         "nodes.common.cors_config 未找到，使用默认 CORS 来源。"
@@ -121,7 +121,7 @@ async def _ensure_recommended_model():
         if not local_models:
             logger.info("No local models found, downloading recommended model...")
             try:
-                await hf.install_recommended("llm_qwen2_7b")
+                await hf.install_recommended("llm_gemma4_e4b")
                 logger.info("Recommended model downloaded successfully")
             except Exception as exc:
                 logger.warning("Failed to auto-download model: %s", exc)
@@ -129,7 +129,7 @@ async def _ensure_recommended_model():
                     "Please manually download a model: "
                     "python -c \"from core.huggingface_model_manager import get_hf_model_manager; "
                     "import asyncio; hf=get_hf_model_manager(); "
-                    "asyncio.run(hf.install_recommended('llm_qwen2_7b'))\""
+                    "asyncio.run(hf.install_recommended('llm_gemma4_e4b'))\""
                 )
     except Exception:
         pass
@@ -278,9 +278,10 @@ class UnifiedWebUI:
             import uvicorn
 
             # === 步骤 1：以内建 FastAPI 应用为主应用（权威 API 基础） ===
-            from fastapi import FastAPI
+            from fastapi import FastAPI, Depends
             from fastapi.middleware.cors import CORSMiddleware
-            from nodes.common.cors_config import get_cors_origins
+            from core.auth import require_auth as _require_auth
+            from nodes.common.cors_config import get_cors_origins, get_cors_methods, get_cors_headers
             self.app = FastAPI(
                 title="Galaxy",
                 description="L4 级自主性智能系统",
@@ -290,8 +291,8 @@ class UnifiedWebUI:
                 CORSMiddleware,
                 allow_origins=get_cors_origins(),
                 allow_credentials=True,
-                allow_methods=["*"],
-                allow_headers=["*"],
+                allow_methods=get_cors_methods(),
+                allow_headers=get_cors_headers(),
             )
 
             # === 步骤 2：引导核心子系统（缓存 + 监控 + 性能中间件 + 命令路由 + AI） ===
@@ -395,7 +396,7 @@ class UnifiedWebUI:
 
             # === 步骤 6：统一启动器专属路由（不覆盖 dashboard 的 / 路由） ===
             @self.app.get("/api/status")
-            async def launcher_status():
+            async def launcher_status(auth: dict = Depends(_require_auth)):
                 return JSONResponse({
                     "status": "running",
                     "version": "2.0",
@@ -1195,22 +1196,31 @@ def main():
         galaxy.config.enable_nodes = False
 
     # ── 信号处理 ───────────────────────────────────────────────────────────
-    # 设置信号处理
-    def signal_handler(sig, frame):
+    # SECURITY: Use asyncio.add_signal_handler for async-safe signal handling.
+    # signal.signal() is unsafe in async contexts because it can interrupt
+    # the event loop at arbitrary points, causing coroutine state corruption.
+    def _graceful_shutdown() -> None:
         galaxy.stop()
-        sys.exit(0)
-        
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-    
+
     # 启动 Electron GUI（在 Python 服务之后启动，作为独立桌面表层）
     _start_electron_gui()
 
-    # 启动系统
+    # 启动系统 — register async signal handlers inside the running loop
     try:
-        asyncio.run(galaxy.start())
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.add_signal_handler(signal.SIGINT, _graceful_shutdown)
+        loop.add_signal_handler(signal.SIGTERM, _graceful_shutdown)
+        loop.run_until_complete(galaxy.start())
     except KeyboardInterrupt:
         galaxy.stop()
+    finally:
+        try:
+            loop.remove_signal_handler(signal.SIGINT)
+            loop.remove_signal_handler(signal.SIGTERM)
+            loop.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
