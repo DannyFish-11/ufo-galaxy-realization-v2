@@ -239,6 +239,27 @@ class NetworkTopologyRuntime:
                 "devices": {did: pos.to_dict() for did, pos in self._positions.items()},
             }
 
+    # ── Durable state recovery (PR-RECOVERY) ────────────────────────
+
+    def restore_durable_state(self, state: dict = None) -> Dict[str, int]:
+        """恢复持久化拓扑状态。
+
+        当前 NetworkTopologyRuntime 不维护磁盘持久化状态，所有位置信息
+        通过运行时探测 (_discover_self / _refresh_loop) 动态发现。
+        此方法提供与 recovery 协议的兼容接口，返回零恢复计数。
+
+        Args:
+            state: 可选的预加载状态字典（当前忽略，用于接口兼容）。
+
+        Returns:
+            {"nodes_restored": 0, "edges_restored": 0}
+        """
+        logger.debug(
+            "NetworkTopologyRuntime.restore_durable_state called — "
+            "no durable state to restore (runtime-discovered topology)"
+        )
+        return {"nodes_restored": 0, "edges_restored": 0}
+
     # ── Internal: Self discovery ────────────────────────────────────
 
     async def _discover_self(self) -> NetworkPosition:

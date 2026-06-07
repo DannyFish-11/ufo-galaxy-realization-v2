@@ -567,13 +567,34 @@ class SystemOrchestrator:
                 detail="electron/ directory not found -- GUI not available",
             )
 
+        # 预检 Node.js / npm 可用性（在调用 npm install 前主动探测，
+        # 避免 FileNotFoundError 导致误导性错误信息 "Node.js not installed"）
+        import shutil
+
+        node_path = shutil.which("node")
+        npm_path = shutil.which("npm")
+        logger.debug("[Phase 6] Node.js detection — node=%s, npm=%s", node_path, npm_path)
+
+        if not node_path:
+            return PhaseResult(
+                phase=StartupPhase.DESKTOP_SURFACE,
+                status=PhaseStatus.DEGRADED,
+                detail="Electron GUI skipped (Node.js not installed or not in PATH)",
+            )
+
         # Check if node_modules exists (npm install has been run)
         node_modules = os.path.join(electron_dir, "node_modules")
         if not os.path.isdir(node_modules):
+            if not npm_path:
+                return PhaseResult(
+                    phase=StartupPhase.DESKTOP_SURFACE,
+                    status=PhaseStatus.DEGRADED,
+                    detail="Electron GUI skipped (npm not in PATH — Node.js installed but npm missing)",
+                )
             logger.warning("[Phase 6] electron/node_modules not found -- running npm install ...")
             try:
                 npm_result = subprocess.run(
-                    ["npm", "install"],
+                    [npm_path, "install"],
                     cwd=electron_dir,
                     capture_output=True,
                     text=True,
@@ -585,11 +606,11 @@ class SystemOrchestrator:
                         status=PhaseStatus.DEGRADED,
                         detail=f"npm install failed: {npm_result.stderr[:200]}",
                     )
-            except (subprocess.TimeoutExpired, FileNotFoundError):
+            except subprocess.TimeoutExpired:
                 return PhaseResult(
                     phase=StartupPhase.DESKTOP_SURFACE,
                     status=PhaseStatus.DEGRADED,
-                    detail="Electron GUI skipped (Node.js not installed)",
+                    detail="npm install timed out after 120s",
                 )
 
         # Launch Electron as detached subprocess

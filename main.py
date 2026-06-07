@@ -142,6 +142,34 @@ ELECTRON_DIR = Path("electron")
 
 from logging.handlers import RotatingFileHandler
 
+
+class SafeStreamHandler(logging.StreamHandler):
+    """Windows-safe StreamHandler with UTF-8 encoding for CJK characters.
+
+    On Windows, the default console encoding (cp1252 / cp936 / cp950)
+    cannot encode certain CJK characters, causing::
+
+        UnicodeEncodeError: 'charmap' codec can't encode characters ...
+
+    This handler re-wraps *stream.buffer* with an explicit UTF-8
+    TextIOWrapper so Chinese log messages are emitted safely.
+    Linux / macOS keep the default behaviour (usually UTF-8 already).
+    """
+
+    def __init__(self, stream=None):
+        super().__init__(stream)
+        # Only patch on Windows where the console encoding is limited.
+        if sys.platform == "win32" and hasattr(self.stream, "buffer"):
+            import io
+
+            self.stream = io.TextIOWrapper(
+                self.stream.buffer,
+                encoding="utf-8",
+                errors="replace",
+                line_buffering=True,
+            )
+
+
 # PR-D6: Log rotation (10MB per file, keep 5 backups)
 log_dir = PROJECT_ROOT / "logs"
 log_dir.mkdir(exist_ok=True)
@@ -157,7 +185,7 @@ if not logging.getLogger().handlers:
         level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(message)s",
         datefmt="%H:%M:%S",
-        handlers=[handler, logging.StreamHandler()],
+        handlers=[handler, SafeStreamHandler()],
     )
 logger = logging.getLogger("Galaxy")
 
