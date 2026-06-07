@@ -14,12 +14,23 @@ UFO Galaxy — 系统化完整启动器 (Systematic Launcher)
     │  Phase 5: 运行监控     (进程保活 + 优雅退出)                │
     └─────────────────────────────────────────────────────────────┘
 
+模型选择（首次克隆）：
+    ┌─────────────────────────────────────────────────────────────┐
+    │  1. Google Gemma 4 12B  — 文本+视觉+工具调用 (推荐, 默认)    │
+    │  2. MiniCPM-o 4.5 9B   — 全模态边看边听边说 (实验性)       │
+    │                                                              │
+    │  模型在后台下载，不阻塞启动流程                              │
+    │  跳过下载: --skip-model-download                             │
+    └─────────────────────────────────────────────────────────────┘
+
 用法：
-    python launch_desktop.py              # 完整启动（推荐）
-    python launch_desktop.py --check      # 只检查环境，不启动
-    python launch_desktop.py --backend    # 只启动 Gateway
-    python launch_desktop.py --frontend   # 只启动 Electron
-    python launch_desktop.py --docker     # Docker 模式
+    python launch_desktop.py                    # 完整启动（推荐）
+    python launch_desktop.py --model gemma4:12b # 指定模型
+    python launch_desktop.py --model minicpm-o4.5:9b
+    python launch_desktop.py --skip-model-download  # 跳过模型下载
+    python launch_desktop.py --check            # 只检查环境
+    python launch_desktop.py --backend          # 只启动 Gateway
+    python launch_desktop.py --frontend         # 只启动 Electron
 
 退出：
     Ctrl+C → 先关 Electron → 再关 Gateway → 清理退出
@@ -33,6 +44,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -58,6 +70,30 @@ logger = logging.getLogger("Galaxy.Launcher")
 _proc_gateway = None
 _proc_electron = None
 _shutting_down = False
+
+# ───────────────────────────────────────────────────────────────────────────
+# 模型配置 — 用户可选择的本地模型
+# ───────────────────────────────────────────────────────────────────────────
+
+AVAILABLE_MODELS = {
+    "gemma4:12b": {
+        "name": "Google Gemma 4 12B",
+        "desc": "文本+视觉+原生工具调用，128K上下文",
+        "size": "~8GB",
+        "vram": "8GB+",
+        "recommended": True,
+    },
+    "minicpm-o4.5:9b": {
+        "name": "MiniCPM-o 4.5 9B",
+        "desc": "全模态(看+听+说)，全双工实时交互",
+        "size": "~6GB",
+        "vram": "9GB+",
+        "recommended": False,
+    },
+}
+
+DEFAULT_MODEL = "gemma4:12b"
+_model_download_thread = None  # 后台下载线程
 
 # ───────────────────────────────────────────────────────────────────────────
 # 工具函数
@@ -111,14 +147,104 @@ def ok(msg: str):
     logger.info("  ✓ %s", msg)
 
 
+def select_model_interactive() -> str:
+    """交互式模型选择 — 首次克隆时让用户选择要下载的模型。"""
+    print()
+    print("  ╔═══════════════════════════════════════════════════════════╗")
+    print("  ║  选择本地 AI 模型（首次启动需要下载，约 2-8GB）         ║")
+    print("  ╚═══════════════════════════════════════════════════════════╝")
+    print()
+    
+    models = list(AVAILABLE_MODELS.items())
+    for i, (tag, info) in enumerate(models, 1):
+        rec = " [推荐]" if info["recommended"] else ""
+        print(f"  [{i}] {info['name']}{rec}")
+        print(f"      {info['desc']}")
+        print(f"      大小: {info['size']} | VRAM: {info['vram']}")
+        print()
+    
+    print("  [s] 跳过模型下载（稍后手动执行: ollama pull <模型>）")
+    print()
+    
+    while True:
+        choice = input("  请选择 [1/2/s，默认 1]: ").strip().lower()
+        if choice == "" or choice == "1":
+            return models[0][0]
+        elif choice == "2" and len(models) >= 2:
+            return models[1][0]
+        elif choice == "s":
+            return ""
+        else:
+            print("  无效选择，请重试。")
+
+
+def select_model_auto(args) -> str:
+    """自动/参数化模型选择（非交互式）。"""
+    # 1. 命令行参数指定
+    if args.model and args.model in AVAILABLE_MODELS:
+        return args.model
+    # 2. 环境变量指定
+    env_model = os.getenv("OLLAMA_MODEL", "")
+    if env_model and env_model in AVAILABLE_MODELS:
+        return env_model
+    # 3. 配置文件中的已选模型
+    config_model = _load_model_choice()
+    if config_model and config_model in AVAILABLE_MODELS:
+        return config_model
+    # 4. 默认推荐模型
+    return DEFAULT_MODEL
+
+
+def _load_model_choice() -> str:
+    """从 .galaxy_config 读取用户上次选择的模型。"""
+    config_file = PROJECT_ROOT / ".galaxy_model"
+    if config_file.exists():
+        return config_file.read_text().strip()
+    return ""
+
+
+def _save_model_choice(model: str):
+    """保存用户选择的模型到 .galaxy_model。"""
+    config_file = PROJECT_ROOT / ".galaxy_model"
+    config_file.write_text(model)
+
+
+def download_model_background(model: str):
+    """后台线程下载模型，不阻塞启动流程。"""
+    def _download():
+        logger.info("[模型下载] 开始在后台下载 %s ...", model)
+        logger.info("[模型下载] 大小约 %s，可能需要几分钟", AVAILABLE_MODELS.get(model, {}).get("size", "未知"))
+        try:
+            result = subprocess.run(
+                ["ollama", "pull", model],
+                capture_output=True, text=True, timeout=1800,  # 30分钟超时
+            )
+            if result.returncode == 0:
+                logger.info("[模型下载] ✅ %s 下载完成！", model)
+                _save_model_choice(model)
+            else:
+                logger.warning("[模型下载] ⚠️ 下载失败: %s", result.stderr[:200] if result.stderr else "未知错误")
+                logger.info("[模型下载] 可稍后手动执行: ollama pull %s", model)
+        except subprocess.TimeoutExpired:
+            logger.warning("[模型下载] ⏱️ 下载超时(30分钟)，仍在继续后台下载...")
+            logger.info("[模型下载] 可稍后手动执行: ollama pull %s", model)
+        except Exception as e:
+            logger.warning("[模型下载] ❌ 异常: %s", str(e)[:200])
+            logger.info("[模型下载] 可稍后手动执行: ollama pull %s", model)
+    
+    thread = threading.Thread(target=_download, daemon=True, name=f"ModelDownload-{model}")
+    thread.start()
+    return thread
+
+
 # ───────────────────────────────────────────────────────────────────────────
-# Phase 0: 环境检查
+# Phase 0: 环境检查（精简输出版）
 # ───────────────────────────────────────────────────────────────────────────
 
 def phase0_environment_check() -> dict:
     """
-    全面检查运行环境，返回状态字典。
-    不修改任何东西，只检查并报告。
+    精简版环境检查。只报告关键项，不阻塞启动。
+    模型状态在 Phase 1 单独处理。
     """
     banner("Phase 0: 环境检查")
     status = {
@@ -134,93 +260,86 @@ def phase0_environment_check() -> dict:
         "ready": False,
     }
 
+    issues = []   # 收集问题，最后统一报告
+    ok_items = [] # 收集通过项
+
     # 0.1 Python 版本
     py_ver = sys.version_info
     if py_ver >= (3, 10):
         status["python_ok"] = True
-        ok(f"Python {py_ver.major}.{py_ver.minor}.{py_ver.micro} ✓")
+        ok_items.append(f"Python {py_ver.major}.{py_ver.minor}.{py_ver.micro}")
     else:
-        fail(f"Python {py_ver.major}.{py_ver.minor}，需要 3.10+")
+        issues.append(f"Python {py_ver.major}.{py_ver.minor}，需要 3.10+")
         return status
 
-    # 0.2 pip 可用
+    # 0.2 pip
     rc, _, _ = run([sys.executable, "-m", "pip", "--version"])
     status["pip_ok"] = rc == 0
     if status["pip_ok"]:
-        ok("pip 可用 ✓")
+        ok_items.append("pip")
     else:
-        fail("pip 不可用")
+        issues.append("pip 不可用")
 
-    # 0.3 .env 文件
+    # 0.3 .env
     status["env_exists"] = ENV_FILE.exists()
     if status["env_exists"]:
-        ok(f".env 已配置 ✓ ({ENV_FILE})")
-    else:
-        fail(f".env 不存在", f"cp .env.example .env  然后编辑配置你的 API Key")
+        ok_items.append(".env 已配置")
 
-    # 0.4 API Key 检查
+    # 0.4 API Key
     api_keys = [k for k in os.environ if "API_KEY" in k and os.environ[k].strip()
                 and "your_" not in os.environ[k].lower() and "example" not in os.environ[k].lower()]
     status["has_api_key"] = len(api_keys) > 0
     if status["has_api_key"]:
-        ok(f"已配置 {len(api_keys)} 个 API Key ✓")
-    else:
-        if status["env_exists"]:
-            fail("API Key 未配置（.env 中的值仍是占位符）")
-        logger.info("  → 至少配置一个: OPENAI_API_KEY 或 DEEPSEEK_API_KEY")
+        ok_items.append(f"{len(api_keys)} 个 API Key")
 
-    # 0.5 Ollama 安装
+    # 0.5 Ollama
     ollama_cmd = shutil.which("ollama")
     status["ollama_installed"] = ollama_cmd is not None
-    if status["ollama_installed"]:
-        ok(f"Ollama 已安装 ✓ ({ollama_cmd})")
-    else:
-        fail("Ollama 未安装", "https://ollama.com/download 下载安装")
-
-    # 0.6 Ollama 运行
     if status["ollama_installed"]:
         rc, _, _ = run(["ollama", "list"], timeout=5)
         status["ollama_running"] = rc == 0
         if status["ollama_running"]:
-            ok("Ollama 服务运行中 ✓")
+            ok_items.append("Ollama 运行中")
         else:
-            fail("Ollama 未运行", "ollama serve &")
+            issues.append("Ollama 未运行 → ollama serve &")
+    else:
+        issues.append("Ollama 未安装 → https://ollama.com/download")
 
-    # 0.7 Gemma 4 模型
+    # 0.6 模型状态（不报告为fail，Phase 1 处理）
     if status["ollama_running"]:
-        model = os.getenv("OLLAMA_MODEL", "gemma4:latest")
         rc, out, _ = run(["ollama", "list"], timeout=5)
-        status["model_available"] = model in out
+        # 检查是否有任何可用模型
+        status["model_available"] = bool(out.strip())
         if status["model_available"]:
-            ok(f"模型 {model} 已下载 ✓")
-        else:
-            fail(f"模型 {model} 未下载", f"ollama pull {model}")
+            installed = [line.split()[0] for line in out.strip().split('\n') if line.strip()]
+            ok_items.append(f"模型: {', '.join(installed[:3])}")
 
-    # 0.8 npm
+    # 0.7 npm
     npm_cmd = shutil.which("npm")
     status["npm_installed"] = npm_cmd is not None
     if status["npm_installed"]:
-        ok(f"npm 可用 ✓")
+        ok_items.append("npm")
     else:
-        fail("npm 未安装", "安装 Node.js 18+: https://nodejs.org")
+        issues.append("npm 未安装 → https://nodejs.org")
 
-    # 0.9 Electron 依赖
+    # 0.8 Electron 依赖
     status["electron_deps_ok"] = (ELECTRON_DIR / "node_modules" / "electron").exists()
     if status["electron_deps_ok"]:
-        ok("Electron 依赖已安装 ✓")
-    else:
-        fail("Electron 依赖未安装", "cd electron && npm install")
+        ok_items.append("Electron 依赖")
 
-    # 总结
-    critical = ["python_ok", "pip_ok", "npm_installed"]
-    optional = ["ollama_installed", "has_api_key"]  # 至少有一个就能跑
-    critical_ok = all(status[k] for k in critical)
-    can_run = critical_ok and (status["has_api_key"] or status["model_available"])
+    # 精简输出：一行OK + 问题列表
+    if ok_items:
+        ok(", ".join(ok_items))
+    if issues:
+        logger.warning("  ⚠ %d 个问题（不影响启动）:", len(issues))
+        for issue in issues:
+            logger.warning("     → %s", issue)
 
-    if can_run:
-        ok("环境检查通过，可以启动")
-    else:
-        fail("环境检查未通过，请修复上述问题后重试")
+    # 总结：只有核心项缺失才阻止启动
+    critical_ok = status["python_ok"] and status["pip_ok"] and status["npm_installed"]
+    can_run = critical_ok
+    if not can_run:
+        fail("核心依赖缺失，无法启动。请修复后重试。")
     status["ready"] = can_run
     return status
 
@@ -255,16 +374,26 @@ def phase1_ensure_dependencies(status: dict, args) -> bool:
         ok(".env 已创建，请编辑配置你的 API Key")
         logger.info("  → 编辑命令: nano .env 或 vim .env")
 
-    # 1.3 Ollama 模型
+    # 1.3 Ollama 模型 — 后台下载，不阻塞启动
     if status["ollama_installed"] and not status["model_available"]:
-        model = os.getenv("OLLAMA_MODEL", "gemma4:latest")
-        logger.info("  下载 %s ...（首次需要，约 2-5GB）", model)
-        rc, out, err = run(["ollama", "pull", model], timeout=600, capture=True)
-        if rc == 0:
-            ok(f"模型 {model} 下载完成 ✓")
-            status["model_available"] = True
+        # 选择模型
+        model = select_model_auto(args)
+        
+        # 交互式选择（首次启动且是TTY）
+        if not _load_model_choice() and sys.stdin.isatty() and not getattr(args, 'no_interactive', False):
+            model = select_model_interactive()
+            if model:
+                _save_model_choice(model)
+        
+        if not model or args.skip_model_download:
+            logger.info("  → 跳过模型下载（可用云端 API 或稍后 ollama pull）")
         else:
-            fail(f"模型下载失败: {err[:200]}")
+            info = AVAILABLE_MODELS.get(model, {})
+            logger.info("  → %s (%s)", info.get('name', model), info.get('size', '?'))
+            logger.info("  → 后台下载中，启动不受影响...")
+            _model_download_thread = download_model_background(model)
+            # 不等待下载完成，继续启动流程
+            status["model_available"] = True  # 标记为可用（启动后下载完即可用）
 
     # 1.4 Electron 依赖
     if not status["electron_deps_ok"]:
@@ -371,7 +500,29 @@ def main():
     parser.add_argument("--docker", action="store_true", help="Docker 模式")
     parser.add_argument("--debug", action="store_true", help="DEBUG 日志")
     parser.add_argument("--skip-check", action="store_true", help="跳过环境检查（快速启动）")
+    parser.add_argument("--model", choices=list(AVAILABLE_MODELS.keys()),
+                        default=os.getenv("OLLAMA_MODEL", DEFAULT_MODEL),
+                        help=f"选择本地模型 (默认: {DEFAULT_MODEL})")
+    parser.add_argument("--skip-model-download", action="store_true",
+                        help="跳过模型下载（使用云端 API 或稍后手动下载）")
+    parser.add_argument("--no-interactive", action="store_true",
+                        help="非交互模式（使用默认配置，不提示选择）")
+    parser.add_argument("--list-models", action="store_true",
+                        help="列出可用的本地模型并退出")
     args = parser.parse_args()
+
+    # --list-models: 列出模型并退出
+    if args.list_models:
+        print("\n  可用本地模型:\n")
+        for tag, info in AVAILABLE_MODELS.items():
+            rec = " ★ 推荐" if info["recommended"] else ""
+            print(f"  {tag:20s} — {info['name']:25s} {rec}")
+            print(f"  {'':20s}   {info['desc']}")
+            print(f"  {'':20s}   大小: {info['size']} | VRAM: {info['vram']}")
+            print()
+        print(f"  默认模型: {DEFAULT_MODEL}")
+        print(f"  设置环境变量: export OLLAMA_MODEL=<模型名>")
+        sys.exit(0)
 
     setup_logging(logging.DEBUG if args.debug else logging.INFO)
 
@@ -406,8 +557,11 @@ def main():
     # ═══════════════════════════════════════════════════════════════════
     print()
     print("  ╔═══════════════════════════════════════════════════════════╗")
+    chosen_model = select_model_auto(args)
+    model_info = AVAILABLE_MODELS.get(chosen_model, {})
+    model_display = model_info.get('name', chosen_model) if model_info else chosen_model
     print("  ║      UFO Galaxy 桌面原生 AI 助手 — 系统化启动器          ║")
-    print("  ║      本地模型: Google Gemma 4 E4B (128K 上下文)          ║")
+    print(f"  ║      本地模型: {model_display:43s} ║")
     print("  ╚═══════════════════════════════════════════════════════════╝")
     print()
 
