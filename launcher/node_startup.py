@@ -201,7 +201,13 @@ class NodeSystemLauncher:
         def _sort_key(name: str):
             cfg = self.node_configs.get(name, {})
             priority = cfg.get("priority", 99) if isinstance(cfg, dict) else 99
-            return (priority, name)
+            # PR-SORT-NUMERIC: extract node number for proper numeric ordering
+            # e.g., "Node_01" → 1, "Node_10" → 10 (avoids "Node_10" < "Node_2" in string sort)
+            try:
+                num = int(name.split("_")[-1])
+            except (ValueError, IndexError):
+                num = 999
+            return (priority, num)
 
         return sorted(eligible, key=_sort_key)
 
@@ -276,7 +282,12 @@ class NodeSystemLauncher:
         def _sort_key(name: str):
             cfg = self.node_configs.get(name, {})
             priority = cfg.get("priority", 99) if isinstance(cfg, dict) else 99
-            return (priority, name)
+            # PR-SORT-NUMERIC: extract node number for proper numeric ordering
+            try:
+                num = int(name.split("_")[-1])
+            except (ValueError, IndexError):
+                num = 999
+            return (priority, num)
 
         return sorted(result, key=_sort_key)
 

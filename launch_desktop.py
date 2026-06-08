@@ -491,34 +491,49 @@ def start_gateway_backend():
     env["PYTHONUNBUFFERED"] = "1"
     gateway_log = LOGS_DIR / "gateway.log"
     gateway_log.parent.mkdir(exist_ok=True)
-    # PR-FH: try/finally ensures handle closed even if Popen raises
+    # PR-FH: ensure handle closed even if Popen raises
     _gateway_stdout = open(gateway_log, "w", encoding="utf-8")
+    _proc = None
     try:
-        proc = subprocess.Popen(
+        _proc = subprocess.Popen(
             [sys.executable, str(PROJECT_ROOT / "main.py")],
             cwd=str(PROJECT_ROOT), env=env,
             stdout=_gateway_stdout, stderr=subprocess.STDOUT,
         )
-        proc._stdout_handle = _gateway_stdout
-        return proc
+        _proc._stdout_handle = _gateway_stdout
+        return _proc
     except Exception:
         _gateway_stdout.close()
+        if _proc is not None:
+            try:
+                _proc.kill()
+            except Exception:
+                pass
         raise
 
 
 def start_electron_frontend() -> subprocess.Popen:
     logger.info("  启动 Electron 桌面覆盖层...")
     node_modules = ELECTRON_DIR / "node_modules"
+    npm = shutil.which("npm")
+    if not npm:
+        raise RuntimeError("npm 未安装")
     if not node_modules.exists():
         logger.info("  → 首次运行，执行 npm install ...")
-        rc, _, err = run(["npm", "install"], cwd=ELECTRON_DIR, timeout=120)
+        rc, _, err = run([npm, "install"], cwd=ELECTRON_DIR, timeout=120)
         if rc != 0:
             raise RuntimeError(f"npm install 失败: {err[:200]}")
 
+    npx = shutil.which("npx") or npm
     env = os.environ.copy()
     env["ELECTRON_ENABLE_LOGGING"] = "1"
-    return subprocess.Popen(["npx", "electron", "."], cwd=str(ELECTRON_DIR), env=env,
-                            stdout=None, stderr=None)
+    env["PATH"] = str(Path(npm).parent) + os.pathsep + env.get("PATH", "")
+    # PR-WIN-ELECTRON: Windows needs DETACHED_PROCESS for clean Electron start
+    popen_kwargs = {}
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+    return subprocess.Popen([npx, "electron", "."], cwd=str(ELECTRON_DIR), env=env,
+                            stdout=None, stderr=None, **popen_kwargs)
 
 
 # ───────────────────────────────────────────────────────────────────────────
