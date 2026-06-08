@@ -29,8 +29,7 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from nodes.common.cors_config import get_cors_origins
-
+from nodes.common.cors_config import get_cors_origins, get_cors_methods, get_cors_headers
 from fastapi import APIRouter
 
 # APIRouter 供主网关 app.py 挂载（Phase 5 集成）
@@ -42,8 +41,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_methods=get_cors_methods(),
+    allow_headers=get_cors_headers()
 )
 
 # ============================================================================
@@ -156,6 +155,30 @@ memory_client = NodeClient(NODE_SERVICES["memory"])
 code_client = NodeClient(NODE_SERVICES["code"])
 debug_client = NodeClient(NODE_SERVICES["debug"])
 knowledge_client = NodeClient(NODE_SERVICES["knowledge"])
+
+# PR-ASYNC-CLIENT: register cleanup to prevent resource leaks on exit
+import atexit
+_all_clients = [memory_client, code_client, debug_client, knowledge_client]
+async def _close_all_clients():
+    for c in _all_clients:
+        try:
+            await c.client.aclose()
+        except Exception:
+            pass
+
+def _cleanup_clients_sync():
+    """Synchronous cleanup for atexit — best-effort close."""
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.ensure_future(_close_all_clients())
+        else:
+            loop.run_until_complete(_close_all_clients())
+    except Exception:
+        pass
+
+atexit.register(_cleanup_clients_sync)
 
 # ============================================================================
 # 自主学习引擎

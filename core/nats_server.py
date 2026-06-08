@@ -39,10 +39,11 @@ class EmbeddedNATSServer:
         # 启动
         try:
             # PR-NATS-ARGS: v2.10.x uses JetStream — remove legacy --max_memory_store/--max_file_store flags
+            # PR-NATS-PIPE: redirect stdout/stderr to DEVNULL to prevent pipe buffer deadlock
             self.process = subprocess.Popen(
                 ["nats-server", "--addr", self.host, "--port", str(self.port),
                  "--jetstream", "--store_dir", str(self.data_dir)],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
 
             # 等待启动

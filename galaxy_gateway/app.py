@@ -49,8 +49,7 @@ from typing import Any, Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from nodes.common.cors_config import get_cors_origins
-
+from nodes.common.cors_config import get_cors_origins, get_cors_methods, get_cors_headers
 # ── New sub-modules (extracted from this file) ──
 from galaxy_gateway.bootstrap.lifecycle import lifespan
 from galaxy_gateway.middleware import BearerAuthMiddleware  # re-exported for compat
@@ -105,8 +104,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=get_cors_methods(),
+    allow_headers=get_cors_headers(),
 )
 # Bearer token auth (no-op unless GALAXY_AUTH_ENABLED=true)
 app.add_middleware(BearerAuthMiddleware)
@@ -160,7 +159,7 @@ try:
     app.include_router(_gateway_v5_router, tags=["gateway-v5"])
     logger.info("Gateway v5.0 routes mounted")
 except Exception as _gw5_err:
-    logger.error("Gateway v5.0 routes FAILED to mount: %s", _gw5_err, exc_info=True)  # H6 fixed
+    logger.warning("Gateway v5.0 routes not mounted (optional): %s", _gw5_err)  # PR-LOG-LEVEL: optional component → warning not error
 
 try:
     from .api.config import router as _client_config_router

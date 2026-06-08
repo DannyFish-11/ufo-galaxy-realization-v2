@@ -1062,10 +1062,12 @@ def _start_electron_gui():
 def main():
     """主函数"""
     print_banner()  # Galaxy ASCII banner at the top
-    try:
-        uvloop.install()
-    except Exception:
-        pass
+    # PR-UVLOOP-WIN: uvloop is Linux/macOS only — skip on Windows to avoid startup delay
+    if sys.platform != "win32":
+        try:
+            uvloop.install()
+        except Exception:
+            pass
     if not ensure_entrypoint_role(UNIFIED_LAUNCHER_ENTRY_ID, EntrypointRole.SUB_ENTRY):
         logger.error(
             "Entrypoint role contract violation: unified_launcher does not have SUB_ENTRY role."
