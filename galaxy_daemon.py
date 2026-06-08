@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+# PR-WIN-ENCODING: Defensive UTF-8 re-config for standalone launch on Windows.
+import sys
+if sys.platform == "win32":
+    try:
+        import io, os
+        if hasattr(sys.stdout, "buffer"):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+        os.environ["PYTHONIOENCODING"] = "utf-8:replace"
+    except Exception:
+        pass
 """
 Galaxy Daemon — Crash-Restart Wrapper
 ======================================
@@ -29,16 +40,19 @@ def setup_logging() -> logging.Logger:
                 f.unlink()
             except OSError:
                 pass
-    log_file = LOG_DIR / f"galaxy_{datetime.now():%Y%m%d}.log"
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S",
-        handlers=[
-            logging.FileHandler(log_file, encoding="utf-8"),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
+    # SECURITY: Only configure logging if no root handlers exist yet.
+    # Prevents duplicate log entries when multiple entry points are imported.
+    if not logging.getLogger().handlers:
+        log_file = LOG_DIR / f"galaxy_{datetime.now():%Y%m%d}.log"
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%H:%M:%S",
+            handlers=[
+                logging.FileHandler(log_file, encoding="utf-8"),
+                logging.StreamHandler(sys.stdout),
+            ],
+        )
     return logging.getLogger("Galaxy.Daemon")
 
 
@@ -148,4 +162,6 @@ class GalaxyDaemon:
 
             if not self._should_restart():
                 self._notify(
-                    f"Galaxy 连续重启超过 {MAX_RES
+                    f"Galaxy 连续重启超过 {MAX_RESTARTS_PER_HOUR} 次限制，停止重启。"
+                )
+                return 1

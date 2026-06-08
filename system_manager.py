@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+# PR-WIN-ENCODING: Defensive UTF-8 re-config for standalone launch on Windows.
+import sys
+if sys.platform == "win32":
+    try:
+        import io, os
+        if hasattr(sys.stdout, "buffer"):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+        os.environ["PYTHONIOENCODING"] = "utf-8:replace"
+    except Exception:
+        pass
 """
 Galaxy 系统管理器 v2.0 (修复版)
 =================================
@@ -367,15 +378,33 @@ class SystemManager:
             print(f"{YELLOW}⚠️  能力注册失败 {config.name}: {e}{RESET}")
     
     async def check_node_health(self, config: NodeConfig, timeout: int = 5) -> bool:
-        """检查节点健康状态"""
+        """检查节点健康状态
+
+        SECURITY: 若配置了 HEALTH_CHECK_TOKEN 环境变量，会在请求头中
+        携带 X-Health-Token 进行认证。被检查节点可选择性验证此 token。
+        """
         url = f"http://localhost:{config.port}{config.health_check_path}"
-        
+
+        # 构建请求头：若配置了健康检查 token，则携带认证头
+        headers = {}
+        health_token = os.environ.get("HEALTH_CHECK_TOKEN", "").strip()
+        if health_token:
+            headers["X-Health-Token"] = health_token
+
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.get(url)
+                response = await client.get(url, headers=headers)
                 response.raise_for_status()
                 self.node_status[config.id] = "healthy"
                 return True
+        except httpx.HTTPStatusError as exc:
+            # 401/403 表示认证失败 — 记录但不视为节点不健康
+            if exc.response.status_code in (401, 403):
+                logger.warning(
+                    "Health check auth failed for %s (port %d): %s",
+                    config.name, config.port, exc.response.status_code,
+                )
+            return False
         except Exception:
             return False
     

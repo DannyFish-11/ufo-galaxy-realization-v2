@@ -404,14 +404,16 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         # Method 2: get-pip.py
         if not pip_fixed:
             try:
+                import tempfile
+                get_pip_tmp = os.path.join(tempfile.gettempdir(), "get-pip.py")
                 rc = sp.run([
                     sys.executable, "-c",
-                    "import urllib.request; "
-                    "urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', '/tmp/get-pip.py')",
+                    f"import urllib.request; "
+                    f"urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', r'{get_pip_tmp}')",
                 ], capture_output=True, text=True, timeout=30).returncode
                 if rc == 0:
                     rc2 = sp.run(
-                        [sys.executable, "/tmp/get-pip.py"],
+                        [sys.executable, get_pip_tmp],
                         capture_output=True, text=True, timeout=60,
                     ).returncode
                     if rc2 == 0:

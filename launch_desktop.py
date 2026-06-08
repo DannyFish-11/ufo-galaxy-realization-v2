@@ -1,4 +1,20 @@
 #!/usr/bin/env python3
+# PR-WIN-ENCODING: Force UTF-8 on Windows for CJK console output.
+import sys
+if sys.platform == "win32":
+    try:
+        import io
+        if hasattr(sys.stdout, "buffer"):
+            sys.stdout = io.TextIOWrapper(
+                sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True
+            )
+            sys.stderr = io.TextIOWrapper(
+                sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True
+            )
+        import os
+        os.environ["PYTHONIOENCODING"] = "utf-8:replace"
+    except Exception:
+        pass
 """
 UFO Galaxy — 系统化完整启动器 (Systematic Launcher)
 ====================================================
@@ -211,6 +227,9 @@ def _save_model_choice(model: str):
 
 def download_model_background(model: str):
     """后台线程下载模型，不阻塞启动流程。"""
+    if not model or model.strip() == "":
+        logger.debug("[模型下载] 空模型名，跳过下载")
+        return None
     def _download():
         logger.info("[模型下载] 开始在后台下载 %s ...", model)
         logger.info("[模型下载] 大小约 %s，可能需要几分钟", AVAILABLE_MODELS.get(model, {}).get("size", "未知"))
@@ -444,6 +463,13 @@ def kill_proc(proc, name, timeout=5.0):
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
+    finally:
+        # 关闭日志文件句柄
+        if hasattr(proc, '_stdout_handle'):
+            try:
+                proc._stdout_handle.close()
+            except Exception:
+                pass
 
 
 def _signal_handler(signum, frame):
@@ -465,12 +491,16 @@ def start_gateway_backend():
     env["PYTHONUNBUFFERED"] = "1"
     gateway_log = LOGS_DIR / "gateway.log"
     gateway_log.parent.mkdir(exist_ok=True)
-    stdout = open(gateway_log, "w", encoding="utf-8")
-    return subprocess.Popen(
+    # 使用上下文管理器确保文件句柄正确关闭
+    _gateway_stdout = open(gateway_log, "w", encoding="utf-8")
+    proc = subprocess.Popen(
         [sys.executable, str(PROJECT_ROOT / "main.py")],
         cwd=str(PROJECT_ROOT), env=env,
-        stdout=stdout, stderr=subprocess.STDOUT,
+        stdout=_gateway_stdout, stderr=subprocess.STDOUT,
     )
+    # 将句柄附加到进程对象以便退出时关闭
+    proc._stdout_handle = _gateway_stdout
+    return proc
 
 
 def start_electron_frontend() -> subprocess.Popen:

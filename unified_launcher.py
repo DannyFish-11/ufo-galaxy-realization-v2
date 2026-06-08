@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# PR-WIN-ENCODING: Inherit UTF-8 from main.py; defensive re-config if run standalone.
+import sys
+if sys.platform == "win32":
+    try:
+        import io
+        if hasattr(sys.stdout, "buffer"):
+            sys.stdout = io.TextIOWrapper(
+                sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True
+            )
+            sys.stderr = io.TextIOWrapper(
+                sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True
+            )
+        import os
+        os.environ["PYTHONIOENCODING"] = "utf-8:replace"
+    except Exception:
+        pass
 """
 Galaxy - 统一启动器 (Subordinate Launcher Component — PR-2)
 ===========================================================
@@ -1008,16 +1024,26 @@ def _start_electron_gui():
         except (OSError, ValueError):
             os.remove(pid_file)  # stale lock
 
+    # PR-ABSOLUTE-PATH: use shutil.which to find npm — works even when not in PATH
+    import shutil
+    npm_path = shutil.which("npm")
+    if not npm_path:
+        print("[Launcher] npm not found — skip Electron")
+        return
     try:
         env = os.environ.copy()
         env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
+        # Windows: use CREATE_NEW_PROCESS_GROUP for detached Electron
+        popen_kwargs = {}
+        if sys.platform == "win32":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
         proc = subprocess.Popen(
-            ["npm", "start"],
+            [npm_path, "start"],
             cwd=electron_dir,
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_task=True if sys.platform != "win32" else False,
+            **popen_kwargs,
         )
         with open(pid_file, "w") as f:
             f.write(str(proc.pid))
