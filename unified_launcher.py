@@ -621,12 +621,16 @@ class GalaxyUnified:
                     return False
             except Exception:
                 return False
-        # Start Electron
+        # Start Electron — PR-ABSOLUTE-PATH: use absolute paths on Windows
         try:
+            npx = shutil.which("npx") or npm
+            env = os.environ.copy()
+            env["PATH"] = str(Path(npm).parent) + os.pathsep + env.get("PATH", "")
             self.electron_proc = sp.Popen(
-                ["npx", "electron", "."],
+                [npx, "electron", "."],
                 cwd=str(electron_dir),
                 stdout=sp.DEVNULL, stderr=sp.DEVNULL,
+                env=env,
             )
             return True
         except Exception as exc:
@@ -789,7 +793,7 @@ class GalaxyUnified:
         # ── Ready ──
         print()
         print(f"{Colors.GREEN}{'═' * 60}{Colors.ENDC}")
-        print(f"{Colors.GREEN}  🚀 系统就绪{Colors.ENDC}  {Colors.WHITE}Galaxy L4 v2.3.21{Colors.ENDC}")
+        print(f"{Colors.GREEN}  🚀 系统就绪{Colors.ENDC}  {Colors.BOLD}Galaxy L4 v2.3.21{Colors.ENDC}")
         print(f"{Colors.GREEN}{'═' * 60}{Colors.ENDC}")
         print()
         print(f"  {Colors.CYAN}API 服务:{Colors.ENDC}     http://localhost:{self.config.web_ui_port}")
