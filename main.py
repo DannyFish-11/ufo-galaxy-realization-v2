@@ -10,11 +10,13 @@ if sys.platform == "win32":
     except Exception:
         pass
     # Force logging StreamHandler to use UTF-8 as well
+    # CRITICAL: must reconfigure BOTH stdout AND stderr — logging uses stderr by default
     try:
         import io
-        # Wrap stdout in a UTF-8 TextIOWrapper to ensure logging picks it up
         if hasattr(sys.stdout, "buffer"):
             sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+        if hasattr(sys.stderr, "buffer"):
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
     except Exception:
         pass
     # Also set environment variable for subprocesses
@@ -84,7 +86,11 @@ _PHASE_WIDTH = 60
 def print_phase(title: str) -> None:
     """Print a Phase section title with separators."""
     print_section_header(title)
-    logger.info("[Phase] %s", title)  # L2 fixed: mirror to logger
+    # PR-WIN-ENCODING: logger may still use cp1252 even after SafeStreamHandler
+    try:
+        logger.info("[Phase] %s", title)
+    except UnicodeEncodeError:
+        pass
 
 
 def print_item(name: str, status: str = "ok", detail: str = "") -> None:
@@ -114,8 +120,11 @@ def print_item(name: str, status: str = "ok", detail: str = "") -> None:
             print(clean.encode("cp1252", errors="replace").decode("cp1252"))
         except Exception:
             pass
-    # L2 fixed: mirror status items to logger (without ANSI codes)
-    logger.info("[%s] %s %s", status.upper(), name, detail)
+    # PR-WIN-ENCODING: wrap logger to suppress cp1252 UnicodeEncodeError
+    try:
+        logger.info("[%s] %s %s", status.upper(), name, detail)
+    except UnicodeEncodeError:
+        pass
 
 
 from entrypoint_role_contract import (
@@ -169,6 +178,18 @@ class SafeStreamHandler(logging.StreamHandler):
                 line_buffering=True,
             )
 
+    def emit(self, record):
+        """Override emit to catch UnicodeEncodeError on Windows."""
+        try:
+            super().emit(record)
+        except UnicodeEncodeError:
+            # Fallback: encode message with replace, then write bytes
+            try:
+                msg = self.format(record) + self.terminator
+                self.stream.buffer.write(msg.encode("utf-8", errors="replace"))
+            except Exception:
+                pass
+
 
 # PR-D6: Log rotation (10MB per file, keep 5 backups)
 log_dir = PROJECT_ROOT / "logs"
@@ -179,7 +200,8 @@ log_dir.mkdir(exist_ok=True)
 # call basicConfig; repeated calls are no-ops after the first.
 if not logging.getLogger().handlers:
     handler = RotatingFileHandler(
-        str(log_dir / "galaxy.log"), maxBytes=10 * 1024 * 1024, backupCount=5
+        str(log_dir / "galaxy.log"), maxBytes=10 * 1024 * 1024, backupCount=5,
+        encoding="utf-8",
     )
     logging.basicConfig(
         level=logging.INFO,
