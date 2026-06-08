@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import asyncio  # PR-FIX: required for asyncio.CancelledError reference on line 72
 import logging
 import os
 import sys

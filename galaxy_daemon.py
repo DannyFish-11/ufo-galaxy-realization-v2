@@ -16,6 +16,7 @@ Galaxy Daemon — Crash-Restart Wrapper
 Pure wrapper around main.py. Does NOT modify env vars or skip phases.
 """
 
+import asyncio
 import logging
 import os
 import subprocess
@@ -60,6 +61,7 @@ class GalaxyDaemon:
     def __init__(self):
         self.logger = setup_logging()
         self.process = None
+        self.restart_count = 0
         # M1 fixed: track restart timestamps in a list for accurate rate limiting
         self._restart_timestamps: list = []
         self._notifier = None  # lazy init
