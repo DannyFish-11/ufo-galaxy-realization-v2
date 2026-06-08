@@ -579,8 +579,13 @@ def main():
     if args.backend:
         logger.info("正在启动 Gateway（委托 main.py）...")
         _proc_gateway = start_gateway_backend()
-        returncode, _, _ = _proc_gateway
-        sys.exit(returncode)
+        # PR-POPEN-FIX: start_gateway_backend() returns a Popen object, not a tuple
+        try:
+            _proc_gateway.wait()
+            sys.exit(_proc_gateway.returncode if _proc_gateway.returncode is not None else 0)
+        except KeyboardInterrupt:
+            kill_proc(_proc_gateway, "Gateway")
+            sys.exit(0)
 
     # ═══════════════════════════════════════════════════════════════════
     # 完整模式：系统化一体化启动

@@ -52,7 +52,9 @@ NOTE — Device WebSocket ingress authority:
 import asyncio
 import base64
 import binascii
+import json
 import logging
+import os
 import time
 
 _startup_time = time.time()

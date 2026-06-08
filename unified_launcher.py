@@ -608,11 +608,14 @@ class GalaxyUnified:
         if not electron_dir.exists():
             logger.warning("electron/ directory not found")
             return False
+        # PR-NPM-FIX: npm must be resolved BEFORE the if block so it's always available
+        npm = shutil.which("npm")
+        if not npm:
+            logger.warning("npm not found in PATH")
+            return False
         # Ensure npm deps
         if not (electron_dir / "node_modules").exists():
-            npm = shutil.which("npm")
-            if not npm:
-                return False
+            print_status_row("正在安装 Electron 依赖...", True)
             print_status_row("正在安装 Electron 依赖...", True)
             try:
                 rc = sp.run([npm, "install"], cwd=str(electron_dir),
