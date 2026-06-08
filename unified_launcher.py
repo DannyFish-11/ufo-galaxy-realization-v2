@@ -709,23 +709,23 @@ class GalaxyUnified:
             await self.start_nats()
             nats_host = os.environ.get("GALAXY_NATS_HOST", "localhost")
             nats_port = os.environ.get("GALAXY_NATS_PORT", "4222")
-            print_status_row("NATS Bus", True, detail=f"nats://{nats_host}:{nats_port}")
+            print_status_row(f"NATS Bus (nats://{nats_host}:{nats_port})", True)
         except Exception as exc:
-            print_status_row("NATS", False, detail=str(exc))
+            print_status_row(f"NATS — {exc}", False)
         try:
             await self.start_tailscale()
             print_status_row("Tailscale", True)
         except Exception:
-            print_status_row("Tailscale", False, detail="未安装 (LAN直连模式)")
+            print_status_row("Tailscale — 未安装 (LAN直连模式)", False)
 
         # ── Phase 5: AI 大脑 ──
         print_section_header("[Phase 5] AI 大脑")
         try:
             await self.start_local_brain()
             print_status_row("Ollama 服务", True)
-            print_status_row("本地模型", True, detail="gemma4:latest | phi4:latest")
-            print_status_row("GPU 加速", True, detail="NVIDIA RTX 4090 | VRAM: 2048/24576 MB")
-            print_status_row("MasterBrain", True, detail="高级推理模块已激活")
+            print_status_row("本地模型 — gemma4:latest | phi4:latest", True)
+            print_status_row("GPU 加速 — NVIDIA RTX 4090 | VRAM: 2048/24576 MB", True)
+            print_status_row("MasterBrain — 高级推理模块已激活", True)
         except Exception as exc:
             print_status_row("AI 大脑启动失败", False)
             logger.error(f"Local brain: {exc}")
@@ -738,8 +738,8 @@ class GalaxyUnified:
             result = await nl.start_all()
             core_count = len(result.get("core", []))
             ext_count = len(result.get("extended", []))
-            print_status_row("核心节点", True, detail=f"{core_count}/13 全部启动")
-            print_status_row("扩展节点", True, detail=f"{ext_count}/117 全部启动")
+            print_status_row(f"核心节点 — {core_count}/13 全部启动", True)
+            print_status_row(f"扩展节点 — {ext_count}/117 全部启动", True)
         except Exception as exc:
             print_status_row("节点系统启动失败", False)
             logger.error(f"Node system: {exc}")
@@ -766,11 +766,11 @@ class GalaxyUnified:
         print_section_header("[Phase 8] API 网关")
         try:
             await self.launch_web_ui()
-            print_status_row("FastAPI + Uvicorn", True, detail=f"http://{self.config.host}:{self.config.web_ui_port}")
-            print_status_row("WebSocket 服务", True, detail=f"ws://localhost:{self.config.web_ui_port}/ws")
-            print_status_row("API 文档", True, detail=f"http://localhost:{self.config.web_ui_port}/docs")
-            print_status_row("健康检查", True, detail="/health")
-            print_status_row("状态面板", True, detail=f"http://localhost:{self.config.web_ui_port}/api/v1/projection/operability-contract")
+            print_status_row(f"FastAPI + Uvicorn — http://{self.config.host}:{self.config.web_ui_port}", True)
+            print_status_row(f"WebSocket 服务 — ws://localhost:{self.config.web_ui_port}/ws", True)
+            print_status_row(f"API 文档 — http://localhost:{self.config.web_ui_port}/docs", True)
+            print_status_row("健康检查 — /health", True)
+            print_status_row(f"状态面板 — http://localhost:{self.config.web_ui_port}/api/v1/projection/operability-contract", True)
         except Exception as exc:
             print_status_row("API 网关启动失败", False)
             logger.error(f"API gateway: {exc}")
@@ -779,12 +779,12 @@ class GalaxyUnified:
         print_section_header("[Phase 9] 桌面前端")
         electron_ok = await self.start_electron()
         if electron_ok:
-            print_status_row("Electron", True, detail="v28.2.0")
-            print_status_row("Three.js 3D 覆盖层", True, detail="就绪")
-            print_status_row("三态 UI", True, detail="Active / Standby / Dormant")
-            print_status_row("快捷键", True, detail="Ctrl+Space 唤醒 / Ctrl+H 隐藏")
+            print_status_row("Electron — v28.2.0", True)
+            print_status_row("Three.js 3D 覆盖层 — 就绪", True)
+            print_status_row("三态 UI — Active / Standby / Dormant", True)
+            print_status_row("快捷键 — Ctrl+Space 唤醒 / Ctrl+H 隐藏", True)
         else:
-            print_status_row("Electron", False, detail="npm install 失败或缺失")
+            print_status_row("Electron — npm install 失败或缺失", False)
 
         # ── Ready ──
         print()
