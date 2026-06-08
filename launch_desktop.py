@@ -491,16 +491,19 @@ def start_gateway_backend():
     env["PYTHONUNBUFFERED"] = "1"
     gateway_log = LOGS_DIR / "gateway.log"
     gateway_log.parent.mkdir(exist_ok=True)
-    # 使用上下文管理器确保文件句柄正确关闭
+    # PR-FH: try/finally ensures handle closed even if Popen raises
     _gateway_stdout = open(gateway_log, "w", encoding="utf-8")
-    proc = subprocess.Popen(
-        [sys.executable, str(PROJECT_ROOT / "main.py")],
-        cwd=str(PROJECT_ROOT), env=env,
-        stdout=_gateway_stdout, stderr=subprocess.STDOUT,
-    )
-    # 将句柄附加到进程对象以便退出时关闭
-    proc._stdout_handle = _gateway_stdout
-    return proc
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, str(PROJECT_ROOT / "main.py")],
+            cwd=str(PROJECT_ROOT), env=env,
+            stdout=_gateway_stdout, stderr=subprocess.STDOUT,
+        )
+        proc._stdout_handle = _gateway_stdout
+        return proc
+    except Exception:
+        _gateway_stdout.close()
+        raise
 
 
 def start_electron_frontend() -> subprocess.Popen:

@@ -406,7 +406,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
             tcp_adapter = aip_transport.get_adapter("tcp")
             if tcp_adapter:
                 await tcp_adapter.start_server()
-                tcp_adapter.register_local_service(device_id)
+                tcp_adapter.register_local_service("local")
         except Exception as _tcp_err:
             logger.debug("TCP P2P server start failed (non-fatal): %s", _tcp_err)
 

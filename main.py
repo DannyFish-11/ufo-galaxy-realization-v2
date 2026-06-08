@@ -463,7 +463,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     for mod_name, pip_name in core_modules.items():
         try:
             __import__(mod_name)
-        except BaseException:
+        except Exception:
             core_deps_missing.append(pip_name)
 
     if not core_deps_missing:
@@ -606,7 +606,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     for mod_name, pip_name in voice_deps.items():
         try:
             __import__(mod_name)
-        except BaseException:
+        except Exception:
             voice_missing.append(pip_name)
 
     if not voice_missing:
@@ -630,7 +630,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     try:
         __import__("pyaudio")
         print_item("PyAudio", "ok")
-    except BaseException:
+    except Exception:
         print_item("PyAudio 未安装", "warn")
         print_item("正在自动安装 PyAudio...", "ok")
         try:
