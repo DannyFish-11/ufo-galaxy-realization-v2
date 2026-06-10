@@ -696,13 +696,16 @@ def main() -> int:
     from unified_launcher import GalaxyUnified
 
     lumiv = GalaxyUnified()
-        # ── Galaxy WebSocket Bridge — 桌面覆盖层事件推送 ──
+        # ── DesktopPresenceAdapter — AIP Transport 桌面覆盖层通道 ──
+        # PR-AIP-INTEGRATION: 整合到 AIP Transport 体系，transport_type="desktop_presence"
         try:
-            from core.lumiv_websocket_bridge import GalaxyWebSocketBridge
-            _ws_bridge = GalaxyWebSocketBridge.get_instance()
-            asyncio.create_task(_ws_bridge.start())
+            from core.adapters.desktop_presence_adapter import DesktopPresenceAdapter
+            from core.aip_transport import get_aip_transport
+            _dp_adapter = DesktopPresenceAdapter()
+            get_aip_transport().register_adapter(_dp_adapter)
+            asyncio.create_task(_dp_adapter.start())
         except Exception as _exc:
-            logger.debug("GalaxyWebSocketBridge init skipped (non-fatal): %s", _exc)
+            logger.debug("DesktopPresenceAdapter init skipped (non-fatal): %s", _exc)
 
     try:
         asyncio.run(lumiv.start())
