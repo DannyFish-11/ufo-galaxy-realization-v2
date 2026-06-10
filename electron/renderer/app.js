@@ -1,558 +1,303 @@
 /**
- * app.js
- * Galaxy V2 Desktop Presence — 三态状态机主控制器
+ * Lumiv Desktop — 渲染进程主逻辑
  *
- * 三态：SILENT (WebGL Shader) / LIMINAL (CSS 3D) / MANIFEST (极简)
+ * 核心职责：
+ * 1. 后端状态管理（接收或模拟）
+ * 2. Spring 物理（自适应速度）
+ * 3. WebGL 渲染循环 + Uniform 更新
+ * 4. 灵动岛控制
+ * 5. 三态权重计算
  *
- * v18: Liminal改为纯CSS 3D，不再依赖Three.js
- *      Silent保持WebGL Shader不变
- *
- * WebSocket: ws://localhost:9000/ws/desktop-presence
+ * 流转逻辑（与 Canvas 2D 版本 1:1 一致）：
+ * - depth 0.0→0.30: Silent 边缘光环
+ * - depth 0.15→0.95: Liminal 透视空间
+ * - depth 0.90+: Manifest 透明，AI 执行操作
  */
 
-// ============================================
-// 阶段枚举
-// ============================================
-const Phase = {
-    SILENT: 'silent',
-    LIMINAL: 'liminal',
-    MANIFEST: 'manifest'
-};
+class LumivApp {
+  constructor() {
+    // DOM
+    this.canvas = document.getElementById('overlay');
+    this.depthEl = document.getElementById('depth');
 
-// ============================================
-// 三态管理器
-// ============================================
-class ThreeStateManager {
-    constructor() {
-        this.currentPhase = Phase.SILENT;
-        this.previousPhase = null;
-        this.isTransitioning = false;
-        this.queuedTransition = null;
+    // WebGL
+    this.webgl = null;
 
-        // 各态实例
-        this.silentState = null;
-        this.liminalState = null;
-        this.manifestState = null;
+    // 灵动岛
+    this.island = null;
 
-        // WebSocket
-        this.ws = null;
-        this.wsReconnectBaseInterval = 1000;   // 初始重连间隔 1秒
-        this.wsReconnectMaxInterval = 30000;   // 最大重连间隔 30秒
-        this.wsReconnectAttempts = 0;          // 重连次数（指数退避）
-        this.wsReconnectTimer = null;
-        this.wsUrl = 'ws://localhost:9000/ws/desktop-presence';
+    // 桥接
+    this.bridge = null;
 
-        // UI 元素引用
-        this.wsStatusEl = document.getElementById('ws-status');
-        this.wsStatusTextEl = document.getElementById('ws-status-text');
+    // ── 渲染状态（由后端数据驱动） ──
+    this.currentDepth = 0.0;
+    this.targetDepth = 0.0;
+    this.springV = 0;
+    this.time = 0;
 
-        this.init();
+    // ── 后端状态 ──
+    this.backendState = {
+      phase: 'silent',
+      intent: 0.0,
+      speaking: false,
+      activeTask: null,
+      taskProgress: 0,
+    };
+
+    // 状态计时器
+    this.stateTimer = 0;
+
+    // 渲染循环
+    this.lastTime = 0;
+    this.rafId = null;
+    this.running = false;
+
+    // 开发模式
+    this.isDev = false;
+  }
+
+  // ── 初始化 ──────────────────────────────────────
+
+  async init() {
+    // 自适应 DPI
+    this._setupDPI();
+
+    // 初始化 WebGL
+    try {
+      this.webgl = new WebGLContext(this.canvas);
+      await this.webgl.init();
+      console.log('[Lumiv] WebGL initialized');
+    } catch (e) {
+      console.error('[Lumiv] WebGL init failed:', e);
+      // 降级到 Canvas 2D（理论上不会发生，因为 Electron 内置 Chromium 支持 WebGL 2.0）
+      alert('WebGL 2.0 not supported');
+      return;
     }
 
-    // ============================================
-    // 初始化
-    // ============================================
-    init() {
-        console.log('[ThreeStateManager] 初始化 Galaxy V2 三态系统 v18...');
+    // 初始化灵动岛
+    this.island = new IslandController();
 
-        // 初始化各态
-        this.silentState = new SilentState({ element: document.getElementById('sLayer') });
-        // v18: LiminalState不再传threeContainer，纯CSS方案
-        this.liminalState = new LiminalState({ element: document.getElementById('lLayer') });
-        this.manifestState = new ManifestState({ element: document.getElementById('mLayer') });
+    // 初始化后端桥接
+    this.bridge = new BackendBridge(
+      (state) => this._onBackendState(state),
+      (status) => this._onBackendStatus(status)
+    );
+    this.bridge.connect();
 
-        // 监听窗口变化
-        window.addEventListener('resize', () => this.onWindowResize());
+    // 监听 IPC 事件
+    this._setupIPC();
 
-        // 连接 WebSocket
-        this.connectWebSocket();
+    // 监听 resize
+    window.addEventListener('resize', () => this._onResize());
 
-        // 进入初始态（Silent）
-        this.enterState(Phase.SILENT);
+    // 启动渲染循环
+    this.running = true;
+    this.lastTime = performance.now();
+    this.rafId = requestAnimationFrame((t) => this._renderLoop(t));
 
-        console.log('[ThreeStateManager] 初始化完成，当前阶段:', this.currentPhase);
+    console.log('[Lumiv] App initialized');
+  }
+
+  // ── DPI 自适应 ──────────────────────────────────
+
+  _setupDPI() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.canvas.width = Math.round(w * dpr);
+    this.canvas.height = Math.round(h * dpr);
+    this.canvas.style.width = w + 'px';
+    this.canvas.style.height = h + 'px';
+  }
+
+  _onResize() {
+    this._setupDPI();
+    if (this.webgl) {
+      this.webgl.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    }
+  }
+
+  // ── IPC 监听 ────────────────────────────────────
+
+  _setupIPC() {
+    // 显示器变化
+    if (window.lumivAPI?.onDisplayChanged) {
+      window.lumivAPI.onDisplayChanged((info) => {
+        this.canvas.width = Math.round(info.width * info.scaleFactor);
+        this.canvas.height = Math.round(info.height * info.scaleFactor);
+      });
     }
 
-    /** 显示错误信息 */
-    // P20 修复：添加唯一 ID，防止重复创建错误元素
-    _showError(message) {
-        const existing = document.getElementById('app-error-display');
-        if (existing) existing.remove();
-
-        const el = document.createElement('div');
-        el.id = 'app-error-display';
-        el.style.cssText = `
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: rgba(255, 80, 80, 0.8); font-family: monospace; font-size: 14px;
-            background: rgba(0, 0, 0, 0.6); padding: 20px; border-radius: 4px;
-            z-index: 9999; letter-spacing: 2px; text-align: center;
-        `;
-        el.textContent = `[ERROR] ${message}`;
-        document.body.appendChild(el);
+    // 开发调试
+    if (window.lumivAPI?.onDevTogglePhase) {
+      window.lumivAPI.onDevTogglePhase(() => {
+        this._devTogglePhase();
+      });
     }
 
-    /** 窗口大小变化 — 通知各态 */
-    // P32 修复：通知所有态，即使当前是纯CSS也可能需要动态调整
-    onWindowResize() {
-        if (this.silentState) this.silentState.onResize();
-        if (this.liminalState) this.liminalState.onResize();
-        if (this.manifestState) this.manifestState.onResize();
+    // 后端状态推送（备用通道）
+    if (window.lumivAPI?.onBackendState) {
+      window.lumivAPI.onBackendState((state) => this._onBackendState(state));
     }
 
-    // ============================================
-    // 状态管理
-    // ============================================
+    // 后端连接状态
+    if (window.lumivAPI?.onBackendStatus) {
+      window.lumivAPI.onBackendStatus((status) => this._onBackendStatus(status));
+    }
+  }
 
-    /**
-     * 进入指定状态
-     */
-    enterState(phase, data = {}) {
-        if (this.isTransitioning) {
-            console.log('[ThreeStateManager] 转换进行中，排队:', phase);
-            this.queuedTransition = { phase, data };
-            return;
+  // ── 后端状态处理 ────────────────────────────────
+
+  _onBackendState(state) {
+    // 直接更新后端状态
+    if (state.phase !== undefined) this.backendState.phase = state.phase;
+    if (state.intent !== undefined) this.backendState.intent = state.intent;
+    if (state.speaking !== undefined) this.backendState.speaking = state.speaking;
+    if (state.activeTask !== undefined) this.backendState.activeTask = state.activeTask;
+    if (state.taskProgress !== undefined) this.backendState.taskProgress = state.taskProgress;
+  }
+
+  _onBackendStatus(status) {
+    if (status.connected) {
+      this.bridge.simulateMode = false;
+    } else {
+      this.bridge.enableSimulation();
+    }
+  }
+
+  // ── Spring 物理（与 Canvas 2D 版本 1:1） ───────
+
+  _springUpdate(dt) {
+    const intentBoost = 1.0 + this.backendState.intent * 1.5;
+    const tension = this.currentDepth < this.targetDepth ? 50 * intentBoost : 70;
+    const friction = 14;
+    const force = -tension * (this.currentDepth - this.targetDepth);
+    const damping = -friction * this.springV;
+    this.springV += (force + damping) * dt;
+    this.currentDepth += this.springV * dt;
+    this.currentDepth = Math.max(0, Math.min(1, this.currentDepth));
+  }
+
+  // ── 模拟后端 AI（降级模式，与 Canvas 2D 版本 1:1） ──
+
+  _simulateBackendAI(dt) {
+    this.stateTimer += dt;
+
+    switch (this.backendState.phase) {
+      case 'silent':
+        if (this.stateTimer > 3 + Math.sin(this.time * 0.3) * 2) {
+          this.backendState.phase = 'liminal';
+          this.backendState.intent = 0.1;
+          this.stateTimer = 0;
         }
+        break;
 
-        if (!Object.values(Phase).includes(phase)) {
-            console.warn('[ThreeStateManager] 无效阶段:', phase);
-            return;
+      case 'liminal':
+        if (this.backendState.intent < 0.9) {
+          this.backendState.intent += dt * 0.25;
         }
-
-        const isValid = this.isValidTransition(this.currentPhase, phase);
-        if (!isValid && !data.force) {
-            console.warn(`[ThreeStateManager] 无效转换: ${this.currentPhase} -> ${phase}`);
-            return;
+        this.backendState.speaking = Math.sin(this.time * 2.5) > 0.2;
+        if (this.backendState.intent >= 0.85 && this.stateTimer > 4) {
+          this.backendState.phase = 'manifest';
+          this.backendState.activeTask = '整理桌面文件';
+          this.backendState.taskProgress = 0;
+          this.backendState.intent = 1.0;
+          this.stateTimer = 0;
         }
+        break;
 
-        this.isTransitioning = true;
-        this.previousPhase = this.currentPhase;
-        this.currentPhase = phase;
-
-        console.log(`[ThreeStateManager] 转换: ${this.previousPhase} -> ${phase}`, data);
-
-        // 退出当前态
-        this._exitState(this.previousPhase);
-
-        // P4 修复：100ms 延迟确保前一个态的 CSS 过渡开始执行
-        setTimeout(() => {
-            this._enterState(phase, data);
-            this.isTransitioning = false;
-
-            if (this.queuedTransition) {
-                const queued = this.queuedTransition;
-                this.queuedTransition = null;
-                this.enterState(queued.phase, queued.data);
-            }
-        }, 100);
+      case 'manifest':
+        this.backendState.speaking = false;
+        this.backendState.taskProgress += dt * 0.15;
+        if (this.backendState.taskProgress >= 1.0) {
+          this.backendState.phase = 'silent';
+          this.backendState.intent = 0;
+          this.backendState.activeTask = null;
+          this.backendState.taskProgress = 0;
+          this.stateTimer = 0;
+        }
+        break;
     }
 
-    /** 进入具体状态 */
-    _enterState(phase, data) {
-        // P13 修复：根据态控制鼠标穿透
-        const mouseIgnore = phase === Phase.LIMINAL ? false : true;
-        if (window.electronAPI?.setIgnoreMouse) {
-            window.electronAPI.setIgnoreMouse(mouseIgnore);
-        }
+    // 根据 phase 设置目标深度
+    if (this.backendState.phase === 'silent') this.targetDepth = 0.05;
+    else if (this.backendState.phase === 'liminal') {
+      this.targetDepth = 0.15 + this.backendState.intent * 0.30;
+    } else if (this.backendState.phase === 'manifest') {
+      this.targetDepth = 0.90;
+    }
+  }
 
-        switch (phase) {
-            case Phase.SILENT:
-                // Silent态：桌面壁纸正常显示，鼠标穿透
-                document.body.classList.remove('liminal-active');
-                this.silentState.enter();
-                break;
+  // ── 渲染循环 ────────────────────────────────────
 
-            case Phase.LIMINAL:
-                // Liminal态：桌面背景变暗，空间层透过来，不穿透
-                // 注意：silentState.exit() 已在 _exitState() 中调用，无需重复
-                document.body.classList.add('liminal-active');
-                this.liminalState.enter();
-                break;
+  _renderLoop(now) {
+    if (!this.running) return;
 
-            case Phase.MANIFEST:
-                // Manifest态：鼠标穿透，所有覆盖层淡出
-                document.body.classList.remove('liminal-active');
-                this.manifestState.enter();
-                break;
+    const dt = Math.min((now - this.lastTime) / 1000, 0.05);
+    this.lastTime = now;
+    this.time += dt;
 
-            default:
-                console.warn('[ThreeStateManager] 未知阶段:', phase);
-                this.silentState.enter();
-        }
-
-        this.updateWSStatusText(phase);
+    // 如果没有真实后端，启用模拟
+    if (this.bridge?.isSimulating?.() || !this.bridge?.connected) {
+      this._simulateBackendAI(dt);
     }
 
-    /** 退出当前状态 */
-    _exitState(phase) {
-        switch (phase) {
-            case Phase.SILENT:
-                if (this.silentState) this.silentState.exit();
-                break;
-            case Phase.LIMINAL:
-                if (this.liminalState) this.liminalState.exit();
-                break;
-            case Phase.MANIFEST:
-                if (this.manifestState) this.manifestState.exit();
-                break;
-            default:
-                break;
-        }
-    }
+    // Spring 物理
+    this._springUpdate(dt);
 
-    /** 验证状态转换 */
-    isValidTransition(from, to) {
-        const transitions = {
-            [Phase.SILENT]: [Phase.LIMINAL, Phase.MANIFEST, Phase.SILENT],
-            [Phase.LIMINAL]: [Phase.MANIFEST, Phase.SILENT, Phase.LIMINAL],
-            [Phase.MANIFEST]: [Phase.SILENT, Phase.LIMINAL, Phase.MANIFEST]
-        };
-        return transitions[from] && transitions[from].includes(to);
-    }
+    // 三态权重
+    const silentW = Math.max(0, 1 - this.currentDepth / 0.30);
+    const liminalW = Math.max(0, Math.min(1, (this.currentDepth - 0.15) / 0.40) * Math.min(1, (0.95 - this.currentDepth) / 0.35));
 
-    /** 更新状态显示文本 */
-    updateWSStatusText(phase) {
-        if (this.wsStatusTextEl) {
-            this.wsStatusTextEl.textContent = phase.toUpperCase();
-        }
-        console.log('[ThreeStateManager] 当前阶段:', phase.toUpperCase());
-    }
+    // 更新 WebGL Uniforms
+    const dpr = window.devicePixelRatio || 1;
+    this.webgl.setUniform('u_time', this.time);
+    this.webgl.setUniform('u_resolution', [this.canvas.width, this.canvas.height]);
+    this.webgl.setUniform('u_depth', this.currentDepth);
+    this.webgl.setUniform('u_intent', this.backendState.intent);
+    this.webgl.setUniform('u_speaking', this.backendState.speaking ? 1.0 : 0.0);
 
-    // ============================================
-    // WebSocket 通信
-    // ============================================
-    connectWebSocket() {
-        console.log('[ThreeStateManager] 连接 WebSocket:', this.wsUrl);
-        this.updateConnectionStatus('connecting');
+    // 渲染
+    this.webgl.render();
 
-        try {
-            this.ws = new WebSocket(this.wsUrl);
+    // 更新灵动岛
+    this.island.update(this.currentDepth, this.backendState);
 
-            this.ws.onopen = () => {
-                console.log('[ThreeStateManager] WebSocket 已连接');
-                this.updateConnectionStatus('connected');
+    // 状态显示（开发模式）
+    const pn = this.currentDepth < 0.25 ? '呼吸' : this.currentDepth < 0.75 ? '空间' : '执行';
+    const intentStr = (this.backendState.intent * 100).toFixed(0);
+    this.depthEl.textContent = `${this.currentDepth.toFixed(2)} · ${pn} · 意图${intentStr}%`;
 
-                // P6 修复：连接成功后重置重连计数
-                this.wsReconnectAttempts = 0;
+    this.rafId = requestAnimationFrame((t) => this._renderLoop(t));
+  }
 
-                if (this.wsReconnectTimer) {
-                    clearTimeout(this.wsReconnectTimer);
-                    this.wsReconnectTimer = null;
-                }
+  // ── 开发工具 ────────────────────────────────────
 
-                this.wsSend({
-                    type: 'register',
-                    client: 'desktop-presence',
-                    version: '2.0.0'
-                });
-            };
+  _devTogglePhase() {
+    const phases = ['silent', 'liminal', 'manifest'];
+    const idx = phases.indexOf(this.backendState.phase);
+    this.backendState.phase = phases[(idx + 1) % 3];
+    this.stateTimer = 0;
+    console.log('[Lumiv] Dev: phase →', this.backendState.phase);
+  }
 
-            this.ws.onmessage = (event) => {
-                this.handleWebSocketMessage(event.data);
-            };
+  // ── 销毁 ────────────────────────────────────────
 
-            this.ws.onerror = (error) => {
-                console.error('[ThreeStateManager] WebSocket 错误:', error);
-                this.updateConnectionStatus('disconnected');
-            };
-
-            this.ws.onclose = (event) => {
-                console.log('[ThreeStateManager] WebSocket 关闭:', event.code, event.reason);
-                this.updateConnectionStatus('disconnected');
-                this.scheduleReconnect();
-            };
-
-        } catch (err) {
-            console.error('[ThreeStateManager] WebSocket 连接失败:', err);
-            this.updateConnectionStatus('disconnected');
-            this.scheduleReconnect();
-        }
-    }
-
-    /** P6 修复：指数退避重连策略 */
-    scheduleReconnect() {
-        if (this.wsReconnectTimer) return;
-        
-        // 指数退避：1s → 2s → 4s → 8s → ... → 30s(max)
-        const interval = Math.min(
-            this.wsReconnectBaseInterval * Math.pow(2, this.wsReconnectAttempts),
-            this.wsReconnectMaxInterval
-        );
-        this.wsReconnectAttempts++;
-        
-        console.log(`[ThreeStateManager] ${interval}ms 后重连 (第${this.wsReconnectAttempts}次)...`);
-        this.wsReconnectTimer = setTimeout(() => {
-            this.wsReconnectTimer = null;
-            this.connectWebSocket();
-        }, interval);
-    }
-
-    wsSend(message) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify(message));
-        }
-    }
-
-    handleWebSocketMessage(data) {
-        try {
-            const message = JSON.parse(data);
-            console.log('[ThreeStateManager] WS 消息:', message);
-
-            const msgType = message.type;
-
-            if (msgType === 'state_event') {
-                this.handleAIPV3StateEvent(message);
-                return;
-            }
-
-            switch (msgType) {
-                case 'phase_change':
-                    this.handlePhaseChange(message);
-                    break;
-                case 'update_result':
-                    console.log('[ThreeStateManager] 结果更新:', message.result);
-                    break;
-                case 'task_result':
-                case 'goal_execution_result':
-                    console.log('[ThreeStateManager] 任务结果:', message.result || message.data);
-                    break;
-                case 'ping':
-                    this.wsSend({ type: 'pong', timestamp: Date.now() });
-                    break;
-                case 'heartbeat_ack':
-                    console.log('[ThreeStateManager] 心跳 ACK');
-                    break;
-                case 'status':
-                    console.log('[ThreeStateManager] 服务器状态:', message.status);
-                    break;
-                default:
-                    console.log('[ThreeStateManager] 未知消息类型:', msgType);
-            }
-        } catch (err) {
-            console.error('[ThreeStateManager] 解析 WS 消息失败:', err, data);
-        }
-    }
-
-    handleAIPV3StateEvent(message) {
-        const category = message.event_category || '';
-        const action = message.event_action || '';
-        const payload = message.payload || {};
-
-        if (category === 'phase' || category === 'desktop_presence') {
-            const phaseMap = {
-                'silent': Phase.SILENT,
-                'liminal': Phase.LIMINAL,
-                'manifest': Phase.MANIFEST,
-                'processing': Phase.LIMINAL,
-                'completed': Phase.MANIFEST,
-                'dismissed': Phase.SILENT,
-            };
-            const targetPhase = phaseMap[action.toLowerCase()];
-            if (targetPhase) {
-                this.handlePhaseChange({
-                    phase: targetPhase,
-                    reason: payload.reason || 'aip_v3_state_event',
-                    result: payload.result || payload.message,
-                    metadata: payload.metadata || {},
-                    force: message.force || false,
-                });
-            }
-            return;
-        }
-
-        if (category === 'task') {
-            if (action === 'started' || action === 'assigned') {
-                this.enterState(Phase.LIMINAL, { reason: 'task_started' });
-            } else if (action === 'completed' || action === 'done') {
-                this.enterState(Phase.MANIFEST, {
-                    result: this.formatTaskResult(message),
-                    reason: 'task_completed'
-                });
-            } else if (action === 'failed' || action === 'cancelled') {
-                const errorText = payload.error || payload.message || '任务失败';
-                this.enterState(Phase.MANIFEST, {
-                    result: `[错误] ${errorText}`,
-                    reason: action
-                });
-            }
-            return;
-        }
-
-        if (category === 'mesh') {
-            if (action === 'joined' || action === 'coord_sync') {
-                this.enterState(Phase.LIMINAL, { reason: `mesh_${action}` });
-            }
-            return;
-        }
-
-        if (category === 'device' || category === 'state_sync') {
-            const deviceId = message.device_id || payload.device_id || 'system';
-            if (this.currentPhase === Phase.SILENT) {
-                if (['registered', 'unregistered', 'online', 'offline'].includes(action)) {
-                    this.enterState(Phase.MANIFEST, {
-                        result: `[${deviceId}] ${action}`,
-                        reason: 'device_event'
-                    });
-                    setTimeout(() => this.enterState(Phase.SILENT, { reason: 'auto_dismiss' }), 3000);
-                }
-            }
-            return;
-        }
-
-        console.log('[ThreeStateManager] 未处理的 STATE_EVENT:', category, action);
-    }
-
-    handlePhaseChange(message) {
-        const newPhase = message.phase;
-        const reason = message.reason || '';
-
-        if (!newPhase || !Object.values(Phase).includes(newPhase)) {
-            console.warn('[ThreeStateManager] 无效阶段:', newPhase);
-            return;
-        }
-
-        const isValid = this.isValidTransition(this.currentPhase, newPhase);
-        if (!isValid) {
-            console.warn(`[ThreeStateManager] 无效转换: ${this.currentPhase} -> ${newPhase}`);
-            if (message.force) {
-                console.log('[ThreeStateManager] 强制转换允许');
-            } else {
-                return;
-            }
-        }
-
-        console.log(`[ThreeStateManager] 阶段切换: ${this.currentPhase} -> ${newPhase} (${reason})`);
-
-        const stateData = {
-            result: message.result || message.data,
-            reason: reason,
-            metadata: message.metadata || {},
-            force: message.force || false
-        };
-
-        this.enterState(newPhase, stateData);
-    }
-
-    formatTaskResult(message) {
-        const payload = message.payload || {};
-        const result = message.result || payload.result || payload.message || '';
-        if (typeof result === 'string') return result;
-        if (typeof result === 'object') {
-            try {
-                return JSON.stringify(result, null, 2);
-            } catch {
-                return String(result);
-            }
-        }
-        return String(result);
-    }
-
-    updateConnectionStatus(status) {
-        if (!this.wsStatusEl || !this.wsStatusTextEl) return;
-        this.wsStatusEl.className = '';
-        switch (status) {
-            case 'connected':
-                this.wsStatusEl.classList.add('ws-connected');
-                this.wsStatusTextEl.textContent = 'ONLINE';
-                break;
-            case 'connecting':
-                this.wsStatusEl.classList.add('ws-connecting');
-                this.wsStatusTextEl.textContent = 'CONNECTING';
-                break;
-            case 'disconnected':
-                this.wsStatusEl.classList.add('ws-disconnected');
-                this.wsStatusTextEl.textContent = 'OFFLINE';
-                break;
-        }
-    }
-
-    // ============================================
-    // 公共 API
-    // ============================================
-    forcePhase(phase, data = {}) {
-        console.log('[ThreeStateManager] 强制切换阶段:', phase);
-        this.enterState(phase, { ...data, force: true });
-    }
-
-    getCurrentPhase() {
-        return this.currentPhase;
-    }
-
-    // ============================================
-    // 清理
-    // ============================================
-    /** P5 修复：dispose 时清理全局引用 */
-    dispose() {
-        console.log('[ThreeStateManager] 清理中...');
-
-        if (this.wsReconnectTimer) {
-            clearTimeout(this.wsReconnectTimer);
-            this.wsReconnectTimer = null;
-        }
-        if (this.ws) {
-            this.ws.close();
-            this.ws = null;
-        }
-
-        if (this.silentState) this.silentState.dispose();
-        if (this.liminalState) this.liminalState.dispose();
-        if (this.manifestState) this.manifestState.dispose();
-
-        // 清理全局引用
-        if (window.stateManager === this) {
-            window.stateManager = null;
-        }
-
-        console.log('[ThreeStateManager] 清理完成');
-    }
+  destroy() {
+    this.running = false;
+    if (this.rafId) cancelAnimationFrame(this.rafId);
+    if (this.bridge) this.bridge.disconnect();
+    if (this.webgl) this.webgl.destroy();
+  }
 }
 
-// ============================================
-// 应用入口
-// ============================================
-let stateManager = null;
+// ── 启动 ──────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('[App] DOM 加载完成，初始化 Galaxy V2 v18...');
-    try {
-        stateManager = new ThreeStateManager();
-        window.stateManager = stateManager;
-        console.log('[App] Galaxy V2 v18 应用初始化成功');
-    } catch (err) {
-        console.error('[App] 初始化失败:', err);
-    }
+window.addEventListener('DOMContentLoaded', () => {
+  window.lumivApp = new LumivApp();
+  window.lumivApp.init();
 });
 
 window.addEventListener('beforeunload', () => {
-    if (stateManager) stateManager.dispose();
+  if (window.lumivApp) window.lumivApp.destroy();
 });
-
-// ============================================
-// 开发快捷键
-// ============================================
-document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.shiftKey) {
-        switch (e.key) {
-            case '1':
-                console.log('[App] 快捷键: 强制 SILENT');
-                if (stateManager) stateManager.forcePhase(Phase.SILENT);
-                break;
-            case '2':
-                console.log('[App] 快捷键: 强制 LIMINAL');
-                if (stateManager) stateManager.forcePhase(Phase.LIMINAL);
-                break;
-            case '3':
-                console.log('[App] 快捷键: 强制 MANIFEST');
-                if (stateManager) stateManager.forcePhase(Phase.MANIFEST, {
-                    result: 'MANIFEST 态测试\n===================\n\n系统运行正常。\n等待进一步指令。'
-                });
-                break;
-            case 'R':
-            case 'r':
-                console.log('[App] 快捷键: 强制重置');
-                if (stateManager) stateManager.enterState(Phase.SILENT, { force: true });
-                break;
-        }
-    }
-});
-
-console.log('[App] Galaxy V2 Desktop Presence v18 — Silent(WebGL) + Liminal(CSS3D) + Manifest');
