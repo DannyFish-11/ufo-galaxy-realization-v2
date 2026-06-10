@@ -20,8 +20,8 @@ class BackendBridge {
 
   async connect() {
     // 获取后端地址
-    if (window.lumivAPI) {
-      this.url = await window.lumivAPI.getBackendUrl();
+    if (window.galaxyAPI) {
+      this.url = await window.galaxyAPI.getBackendUrl();
     } else {
       // 独立运行模式（浏览器预览）
       this.url = 'ws://localhost:8765';
