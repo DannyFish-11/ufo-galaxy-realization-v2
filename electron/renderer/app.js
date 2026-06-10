@@ -19,7 +19,6 @@ class GalaxyRenderer {
     this.intent = 0.0;
     this.speaking = false;
     this.phase = 'static';
-    this.statusText = '感知中...';  // OpenClawd 实时状态
 
     // Spring 物理（只用于平滑 depth 变化，不做状态切换）
     this.currentDepth = 0.0;
@@ -40,7 +39,7 @@ class GalaxyRenderer {
     await this.webgl.init();
 
     // 连接后端
-    this._connectWebSocket();
+    this._connectBackend();
 
     // 启动渲染循环
     requestAnimationFrame((t) => this._loop(t));
@@ -48,17 +47,14 @@ class GalaxyRenderer {
 
   // ── WebSocket：接收 DesktopPresenceRuntime 事件 ──
 
-  _connectWebSocket() {
-    const url = window.galaxyAPI
-      ? null // 由 preload 提供
-      : 'ws://localhost:9000/ws/desktop-presence';
-
+  _connectBackend() {
     if (window.galaxyAPI?.onBackendState) {
-      // Electron 模式：通过 IPC 接收
-      window.galaxyAPI.onBackendState((state) => this._onStateEvent(state));
+      // PR-IPC: Electron 模式 — 通过 IPC 接收（内存级，无 WebSocket）
+      window.galaxyAPI.onBackendState((payload) => this._onStateEvent(payload));
+      console.log('[Galaxy] IPC backend connected');
     } else {
-      // 浏览器预览模式：直接 WebSocket
-      this._wsConnect(url);
+      // 浏览器预览模式：fallback 到 WebSocket
+      this._wsConnect('ws://localhost:9000/ws/desktop-presence');
     }
   }
 
@@ -94,7 +90,7 @@ class GalaxyRenderer {
   // ── 状态事件处理（唯一入口） ──
 
   _onStateEvent(payload) {
-    // payload: { phase, depth_factor, intent, speaking, status_text, source: "DesktopPresenceRuntime" }
+    // payload: { phase, depth_factor, intent, speaking, source: "DesktopPresenceRuntime" }
     if (payload.depth_factor !== undefined) {
       this.depth = payload.depth_factor;
     }
@@ -107,9 +103,9 @@ class GalaxyRenderer {
     if (payload.phase !== undefined) {
       this.phase = payload.phase;
     }
-    // OpenClawd 实时状态文本（后端动态生成，不硬编码）
+    // OpenClawd 实时状态文本（后端动态生成）
     if (payload.status_text !== undefined) {
-      this.statusText = payload.status_text;
+      // 可选：用于灵动岛显示
     }
   }
 
@@ -160,41 +156,26 @@ class GalaxyRenderer {
   _updateIsland() {
     let progress = 0;
     let text = 'Galaxy';
-    let translateY = -30;  // 从上方滑入
-    const d = this.currentDepth;
 
-    // 分阶段灵动岛动画（与shader分阶段对齐）
-    // 0.00-0.35: 隐藏（边缘光阶段）
-    // 0.35-0.50: 从顶部滑入
-    // 0.50-0.80: 完全显示（认知/思考中）
-    // 0.80-0.90: 滑出消失
-    // 0.90-1.00: 隐藏（执行阶段）
-
-    if (d >= 0.35 && d < 0.50) {
-      // 滑入阶段
-      progress = (d - 0.35) / 0.15;
-      translateY = -30 * (1.0 - progress);
-      text = this.statusText || '认知中...';
-    } else if (d >= 0.50 && d < 0.80) {
-      // 完全显示
-      progress = 1.0;
-      translateY = 0;
-      text = this.statusText || '感知中...';  // OpenClawd 实时状态
-    } else if (d >= 0.80 && d < 0.90) {
-      // 滑出消失
-      progress = 1.0 - (d - 0.80) / 0.10;
-      translateY = -30 * (1.0 - progress);
-      text = this.statusText || '执行中...';
+    if (this.currentDepth > 0.10 && this.currentDepth < 0.90) {
+      if (this.currentDepth < 0.35) {
+        progress = Math.min(1, (this.currentDepth - 0.10) / 0.18);
+        text = 'Galaxy';
+      } else if (this.currentDepth < 0.65) {
+        progress = 1;
+        text = this.speaking ? '倾听中...' : 'Galaxy';
+      } else {
+        progress = Math.max(0, 1 - (this.currentDepth - 0.65) / 0.18);
+        text = '执行中...';
+      }
     }
 
     if (progress > 0.01) {
       this.islandEl.classList.add('visible');
       this.islandText.textContent = text;
       this.islandEl.style.opacity = Math.min(1, progress).toFixed(2);
-      this.islandEl.style.transform = `translateY(${translateY.toFixed(1)}px)`;
     } else {
       this.islandEl.classList.remove('visible');
-      this.islandEl.style.transform = 'translateY(-30px)';
     }
   }
 
@@ -213,6 +194,6 @@ class GalaxyRenderer {
 
 // ── 启动 ──
 window.addEventListener('DOMContentLoaded', () => {
-  window.galaxyRenderer = new GalaxyRenderer();
-  window.galaxyRenderer.init();
+  window.lumivRenderer = new GalaxyRenderer();
+  window.lumivRenderer.init();
 });
