@@ -17,7 +17,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 """
-Lumiv - 统一启动器 (Subordinate Launcher Component — PR-2)
+Galaxy - 统一启动器 (Subordinate Launcher Component — PR-2)
 ===========================================================
 
 **Subordinate Launcher Role — NOT a top-level startup authority**
@@ -31,7 +31,7 @@ system readiness, ``main.py`` delegates to this file for the full async
 service bring-up (background subsystems, runtime subject, desktop surface).
 
 ``main.py`` is the authoritative startup entrypoint.  Running
-``python main.py`` is the official way to start Lumiv-Nexus.
+``python main.py`` is the official way to start Galaxy-Nexus.
 
 This file must NOT be treated as a competing top-level startup contract.
 
@@ -62,10 +62,10 @@ Launcher responsibilities are split across focused ``launcher/`` sub-modules:
 This file retains the service orchestration surface:
 - ``L4EnhancementLauncher``  — L4 module startup
 - ``UnifiedWebUI``           — HTTP server assembly (FastAPI + uvicorn)
-- ``LumivUnified``          — service bring-up coordinator (Phase 4–6 delegate)
+- ``GalaxyUnified``          — service bring-up coordinator (Phase 4–6 delegate)
 - ``_run_check_only`` / ``main`` — CLI entry-points (for direct invocation)
 
-作者：Lumiv Team
+作者：Galaxy Team
 日期：2026-02-06
 版本：2.1 (demoted to subordinate role — PR-2)
 """
@@ -94,7 +94,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 try:
     from nodes.common.cors_config import get_cors_origins, get_cors_methods, get_cors_headers
 except ImportError:
-    logging.getLogger("Lumiv").warning(
+    logging.getLogger("Galaxy").warning(
         "nodes.common.cors_config 未找到，使用默认 CORS 来源。"
     )
 
@@ -106,7 +106,7 @@ logging.basicConfig(
     format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
     datefmt='%H:%M:%S'
 )
-logger = logging.getLogger("Lumiv")
+logger = logging.getLogger("Galaxy")
 
 
 # ============================================================================
@@ -270,10 +270,10 @@ class UnifiedWebUI:
         self.app = None
         
     async def start(self):
-        """启动 Lumiv API 服务（核心运行时 API 层）
+        """启动 Galaxy API 服务（核心运行时 API 层）
 
         架构说明（API 单一入口原则）：
-          core/api_routes.py 是 Lumiv 系统的 **唯一权威 API 定义**。
+          core/api_routes.py 是 Galaxy 系统的 **唯一权威 API 定义**。
           所有 REST 路由必须通过 core.api_routes.create_api_routes() 提供。
 
           当前系统表层方向：桌面三态运行层 + 桌面状态板（desktop tri-state runtime
@@ -299,7 +299,7 @@ class UnifiedWebUI:
             from core.auth import require_auth as _require_auth
             from nodes.common.cors_config import get_cors_origins, get_cors_methods, get_cors_headers
             self.app = FastAPI(
-                title="Lumiv",
+                title="Galaxy",
                 description="L4 级自主性智能系统",
                 version="2.0"
             )
@@ -333,7 +333,7 @@ class UnifiedWebUI:
                 logger.warning("认知进化系统初始化失败（非阻塞）: %s", e)
 
             # === 步骤 3：挂载 core.api_routes 作为主 API 层 ===
-            # core/api_routes.py 是 Lumiv 的 **唯一权威 API 入口**。
+            # core/api_routes.py 是 Galaxy 的 **唯一权威 API 入口**。
             # 所有 REST 路由（system、devices、nodes、vision、tasks、chat、
             # ai、monitoring、relay、hybrid、vault、cost、channels、
             # federation、sessions、concurrency、errors、observability 等）
@@ -434,7 +434,7 @@ class UnifiedWebUI:
             )
             server = uvicorn.Server(_uvi_config)
             logger.info(
-                "Lumiv API 服务启动: http://%s:%d",
+                "Galaxy API 服务启动: http://%s:%d",
                 self.config.host, self.config.web_ui_port
             )
             logger.info("API 文档: http://localhost:%d/docs", self.config.web_ui_port)
@@ -451,10 +451,10 @@ class UnifiedWebUI:
     # Minimal fallback HTML — points to the API docs.
     # dashboard/frontend is a LEGACY UI SURFACE (PR-8) and is not the current primary surface.
     FALLBACK_HTML = """<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Lumiv</title></head>
+<html><head><meta charset="UTF-8"><title>Galaxy</title></head>
 <body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
 <div style="text-align:center">
-<h1>Lumiv</h1>
+<h1>Galaxy</h1>
 <p>API docs: <a href="/docs" style="color:#00CED1">/docs</a></p>
 <p style="font-size:0.8em;color:#888">Current surface: desktop tri-state runtime + desktop status board</p>
 </div></body></html>"""
@@ -476,11 +476,11 @@ class UnifiedWebUI:
 
 
 # ============================================================================
-# Lumiv 统一系统
+# Galaxy 统一系统
 # ============================================================================
 
-class LumivUnified:
-    """Lumiv 统一系统"""
+class GalaxyUnified:
+    """Galaxy 统一系统"""
     
     def __init__(self):
         self.config = SystemConfig.load_from_env()
@@ -693,7 +693,7 @@ class LumivUnified:
             logger.warning("写入 runtime/entrypoint.json 失败（不影响启动）: %s", _e)
 
     async def start(self):
-        """启动 Lumiv 后端 — 板块式输出。"""
+        """启动 Galaxy 后端 — 板块式输出。"""
         await self.setup()
         self.service_manager = ServiceManager(self.config)
 
@@ -796,7 +796,7 @@ class LumivUnified:
         # ── Ready ──
         print()
         print(f"{Colors.GREEN}{'═' * 60}{Colors.ENDC}")
-        print(f"{Colors.GREEN}  🚀 系统就绪{Colors.ENDC}  {Colors.BOLD}Lumiv L4 v2.3.21{Colors.ENDC}")
+        print(f"{Colors.GREEN}  🚀 系统就绪{Colors.ENDC}  {Colors.BOLD}Galaxy L4 v2.3.21{Colors.ENDC}")
         print(f"{Colors.GREEN}{'═' * 60}{Colors.ENDC}")
         print()
         print(f"  {Colors.CYAN}API 服务:{Colors.ENDC}     http://localhost:{self.config.web_ui_port}")
@@ -906,7 +906,7 @@ class LumivUnified:
 # 主函数
 # ============================================================================
 
-async def _run_check_only(lumiv: 'LumivUnified'):
+async def _run_check_only(lumiv: 'GalaxyUnified'):
     """仅检查依赖和配置，输出完整系统状态表，不启动服务"""
     print_banner()
     print_section("系统检查模式 (--check-only)")
@@ -1061,7 +1061,7 @@ def _start_electron_gui():
 
 def main():
     """主函数"""
-    print_banner()  # Lumiv ASCII banner at the top
+    print_banner()  # Galaxy ASCII banner at the top
     # PR-UVLOOP-WIN: uvloop is Linux/macOS only — skip on Windows to avoid startup delay
     if sys.platform != "win32":
         try:
@@ -1075,7 +1075,7 @@ def main():
         return 1
 
     parser = argparse.ArgumentParser(
-        description="Lumiv - L4 级自主性智能系统（统一融合版）",
+        description="Galaxy - L4 级自主性智能系统（统一融合版）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 权威启动路径 (PR-2):
@@ -1170,7 +1170,7 @@ def main():
         return
 
     # 创建系统实例
-    lumiv = LumivUnified()
+    lumiv = GalaxyUnified()
     
     # 应用命令行参数
     lumiv.config.minimal_mode = args.minimal
