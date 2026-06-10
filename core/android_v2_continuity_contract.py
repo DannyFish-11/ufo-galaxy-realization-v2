@@ -112,6 +112,9 @@ import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
+import logging
+
+logger = logging.getLogger("Lumiv.AndroidV2ContinuityContract")
 
 # ---------------------------------------------------------------------------
 # Authority sentinels
