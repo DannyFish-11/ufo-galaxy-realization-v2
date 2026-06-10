@@ -693,9 +693,9 @@ def main() -> int:
     print_phase("[系统启动]")
     print_item("正在启动 Galaxy 后端服务...", "ok")
 
-    from unified_launcher import GalaxyUnified
+    from unified_launcher import LumivUnified
 
-    galaxy = GalaxyUnified()
+    galaxy = LumivUnified()
     try:
         asyncio.run(galaxy.start())
     except KeyboardInterrupt:
