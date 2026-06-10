@@ -1,10 +1,10 @@
 """
-Lumiv - 完整 API 路由模块（规范路由聚合入口）
+Galaxy - 完整 API 路由模块（规范路由聚合入口）
 =================================================
 
 **架构权威声明 (Batch PR-4)**
 ------------------------------
-``core/api_routes.py`` 是 Lumiv 的 **唯一权威 REST API 定义**。
+``core/api_routes.py`` 是 Galaxy 的 **唯一权威 REST API 定义**。
 路由所有权由 ``CANONICAL_API_ROUTES_AUTHORITY`` 哨兵声明。
 
 API 路由按域组织于 ``core/routes/`` 子模块，本文件仅负责聚合。
@@ -71,7 +71,7 @@ from core.unified_response import UnifiedChatResponse  # noqa
 try:
     from .auth import require_auth
 except ImportError:
-    logging.getLogger("Lumiv.API").warning(
+    logging.getLogger("Galaxy.API").warning(
         "core.auth 模块未找到，所有需要鉴权的路由将拒绝访问（HTTP 401）。"
         "请确保 core/auth.py 存在。"
     )
@@ -79,7 +79,7 @@ except ImportError:
     async def require_auth():
         raise HTTPException(status_code=401, detail="鉴权模块不可用，拒绝访问")
 
-logger = logging.getLogger("Lumiv.API")
+logger = logging.getLogger("Galaxy.API")
 
 # ---------------------------------------------------------------------------
 # Batch PR-4: Canonical API Routes Authority
@@ -525,7 +525,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             await _register()
             try:
                 # Send a welcome event immediately so the client knows it's connected
-                welcome = json.dumps({"type": "connected", "message": "Lumiv SSE stream connected", "timestamp": datetime.now().isoformat()})
+                welcome = json.dumps({"type": "connected", "message": "Galaxy SSE stream connected", "timestamp": datetime.now().isoformat()})
                 yield f"data: {welcome}\n\n"
                 while True:
                     if await request.is_disconnected():
@@ -582,7 +582,7 @@ async def _chat_with_gemini(req: ChatRequest, api_key: str) -> JSONResponse:
             json={
                 "contents": contents,
                 "systemInstruction": {
-                    "parts": [{"text": "你是 Lumiv 智能助手，一个 L4 级自主性 AI 系统。"}]
+                    "parts": [{"text": "你是 Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
                 }
             }
         )
@@ -601,7 +601,7 @@ async def _chat_with_openrouter(req: ChatRequest, api_key: str) -> JSONResponse:
     """使用 OpenRouter API 进行对话"""
     import httpx
 
-    messages = [{"role": "system", "content": "你是 Lumiv 智能助手，一个 L4 级自主性 AI 系统。"}]
+    messages = [{"role": "system", "content": "你是 Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
     for ctx in req.context[-10:]:
         messages.append(ctx)
     messages.append({"role": "user", "content": req.message})
@@ -1361,13 +1361,13 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
             logger.debug("WebSocket status error: %s", exc)
             connection_manager.unsubscribe_status(websocket)
 
-    # === Lumiv 桌面覆盖层 WebSocket ===
+    # === Galaxy 桌面覆盖层 WebSocket ===
     _desktop_clients: set = set()
     _desktop_lock = asyncio.Lock()
 
     @app.websocket("/ws/desktop-presence")
     async def lumiv_desktop_ws(websocket: WebSocket):
-        """Lumiv 桌面覆盖层 — 三态流转事件通道"""
+        """Galaxy 桌面覆盖层 — 三态流转事件通道"""
         await websocket.accept()
         try:
             raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
