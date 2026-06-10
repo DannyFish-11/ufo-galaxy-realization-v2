@@ -93,7 +93,7 @@ class GalaxyRenderer {
   // ── 状态事件处理（唯一入口） ──
 
   _onStateEvent(payload) {
-    // payload: { phase, depth_factor, intent, speaking, source: "DesktopPresenceRuntime" }
+    // payload: { phase, depth_factor, intent, speaking, status_text, source: "DesktopPresenceRuntime" }
     if (payload.depth_factor !== undefined) {
       this.depth = payload.depth_factor;
     }
@@ -105,6 +105,10 @@ class GalaxyRenderer {
     }
     if (payload.phase !== undefined) {
       this.phase = payload.phase;
+    }
+    // OpenClawd 实时状态文本（后端动态生成，不硬编码）
+    if (payload.status_text !== undefined) {
+      this.statusText = payload.status_text;
     }
   }
 
