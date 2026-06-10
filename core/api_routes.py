@@ -1362,19 +1362,30 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
             connection_manager.unsubscribe_status(websocket)
 
     # === Galaxy 桌面覆盖层 WebSocket ===
-    _desktop_clients: set = set()
-    _desktop_lock = asyncio.Lock()
+    # 使用 GalaxyWebSocketBridge 统一管理客户端和状态广播
+    try:
+        from core.lumiv_websocket_bridge import GalaxyWebSocketBridge
+        _desktop_bridge = GalaxyWebSocketBridge.get_instance()
+    except Exception:
+        _desktop_bridge = None
 
     @app.websocket("/ws/desktop-presence")
-    async def lumiv_desktop_ws(websocket: WebSocket):
-        """Galaxy 桌面覆盖层 — 三态流转事件通道"""
+    async def galaxy_desktop_websocket(websocket: WebSocket):
+        """Galaxy 桌面覆盖层 — 三态流转事件通道
+
+        客户端连接后注册到 GalaxyWebSocketBridge，
+        由桥接器统一管理状态推送（连接 StateEventBus → DesktopPresenceRuntime）。
+        """
         await websocket.accept()
+        _registered = False
         try:
             raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
             msg = json.loads(raw)
             if msg.get("type") == "register" and msg.get("client") == "desktop-presence":
-                async with _desktop_lock:
-                    _desktop_clients.add(websocket)
+                # 注册到 GalaxyWebSocketBridge（一体化连接点）
+                if _desktop_bridge:
+                    await _desktop_bridge.register_client(websocket)
+                    _registered = True
                 await websocket.send_json({"type": "registered", "accepted": True})
             else:
                 await websocket.close(code=1008); return
@@ -1385,12 +1396,17 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                 try:
                     msg = json.loads(raw)
                     if msg.get("type") == "get_state":
-                        await websocket.send_json({
-                            "type": "state_event", "event_category": "ambient_tick",
-                            "payload": {"phase": "silent", "intent": 0.0, "speaking": False, "depth_factor": 0.05}
-                        })
+                        # 从 GalaxyWebSocketBridge 获取当前状态
+                        if _desktop_bridge:
+                            await _desktop_bridge._send_to(websocket)
+                        else:
+                            await websocket.send_json({
+                                "type": "state_event", "event_category": "ambient_tick",
+                                "payload": {"phase": "silent", "intent": 0.0, "speaking": False, "depth_factor": 0.05}
+                            })
                 except: pass
         except (WebSocketDisconnect, asyncio.TimeoutError): pass
         except Exception as exc: logger.debug("desktop-presence ws error: %s", exc)
         finally:
-            async with _desktop_lock: _desktop_clients.discard(websocket)
+            if _registered and _desktop_bridge:
+                await _desktop_bridge.unregister_client(websocket)
