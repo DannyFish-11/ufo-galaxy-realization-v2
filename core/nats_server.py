@@ -95,8 +95,8 @@ class EmbeddedNATSServer:
                 tag = "v2.10.24"  # 固定已知可用版本，避免API调用
                 # 镜像源列表（按优先级）
                 mirrors = [
-                    "https://ghp.ci/https://github.com",
-                    "https://ghproxy.net/https://github.com",
+                    "https://mirror.ghproxy.com/https://github.com",  # 2025 verified
+                    
                     "https://mirror.ghproxy.com/https://github.com",
                     "https://github.com",  # 直连兜底
                 ]
