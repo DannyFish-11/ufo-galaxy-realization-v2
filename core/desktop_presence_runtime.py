@@ -182,6 +182,10 @@ class RuntimeSession:
         self.tristate: TriState = TriState.SILENT
         self.created_at: float = time.monotonic()
         self.transitions: List[tuple] = []
+        # ── Continuum 持续认知状态 ──
+        self._continuum_state: Optional[Dict[str, Any]] = None
+        self._tick_task: Optional[Any] = None
+        self._tick_running: bool = False
 
     # ------------------------------------------------------------------
     # State helpers
@@ -249,10 +253,76 @@ class RuntimeSession:
             )
         except Exception as exc:
             logger.warning("Runtime session cleanup failed: %s", exc)
+        # PR-REALTIME-CONTINUUM: 启动/停止持续认知 tick
+        self._on_advance_tick(new_state)
 
     def elapsed_ms(self) -> float:
         """Return elapsed milliseconds since session creation."""
         return (time.monotonic() - self.created_at) * 1_000
+
+    # ── Continuum 持续认知 tick ──
+    # PR-REALTIME-CONTINUUM: LIMINAL 阶段启动后台推送，
+    # 让 ContinuumState.presence_intensity 实时驱动外壳渲染。
+
+    def _start_continuum_tick(self) -> None:
+        """启动后台 continuum 状态推送循环。"""
+        if self._tick_running:
+            return
+        self._tick_running = True
+        try:
+            import asyncio
+            self._tick_task = asyncio.create_task(self._continuum_tick_loop())
+        except Exception:
+            self._tick_running = False
+
+    def _stop_continuum_tick(self) -> None:
+        """停止后台 continuum 状态推送循环。"""
+        self._tick_running = False
+        if self._tick_task:
+            try:
+                self._tick_task.cancel()
+            except Exception:
+                pass
+            self._tick_task = None
+
+    async def _continuum_tick_loop(self) -> None:
+        """每 200ms 推送 continuum 状态到 StateEventBus。
+
+        将 OpenClawd 的实时认知强度 (presence_intensity) 传递到
+        GalaxyWebSocketBridge → 前端渲染，实现 AI 状态驱动外壳。
+        """
+        import asyncio
+        try:
+            from core.state_event_bus import emit as _emit
+        except Exception:
+            return
+        while self._tick_running and self.tristate in (TriState.LIMINAL, TriState.MANIFEST):
+            try:
+                cs = self._continuum_state or {}
+                _emit(
+                    "continuum.state",
+                    source="desktop_presence_runtime",
+                    payload={
+                        "presence_intensity": round(cs.get("presence_intensity", 0.0), 4),
+                        "coherence": round(cs.get("coherence", 0.0), 4),
+                        "phase": self.tristate.value,
+                        "collapse_tendency": round(cs.get("collapse_tendency", 0.0), 4),
+                        "retreat_tendency": round(cs.get("retreat_tendency", 0.0), 4),
+                        "runtime_session_id": self.runtime_session_id,
+                    },
+                    runtime_session_id=self.runtime_session_id,
+                )
+            except Exception:
+                pass
+            await asyncio.sleep(0.2)
+
+    # ── advance() tick 控制 ──
+    def _on_advance_tick(self, new_state: TriState) -> None:
+        """在 advance() 中调用，控制 tick 启动/停止。"""
+        if new_state == TriState.LIMINAL:
+            self._start_continuum_tick()
+        elif new_state == TriState.SILENT:
+            self._stop_continuum_tick()
 
 
 # ---------------------------------------------------------------------------
@@ -760,6 +830,9 @@ class DesktopPresenceRuntime:
                     is_operator_request=source == "operator",
                     **kwargs,
                 )
+                # PR-REALTIME-CONTINUUM: 保存 OpenClawd 的 ContinuumState
+                # 供后台 tick 循环实时推送到前端渲染层
+                rsession._continuum_state = result.get("continuum", {})
                 lane_snapshot = lane.to_dict()
 
         except Exception as exc:
