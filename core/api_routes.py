@@ -1360,3 +1360,37 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         except Exception as exc:
             logger.debug("WebSocket status error: %s", exc)
             connection_manager.unsubscribe_status(websocket)
+
+    # === Lumiv 桌面覆盖层 WebSocket ===
+    _desktop_clients: set = set()
+    _desktop_lock = asyncio.Lock()
+
+    @app.websocket("/ws/desktop-presence")
+    async def lumiv_desktop_ws(websocket: WebSocket):
+        """Lumiv 桌面覆盖层 — 三态流转事件通道"""
+        await websocket.accept()
+        try:
+            raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+            msg = json.loads(raw)
+            if msg.get("type") == "register" and msg.get("client") == "desktop-presence":
+                async with _desktop_lock:
+                    _desktop_clients.add(websocket)
+                await websocket.send_json({"type": "registered", "accepted": True})
+            else:
+                await websocket.close(code=1008); return
+            while True:
+                raw = await websocket.receive_text()
+                if raw == "ping":
+                    await websocket.send_json({"type": "pong"}); continue
+                try:
+                    msg = json.loads(raw)
+                    if msg.get("type") == "get_state":
+                        await websocket.send_json({
+                            "type": "state_event", "event_category": "ambient_tick",
+                            "payload": {"phase": "silent", "intent": 0.0, "speaking": False, "depth_factor": 0.05}
+                        })
+                except: pass
+        except (WebSocketDisconnect, asyncio.TimeoutError): pass
+        except Exception as exc: logger.debug("desktop-presence ws error: %s", exc)
+        finally:
+            async with _desktop_lock: _desktop_clients.discard(websocket)
