@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useWebSocket } from '@/hooks/useWebSocket';
-import { usePhase } from '@/hooks/usePhase';
+import { usePanelData } from '@/hooks/usePanelData';
 import type { Phase } from '@/types/phase';
+import VitalityTab from '@/components/VitalityTab';
 import './App.css';
 
 const TABS = [
@@ -11,20 +11,10 @@ const TABS = [
   { cn: '设置', en: 'Settings' },
 ];
 
-const PHASE_LABELS: Record<Phase, string> = {
-  silent: 'STANDBY',
-  liminal: 'THINKING...',
-  manifest: 'ONLINE',
-};
-
 function App() {
-  const { connected, lastMessage } = useWebSocket();
-  const { phase, label, handleMessage } = usePhase();
+  const { panelData } = usePanelData();
+  const phase = panelData.phase;
   const [activeTab, setActiveTab] = useState(0);
-
-  useEffect(() => {
-    handleMessage(lastMessage);
-  }, [lastMessage, handleMessage]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key >= '1' && e.key <= '3') {
@@ -86,8 +76,31 @@ function App() {
           ))}
         </nav>
 
-        {/* 内容区（空的） */}
-        <div className="content-area" />
+        {/* 内容区 */}
+        <div className="content-area">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              className="tab-content"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.3 }}
+            >
+              {activeTab === 0 && <VitalityTab data={panelData} />}
+              {activeTab === 1 && (
+                <div className="placeholder-tab">
+                  <span className="placeholder-text">星元面板 — 即将推出</span>
+                </div>
+              )}
+              {activeTab === 2 && (
+                <div className="placeholder-tab">
+                  <span className="placeholder-text">设置面板 — 即将推出</span>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
 
         {/* 底部状态 */}
         <div className="status-bar">
@@ -120,7 +133,7 @@ function App() {
             ))}
           </div>
 
-          {/* STANDBY/THINKING.../ONLINE */}
+          {/* 动态状态文本 */}
           <AnimatePresence mode="wait">
             <motion.div
               key={phase}
@@ -130,7 +143,7 @@ function App() {
               exit={{ opacity: 0, y: -5 }}
               transition={{ duration: 0.3 }}
             >
-              {PHASE_LABELS[phase]}
+              {panelData.phaseLabel}
             </motion.div>
           </AnimatePresence>
         </div>
