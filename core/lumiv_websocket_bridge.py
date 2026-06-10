@@ -20,7 +20,7 @@ except ImportError:
     WebSocket = Any
     WebSocketDisconnect = Exception
 
-logger = logging.getLogger("Lumiv.WebSocketBridge")
+logger = logging.getLogger("Galaxy.WebSocketBridge")
 
 
 # ── DesktopPresenceMode → depth_factor 映射 ──
@@ -34,13 +34,13 @@ MODE_DEPTH_MAP = {
 }
 
 
-class LumivWebSocketBridge:
+class GalaxyWebSocketBridge:
     """
     单例。订阅 DesktopPresenceRuntime 的 StateEventBus，
     将 presence 模式转换为 depth_factor 推送到前端。
     """
 
-    _instance: Optional["LumivWebSocketBridge"] = None
+    _instance: Optional["GalaxyWebSocketBridge"] = None
 
     # 已连接的 WebSocket 客户端
     _clients: Set[WebSocket] = set()
@@ -81,7 +81,7 @@ class LumivWebSocketBridge:
             # 订阅 intent 强度更新
             bus.subscribe("intent.update",  self._on_intent_update)
 
-            logger.info("LumivWebSocketBridge started — subscribed to StateEventBus")
+            logger.info("GalaxyWebSocketBridge started — subscribed to StateEventBus")
         except Exception as exc:
             logger.warning("StateEventBus subscription failed (non-fatal): %s", exc)
 
