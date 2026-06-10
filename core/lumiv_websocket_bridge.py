@@ -1,10 +1,11 @@
 """
-Galaxy WebSocket Bridge — 桌面覆盖层事件推送
+Lumiv Presence Bridge — 桌面覆盖层事件推送
 
 职责：
 1. 订阅 DesktopPresenceRuntime 的状态事件
 2. 将 DesktopPresenceMode (STATIC/LIMINAL/MANIFEST) 映射为 depth_factor
-3. 通过 WebSocket 推送到前端 Electron 渲染器
+3. 优先通过 IPC HTTP POST 推送到 Electron main.js (localhost:9229)
+4. Fallback 到 WebSocket 广播（浏览器预览模式）
 
 这是 DesktopPresenceRuntime 与 Electron 外壳之间的唯一桥梁。
 前端不做任何状态机，只接收事件并渲染。
@@ -20,7 +21,12 @@ except ImportError:
     WebSocket = Any
     WebSocketDisconnect = Exception
 
-logger = logging.getLogger("Galaxy.WebSocketBridge")
+try:
+    import aiohttp
+except ImportError:
+    aiohttp = None  # type: ignore
+
+logger = logging.getLogger("Lumiv.PresenceBridge")
 
 
 # ── DesktopPresenceMode → depth_factor 映射 ──
@@ -34,15 +40,19 @@ MODE_DEPTH_MAP = {
 }
 
 
-class GalaxyWebSocketBridge:
+class GalaxyPresenceBridge:
     """
     单例。订阅 DesktopPresenceRuntime 的 StateEventBus，
     将 presence 模式转换为 depth_factor 推送到前端。
+
+    推送策略（PR-IPC）：
+    1. 优先 HTTP POST 到 Electron main.js: http://localhost:9229/ipc/presence-state
+    2. Electron 不可用时 fallback 到 WebSocket 广播（浏览器预览模式）
     """
 
-    _instance: Optional["GalaxyWebSocketBridge"] = None
+    _instance: Optional["GalaxyPresenceBridge"] = None
 
-    # 已连接的 WebSocket 客户端
+    # 已连接的 WebSocket 客户端（fallback 模式）
     _clients: Set[WebSocket] = set()
     _lock = asyncio.Lock()
 
@@ -56,7 +66,7 @@ class GalaxyWebSocketBridge:
     _started: bool = False
 
     @classmethod
-    def get_instance(cls) -> "GalaxyWebSocketBridge":
+    def get_instance(cls) -> "GalaxyPresenceBridge":
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
@@ -81,11 +91,7 @@ class GalaxyWebSocketBridge:
             # 订阅 intent 强度更新
             bus.subscribe("intent.update",  self._on_intent_update)
 
-            # PR-REALTIME-CONTINUUM: 订阅持续认知状态事件
-            # OpenClawd 的 ContinuumState.presence_intensity 实时驱动外壳
-            bus.subscribe("continuum.state", self._on_continuum_state)
-
-            logger.info("GalaxyWebSocketBridge started — subscribed to StateEventBus")
+            logger.info("GalaxyPresenceBridge started — subscribed to StateEventBus (IPC HTTP + WS fallback)")
         except Exception as exc:
             logger.warning("StateEventBus subscription failed (non-fatal): %s", exc)
 
@@ -141,19 +147,41 @@ class GalaxyWebSocketBridge:
     # ── 广播 ──
 
     async def _broadcast_state(self) -> None:
-        """向所有已连接客户端广播当前状态。"""
+        """广播状态到前端。优先 IPC HTTP，fallback WebSocket。"""
         msg = self._build_message()
-        dead: list = []
 
+        # PR-IPC: 优先推送到 Electron main.js HTTP 接收端
+        if await self._try_ipc_http(msg):
+            return
+
+        # Fallback: 传统 WebSocket 广播（浏览器预览模式）
+        await self._ws_broadcast(msg)
+
+    async def _try_ipc_http(self, msg: Dict[str, Any]) -> bool:
+        """尝试 HTTP POST 到 Electron。返回是否成功。"""
+        if aiohttp is None:
+            return False
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    "http://localhost:9229/ipc/presence-state",
+                    json=msg,
+                    timeout=aiohttp.ClientTimeout(total=1),
+                ) as resp:
+                    return resp.status == 200
+        except Exception:
+            return False
+
+    async def _ws_broadcast(self, msg: Dict[str, Any]) -> None:
+        """WebSocket fallback 广播。"""
+        dead: list = []
         async with self._lock:
             clients = list(self._clients)
-
         for ws in clients:
             try:
                 await ws.send_json(msg)
             except Exception:
                 dead.append(ws)
-
         if dead:
             async with self._lock:
                 for ws in dead:
@@ -166,80 +194,11 @@ class GalaxyWebSocketBridge:
         except Exception as exc:
             logger.debug("Send to single client failed: %s", exc)
 
-    # ── PR-REALTIME-CONTINUUM: 持续认知状态处理 ──
-
-    def _on_continuum_state(self, event) -> None:
-        """处理 OpenClawd 的实时认知状态更新。
-
-        ContinuumState.presence_intensity 直接映射为 depth_factor，
-        实现 AI 认知强度实时驱动外壳渲染。
-        同时生成实时状态文本供灵动岛显示。
-        """
-        try:
-            # 兼容 StateEvent 对象和直接 dict
-            if hasattr(event, 'payload'):
-                payload = event.payload
-            elif isinstance(event, dict):
-                payload = event
-            else:
-                return
-            if not isinstance(payload, dict):
-                return
-            presence = payload.get("presence_intensity", 0.0)
-            self._current_depth = float(presence)
-            self._intent = payload.get("coherence", 0.5)
-            phase = payload.get("phase", self._current_mode)
-            if phase in ("silent", "static"):
-                self._current_mode = "static"
-            elif phase == "liminal":
-                self._current_mode = "liminal"
-            elif phase == "manifest":
-                self._current_mode = "manifest"
-            # 生成实时状态文本（基于 OpenClawd 认知状态）
-            self._status_text = self._generate_status_text(payload)
-            asyncio.create_task(self._broadcast_state())
-        except Exception:
-            pass
-
-    def _generate_status_text(self, payload: dict) -> str:
-        """根据 OpenClawd 实时认知状态生成灵动岛文本。
-
-        不硬编码 — 从 ContinuumState 数值动态映射。
-        """
-        presence = payload.get("presence_intensity", 0.0)
-        coherence = payload.get("coherence", 0.0)
-        collapse = payload.get("collapse_tendency", 0.0)
-        phase = payload.get("phase", "")
-        # 基于认知强度的动态状态描述
-        if phase == "manifest":
-            return "执行中..."
-        if self._speaking:
-            return "倾听中..."
-        if presence > 0.85 and coherence > 0.7:
-            return "深度推理..."
-        if presence > 0.6 and coherence > 0.5:
-            return "思考中..."
-        if presence > 0.35:
-            return "认知中..."
-        if collapse > 0.5:
-            return "重新评估..."
-        return "感知中..."
-
     def _build_message(self) -> Dict[str, Any]:
-        """构建 AIP v3 兼容的 presence_state 消息。
-
-        格式兼容前端 GalaxyRenderer，同时符合 AIP v3 消息规范。
-        包含 status_text 供灵动岛实时显示 OpenClawd 认知状态。
-        """
+        """构建与前端兼容的 state_event 消息。"""
         return {
             "type": "state_event",
             "event_category": "ambient_tick",
-            "aip_version": "3.0",
-            "message_type": "presence_state",
-            "transport": "websocket",
-            "source": "desktop_presence_runtime",
-            "target": "desktop_shell",
-            "timestamp": time.time(),
             "payload": {
                 "phase": self._current_mode,
                 "depth_factor": round(self._current_depth, 4),
@@ -247,7 +206,9 @@ class GalaxyWebSocketBridge:
                 "speaking": self._speaking,
                 "mode": self._current_mode,
                 "source": "DesktopPresenceRuntime",
-                "presence_intensity": round(self._current_depth, 4),
-                "status_text": getattr(self, '_status_text', '感知中...'),
             },
         }
+
+
+# 兼容旧类名
+LumivWebSocketBridge = GalaxyPresenceBridge
