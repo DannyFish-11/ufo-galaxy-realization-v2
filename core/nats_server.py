@@ -12,7 +12,7 @@ import subprocess
 import time
 from pathlib import Path
 
-logger = logging.getLogger("Lumiv.NATSServer")
+logger = logging.getLogger("Galaxy.NATSServer")
 
 
 class EmbeddedNATSServer:
@@ -106,7 +106,7 @@ class EmbeddedNATSServer:
                 for mirror in mirrors:
                     url = f"{mirror}/nats-io/nats-server/releases/download/{tag}/nats-server-{tag}-windows-amd64.zip"
                     try:
-                        req = urllib.request.Request(url, headers={"User-Agent": "Lumiv-Installer"})
+                        req = urllib.request.Request(url, headers={"User-Agent": "Galaxy-Installer"})
                         with urllib.request.urlopen(req, timeout=15) as resp:
                             with open(zip_path, "wb") as f:
                                 f.write(resp.read())
@@ -132,7 +132,7 @@ class EmbeddedNATSServer:
                         for mirror in mirrors:
                             url = f"{mirror}/nats-io/nats-server/releases/download/{tag}/nats-server.exe"
                             try:
-                                req = urllib.request.Request(url, headers={"User-Agent": "Lumiv-Installer"})
+                                req = urllib.request.Request(url, headers={"User-Agent": "Galaxy-Installer"})
                                 with urllib.request.urlopen(req, timeout=15) as resp:
                                     with open(nats_exe, "wb") as f:
                                         f.write(resp.read())
