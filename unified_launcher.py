@@ -17,7 +17,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 """
-Galaxy - 统一启动器 (Subordinate Launcher Component — PR-2)
+Lumiv - 统一启动器 (Subordinate Launcher Component — PR-2)
 ===========================================================
 
 **Subordinate Launcher Role — NOT a top-level startup authority**
@@ -31,7 +31,7 @@ system readiness, ``main.py`` delegates to this file for the full async
 service bring-up (background subsystems, runtime subject, desktop surface).
 
 ``main.py`` is the authoritative startup entrypoint.  Running
-``python main.py`` is the official way to start Galaxy-Nexus.
+``python main.py`` is the official way to start Lumiv-Nexus.
 
 This file must NOT be treated as a competing top-level startup contract.
 
@@ -65,7 +65,7 @@ This file retains the service orchestration surface:
 - ``LumivUnified``          — service bring-up coordinator (Phase 4–6 delegate)
 - ``_run_check_only`` / ``main`` — CLI entry-points (for direct invocation)
 
-作者：Galaxy Team
+作者：Lumiv Team
 日期：2026-02-06
 版本：2.1 (demoted to subordinate role — PR-2)
 """
@@ -94,7 +94,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 try:
     from nodes.common.cors_config import get_cors_origins, get_cors_methods, get_cors_headers
 except ImportError:
-    logging.getLogger("Galaxy").warning(
+    logging.getLogger("Lumiv").warning(
         "nodes.common.cors_config 未找到，使用默认 CORS 来源。"
     )
 
@@ -106,7 +106,7 @@ logging.basicConfig(
     format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
     datefmt='%H:%M:%S'
 )
-logger = logging.getLogger("Galaxy")
+logger = logging.getLogger("Lumiv")
 
 
 # ============================================================================
@@ -270,10 +270,10 @@ class UnifiedWebUI:
         self.app = None
         
     async def start(self):
-        """启动 Galaxy API 服务（核心运行时 API 层）
+        """启动 Lumiv API 服务（核心运行时 API 层）
 
         架构说明（API 单一入口原则）：
-          core/api_routes.py 是 Galaxy 系统的 **唯一权威 API 定义**。
+          core/api_routes.py 是 Lumiv 系统的 **唯一权威 API 定义**。
           所有 REST 路由必须通过 core.api_routes.create_api_routes() 提供。
 
           当前系统表层方向：桌面三态运行层 + 桌面状态板（desktop tri-state runtime
@@ -299,7 +299,7 @@ class UnifiedWebUI:
             from core.auth import require_auth as _require_auth
             from nodes.common.cors_config import get_cors_origins, get_cors_methods, get_cors_headers
             self.app = FastAPI(
-                title="Galaxy",
+                title="Lumiv",
                 description="L4 级自主性智能系统",
                 version="2.0"
             )
@@ -333,7 +333,7 @@ class UnifiedWebUI:
                 logger.warning("认知进化系统初始化失败（非阻塞）: %s", e)
 
             # === 步骤 3：挂载 core.api_routes 作为主 API 层 ===
-            # core/api_routes.py 是 Galaxy 的 **唯一权威 API 入口**。
+            # core/api_routes.py 是 Lumiv 的 **唯一权威 API 入口**。
             # 所有 REST 路由（system、devices、nodes、vision、tasks、chat、
             # ai、monitoring、relay、hybrid、vault、cost、channels、
             # federation、sessions、concurrency、errors、observability 等）
@@ -434,7 +434,7 @@ class UnifiedWebUI:
             )
             server = uvicorn.Server(_uvi_config)
             logger.info(
-                "Galaxy API 服务启动: http://%s:%d",
+                "Lumiv API 服务启动: http://%s:%d",
                 self.config.host, self.config.web_ui_port
             )
             logger.info("API 文档: http://localhost:%d/docs", self.config.web_ui_port)
@@ -451,10 +451,10 @@ class UnifiedWebUI:
     # Minimal fallback HTML — points to the API docs.
     # dashboard/frontend is a LEGACY UI SURFACE (PR-8) and is not the current primary surface.
     FALLBACK_HTML = """<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Galaxy</title></head>
+<html><head><meta charset="UTF-8"><title>Lumiv</title></head>
 <body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
 <div style="text-align:center">
-<h1>Galaxy</h1>
+<h1>Lumiv</h1>
 <p>API docs: <a href="/docs" style="color:#00CED1">/docs</a></p>
 <p style="font-size:0.8em;color:#888">Current surface: desktop tri-state runtime + desktop status board</p>
 </div></body></html>"""
@@ -476,11 +476,11 @@ class UnifiedWebUI:
 
 
 # ============================================================================
-# Galaxy 统一系统
+# Lumiv 统一系统
 # ============================================================================
 
 class LumivUnified:
-    """Galaxy 统一系统"""
+    """Lumiv 统一系统"""
     
     def __init__(self):
         self.config = SystemConfig.load_from_env()
@@ -693,7 +693,7 @@ class LumivUnified:
             logger.warning("写入 runtime/entrypoint.json 失败（不影响启动）: %s", _e)
 
     async def start(self):
-        """启动 Galaxy 后端 — 板块式输出。"""
+        """启动 Lumiv 后端 — 板块式输出。"""
         await self.setup()
         self.service_manager = ServiceManager(self.config)
 
@@ -796,7 +796,7 @@ class LumivUnified:
         # ── Ready ──
         print()
         print(f"{Colors.GREEN}{'═' * 60}{Colors.ENDC}")
-        print(f"{Colors.GREEN}  🚀 系统就绪{Colors.ENDC}  {Colors.BOLD}Galaxy L4 v2.3.21{Colors.ENDC}")
+        print(f"{Colors.GREEN}  🚀 系统就绪{Colors.ENDC}  {Colors.BOLD}Lumiv L4 v2.3.21{Colors.ENDC}")
         print(f"{Colors.GREEN}{'═' * 60}{Colors.ENDC}")
         print()
         print(f"  {Colors.CYAN}API 服务:{Colors.ENDC}     http://localhost:{self.config.web_ui_port}")
@@ -906,7 +906,7 @@ class LumivUnified:
 # 主函数
 # ============================================================================
 
-async def _run_check_only(galaxy: 'LumivUnified'):
+async def _run_check_only(lumiv: 'LumivUnified'):
     """仅检查依赖和配置，输出完整系统状态表，不启动服务"""
     print_banner()
     print_section("系统检查模式 (--check-only)")
@@ -938,7 +938,7 @@ async def _run_check_only(galaxy: 'LumivUnified'):
 
     # 2. 配置检查
     print_section("配置检查")
-    status = galaxy.config.get_status_dict()
+    status = lumiv.config.get_status_dict()
     llm_count = sum(1 for v in status["llm_apis"].values() if v)
     print_status(f"LLM API: {llm_count} 个已配置", "success" if llm_count > 0 else "warning")
 
@@ -1061,7 +1061,7 @@ def _start_electron_gui():
 
 def main():
     """主函数"""
-    print_banner()  # Galaxy ASCII banner at the top
+    print_banner()  # Lumiv ASCII banner at the top
     # PR-UVLOOP-WIN: uvloop is Linux/macOS only — skip on Windows to avoid startup delay
     if sys.platform != "win32":
         try:
@@ -1075,7 +1075,7 @@ def main():
         return 1
 
     parser = argparse.ArgumentParser(
-        description="Galaxy - L4 级自主性智能系统（统一融合版）",
+        description="Lumiv - L4 级自主性智能系统（统一融合版）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 权威启动路径 (PR-2):
@@ -1083,7 +1083,7 @@ def main():
     python unified_launcher.py              # 从属组件（直接调用，高级用途）
 
 已删除的兼容性包装器（不可再使用）:
-    start_galaxy.py                         # 已删除（post-PR-10 清理）
+    start_lumiv.py                         # 已删除（post-PR-10 清理）
     start_l4.py                             # 已删除（post-PR-10 清理）
 
 示例:
@@ -1170,32 +1170,32 @@ def main():
         return
 
     # 创建系统实例
-    galaxy = LumivUnified()
+    lumiv = LumivUnified()
     
     # 应用命令行参数
-    galaxy.config.minimal_mode = args.minimal
-    galaxy.config.enable_web_ui = not args.no_ui
-    galaxy.config.enable_l4 = not args.no_l4
-    galaxy.config.enable_nodes = not args.no_nodes
-    galaxy.config.host = args.host
-    galaxy.config.web_ui_port = args.port
+    lumiv.config.minimal_mode = args.minimal
+    lumiv.config.enable_web_ui = not args.no_ui
+    lumiv.config.enable_l4 = not args.no_l4
+    lumiv.config.enable_nodes = not args.no_nodes
+    lumiv.config.host = args.host
+    lumiv.config.web_ui_port = args.port
     
     # 查看状态
     if args.status:
-        galaxy.show_status()
+        lumiv.show_status()
         return
 
     # 仅检查依赖和配置
     if args.check_only:
-        asyncio.run(_run_check_only(galaxy))
+        asyncio.run(_run_check_only(lumiv))
         return
 
     # ── 前置检查（Pre-flight checks）──────────────────────────────────────
     # 端口冲突检测：如果目标端口已被占用，提前告知用户并退出
-    if galaxy.config.enable_web_ui:
+    if lumiv.config.enable_web_ui:
         import socket as _socket
-        _port = galaxy.config.web_ui_port
-        _host = galaxy.config.host if galaxy.config.host != "0.0.0.0" else "127.0.0.1"
+        _port = lumiv.config.web_ui_port
+        _host = lumiv.config.host if lumiv.config.host != "0.0.0.0" else "127.0.0.1"
         with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as _s:
             _s.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
             try:
@@ -1209,7 +1209,7 @@ def main():
                 sys.exit(1)
 
     # 配置缺失检测：没有 LLM API Key 时给出明确提示
-    if not galaxy.config.has_llm_api():
+    if not lumiv.config.has_llm_api():
         env_file = PROJECT_ROOT / ".env"
         if not env_file.exists():
             print_status(
@@ -1226,16 +1226,16 @@ def main():
             )
 
     # 节点目录检测
-    if galaxy.config.enable_nodes and not (PROJECT_ROOT / "nodes").exists():
+    if lumiv.config.enable_nodes and not (PROJECT_ROOT / "nodes").exists():
         print_status("nodes/ 目录未找到，节点系统将被跳过。", "warning")
-        galaxy.config.enable_nodes = False
+        lumiv.config.enable_nodes = False
 
     # ── 信号处理 ───────────────────────────────────────────────────────────
     # SECURITY: Use asyncio.add_signal_handler for async-safe signal handling.
     # signal.signal() is unsafe in async contexts because it can interrupt
     # the event loop at arbitrary points, causing coroutine state corruption.
     def _graceful_shutdown() -> None:
-        galaxy.stop()
+        lumiv.stop()
 
     # 启动 Electron GUI（在 Python 服务之后启动，作为独立桌面表层）
     _start_electron_gui()
@@ -1246,9 +1246,9 @@ def main():
         asyncio.set_event_loop(loop)
         loop.add_signal_handler(signal.SIGINT, _graceful_shutdown)
         loop.add_signal_handler(signal.SIGTERM, _graceful_shutdown)
-        loop.run_until_complete(galaxy.start())
+        loop.run_until_complete(lumiv.start())
     except KeyboardInterrupt:
-        galaxy.stop()
+        lumiv.stop()
     finally:
         try:
             loop.remove_signal_handler(signal.SIGINT)
