@@ -1,5 +1,5 @@
 """
-Lumiv WebSocket Bridge — 桌面覆盖层事件推送
+Galaxy WebSocket Bridge — 桌面覆盖层事件推送
 
 职责：
 1. 订阅 DesktopPresenceRuntime 的状态事件
@@ -56,7 +56,7 @@ class GalaxyWebSocketBridge:
     _started: bool = False
 
     @classmethod
-    def get_instance(cls) -> "LumivWebSocketBridge":
+    def get_instance(cls) -> "GalaxyWebSocketBridge":
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
