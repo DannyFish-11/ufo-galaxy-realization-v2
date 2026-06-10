@@ -1,21 +1,22 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// P1+P14 修复：本地加载 Three.js，避免 CDN 依赖
-// 添加 try-catch，如果 require 失败则 THREE 为 undefined（renderer 会 graceful degradation）
-let THREE = null;
-try {
-    THREE = require('three');
-    console.log('[Preload] Three.js 本地加载成功');
-} catch (err) {
-    console.warn('[Preload] Three.js 本地加载失败 — Silent 态将以 CSS 降级模式运行:', err.message);
-}
+// PR-IPC: Electron IPC 桥接 — Python 后端 → main.js → preload → 前端
+// 替代 WebSocket，内存级通信，无端口占用
+contextBridge.exposeInMainWorld('galaxyAPI', {
+  // ── 三态状态接收（主窗口）─
+  onBackendState: (callback) => {
+    ipcRenderer.on('presence-state', (event, payload) => callback(payload));
+  },
 
-contextBridge.exposeInMainWorld('electronAPI', {
-    getWindowSize: () => ipcRenderer.invoke('get-window-size'),
-    onWindowResize: (callback) => ipcRenderer.on('window-resize', (_, size) => callback(size)),
-    setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
-    removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
+  // ── Panel 数据获取 ─
+  getBackendUrl: () => Promise.resolve('http://localhost:8000'),
+
+  // ── 窗口控制 ─
+  getWindowSize: () => ipcRenderer.invoke('get-window-size'),
+  setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
+
+  // ── 工具 ─
+  platform: process.platform,
 });
 
-// 暴露 THREE 到全局（如果加载成功）
-contextBridge.exposeInMainWorld('THREE', THREE);
+console.log('[Preload] galaxyAPI IPC bridge ready');
