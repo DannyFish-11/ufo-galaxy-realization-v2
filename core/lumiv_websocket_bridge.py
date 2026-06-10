@@ -173,6 +173,7 @@ class GalaxyWebSocketBridge:
 
         ContinuumState.presence_intensity 直接映射为 depth_factor，
         实现 AI 认知强度实时驱动外壳渲染。
+        同时生成实时状态文本供灵动岛显示。
         """
         try:
             # 兼容 StateEvent 对象和直接 dict
@@ -194,14 +195,41 @@ class GalaxyWebSocketBridge:
                 self._current_mode = "liminal"
             elif phase == "manifest":
                 self._current_mode = "manifest"
+            # 生成实时状态文本（基于 OpenClawd 认知状态）
+            self._status_text = self._generate_status_text(payload)
             asyncio.create_task(self._broadcast_state())
         except Exception:
             pass
+
+    def _generate_status_text(self, payload: dict) -> str:
+        """根据 OpenClawd 实时认知状态生成灵动岛文本。
+
+        不硬编码 — 从 ContinuumState 数值动态映射。
+        """
+        presence = payload.get("presence_intensity", 0.0)
+        coherence = payload.get("coherence", 0.0)
+        collapse = payload.get("collapse_tendency", 0.0)
+        phase = payload.get("phase", "")
+        # 基于认知强度的动态状态描述
+        if phase == "manifest":
+            return "执行中..."
+        if self._speaking:
+            return "倾听中..."
+        if presence > 0.85 and coherence > 0.7:
+            return "深度推理..."
+        if presence > 0.6 and coherence > 0.5:
+            return "思考中..."
+        if presence > 0.35:
+            return "认知中..."
+        if collapse > 0.5:
+            return "重新评估..."
+        return "感知中..."
 
     def _build_message(self) -> Dict[str, Any]:
         """构建 AIP v3 兼容的 presence_state 消息。
 
         格式兼容前端 GalaxyRenderer，同时符合 AIP v3 消息规范。
+        包含 status_text 供灵动岛实时显示 OpenClawd 认知状态。
         """
         return {
             "type": "state_event",
@@ -220,5 +248,6 @@ class GalaxyWebSocketBridge:
                 "mode": self._current_mode,
                 "source": "DesktopPresenceRuntime",
                 "presence_intensity": round(self._current_depth, 4),
+                "status_text": getattr(self, '_status_text', '感知中...'),
             },
         }
