@@ -62,7 +62,7 @@ Launcher responsibilities are split across focused ``launcher/`` sub-modules:
 This file retains the service orchestration surface:
 - ``L4EnhancementLauncher``  — L4 module startup
 - ``UnifiedWebUI``           — HTTP server assembly (FastAPI + uvicorn)
-- ``GalaxyUnified``          — service bring-up coordinator (Phase 4–6 delegate)
+- ``LumivUnified``          — service bring-up coordinator (Phase 4–6 delegate)
 - ``_run_check_only`` / ``main`` — CLI entry-points (for direct invocation)
 
 作者：Galaxy Team
@@ -479,7 +479,7 @@ class UnifiedWebUI:
 # Galaxy 统一系统
 # ============================================================================
 
-class GalaxyUnified:
+class LumivUnified:
     """Galaxy 统一系统"""
     
     def __init__(self):
@@ -906,7 +906,7 @@ class GalaxyUnified:
 # 主函数
 # ============================================================================
 
-async def _run_check_only(galaxy: 'GalaxyUnified'):
+async def _run_check_only(galaxy: 'LumivUnified'):
     """仅检查依赖和配置，输出完整系统状态表，不启动服务"""
     print_banner()
     print_section("系统检查模式 (--check-only)")
@@ -1170,7 +1170,7 @@ def main():
         return
 
     # 创建系统实例
-    galaxy = GalaxyUnified()
+    galaxy = LumivUnified()
     
     # 应用命令行参数
     galaxy.config.minimal_mode = args.minimal
