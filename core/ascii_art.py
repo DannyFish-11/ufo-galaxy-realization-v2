@@ -3,7 +3,7 @@ Galaxy ASCII 艺术字 / 统一终端输出格式
 =======================================
 
 单一真相来源 (single source of truth) for:
-- Galaxy 启动横幅 (GALAXY_BANNER)
+- Galaxy 启动横幅 (LUMIV_BANNER)
 - 终端颜色 (Colors)
 - 对齐的状态行 (print_status_row)
 - 章节标题 (print_section_header)
@@ -20,17 +20,17 @@ import os
 # 版本 & 标语 (single source of truth)
 # ---------------------------------------------------------------------------
 
-GALAXY_VERSION = "v2.3.21"
-GALAXY_TAGLINE = "L4 Autonomous Intelligence System"
+LUMIV_VERSION = "v2.3.21"
+LUMIV_TAGLINE = "L4 Autonomous Intelligence System"
 
 # ---------------------------------------------------------------------------
 # 规范横幅 (canonical banner)
 # 宽度 60 字符 (含边框)，与 shell 脚本中的 echo 版本精确对齐
-# Version line is composed from GALAXY_TAGLINE / GALAXY_VERSION constants.
+# Version line is composed from LUMIV_TAGLINE / LUMIV_VERSION constants.
 # ---------------------------------------------------------------------------
 
 _BANNER_VERSION_LINE = (
-    "║     " + GALAXY_TAGLINE + "   " + GALAXY_VERSION
+    "║     " + LUMIV_TAGLINE + "   " + LUMIV_VERSION
 ).ljust(59) + "║"
 
 
@@ -74,13 +74,13 @@ _RAW_BANNER_LINES = [
     "╚══════════════════════════════════════════════════════════╝",
 ]
 
-GALAXY_BANNER = _normalize_banner(_RAW_BANNER_LINES)
+LUMIV_BANNER = _normalize_banner(_RAW_BANNER_LINES)
 
 # ---------------------------------------------------------------------------
 # 向后兼容别名 (backward-compat aliases)
 # ---------------------------------------------------------------------------
 
-GALAXY_ASCII = """\
+LUMIV_ASCII = """\
    ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗
   ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝
   ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝ 
@@ -89,12 +89,12 @@ GALAXY_ASCII = """\
    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   
 
   {tagline}
-  Version: {version}""".format(tagline=GALAXY_TAGLINE, version=GALAXY_VERSION)
+  Version: {version}""".format(tagline=LUMIV_TAGLINE, version=LUMIV_VERSION)
 
-GALAXY_ASCII_LARGE = GALAXY_BANNER
+LUMIV_ASCII_LARGE = LUMIV_BANNER
 
-# GALAXY_ASCII_MINIMAL now points to the canonical banner for backward compat
-GALAXY_ASCII_MINIMAL = GALAXY_BANNER
+# LUMIV_ASCII_MINIMAL now points to the canonical banner for backward compat
+LUMIV_ASCII_MINIMAL = LUMIV_BANNER
 
 # ---------------------------------------------------------------------------
 # 终端颜色 (terminal colors)
@@ -156,11 +156,17 @@ def ansi_supported() -> bool:
 # ---------------------------------------------------------------------------
 
 _ANCHOR_COLORS = [
-    (  0, 225, 253),  # aurora cyan
-    ( 41, 156, 255),  # tech blue
-    (109,  92, 255),  # indigo
-    (184,  61, 245),  # neon purple
-    (255,  46, 147),  # cyber pink
+    (255, 248, 240),  # 0.00 晨曦白
+    (252, 242, 220),  # 0.10 暖 Ivory
+    (248, 234, 200),  # 0.20 暖米
+    (244, 225, 185),  # 0.30 牙色过渡
+    (242, 215, 155),  # 0.40 浅金
+    (240, 200, 100),  # 0.50 亮金
+    (230, 180,  70),  # 0.60 赤金
+    (200, 165,  75),  # 0.70 古金
+    (160, 135,  70),  # 0.80 乌金过渡
+    (100,  95,  65),  # 0.90 暗金褐
+    ( 44,  62,  80),  # 1.00 松烟墨
 ]
 
 
@@ -174,7 +180,7 @@ def _interp_rgb(t: float) -> tuple:
         Tuple (r, g, b) with values in 0–255.
     """
     anchors = _ANCHOR_COLORS
-    n = len(anchors) - 1  # 4 segments
+    n = len(anchors) - 1  # 10 segments (11 anchors)
     scaled = t * n
     i = int(scaled)
     if i >= n:
@@ -199,7 +205,7 @@ def _colorize_line(line: str, banner_width: int = 60) -> str:
     Args:
         line:         The text to colorize.
         banner_width: Total width used for the color calculation (default 60,
-                      matching GALAXY_BANNER). All lines of the banner share
+                      matching LUMIV_BANNER). All lines of the banner share
                       this same scale, so colors align consistently across
                       lines of varying code-point length.
 
@@ -260,13 +266,13 @@ def print_powershell_hint() -> None:
         "\n[Galaxy Tip] PowerShell 显示建议:\n"
         "  • 字体:   Consolas (右键标题栏 → 属性 → 字体)\n"
         "  • 列宽:   窗口宽度 ≥ 120 列 (属性 → 布局 → 宽度 120)\n"
-        "  • UTF-8:  运行 chcp 65001 后再启动 Galaxy\n"
+        "  • UTF-8:  运行 chcp 65001 后再启动 Lumiv\n"
         "  示例: chcp 65001 && python main.py\n"
     )
 
 
 def print_banner(use_color: bool = True) -> None:
-    """打印规范 Galaxy 横幅（24-bit true-color 平滑左→右渐变）。
+    """打印规范 Lumiv 横幅（24-bit true-color 平滑左→右渐变）。
 
     ANSI 支持自动检测：
     - 若终端支持 ANSI（包括 Windows 10+ VT 模式），每个字符使用独立的
@@ -279,13 +285,13 @@ def print_banner(use_color: bool = True) -> None:
     """
     _use_ansi = use_color and ansi_supported()
     if _use_ansi:
-        lines = GALAXY_BANNER.split("\n")
+        lines = LUMIV_BANNER.split("\n")
         print()
         for line in lines:
             print(_colorize_line(line))
         print()
     else:
-        print(f"\n{GALAXY_BANNER}\n")
+        print(f"\n{LUMIV_BANNER}\n")
 
 
 def print_section_header(title: str, use_color: bool = True) -> None:
@@ -341,8 +347,8 @@ def print_status_row(
         "success": Colors.GREEN,
         "warning": Colors.YELLOW,
         "error":   Colors.RED,
-        "loading": Colors.CYAN,
-        "step":    Colors.CYAN,
+        "loading": Colors.GOLD,
+        "step":    Colors.GOLD,
         "info":    Colors.BLUE,
     }
 
@@ -363,14 +369,14 @@ def print_status_row(
 # 旧版兼容函数 (legacy compat)
 # ---------------------------------------------------------------------------
 
-def print_galaxy(style: str = "minimal") -> None:
-    """打印 Galaxy ASCII 艺术字（旧版接口，新代码请使用 print_banner()）。"""
+def print_lumiv(style: str = "minimal") -> None:
+    """打印 Lumiv ASCII 艺术字（旧版接口，新代码请使用 print_banner()）。"""
     if style == "large":
-        print(GALAXY_ASCII_LARGE)
+        print(LUMIV_ASCII_LARGE)
     elif style == "minimal":
-        print(GALAXY_ASCII_MINIMAL)
+        print(LUMIV_ASCII_MINIMAL)
     else:
-        print(GALAXY_ASCII)
+        print(LUMIV_ASCII)
 
 
 if __name__ == "__main__":
