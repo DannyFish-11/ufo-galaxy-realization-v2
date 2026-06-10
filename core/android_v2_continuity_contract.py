@@ -114,7 +114,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 import logging
 
-logger = logging.getLogger("Lumiv.AndroidV2ContinuityContract")
+logger = logging.getLogger("Galaxy.AndroidV2ContinuityContract")
 
 # ---------------------------------------------------------------------------
 # Authority sentinels
