@@ -169,17 +169,17 @@ class GalaxyRenderer {
       // 滑入阶段
       progress = (d - 0.35) / 0.15;
       translateY = -30 * (1.0 - progress);
-      text = '认知中...';
+      text = this.statusText || '认知中...';
     } else if (d >= 0.50 && d < 0.80) {
       // 完全显示
       progress = 1.0;
       translateY = 0;
-      text = this.speaking ? '倾听中...' : (this.intent > 0.6 ? '思考中...' : '认知中...');
+      text = this.statusText || '感知中...';  // OpenClawd 实时状态
     } else if (d >= 0.80 && d < 0.90) {
       // 滑出消失
       progress = 1.0 - (d - 0.80) / 0.10;
       translateY = -30 * (1.0 - progress);
-      text = '执行中...';
+      text = this.statusText || '执行中...';
     }
 
     if (progress > 0.01) {
