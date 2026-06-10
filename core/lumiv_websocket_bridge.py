@@ -175,27 +175,43 @@ class GalaxyWebSocketBridge:
         实现 AI 认知强度实时驱动外壳渲染。
         """
         try:
-            payload = event.payload if hasattr(event, 'payload') else {}
-            if isinstance(payload, dict):
-                presence = payload.get("presence_intensity", 0.0)
-                self._current_depth = float(presence)
-                self._intent = payload.get("coherence", 0.0)
-                phase = payload.get("phase", self._current_mode)
-                if phase in ("silent", "static"):
-                    self._current_mode = "static"
-                elif phase == "liminal":
-                    self._current_mode = "liminal"
-                elif phase in ("manifest",):
-                    self._current_mode = "manifest"
-                asyncio.create_task(self._broadcast_state())
+            # 兼容 StateEvent 对象和直接 dict
+            if hasattr(event, 'payload'):
+                payload = event.payload
+            elif isinstance(event, dict):
+                payload = event
+            else:
+                return
+            if not isinstance(payload, dict):
+                return
+            presence = payload.get("presence_intensity", 0.0)
+            self._current_depth = float(presence)
+            self._intent = payload.get("coherence", 0.5)
+            phase = payload.get("phase", self._current_mode)
+            if phase in ("silent", "static"):
+                self._current_mode = "static"
+            elif phase == "liminal":
+                self._current_mode = "liminal"
+            elif phase == "manifest":
+                self._current_mode = "manifest"
+            asyncio.create_task(self._broadcast_state())
         except Exception:
             pass
 
     def _build_message(self) -> Dict[str, Any]:
-        """构建与前端兼容的 state_event 消息。"""
+        """构建 AIP v3 兼容的 presence_state 消息。
+
+        格式兼容前端 GalaxyRenderer，同时符合 AIP v3 消息规范。
+        """
         return {
             "type": "state_event",
             "event_category": "ambient_tick",
+            "aip_version": "3.0",
+            "message_type": "presence_state",
+            "transport": "websocket",
+            "source": "desktop_presence_runtime",
+            "target": "desktop_shell",
+            "timestamp": time.time(),
             "payload": {
                 "phase": self._current_mode,
                 "depth_factor": round(self._current_depth, 4),
@@ -203,5 +219,6 @@ class GalaxyWebSocketBridge:
                 "speaking": self._speaking,
                 "mode": self._current_mode,
                 "source": "DesktopPresenceRuntime",
+                "presence_intensity": round(self._current_depth, 4),
             },
         }
