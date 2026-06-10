@@ -1,8 +1,9 @@
 # config/llm_routing_policy.yaml
 # ================================
-# Galaxy Multi-LLM 路由策略配置（2026-05-29全面更新）
+# Galaxy Multi-LLM 路由策略配置（2026-06-10更新）
 # 14个提供商, 覆盖8个任务类型
 # 新增: minimax(M2.7), step(3.7 Flash), mimo(V2.5 Pro)
+# 新增: anthropic/fable-5 (2026-06-09 Mythos-class发布)
 #
 # 字段说明：
 #   priorities      — 任务类型 → 提供商优先顺序（index 0 最高优先）
@@ -17,9 +18,10 @@ version: "2"
 # 全局默认 fallback（任何任务类型均可用）
 # ─────────────────────────────────────────────────────────────────────────────
 global_fallback_chain:
+  - anthropic   # Fable 5 (2026-06-09): Mythos-class, SWE-Bench Pro 80.3%
   - deepseek    # V4-Pro: 降价75%, ¥0.025/M输入
   - openai      # GPT-5.5
-  - anthropic   # Opus 4.8 (2026-05-29发布)
+  - anthropic   # Opus 4.8 (2026-05-29发布) — Fable safeguard fallback
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 全局 SLO / 预算
@@ -35,7 +37,8 @@ global_slo:
 task_routing:
 
   reasoning:
-    priorities: [anthropic, openai, deepseek, google, qwen, step, xai]
+    priorities: [anthropic, anthropic, openai, deepseek, google, qwen, step, xai]
+    # ^ 双anthropic = Fable 5 (Mythos-class) → Opus 4.8 (safeguard fallback)
     constraints:
       require_tools: false
     cost_budget:
@@ -57,7 +60,8 @@ task_routing:
     fallback_chain: [openai, anthropic]
 
   coding:
-    priorities: [deepseek, qwen, anthropic, openai, step, mimo]
+    priorities: [anthropic, deepseek, qwen, openai, step, mimo]
+    # ^ anthropic = Fable 5 (SWE-Bench Pro 80.3%, 代码迁移50M行Ruby一天完成)
     constraints:
       require_tools: false
     cost_budget:
@@ -80,6 +84,7 @@ task_routing:
 
   analysis:
     priorities: [anthropic, openai, deepseek, google, perplexity, qwen, step]
+    # ^ anthropic = Fable 5 (Hex analytics首个>90%模型)
     constraints:
       require_tools: false
     cost_budget:
@@ -91,6 +96,7 @@ task_routing:
 
   planning:
     priorities: [anthropic, openai, deepseek, xai, qwen, minimax, step]
+    # ^ anthropic = Fable 5 (长程规划，多步自主任务)
     constraints:
       require_tools: false
     cost_budget:
@@ -102,6 +108,7 @@ task_routing:
 
   agent_control:
     priorities: [anthropic, openai, deepseek, minimax, step]
+    # ^ anthropic = Fable 5 (长程agentic任务最优，持久记忆游戏通关率3x)
     constraints:
       require_tools: true
     cost_budget:
