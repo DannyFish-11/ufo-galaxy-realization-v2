@@ -81,6 +81,10 @@ class GalaxyWebSocketBridge:
             # 订阅 intent 强度更新
             bus.subscribe("intent.update",  self._on_intent_update)
 
+            # PR-REALTIME-CONTINUUM: 订阅持续认知状态事件
+            # OpenClawd 的 ContinuumState.presence_intensity 实时驱动外壳
+            bus.subscribe("continuum.state", self._on_continuum_state)
+
             logger.info("GalaxyWebSocketBridge started — subscribed to StateEventBus")
         except Exception as exc:
             logger.warning("StateEventBus subscription failed (non-fatal): %s", exc)
@@ -161,6 +165,31 @@ class GalaxyWebSocketBridge:
             await websocket.send_json(self._build_message())
         except Exception as exc:
             logger.debug("Send to single client failed: %s", exc)
+
+    # ── PR-REALTIME-CONTINUUM: 持续认知状态处理 ──
+
+    def _on_continuum_state(self, event) -> None:
+        """处理 OpenClawd 的实时认知状态更新。
+
+        ContinuumState.presence_intensity 直接映射为 depth_factor，
+        实现 AI 认知强度实时驱动外壳渲染。
+        """
+        try:
+            payload = event.payload if hasattr(event, 'payload') else {}
+            if isinstance(payload, dict):
+                presence = payload.get("presence_intensity", 0.0)
+                self._current_depth = float(presence)
+                self._intent = payload.get("coherence", 0.0)
+                phase = payload.get("phase", self._current_mode)
+                if phase in ("silent", "static"):
+                    self._current_mode = "static"
+                elif phase == "liminal":
+                    self._current_mode = "liminal"
+                elif phase in ("manifest",):
+                    self._current_mode = "manifest"
+                asyncio.create_task(self._broadcast_state())
+        except Exception:
+            pass
 
     def _build_message(self) -> Dict[str, Any]:
         """构建与前端兼容的 state_event 消息。"""
