@@ -19,6 +19,7 @@ class GalaxyRenderer {
     this.intent = 0.0;
     this.speaking = false;
     this.phase = 'static';
+    this.statusText = '感知中...';  // OpenClawd 实时状态
 
     // Spring 物理（只用于平滑 depth 变化，不做状态切换）
     this.currentDepth = 0.0;
