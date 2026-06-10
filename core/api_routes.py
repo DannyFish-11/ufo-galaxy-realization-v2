@@ -1,10 +1,10 @@
 """
-Galaxy - 完整 API 路由模块（规范路由聚合入口）
+Lumiv - 完整 API 路由模块（规范路由聚合入口）
 =================================================
 
 **架构权威声明 (Batch PR-4)**
 ------------------------------
-``core/api_routes.py`` 是 Galaxy 的 **唯一权威 REST API 定义**。
+``core/api_routes.py`` 是 Lumiv 的 **唯一权威 REST API 定义**。
 路由所有权由 ``CANONICAL_API_ROUTES_AUTHORITY`` 哨兵声明。
 
 API 路由按域组织于 ``core/routes/`` 子模块，本文件仅负责聚合。
@@ -42,7 +42,7 @@ Domain → 子模块映射：
   /ws/status            → (create_websocket_routes)    （状态推送 WebSocket）
 
 NOTE — Device WebSocket ingress authority:
-  The CANONICAL device ingress is galaxy_gateway/routes/websocket.py /ws/device/{device_id}.
+  The CANONICAL device ingress is lumiv_gateway/routes/websocket.py /ws/device/{device_id}.
   The /ws/device/{device_id} route in THIS file (core/api_routes.py) is a
   COMPATIBILITY-ONLY path retained for legacy/core-direct clients.  It must NOT
   be treated as a competing primary ingress.  New device clients MUST connect
@@ -71,7 +71,7 @@ from core.unified_response import UnifiedChatResponse  # noqa
 try:
     from .auth import require_auth
 except ImportError:
-    logging.getLogger("Galaxy.API").warning(
+    logging.getLogger("Lumiv.API").warning(
         "core.auth 模块未找到，所有需要鉴权的路由将拒绝访问（HTTP 401）。"
         "请确保 core/auth.py 存在。"
     )
@@ -79,7 +79,7 @@ except ImportError:
     async def require_auth():
         raise HTTPException(status_code=401, detail="鉴权模块不可用，拒绝访问")
 
-logger = logging.getLogger("Galaxy.API")
+logger = logging.getLogger("Lumiv.API")
 
 # ---------------------------------------------------------------------------
 # Batch PR-4: Canonical API Routes Authority
@@ -110,7 +110,7 @@ API_COMPATIBILITY_SURFACE_BOUNDARY_PR8_SENTINEL = (
 CORE_COMPAT_DEVICE_INGRESS_POLICY_AUTHORITY = (
     "CORE_COMPAT_DEVICE_INGRESS_POLICY_AUTHORITY_V1: "
     "core.api_routes compatibility websocket ingress is never production-equivalent. "
-    "The canonical Android/V2 device ingress remains galaxy_gateway.routes.websocket "
+    "The canonical Android/V2 device ingress remains lumiv_gateway.routes.websocket "
     "/ws/device/{device_id}; protected cross-device mode blocks the core-direct "
     "compatibility ingress unless an explicit override is set for controlled fallback use."
 )
@@ -151,7 +151,7 @@ _API_COMPATIBILITY_SURFACES: tuple[APICompatibilitySurface, ...] = (
         surface_id="core_direct_device_websocket_ingress",
         path="/ws/device/{device_id}",
         module="core.api_routes.create_websocket_routes",
-        canonical_replacement="/ws/device/{device_id} (galaxy_gateway/routes/websocket.py)",
+        canonical_replacement="/ws/device/{device_id} (lumiv_gateway/routes/websocket.py)",
         compatibility_scope="legacy_core_direct_ws_clients",
     ),
 )
@@ -222,7 +222,7 @@ def get_core_compat_device_ingress_policy(
         "compatibility_surface_factory": "core.api_routes.create_websocket_routes",
         "classification": "compatibility-only",
         "canonical_device_ingress": "/ws/device/{device_id}",
-        "canonical_device_ingress_module": "galaxy_gateway.routes.websocket",
+        "canonical_device_ingress_module": "lumiv_gateway.routes.websocket",
         "canonical_required_for_production": True,
         "production_equivalent": False,
         "system_mode": fabric.mode.value,
@@ -242,7 +242,7 @@ def get_device_ingress_surface_report(
     env: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Return a machine-readable view of canonical and compatibility ingress surfaces."""
-    from galaxy_gateway.routes.websocket import (
+    from lumiv_gateway.routes.websocket import (
         CANONICAL_DEVICE_INGRESS_AUTHORITY,
         DEVICE_WS_INGRESS_SURFACE_REGISTRY,
     )
@@ -459,9 +459,9 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         logger.warning("存在面路由加载失败（可选）: %s", _e)
 
     # Android center-side VLM HTTP surface (plan / ground / status / checksums).
-    # Module lives under galaxy_gateway but must register on the canonical API app.
+    # Module lives under lumiv_gateway but must register on the canonical API app.
     try:
-        from galaxy_gateway.routes.android_vlm import router as _android_vlm_router
+        from lumiv_gateway.routes.android_vlm import router as _android_vlm_router
         router.include_router(_android_vlm_router)
     except Exception as _e:
         logger.warning("Android VLM HTTP 路由加载失败（可选）: %s", _e)
@@ -525,7 +525,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             await _register()
             try:
                 # Send a welcome event immediately so the client knows it's connected
-                welcome = json.dumps({"type": "connected", "message": "Galaxy SSE stream connected", "timestamp": datetime.now().isoformat()})
+                welcome = json.dumps({"type": "connected", "message": "Lumiv SSE stream connected", "timestamp": datetime.now().isoformat()})
                 yield f"data: {welcome}\n\n"
                 while True:
                     if await request.is_disconnected():
@@ -582,7 +582,7 @@ async def _chat_with_gemini(req: ChatRequest, api_key: str) -> JSONResponse:
             json={
                 "contents": contents,
                 "systemInstruction": {
-                    "parts": [{"text": "你是 Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
+                    "parts": [{"text": "你是 Lumiv 智能助手，一个 L4 级自主性 AI 系统。"}]
                 }
             }
         )
@@ -601,7 +601,7 @@ async def _chat_with_openrouter(req: ChatRequest, api_key: str) -> JSONResponse:
     """使用 OpenRouter API 进行对话"""
     import httpx
 
-    messages = [{"role": "system", "content": "你是 Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
+    messages = [{"role": "system", "content": "你是 Lumiv 智能助手，一个 L4 级自主性 AI 系统。"}]
     for ctx in req.context[-10:]:
         messages.append(ctx)
     messages.append({"role": "user", "content": req.message})
@@ -636,7 +636,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
 
     COMPATIBILITY SURFACE — NOT the canonical device ingress.
 
-    The canonical device ingress is galaxy_gateway/routes/websocket.py
+    The canonical device ingress is lumiv_gateway/routes/websocket.py
     /ws/device/{device_id}.  The routes registered here are retained for
     legacy/core-direct clients only and must not be introduced as a second
     primary device ingress authority.
@@ -658,7 +658,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
     logger.warning(
         "DEPRECATED: core/api_routes.py create_websocket_routes() is a "
         "compatibility surface. New clients MUST use "
-        "galaxy_gateway/routes/websocket.py /ws/device/{device_id} "
+        "lumiv_gateway/routes/websocket.py /ws/device/{device_id} "
         "as the sole canonical device ingress. "
         "This compat path will be removed in a future release."
     )
@@ -697,7 +697,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
     #
     # Compatibility-only device WebSocket path.  This endpoint is NOT the
     # canonical device ingress.  The canonical path is:
-    #   galaxy_gateway/routes/websocket.py → /ws/device/{device_id}
+    #   lumiv_gateway/routes/websocket.py → /ws/device/{device_id}
     #
     # This route is retained for clients that connect directly to the core
     # layer without going through the gateway.  It must not be extended with
@@ -708,7 +708,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         """[COMPAT] 设备 WebSocket 连接 — 兼容路径（非规范主入口）
 
         Compatibility-only path.  The canonical device ingress is
-        galaxy_gateway/routes/websocket.py /ws/device/{device_id}.
+        lumiv_gateway/routes/websocket.py /ws/device/{device_id}.
         """
         if not compat_ws_policy["effective_enabled"]:
             blocked_by_policy = compat_ws_policy["blocked_by_protected_mode"]
