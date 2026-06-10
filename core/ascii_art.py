@@ -1,9 +1,9 @@
 """
-Galaxy ASCII 艺术字 / 统一终端输出格式
+Lumiv ASCII 艺术字 / 统一终端输出格式
 =======================================
 
 单一真相来源 (single source of truth) for:
-- Galaxy 启动横幅 (LUMIV_BANNER)
+- Lumiv 启动横幅 (LUMIV_BANNER)
 - 终端颜色 (Colors)
 - 对齐的状态行 (print_status_row)
 - 章节标题 (print_section_header)
@@ -254,7 +254,7 @@ def print_powershell_hint() -> None:
     """Print a one-time startup tip for Windows PowerShell users.
 
     Recommends Consolas font, ≥120-column window width, and UTF-8 code page so
-    that the Galaxy ASCII banner renders without broken borders or missing glyphs.
+    that the Lumiv ASCII banner renders without broken borders or missing glyphs.
 
     The hint is only printed when the process is running inside a Windows
     PowerShell session (detected via the ``PSModulePath`` or ``PSVersionTable``
@@ -263,7 +263,7 @@ def print_powershell_hint() -> None:
     if os.name != 'nt' or not (os.environ.get("PSModulePath") or os.environ.get("PSVersionTable")):
         return
     print(
-        "\n[Galaxy Tip] PowerShell 显示建议:\n"
+        "\n[Lumiv Tip] PowerShell 显示建议:\n"
         "  • 字体:   Consolas (右键标题栏 → 属性 → 字体)\n"
         "  • 列宽:   窗口宽度 ≥ 120 列 (属性 → 布局 → 宽度 120)\n"
         "  • UTF-8:  运行 chcp 65001 后再启动 Lumiv\n"
