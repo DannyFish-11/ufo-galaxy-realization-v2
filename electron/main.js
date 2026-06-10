@@ -1,6 +1,10 @@
 const { app, BrowserWindow, globalShortcut, ipcMain } = require('electron');
 const path = require('path');
 
+// PR-IPC: HTTP 接收端 — Python 后端推送到此端点，转发到前端 IPC
+const IPC_HTTP_PORT = 9229;
+let ipcHttpServer = null;
+
 // ── Two-window architecture ──
 // mainWindow  : Three-State Full-Screen AI (always on, never hidden)
 // panelWindow : AI Control Panel — Colorless Lens (toggled by F12)
@@ -57,6 +61,45 @@ function createWindow() {
 
 app.whenReady().then(() => {
     createWindow();
+
+    // ── IPC HTTP 接收端 ──
+    // Python 后端 POST /ipc/presence-state → 转发到前端 via ipcMain
+    try {
+        const http = require('http');
+        ipcHttpServer = http.createServer((req, res) => {
+            if (req.method === 'POST' && req.url === '/ipc/presence-state') {
+                let body = '';
+                req.on('data', chunk => body += chunk);
+                req.on('end', () => {
+                    try {
+                        const data = JSON.parse(body);
+                        const payload = data.payload || data;
+                        // 转发到主窗口
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            mainWindow.webContents.send('presence-state', payload);
+                        }
+                        // 转发到 Panel 窗口
+                        if (panelWindow && !panelWindow.isDestroyed()) {
+                            panelWindow.webContents.send('presence-state', payload);
+                        }
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: true, via: 'ipc' }));
+                    } catch (e) {
+                        res.writeHead(400);
+                        res.end('{"error": "invalid json"}');
+                    }
+                });
+            } else {
+                res.writeHead(404);
+                res.end('{"error": "not found"}');
+            }
+        });
+        ipcHttpServer.listen(IPC_HTTP_PORT, '127.0.0.1', () => {
+            console.log(`[IPC] HTTP receiver on localhost:${IPC_HTTP_PORT}`);
+        });
+    } catch (err) {
+        console.warn('[IPC] Failed to start HTTP receiver:', err);
+    }
 
     // PR-D5: Start system tray alongside Electron GUI
     // P22 修复：根据平台选择 python/python3，避免硬编码
@@ -160,6 +203,11 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+    // 关闭 IPC HTTP 服务器
+    if (ipcHttpServer) {
+        ipcHttpServer.close();
+        console.log('[IPC] HTTP receiver stopped');
+    }
     globalShortcut.unregisterAll();
 });
 
