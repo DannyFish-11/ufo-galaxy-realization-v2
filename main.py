@@ -30,12 +30,12 @@ if sys.platform == "win32":
         pass
 
 """
-Galaxy-Nexus 星枢 — System Orchestrator
+Lumiv-Nexus 星枢 — System Orchestrator
 ========================================
 
 **SYSTEM_ORCHESTRATOR_AUTHORITY** — ``main.py:SYSTEM_ORCHESTRATOR``
 --------------------------------------------------------------------
-This file is the **canonical system orchestrator** for Galaxy-Nexus.
+This file is the **canonical system orchestrator** for Lumiv-Nexus.
 ``python main.py`` is the official startup path.
 
 Staged bring-up contract (PR-2)
@@ -60,7 +60,7 @@ Subject lifecycle authority
 
 Usage
 -----
-    python main.py              # Start complete Galaxy-Nexus system
+    python main.py              # Start complete Lumiv-Nexus system
     python main.py --setup      # Run configuration wizard
     python main.py --status     # Show system status
     python main.py --help       # Show all startup options
@@ -196,11 +196,11 @@ log_dir = PROJECT_ROOT / "logs"
 log_dir.mkdir(exist_ok=True)
 
 # SECURITY: Only configure logging if no handlers exist yet.
-# Multiple entry points (main.py, galaxy_daemon.py, system_manager.py)
+# Multiple entry points (main.py, lumiv_daemon.py, system_manager.py)
 # call basicConfig; repeated calls are no-ops after the first.
 if not logging.getLogger().handlers:
     handler = RotatingFileHandler(
-        str(log_dir / "galaxy.log"), maxBytes=10 * 1024 * 1024, backupCount=5,
+        str(log_dir / "lumiv.log"), maxBytes=10 * 1024 * 1024, backupCount=5,
         encoding="utf-8",
     )
     logging.basicConfig(
@@ -209,7 +209,7 @@ if not logging.getLogger().handlers:
         datefmt="%H:%M:%S",
         handlers=[handler, SafeStreamHandler()],
     )
-logger = logging.getLogger("Galaxy")
+logger = logging.getLogger("Lumiv")
 
 # Health / validation tracking (non-strict mode diagnostics)
 _health_status: str = "unknown"
@@ -543,7 +543,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                                 if bashrc.exists():
                                     content = bashrc.read_text()
                                     if path_line not in content:
-                                        bashrc.write_text(content + f"\n# Galaxy Node.js\n{path_line}\n")
+                                        bashrc.write_text(content + f"\n# Lumiv Node.js\n{path_line}\n")
                                 node_installed = True
                                 print_item(f"Node.js {node_ver} 已安装", "ok", str(bin_dir))
                 except Exception as exc:
@@ -663,7 +663,7 @@ def _run_setup_wizard() -> int:
 # ---------------------------------------------------------------------------
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Galaxy V2 Unified Entry")
+    parser = argparse.ArgumentParser(description="Lumiv V2 Unified Entry")
     parser.add_argument("--setup", action="store_true", help="Run interactive setup wizard")
     args = parser.parse_args()
 
@@ -671,7 +671,7 @@ def main() -> int:
         _run_setup_wizard()
         return 0
 
-    # ── Phase 0: Galaxy Banner ───────────────────────────
+    # ── Phase 0: Lumiv Banner ───────────────────────────
     print_banner()
 
     # ── Phase 0: Environment check ───────────────────────
@@ -691,18 +691,18 @@ def main() -> int:
 
     # ── Start unified launcher (DIRECT CALL, not subprocess)
     print_phase("[系统启动]")
-    print_item("正在启动 Galaxy 后端服务...", "ok")
+    print_item("正在启动 Lumiv 后端服务...", "ok")
 
     from unified_launcher import LumivUnified
 
-    galaxy = LumivUnified()
+    lumiv = LumivUnified()
     try:
-        asyncio.run(galaxy.start())
+        asyncio.run(lumiv.start())
     except KeyboardInterrupt:
         print()
         print_phase("[系统停止]")
         print_item("正在优雅关闭所有服务...", "ok")
-        galaxy.stop()
+        lumiv.stop()
         print_item("所有服务已停止", "ok")
 
     return 0
