@@ -48,13 +48,13 @@ class GalaxyRenderer {
   // ── WebSocket：接收 DesktopPresenceRuntime 事件 ──
 
   _connectWebSocket() {
-    const url = window.lumivAPI
+    const url = window.galaxyAPI
       ? null // 由 preload 提供
       : 'ws://localhost:9000/ws/desktop-presence';
 
-    if (window.lumivAPI?.onBackendState) {
+    if (window.galaxyAPI?.onBackendState) {
       // Electron 模式：通过 IPC 接收
-      window.lumivAPI.onBackendState((state) => this._onStateEvent(state));
+      window.galaxyAPI.onBackendState((state) => this._onStateEvent(state));
     } else {
       // 浏览器预览模式：直接 WebSocket
       this._wsConnect(url);
@@ -193,6 +193,6 @@ class GalaxyRenderer {
 
 // ── 启动 ──
 window.addEventListener('DOMContentLoaded', () => {
-  window.lumivRenderer = new GalaxyRenderer();
-  window.lumivRenderer.init();
+  window.galaxyRenderer = new GalaxyRenderer();
+  window.galaxyRenderer.init();
 });
