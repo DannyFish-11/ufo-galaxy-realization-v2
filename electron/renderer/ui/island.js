@@ -14,17 +14,17 @@ class IslandController {
 
   update(currentDepth, backendState) {
     let progress = 0;
-    let text = 'Lumiv';
+    let text = 'Galaxy';
 
     if (currentDepth > 0.10 && currentDepth < 0.90) {
       if (currentDepth < 0.35) {
         // 出现阶段
         progress = Math.min(1, (currentDepth - 0.10) / 0.18);
-        text = 'Lumiv';
+        text = 'Galaxy';
       } else if (currentDepth < 0.65) {
         // 完全展开
         progress = 1;
-        text = backendState.speaking ? '倾听中...' : 'Lumiv';
+        text = backendState.speaking ? '倾听中...' : 'Galaxy';
       } else {
         // 消失阶段
         progress = Math.max(0, 1 - (currentDepth - 0.65) / 0.18);
@@ -45,7 +45,7 @@ class IslandController {
 
   // ── 强制显示/隐藏 ───────────────────────────────
 
-  show(text = 'Lumiv') {
+  show(text = 'Galaxy') {
     this.el.classList.add('visible');
     this.textEl.textContent = text;
     this.visible = true;
