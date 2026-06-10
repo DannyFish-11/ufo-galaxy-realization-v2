@@ -12,7 +12,7 @@ import subprocess
 import time
 from pathlib import Path
 
-logger = logging.getLogger("Galaxy.NATSServer")
+logger = logging.getLogger("Lumiv.NATSServer")
 
 
 class EmbeddedNATSServer:
@@ -22,7 +22,7 @@ class EmbeddedNATSServer:
         self.host = host
         self.port = port
         self.process = None
-        self.data_dir = Path.home() / ".galaxy" / "nats"
+        self.data_dir = Path.home() / ".lumiv" / "nats"
 
     async def start(self) -> bool:
         """启动内置NATS服务器"""
@@ -88,7 +88,7 @@ class EmbeddedNATSServer:
                 import urllib.request
                 import json
                 import socket
-                nats_dir = Path.home() / ".galaxy" / "bin"
+                nats_dir = Path.home() / ".lumiv" / "bin"
                 nats_dir.mkdir(parents=True, exist_ok=True)
                 nats_exe = nats_dir / "nats-server.exe"
                 # PR-NATS-CN: 使用国内镜像源加速下载，支持超时重试
@@ -106,7 +106,7 @@ class EmbeddedNATSServer:
                 for mirror in mirrors:
                     url = f"{mirror}/nats-io/nats-server/releases/download/{tag}/nats-server-{tag}-windows-amd64.zip"
                     try:
-                        req = urllib.request.Request(url, headers={"User-Agent": "Galaxy-Installer"})
+                        req = urllib.request.Request(url, headers={"User-Agent": "Lumiv-Installer"})
                         with urllib.request.urlopen(req, timeout=15) as resp:
                             with open(zip_path, "wb") as f:
                                 f.write(resp.read())
@@ -132,7 +132,7 @@ class EmbeddedNATSServer:
                         for mirror in mirrors:
                             url = f"{mirror}/nats-io/nats-server/releases/download/{tag}/nats-server.exe"
                             try:
-                                req = urllib.request.Request(url, headers={"User-Agent": "Galaxy-Installer"})
+                                req = urllib.request.Request(url, headers={"User-Agent": "Lumiv-Installer"})
                                 with urllib.request.urlopen(req, timeout=15) as resp:
                                     with open(nats_exe, "wb") as f:
                                         f.write(resp.read())
