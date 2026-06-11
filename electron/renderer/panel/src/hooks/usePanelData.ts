@@ -46,7 +46,7 @@ const DEFAULT_PANEL_DATA: PanelData = {
   collapseTendency: 0.0,
   llmRouting: {
     activeProviders: ['anthropic', 'openai', 'deepseek'],
-    lastModelUsed: 'claude-sonnet-4-6-20251022',
+    lastModelUsed: 'claude-fable-5',
   },
   nodeTopology: {
     totalNodes: 120,

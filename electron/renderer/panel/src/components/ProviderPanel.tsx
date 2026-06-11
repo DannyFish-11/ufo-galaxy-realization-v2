@@ -31,14 +31,32 @@ interface Props {
 
 // ── Mock 数据 ────────────────────────────────────
 
+// 所有模型 ID 均来自 2026 年 6 月各厂商最新公开 API 文档
+// Anthropic: claude-fable-5 (2026/6/9), Opus 4.8 (2026/5/28), Sonnet 4.6 (2026/2/17)
+// OpenAI: GPT-5.5 (2026/4/23), GPT-5.5 Instant (2026/5/28 更新)
+// DeepSeek: V4 Pro / V4 Flash (2026/4)
+// Google: Gemini 3.5 Pro / Flash (2026/5/19)
+// xAI: Grok 4.3 (2026/4/30), grok-4.1 已于 2026/5/15 退役
+// Qwen: 3.7 Max / 3.7 Coder (2026/5/20), 3.6-27B (2026/4/22)
+// Step: 3.7 Flash / Turbo (2026/5/28)
+// Zhipu: GLM-5.1 / Flash (2026/4/8)
+// MiniMax: M3 (2026/6/1), M2.7 (2026/3/18)
+// Mistral: Large 3 (2026/5), Medium 3.5, Small 4
+// Moonshot: Kimi K2.6 (2026/4/20, 1T 参数开源)
+// Perplexity: Sonar Reasoning Pro / Pro
+// Groq: Llama 4 Scout / Maverick (2026), Llama 3.3 70B
+// Ollama: Gemma 4 系列 (12B/26B/31B + QAT 版本)
+// HF Local: Qwen 3.6-27B / 35B-A3B
 export const DEFAULT_PROVIDERS: ProviderConfig[] = [
   {
     id: 'anthropic',
     name: 'Anthropic',
     color: '#d4a57b',
     models: [
-      { id: 'claude-opus-4-8-20250529', name: 'Claude Opus 4.8', active: true },
-      { id: 'claude-sonnet-4-6-20251022', name: 'Claude Sonnet 4.6', active: false },
+      { id: 'claude-fable-5', name: 'Claude Fable 5', active: true },
+      { id: 'claude-opus-4-8', name: 'Claude Opus 4.8', active: false },
+      { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', active: false },
+      { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', active: false },
     ],
     apiKey: '',
     status: 'online',
@@ -51,6 +69,8 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     models: [
       { id: 'gpt-5.5', name: 'GPT-5.5', active: true },
       { id: 'gpt-5.5-instant', name: 'GPT-5.5 Instant', active: false },
+      { id: 'gpt-5.5-pro', name: 'GPT-5.5 Pro', active: false },
+      { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', active: false },
     ],
     apiKey: '',
     status: 'online',
@@ -62,7 +82,7 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     color: '#4f6ef7',
     models: [
       { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', active: true },
-      { id: 'deepseek-v4', name: 'DeepSeek V4', active: false },
+      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', active: false },
     ],
     apiKey: '',
     status: 'online',
@@ -87,6 +107,7 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     models: [
       { id: 'qwen3.7-max', name: 'Qwen 3.7 Max', active: true },
       { id: 'qwen3.7-coder', name: 'Qwen 3.7 Coder', active: false },
+      { id: 'qwen3.6-27b', name: 'Qwen 3.6 27B', active: false },
     ],
     apiKey: '',
     status: 'online',
@@ -97,7 +118,8 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     name: 'xAI',
     color: '#1d9bf0',
     models: [
-      { id: 'grok-4.1', name: 'Grok 4.1', active: false },
+      { id: 'grok-4.3', name: 'Grok 4.3', active: false },
+      { id: 'grok-4.20', name: 'Grok 4.20', active: false },
     ],
     apiKey: '',
     status: 'offline',
@@ -132,6 +154,7 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     name: 'MiniMax',
     color: '#ec4899',
     models: [
+      { id: 'minimax-m3', name: 'MiniMax M3', active: false },
       { id: 'minimax-m2.7', name: 'MiniMax M2.7', active: false },
     ],
     apiKey: '',
@@ -156,6 +179,8 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     color: '#fb923c',
     models: [
       { id: 'mistral-large-3', name: 'Mistral Large 3', active: false },
+      { id: 'mistral-medium-3.5', name: 'Mistral Medium 3.5', active: false },
+      { id: 'mistral-small-4', name: 'Mistral Small 4', active: false },
     ],
     apiKey: '',
     status: 'offline',
@@ -166,8 +191,8 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     name: 'Moonshot',
     color: '#f59e0b',
     models: [
-      { id: 'moonshot-v1-128k', name: 'Moonshot V1 128K', active: false },
-      { id: 'moonshot-v1-256k', name: 'Moonshot V1 256K', active: false },
+      { id: 'kimi-k2.6', name: 'Kimi K2.6', active: false },
+      { id: 'kimi-k2.5', name: 'Kimi K2.5', active: false },
     ],
     apiKey: '',
     status: 'offline',
@@ -178,7 +203,7 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     name: 'Perplexity',
     color: '#20b8cd',
     models: [
-      { id: 'sonar-deep-research', name: 'Sonar Deep Research', active: false },
+      { id: 'sonar-reasoning-pro', name: 'Sonar Reasoning Pro', active: false },
       { id: 'sonar-pro', name: 'Sonar Pro', active: false },
     ],
     apiKey: '',
@@ -190,6 +215,8 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     name: 'Groq',
     color: '#f55036',
     models: [
+      { id: 'llama-4-scout', name: 'Llama 4 Scout', active: false },
+      { id: 'llama-4-maverick', name: 'Llama 4 Maverick', active: false },
       { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', active: false },
     ],
     apiKey: '',
@@ -202,7 +229,8 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     color: '#ffffff',
     models: [
       { id: 'gemma4:12b', name: 'Gemma4 12B', active: false },
-      { id: 'gemma4:e4b', name: 'Gemma4 E4B', active: false },
+      { id: 'gemma4:26b', name: 'Gemma4 26B', active: false },
+      { id: 'gemma4:31b', name: 'Gemma4 31B', active: false },
     ],
     apiKey: '',
     status: 'online',
@@ -213,9 +241,8 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     name: 'HF Local',
     color: '#ffd21e',
     models: [
-      { id: 'Qwen/Qwen2.5-14B-Instruct', name: 'Qwen2.5 14B', active: false },
-      { id: 'Qwen/Qwen2.5-3B-Instruct', name: 'Qwen2.5 3B', active: false },
-      { id: 'Qwen/Qwen2.5-Coder-14B-Instruct', name: 'Qwen2.5 Coder 14B', active: false },
+      { id: 'Qwen/Qwen3.6-27B-Instruct', name: 'Qwen 3.6 27B', active: false },
+      { id: 'Qwen/Qwen3.6-35B-A3B', name: 'Qwen 3.6 35B MoE', active: false },
     ],
     apiKey: '',
     status: 'offline',
