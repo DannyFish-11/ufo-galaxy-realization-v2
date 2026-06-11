@@ -1074,6 +1074,46 @@ class AndroidBridge:
             if msg_type not in self._message_handlers:
                 self._message_handlers[msg_type] = _wrap(handle_unregistered)
 
+    async def push_decision_to_wearos(self, device_id: str, decision_context: Dict[str, Any]) -> bool:
+        """向 WearOS 设备推送决策通知。
+
+        当 OpenClawd 需要人类确认时，通过此方法向已注册的 WearOS 设备
+        推送决策上下文，手表显示通知并等待用户操作。
+
+        Args:
+            device_id: 目标 WearOS 设备 ID
+            decision_context: 决策上下文，包含:
+                - title: 决策标题
+                - summary: 一句话摘要
+                - options: 预设选项列表 [{"id": "confirm", "label": "确认"}, ...]
+                - urgency: 紧急程度 ("low" | "normal" | "high")
+                - timeout_ms: 超时时间（毫秒）
+
+        Returns:
+            bool: 是否成功推送
+        """
+        try:
+            device = self._devices.get(device_id)
+            if not device or not device.connected:
+                return False
+
+            websocket = device.websocket
+            if not websocket:
+                return False
+
+            await websocket.send_json({
+                "type": "decision_request",
+                "payload": {
+                    **decision_context,
+                    "decision_id": str(uuid.uuid4()),
+                    "timestamp": time.time(),
+                    "source": "openclawd",
+                }
+            })
+            return True
+        except Exception:
+            return False
+
     # Fields that are hard requirements
     _V3_MANDATORY_FIELDS: tuple = ("type", "device_id")
 
