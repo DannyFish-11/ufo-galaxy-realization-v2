@@ -428,6 +428,7 @@ class DelegatedSignalKind(str, Enum):
     result = "result"
     timeout = "timeout"
     cancelled = "cancelled"
+    wearos_human_input = "wearos_human_input"
 
     @classmethod
     def from_string(cls, value: str) -> "DelegatedSignalKind":
@@ -496,7 +497,7 @@ class ResultKind(str, Enum):
 # snapshot during extraction.
 _DELEGATED_PAYLOAD_CONTENT_KEYS: tuple = (
     "result", "details", "error", "error_message", "latency_ms",
-    "step_count", "partial_result",
+    "step_count", "partial_result", "decision", "input",
 )
 
 
