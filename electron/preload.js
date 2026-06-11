@@ -5,7 +5,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('galaxyAPI', {
   // ── 三态状态接收（主窗口）─
   onBackendState: (callback) => {
-    ipcRenderer.on('presence-state', (event, payload) => callback(payload));
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('presence-state', handler);
+    return () => ipcRenderer.removeListener('presence-state', handler);
   },
 
   // ── Panel 数据获取 ─
@@ -17,6 +19,16 @@ contextBridge.exposeInMainWorld('galaxyAPI', {
 
   // ── 工具 ─
   platform: process.platform,
+
+  // -- 配置管理 --
+  getConfig: () => ipcRenderer.invoke('galaxy:get-config'),
+  setConfig: (config) => ipcRenderer.invoke('galaxy:set-config', config),
+  onConfigUpdate: (callback) => {
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('galaxy:config-update', handler);
+    return () => ipcRenderer.removeListener('galaxy:config-update', handler);
+  },
+  saveConfig: () => ipcRenderer.invoke('galaxy:save-config'),
 });
 
 console.log('[Preload] galaxyAPI IPC bridge ready');

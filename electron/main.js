@@ -195,35 +195,14 @@ function togglePanel() {
         return;
     }
 
-    // 创建 Panel 窗口
-    panelWindow = new BrowserWindow({
-        width: 1200,
-        height: 700,
-        show: true,
-        frame: false,
-        transparent: true,
-        alwaysOnTop: true,
-        backgroundColor: '#00000000',
-        webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true,
-            nodeIntegration: false,
-            sandbox: true,
-        },
-    });
-
-    panelWindow.loadFile(path.join(__dirname, 'renderer', 'panel', 'index.html'));
-
-    // 开发工具
-    // panelWindow.webContents.openDevTools();
-
-    panelWindow.on('closed', () => {
-        panelWindow = null;
-        isPanelVisible = false;
-    });
-
-    isPanelVisible = true;
-    console.log('[Panel] Created & Shown (F12)');
+    // 创建 Panel 窗口（复用 createPanelWindow）
+    const win = createPanelWindow();
+    if (win) {
+        win.show();
+        win.focus();
+        isPanelVisible = true;
+        console.log('[Panel] Created & Shown (F12)');
+    }
 }
 
 app.on('window-all-closed', () => {
@@ -257,5 +236,66 @@ ipcMain.handle('get-window-size', () => {
 ipcMain.on('set-ignore-mouse', (event, ignore) => {
     if (mainWindow) {
         mainWindow.setIgnoreMouseEvents(ignore, { forward: true });
+    }
+});
+
+// ═══════════════════════════════════════════
+// Configuration Management — Python Backend
+// ═══════════════════════════════════════════
+
+// 内存中的配置缓存
+let configCache = {};
+
+// 从 Python 后端获取配置
+async function fetchConfigFromBackend() {
+    try {
+        const response = await fetch('http://localhost:9229/api/config');
+        if (response.ok) {
+            configCache = await response.json();
+            return configCache;
+        }
+    } catch (e) {
+        console.error('[Main] Failed to fetch config:', e.message);
+    }
+    return configCache;
+}
+
+// GET 配置
+ipcMain.handle('galaxy:get-config', async () => {
+    return await fetchConfigFromBackend();
+});
+
+// SET 配置（批量更新）
+ipcMain.handle('galaxy:set-config', async (_, config) => {
+    try {
+        const response = await fetch('http://localhost:9229/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config),
+        });
+        if (response.ok) {
+            configCache = { ...configCache, ...config };
+            // 广播到所有窗口
+            BrowserWindow.getAllWindows().forEach(w => {
+                w.webContents.send('galaxy:config-update', configCache);
+            });
+            return { success: true };
+        }
+        return { success: false, error: 'Backend rejected config' };
+    } catch (e) {
+        console.error('[Main] Failed to set config:', e.message);
+        return { success: false, error: e.message };
+    }
+});
+
+// 保存配置到文件
+ipcMain.handle('galaxy:save-config', async () => {
+    try {
+        const response = await fetch('http://localhost:9229/api/config/save', {
+            method: 'POST',
+        });
+        return { success: response.ok };
+    } catch (e) {
+        return { success: false, error: e.message };
     }
 });

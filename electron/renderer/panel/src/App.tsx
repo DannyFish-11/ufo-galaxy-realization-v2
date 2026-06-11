@@ -4,6 +4,7 @@ import { usePanelData } from '@/hooks/usePanelData';
 import type { Phase } from '@/types/phase';
 import VitalityTab from '@/components/VitalityTab';
 import WeitaiTab from '@/components/WeitaiTab';
+import SettingsTab from '@/components/SettingsTab';
 import './App.css';
 
 const TABS = [
@@ -90,11 +91,7 @@ function App() {
             >
               {activeTab === 0 && <VitalityTab data={panelData} />}
               {activeTab === 1 && <WeitaiTab data={panelData} />}
-              {activeTab === 2 && (
-                <div className="placeholder-tab">
-                  <span className="placeholder-text">设置面板 — 即将推出</span>
-                </div>
-              )}
+              {activeTab === 2 && <SettingsTab />}
             </motion.div>
           </AnimatePresence>
         </div>
