@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePanelData } from '@/hooks/usePanelData';
 import type { Phase } from '@/types/phase';
 import VitalityTab from '@/components/VitalityTab';
+import WeitaiTab from '@/components/WeitaiTab';
 import './App.css';
 
 const TABS = [
-  { cn: '维态', en: 'Weitai' },
   { cn: '星元', en: 'Xingyuan' },
+  { cn: '维态', en: 'Weitai' },
   { cn: '设置', en: 'Settings' },
 ];
 
@@ -88,11 +89,7 @@ function App() {
               transition={{ duration: 0.3 }}
             >
               {activeTab === 0 && <VitalityTab data={panelData} />}
-              {activeTab === 1 && (
-                <div className="placeholder-tab">
-                  <span className="placeholder-text">星元面板 — 即将推出</span>
-                </div>
-              )}
+              {activeTab === 1 && <WeitaiTab data={panelData} />}
               {activeTab === 2 && (
                 <div className="placeholder-tab">
                   <span className="placeholder-text">设置面板 — 即将推出</span>

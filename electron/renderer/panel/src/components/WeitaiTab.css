@@ -1,0 +1,65 @@
+/**
+ * WeitaiTab.css — 维态面板样式
+ * 液态玻璃风格 + 终端风格 UI
+ */
+
+/* 主容器：液态玻璃基础 */
+.weitai-tab {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  gap: 12px;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+/* 左侧拓扑图区域 */
+.weitai-left {
+  flex: 0 0 55%;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+  position: relative;
+}
+
+/* 右侧信息面板 */
+.weitai-right {
+  flex: 0 0 45%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 右侧子面板通用：液态玻璃 */
+.weitai-right > * {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+}
+
+/* Mesh 会话面板 */
+.mesh-session-section {
+  flex: 0 0 25%;
+  padding: 10px 14px;
+}
+
+/* OpenClawd 状态面板 */
+.openclawd-section {
+  flex: 0 0 30%;
+  padding: 10px 14px;
+}
+
+/* NATS 消息流面板 */
+.nats-section {
+  flex: 1;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
