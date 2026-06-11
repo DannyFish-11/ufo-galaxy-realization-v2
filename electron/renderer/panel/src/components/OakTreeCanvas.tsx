@@ -168,12 +168,12 @@ function generateFlowParticles(nodes: TreeNode[]): FlowParticle[] {
 // ── 默认 Provider 簇 ─────────────────────────────
 
 const DEFAULT_CLUSTERS: ProviderCluster[] = [
-  { id: 'anthropic', name: 'Anthropic', color: '#d4a030', x: 0.20, y: 0.12, models: ['claude-fable-5', 'claude-opus-4.8'], activeModel: 'claude-fable-5' },
-  { id: 'openai', name: 'OpenAI', color: '#10a37f', x: 0.42, y: 0.08, models: ['gpt-5.5', 'gpt-4o'], activeModel: 'gpt-5.5' },
+  { id: 'anthropic', name: 'Anthropic', color: '#d4a030', x: 0.20, y: 0.12, models: ['claude-opus-4-8-20250529', 'claude-sonnet-4-6-20251022'], activeModel: 'claude-opus-4-8-20250529' },
+  { id: 'openai', name: 'OpenAI', color: '#10a37f', x: 0.42, y: 0.08, models: ['gpt-5.5', 'gpt-5.5-instant'], activeModel: 'gpt-5.5' },
   { id: 'deepseek', name: 'DeepSeek', color: '#4f6ef7', x: 0.62, y: 0.10, models: ['deepseek-v4-pro'], activeModel: 'deepseek-v4-pro' },
-  { id: 'google', name: 'Google', color: '#4285f4', x: 0.80, y: 0.14, models: ['gemini-3.1-pro'], activeModel: 'gemini-3.1-pro' },
-  { id: 'qwen', name: 'Qwen', color: '#615ced', x: 0.35, y: 0.20, models: ['qwen3-235b'], activeModel: 'qwen3-235b' },
-  { id: 'xai', name: 'xAI', color: '#1d9bf0', x: 0.72, y: 0.22, models: ['grok-3'], activeModel: 'grok-3' },
+  { id: 'google', name: 'Google', color: '#4285f4', x: 0.80, y: 0.14, models: ['gemini-3.5-pro'], activeModel: 'gemini-3.5-pro' },
+  { id: 'qwen', name: 'Qwen', color: '#615ced', x: 0.35, y: 0.20, models: ['qwen3.7-max'], activeModel: 'qwen3.7-max' },
+  { id: 'xai', name: 'xAI', color: '#1d9bf0', x: 0.72, y: 0.22, models: ['grok-4.1'], activeModel: 'grok-4.1' },
 ];
 
 // ── 组件 ─────────────────────────────────────────
