@@ -1,7 +1,7 @@
 /**
  * VitalityTab — 维态面板
  * 左窄：ProviderPanel（模型配置）
- * 右宽：OakTreeCanvas（橡树根系可视化）
+ * 右宽：OakTreeCanvas（橡树根系可视化 + MCP/Skill 花草丛）
  */
 
 import React, { useState, useCallback } from 'react';
@@ -84,12 +84,14 @@ const VitalityTab: React.FC<Props> = ({ data }) => {
         />
       </div>
 
-      {/* 右侧：橡树根系 */}
+      {/* 右侧：橡树根系 + MCP/Skill 花草丛 */}
       <div className="vitality-right-v2">
         <OakTreeCanvas
           nodes={nodes}
           providers={clusters}
           onNodeHover={setHoveredNode}
+          mcpServers={data.mcpServers}
+          skills={data.skills}
         />
         {hoveredNode && (
           <div className="node-info-bar">

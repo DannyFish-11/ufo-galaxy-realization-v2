@@ -85,6 +85,23 @@ export interface PanelData {
     payload: string;
     msgType: string;
   }>;
+
+  // === 新增：MCP/Skill 状态 ===
+  mcpServers: Array<{
+    id: string;
+    name: string;
+    status: 'healthy' | 'degraded' | 'offline';
+    active: boolean;
+    toolCount: number;
+    activeTools: number;
+  }>;
+  skills: Array<{
+    id: string;
+    name: string;
+    status: 'healthy' | 'degraded' | 'offline';
+    active: boolean;
+    callCount: number;
+  }>;
 }
 
 interface UsePanelDataReturn {
@@ -158,6 +175,25 @@ const DEFAULT_PANEL_DATA: PanelData = {
     { id: 'msg-004', timestamp: Date.now() - 4000, topic: 'mesh.heartbeat', direction: 'in', payload: '{"nodeId":"desktop_01","status":"ok"}', msgType: 'heartbeat' },
     { id: 'msg-005', timestamp: Date.now() - 5000, topic: 'llm.route', direction: 'out', payload: '{"model":"claude-fable-5"}', msgType: 'llm_route' },
   ],
+
+  // === MCP/Skill 默认值 ===
+  mcpServers: [
+    { id: 'filesystem', name: 'FileSystem', status: 'healthy', active: true, toolCount: 8, activeTools: 6 },
+    { id: 'browser', name: 'Browser', status: 'healthy', active: true, toolCount: 6, activeTools: 5 },
+    { id: 'database', name: 'Database', status: 'healthy', active: true, toolCount: 10, activeTools: 8 },
+    { id: 'search', name: 'Search', status: 'degraded', active: true, toolCount: 4, activeTools: 2 },
+    { id: 'terminal', name: 'Terminal', status: 'healthy', active: true, toolCount: 5, activeTools: 5 },
+  ],
+  skills: [
+    { id: 'code-gen', name: 'CodeGen', status: 'healthy', active: true, callCount: 1543 },
+    { id: 'debug', name: 'Debug', status: 'healthy', active: true, callCount: 892 },
+    { id: 'review', name: 'Review', status: 'healthy', active: true, callCount: 1205 },
+    { id: 'doc-write', name: 'DocWrite', status: 'healthy', active: true, callCount: 678 },
+    { id: 'test-gen', name: 'TestGen', status: 'degraded', active: true, callCount: 445 },
+    { id: 'refactor', name: 'Refactor', status: 'healthy', active: true, callCount: 567 },
+    { id: 'analyze', name: 'Analyze', status: 'healthy', active: true, callCount: 2341 },
+    { id: 'deploy', name: 'Deploy', status: 'offline', active: false, callCount: 0 },
+  ],
 };
 
 // ── IPC 驱动 Hook ────────────────────────────────
@@ -217,6 +253,8 @@ export function usePanelData(): UsePanelDataReturn {
           meshSession: payload.mesh_session || DEFAULT_PANEL_DATA.meshSession,
           openclawdStatus: payload.openclawd_status || DEFAULT_PANEL_DATA.openclawdStatus,
           natsMessages: payload.nats_messages || DEFAULT_PANEL_DATA.natsMessages,
+          mcpServers: payload.mcp_servers || DEFAULT_PANEL_DATA.mcpServers,
+          skills: payload.skills || DEFAULT_PANEL_DATA.skills,
         });
         setLoading(false);
         setError(null);

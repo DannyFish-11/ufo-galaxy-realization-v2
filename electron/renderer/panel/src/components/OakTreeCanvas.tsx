@@ -1,6 +1,6 @@
 /**
- * OakTreeCanvas — 橡树根系节点可视化
- * Canvas 2D 绘制：树冠(模型簇) + 地面线 + 分形根系(100+节点) + 流动粒子
+ * OakTreeCanvas — 橡树根系节点可视化 + MCP/Skill 花草丛
+ * Canvas 2D 绘制：树冠(模型簇) + 地面线 + 分形根系(100+节点) + 流动粒子 + 花草丛
  */
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
@@ -28,6 +28,25 @@ export interface ProviderCluster {
   activeModel: string;
 }
 
+// ── MCP/Skill 状态类型 ────────────────────────────
+
+export interface MCPServerStatus {
+  id: string;
+  name: string;
+  status: 'healthy' | 'degraded' | 'offline';
+  active: boolean;
+  toolCount: number;
+  activeTools: number;
+}
+
+export interface SkillStatus {
+  id: string;
+  name: string;
+  status: 'healthy' | 'degraded' | 'offline';
+  active: boolean;
+  callCount: number;
+}
+
 interface FlowParticle {
   t: number;      // 0-1 along root path
   speed: number;
@@ -36,11 +55,45 @@ interface FlowParticle {
   alpha: number;
 }
 
+interface Firefly {
+  x: number;
+  y: number;
+  baseX: number;
+  baseY: number;
+  phase: number;
+  speed: number;
+  radius: number;
+  alpha: number;
+}
+
 interface Props {
   nodes: TreeNode[];
   providers: ProviderCluster[];
   onNodeHover: (node: TreeNode | null) => void;
+  mcpServers?: MCPServerStatus[];
+  skills?: SkillStatus[];
 }
+
+// ── 默认 MCP/Skill 数据 ──────────────────────────
+
+const DEFAULT_MCP_SERVERS: MCPServerStatus[] = [
+  { id: 'filesystem', name: 'FileSystem', status: 'healthy', active: true, toolCount: 8, activeTools: 6 },
+  { id: 'browser', name: 'Browser', status: 'healthy', active: true, toolCount: 6, activeTools: 5 },
+  { id: 'database', name: 'Database', status: 'healthy', active: true, toolCount: 10, activeTools: 8 },
+  { id: 'search', name: 'Search', status: 'degraded', active: true, toolCount: 4, activeTools: 2 },
+  { id: 'terminal', name: 'Terminal', status: 'healthy', active: true, toolCount: 5, activeTools: 5 },
+];
+
+const DEFAULT_SKILLS: SkillStatus[] = [
+  { id: 'code-gen', name: 'CodeGen', status: 'healthy', active: true, callCount: 1543 },
+  { id: 'debug', name: 'Debug', status: 'healthy', active: true, callCount: 892 },
+  { id: 'review', name: 'Review', status: 'healthy', active: true, callCount: 1205 },
+  { id: 'doc-write', name: 'DocWrite', status: 'healthy', active: true, callCount: 678 },
+  { id: 'test-gen', name: 'TestGen', status: 'degraded', active: true, callCount: 445 },
+  { id: 'refactor', name: 'Refactor', status: 'healthy', active: true, callCount: 567 },
+  { id: 'analyze', name: 'Analyze', status: 'healthy', active: true, callCount: 2341 },
+  { id: 'deploy', name: 'Deploy', status: 'offline', active: false, callCount: 0 },
+];
 
 // ── 分形根系生成 ─────────────────────────────────
 
@@ -177,16 +230,199 @@ const DEFAULT_CLUSTERS: ProviderCluster[] = [
   { id: 'xai', name: 'xAI', color: '#1d9bf0', x: 0.72, y: 0.22, models: ['grok-4.3', 'grok-4.20'], activeModel: 'grok-4.3' },
 ];
 
+// ── 花草丛绘制函数 ───────────────────────────────
+
+function drawGrassBlade(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  height: number,
+  angle: number,
+  color: string,
+  sway: number
+) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle + sway * 0.15);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.quadraticCurveTo(height * 0.2, -height * 0.5, height * 0.1, -height);
+  ctx.quadraticCurveTo(-height * 0.1, -height * 0.5, 0, 0);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawFlower(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  petalColor: string,
+  centerColor: string,
+  type: 'square' | 'star',
+  sway: number
+) {
+  ctx.save();
+  ctx.translate(x + sway * 2, y);
+
+  if (type === 'square') {
+    // 方形工具花（MCP）
+    for (let i = 0; i < 4; i++) {
+      ctx.save();
+      ctx.rotate((Math.PI / 2) * i + sway * 0.1);
+      ctx.beginPath();
+      ctx.roundRect(-size * 0.3, -size * 0.8, size * 0.6, size * 0.6, 2);
+      ctx.fillStyle = petalColor;
+      ctx.fill();
+      ctx.restore();
+    }
+  } else {
+    // 星形光芒花（Skill）
+    const spikes = 5;
+    const outerR = size;
+    const innerR = size * 0.4;
+    ctx.beginPath();
+    for (let i = 0; i < spikes * 2; i++) {
+      const r = i % 2 === 0 ? outerR : innerR;
+      const a = (Math.PI / spikes) * i - Math.PI / 2 + sway * 0.05;
+      const px = Math.cos(a) * r;
+      const py = Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = petalColor;
+    ctx.fill();
+  }
+
+  // 花心
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 0.25, 0, Math.PI * 2);
+  ctx.fillStyle = centerColor;
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawFlowerBush(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  groundY: number,
+  density: number,       // 0-1 繁盛度
+  type: 'mcp' | 'skill',
+  status: 'healthy' | 'degraded' | 'offline',
+  t: number,
+  label?: string
+) {
+  const W = ctx.canvas.width;
+  const H = ctx.canvas.height;
+  const scale = Math.min(W / 1200, H / 800);
+  const bushWidth = 80 * scale * (0.5 + density * 0.5);
+  const bushHeight = 60 * scale * (0.4 + density * 0.6);
+  const bladeCount = Math.floor(15 + density * 35);
+
+  // 颜色根据状态变化
+  const colorMap = {
+    healthy: type === 'mcp'
+      ? { grass: `rgba(80, 160, 120, ${0.5 + density * 0.4})`, flower: 'rgba(100, 200, 160, 0.85)', center: 'rgba(220, 255, 240, 0.9)' }
+      : { grass: `rgba(160, 140, 80, ${0.5 + density * 0.4})`, flower: 'rgba(255, 220, 100, 0.85)', center: 'rgba(255, 248, 220, 0.9)' },
+    degraded: type === 'mcp'
+      ? { grass: `rgba(160, 140, 60, ${0.4 + density * 0.3})`, flower: 'rgba(200, 180, 80, 0.7)', center: 'rgba(255, 240, 200, 0.8)' }
+      : { grass: `rgba(180, 120, 60, ${0.4 + density * 0.3})`, flower: 'rgba(255, 180, 60, 0.7)', center: 'rgba(255, 230, 180, 0.8)' },
+    offline: { grass: `rgba(80, 80, 80, ${0.2 + density * 0.2})`, flower: 'rgba(120, 120, 120, 0.4)', center: 'rgba(200, 200, 200, 0.5)' },
+  };
+  const colors = colorMap[status];
+
+  // 微风摆动
+  const sway = Math.sin(t * 0.0012 + centerX * 0.01) * 0.15;
+
+  // 草丛
+  for (let i = 0; i < bladeCount; i++) {
+    const offsetX = (Math.random() - 0.5) * bushWidth;
+    const bladeH = (10 + Math.random() * 25) * scale * (0.5 + density * 0.5);
+    const angle = (Math.random() - 0.5) * 0.6;
+    const bladeSway = sway + Math.sin(t * 0.0015 + i * 0.5) * 0.08;
+    const greenVar = Math.random() * 30;
+    const grassColor = colors.grass.replace(/\d+\)$/, `${0.4 + Math.random() * 0.4})`);
+    drawGrassBlade(ctx, centerX + offsetX, groundY, bladeH, angle, grassColor, bladeSway);
+  }
+
+  // 花朵（根据密度决定数量）
+  const flowerCount = Math.floor(2 + density * 6);
+  for (let i = 0; i < flowerCount; i++) {
+    const fx = centerX + (Math.random() - 0.5) * bushWidth * 0.6;
+    const fy = groundY - (15 + Math.random() * 30) * scale * (0.5 + density * 0.5);
+    const fsize = (6 + Math.random() * 8) * scale;
+    const flowerSway = Math.sin(t * 0.001 + i * 0.8 + centerX * 0.02) * 0.12;
+    drawFlower(ctx, fx, fy, fsize, colors.flower, colors.center, type === 'mcp' ? 'square' : 'star', flowerSway);
+  }
+
+  // 标签
+  if (label) {
+    ctx.font = `bold ${10 * scale}px -apple-system, PingFang SC, sans-serif`;
+    ctx.fillStyle = 'rgba(255, 248, 235, 0.7)';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, centerX, groundY + 14 * scale);
+  }
+}
+
+function drawFireflies(
+  ctx: CanvasRenderingContext2D,
+  fireflies: Firefly[],
+  t: number
+) {
+  fireflies.forEach((f) => {
+    // 更新位置
+    f.x = f.baseX + Math.sin(t * 0.001 * f.speed + f.phase) * 30;
+    f.y = f.baseY + Math.cos(t * 0.0018 * f.speed + f.phase * 1.3) * 20;
+    const flicker = 0.4 + Math.sin(t * 0.003 + f.phase * 2) * 0.35;
+
+    ctx.save();
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = `rgba(180, 255, 160, ${flicker * 0.6})`;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(200, 255, 180, ${flicker})`;
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+function generateFireflies(count: number, W: number, groundY: number): Firefly[] {
+  const flies: Firefly[] = [];
+  for (let i = 0; i < count; i++) {
+    const baseX = 80 + Math.random() * (W - 160);
+    const baseY = groundY - 20 - Math.random() * 80;
+    flies.push({
+      x: baseX,
+      y: baseY,
+      baseX,
+      baseY,
+      phase: Math.random() * Math.PI * 2,
+      speed: 0.5 + Math.random() * 1.5,
+      radius: 1.5 + Math.random() * 2,
+      alpha: 0.5 + Math.random() * 0.5,
+    });
+  }
+  return flies;
+}
+
 // ── 组件 ─────────────────────────────────────────
 
-const OakTreeCanvas: React.FC<Props> = ({ nodes: propNodes, providers, onNodeHover }) => {
+const OakTreeCanvas: React.FC<Props> = ({ nodes: propNodes, providers, onNodeHover, mcpServers, skills }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nodesRef = useRef<TreeNode[]>(propNodes.length > 0 ? propNodes : generateFractalNodes());
   const particlesRef = useRef<FlowParticle[]>(generateFlowParticles(nodesRef.current));
+  const firefliesRef = useRef<Firefly[]>([]);
   const animRef = useRef<number>(0);
   const timeRef = useRef(0);
   const [hoveredNode, setHoveredNode] = useState<TreeNode | null>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
+
+  // MCP/Skill 数据
+  const mcps = mcpServers && mcpServers.length > 0 ? mcpServers : DEFAULT_MCP_SERVERS;
+  const sks = skills && skills.length > 0 ? skills : DEFAULT_SKILLS;
 
   // 绘制主循环
   const draw = useCallback(() => {
@@ -398,9 +634,43 @@ const OakTreeCanvas: React.FC<Props> = ({ nodes: propNodes, providers, onNodeHov
       ctx.fill();
     });
 
+    // ── 左侧 MCP 花丛 ──
+    const mcpX = W * 0.12;
+    const mcpDensity = mcps.filter((m) => m.active).length / Math.max(mcps.length, 1);
+    drawFlowerBush(ctx, mcpX, groundY, mcpDensity, 'mcp', 'healthy', t, 'MCP');
+
+    mcps.forEach((mcp, i) => {
+      if (mcp.status === 'offline') return;
+      const itemX = mcpX + (i - mcps.length / 2) * 25 * (W / 1200);
+      const itemDensity = mcp.active ? mcp.activeTools / Math.max(mcp.toolCount, 1) : 0.2;
+      const itemStatus = mcp.status;
+      drawFlowerBush(ctx, itemX, groundY, itemDensity, 'mcp', itemStatus, t, mcp.name);
+    });
+
+    // ── 右侧 Skill 花丛 ──
+    const skillX = W * 0.88;
+    const skillDensity = sks.filter((s) => s.active).length / Math.max(sks.length, 1);
+    drawFlowerBush(ctx, skillX, groundY, skillDensity, 'skill', 'healthy', t, 'Skill');
+
+    sks.forEach((skill, i) => {
+      if (skill.status === 'offline') return;
+      const itemX = skillX + (i - sks.length / 2) * 22 * (W / 1200);
+      const itemDensity = skill.active ? Math.min(skill.callCount / 2000, 1) : 0.2;
+      const itemStatus = skill.status;
+      drawFlowerBush(ctx, itemX, groundY, itemDensity, 'skill', itemStatus, t, skill.name);
+    });
+
+    // ── 萤火虫粒子（healthy 状态下飞舞）─
+    if (mcpDensity > 0.5 || skillDensity > 0.5) {
+      if (firefliesRef.current.length === 0) {
+        firefliesRef.current = generateFireflies(15, W, groundY);
+      }
+      drawFireflies(ctx, firefliesRef.current, t);
+    }
+
     // ── 图例 ──
     ctx.save();
-    const legendX = W - 90;
+    const legendX = W - 110;
     const legendY = 16;
     [
       { label: 'Healthy', color: 'rgba(100, 200, 130, 0.8)' },
@@ -416,11 +686,20 @@ const OakTreeCanvas: React.FC<Props> = ({ nodes: propNodes, providers, onNodeHov
       ctx.textAlign = 'left';
       ctx.fillText(item.label, legendX + 10, legendY + i * 18 + 3);
     });
+
+    // MCP/Skill 图例
+    const mcpLegendY = legendY + 3 * 18 + 8;
+    ctx.font = '10px -apple-system, sans-serif';
+    ctx.fillStyle = 'rgba(100, 200, 160, 0.85)';
+    ctx.textAlign = 'left';
+    ctx.fillText('\u25A0 MCP', legendX, mcpLegendY);
+    ctx.fillStyle = 'rgba(255, 220, 100, 0.85)';
+    ctx.fillText('\u2605 Skill', legendX + 50, mcpLegendY);
     ctx.restore();
 
     timeRef.current += 16;
     animRef.current = requestAnimationFrame(draw);
-  }, [providers, hoveredNode]);
+  }, [providers, hoveredNode, mcps, sks]);
 
   // 启动/停止动画
   useEffect(() => {
