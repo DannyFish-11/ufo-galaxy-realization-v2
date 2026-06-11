@@ -71,6 +71,8 @@ authority established in :mod:`core.android_participant_truth_ingress`:
   coordinator.
 * ``participant_dropped`` signals drive :meth:`on_participant_dropped` on the
   live coordinator.
+* ``human_input`` signals carry user decisions from WearOS devices back to
+  OpenClawd's cognitive loop, closing the human-in-the-loop branch.
 
 Design
 ------
@@ -208,6 +210,7 @@ class AndroidMeshParticipantSignalKind(str, Enum):
     task_completed = "task_completed"
     task_failed = "task_failed"
     participant_dropped = "participant_dropped"
+    human_input = "human_input"
     unknown = "unknown"
 
     @classmethod
@@ -229,6 +232,7 @@ class AndroidMeshParticipantSignalKind(str, Enum):
             AndroidMeshParticipantSignalKind.task_completed,
             AndroidMeshParticipantSignalKind.task_failed,
             AndroidMeshParticipantSignalKind.participant_dropped,
+            AndroidMeshParticipantSignalKind.human_input,
         )
 
 
@@ -613,6 +617,19 @@ def apply_android_participation_signal(
             coordinator.on_participant_dropped(did, reason=signal.failure_reason or "android_participant_dropped")
             method = "on_participant_dropped"
 
+        elif kind == AndroidMeshParticipantSignalKind.human_input:
+            # WearOS 用户输入 — 转发到 OpenClawd 的认知闭环
+            coordinator.on_participant_result(
+                device_id=signal.device_id,
+                result={
+                    "type": "human_input",
+                    "input": signal.payload.get("input", ""),
+                    "decision": signal.payload.get("decision", ""),
+                    "timestamp": signal.payload.get("timestamp", ""),
+                }
+            )
+            method = "on_participant_result"
+
         else:
             return AndroidSignalApplicationOutcome(
                 signal=signal,
@@ -921,5 +938,4 @@ __all__ = [
     "build_android_participation_record",
     "classify_android_proof_quality",
     "classify_android_proof_quality_for_signals",
-    "evaluate_center_runtime_status_with_android_signals",
-]
+   
