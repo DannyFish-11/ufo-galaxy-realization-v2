@@ -181,21 +181,49 @@ function createPanelWindow() {
 }
 
 function togglePanel() {
-    if (!panelWindow) {
-        createPanelWindow();
+    if (panelWindow && !panelWindow.isDestroyed()) {
+        if (panelWindow.isVisible()) {
+            panelWindow.hide();
+            isPanelVisible = false;
+            console.log('[Panel] Hidden (F12)');
+        } else {
+            panelWindow.show();
+            panelWindow.focus();
+            isPanelVisible = true;
+            console.log('[Panel] Shown (F12)');
+        }
+        return;
     }
-    if (!panelWindow) return;
 
-    if (isPanelVisible) {
-        panelWindow.hide();
+    // 创建 Panel 窗口
+    panelWindow = new BrowserWindow({
+        width: 1200,
+        height: 700,
+        show: true,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        backgroundColor: '#00000000',
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+        },
+    });
+
+    panelWindow.loadFile(path.join(__dirname, 'renderer', 'panel', 'index.html'));
+
+    // 开发工具
+    // panelWindow.webContents.openDevTools();
+
+    panelWindow.on('closed', () => {
+        panelWindow = null;
         isPanelVisible = false;
-        console.log('[Panel] Hidden (F12)');
-    } else {
-        panelWindow.show();
-        panelWindow.focus();
-        isPanelVisible = true;
-        console.log('[Panel] Shown (F12)');
-    }
+    });
+
+    isPanelVisible = true;
+    console.log('[Panel] Created & Shown (F12)');
 }
 
 app.on('window-all-closed', () => {

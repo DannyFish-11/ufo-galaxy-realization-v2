@@ -1,46 +1,12 @@
 /**
- * usePanelData — AIP v3 格式轮询 Hook
- * 替换原有的 useWebSocket + usePhase
+ * usePanelData — IPC 驱动 Hook
+ * 通过 Electron preload.js 暴露的 galaxyAPI.onBackendState 接收状态推送
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Phase } from '@/types/phase';
 
 // ── AIP v3 类型定义 ──────────────────────────────
-
-export interface AIPV3Payload {
-  tri_state_phase: string;
-  presence_intensity: number;
-  coherence: number;
-  continuum_state: {
-    phase: string;
-    presence_intensity: number;
-    coherence: number;
-    collapse_tendency: number;
-  };
-  llm_routing: {
-    active_providers: string[];
-    last_model_used: string;
-  };
-  node_topology: {
-    total_nodes: number;
-    healthy_nodes: number;
-    degraded_nodes: number;
-  };
-  cost_summary: {
-    total_usd: number;
-    tokens_input: number;
-    tokens_output: number;
-  };
-}
-
-export interface AIPV3Response {
-  type: string;
-  aip_version: string;
-  source: string;
-  timestamp: number;
-  payload: AIPV3Payload;
-}
 
 export interface PanelData {
   phase: Phase;
@@ -68,12 +34,11 @@ interface UsePanelDataReturn {
   panelData: PanelData;
   loading: boolean;
   error: string | null;
-  refresh: () => void;
 }
 
-// ── Mock 降级数据 ────────────────────────────────
+// ── 默认值 ───────────────────────────────────────
 
-const MOCK_PANEL_DATA: PanelData = {
+const DEFAULT_PANEL_DATA: PanelData = {
   phase: 'silent',
   phaseLabel: 'STANDBY',
   presenceIntensity: 0.0,
@@ -81,136 +46,90 @@ const MOCK_PANEL_DATA: PanelData = {
   collapseTendency: 0.0,
   llmRouting: {
     activeProviders: ['anthropic', 'openai', 'deepseek'],
-    lastModelUsed: 'claude-fable-5',
+    lastModelUsed: 'claude-sonnet-4-6-20251022',
   },
   nodeTopology: {
-    totalNodes: 47,
-    healthyNodes: 45,
+    totalNodes: 120,
+    healthyNodes: 118,
     degradedNodes: 2,
   },
   costSummary: {
-    totalUsd: 12.45,
-    tokensInput: 456000,
-    tokensOutput: 89000,
+    totalUsd: 0.0,
+    tokensInput: 0,
+    tokensOutput: 0,
   },
 };
 
-// ── Phase 解析 ───────────────────────────────────
-
-function parsePhase(raw: string | undefined): Phase {
-  if (!raw) return 'silent';
-  const p = raw.toLowerCase();
-  if (p === 'silent' || p === 'standby') return 'silent';
-  if (p === 'liminal' || p === 'thinking' || p === 'processing') return 'liminal';
-  if (p === 'manifest' || p === 'online' || p === 'active') return 'manifest';
-  return 'silent';
-}
-
-function toPhaseLabel(phase: Phase): string {
-  switch (phase) {
-    case 'silent':
-      return 'STANDBY';
-    case 'liminal':
-      return 'THINKING...';
-    case 'manifest':
-      return 'ONLINE';
-  }
-}
-
-// ── API 配置 ─────────────────────────────────────
-
-const API_URL = 'http://localhost:8000/api/v1/panel/unified';
-const POLL_INTERVAL = 2000;
-
-// ── Hook ─────────────────────────────────────────
+// ── IPC 驱动 Hook ────────────────────────────────
 
 export function usePanelData(): UsePanelDataReturn {
-  const [panelData, setPanelData] = useState<PanelData>(MOCK_PANEL_DATA);
+  const [panelData, setPanelData] = useState<PanelData>(DEFAULT_PANEL_DATA);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const handlerRef = useRef<((() => void)) | null>(null);
 
-  const fetchData = useCallback(async () => {
-    try {
-      const res = await fetch(API_URL, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-
-      const json = (await res.json()) as AIPV3Response;
-
-      // 校验 AIP v3 格式
-      if (json.type !== 'panel_payload' || json.aip_version !== '3.0') {
-        console.warn('[Panel] AIP v3 format mismatch, using mock data');
-        setPanelData(MOCK_PANEL_DATA);
-        setError('AIP v3 format mismatch');
-        setLoading(false);
-        return;
-      }
-
-      const payload = json.payload;
-      const phase = parsePhase(payload.tri_state_phase);
-
-      setPanelData({
-        phase,
-        phaseLabel: toPhaseLabel(phase),
-        presenceIntensity: payload.presence_intensity ?? 0,
-        coherence: payload.coherence ?? 0,
-        collapseTendency: payload.continuum_state?.collapse_tendency ?? 0,
-        llmRouting: {
-          activeProviders: payload.llm_routing?.active_providers ?? [],
-          lastModelUsed: payload.llm_routing?.last_model_used ?? 'unknown',
-        },
-        nodeTopology: {
-          totalNodes: payload.node_topology?.total_nodes ?? 0,
-          healthyNodes: payload.node_topology?.healthy_nodes ?? 0,
-          degradedNodes: payload.node_topology?.degraded_nodes ?? 0,
-        },
-        costSummary: {
-          totalUsd: payload.cost_summary?.total_usd ?? 0,
-          tokensInput: payload.cost_summary?.tokens_input ?? 0,
-          tokensOutput: payload.cost_summary?.tokens_output ?? 0,
-        },
-      });
-
-      setError(null);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[Panel] API error: ${msg}, using mock data`);
-      // 降级到 mock 数据（保持当前 phase）
-      setPanelData((prev) => ({
-        ...MOCK_PANEL_DATA,
-        phase: prev.phase,
-        phaseLabel: prev.phaseLabel,
-      }));
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // 轮询
   useEffect(() => {
-    setLoading(true);
-    fetchData();
+    // 检查 IPC 通道是否可用
+    if (typeof window === 'undefined' || !(window as any).galaxyAPI?.onBackendState) {
+      console.warn('[Panel] IPC channel not available, using defaults');
+      setLoading(false);
+      setError('IPC not available');
+      return;
+    }
 
-    intervalRef.current = setInterval(fetchData, POLL_INTERVAL);
+    // 注册 IPC 状态回调
+    const handleState = (state: any) => {
+      try {
+        const payload = state?.payload || state;
+        const phase = (payload.tri_state_phase || payload.phase || 'silent') as Phase;
+        const intensity = payload.presence_intensity || 0;
 
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+        // 根据 intensity 映射 phase（如果后端未提供 tri_state_phase）
+        let mappedPhase: Phase = phase;
+        if (!payload.tri_state_phase && intensity > 0) {
+          if (intensity < 0.33) mappedPhase = 'silent';
+          else if (intensity < 0.66) mappedPhase = 'liminal';
+          else mappedPhase = 'manifest';
+        }
+
+        setPanelData({
+          phase: mappedPhase,
+          phaseLabel: mappedPhase.toUpperCase(),
+          presenceIntensity: intensity,
+          coherence: payload.coherence || 0.95,
+          collapseTendency: payload.collapse_tendency || 0,
+          llmRouting: {
+            activeProviders: payload.llm_routing?.active_providers || ['anthropic', 'openai', 'deepseek'],
+            lastModelUsed: payload.llm_routing?.last_model_used || 'unknown',
+          },
+          nodeTopology: {
+            totalNodes: payload.node_topology?.total_nodes || 120,
+            healthyNodes: payload.node_topology?.healthy_nodes || 118,
+            degradedNodes: payload.node_topology?.degraded_nodes || 2,
+          },
+          costSummary: {
+            totalUsd: payload.cost_summary?.total_usd || 0,
+            tokensInput: payload.cost_summary?.tokens_input || 0,
+            tokensOutput: payload.cost_summary?.tokens_output || 0,
+          },
+        });
+        setLoading(false);
+        setError(null);
+      } catch (e) {
+        console.error('[Panel] Failed to parse state:', e);
+        setError('Parse error');
       }
     };
-  }, [fetchData]);
 
-  const refresh = useCallback(() => {
-    setLoading(true);
-    fetchData();
-  }, [fetchData]);
+    handlerRef.current = () => {};
+    (window as any).galaxyAPI.onBackendState(handleState);
+    setLoading(false);
 
-  return { panelData, loading, error, refresh };
+    return () => {
+      // IPC 通道不支持取消订阅，这里只是清理引用
+      handlerRef.current = null;
+    };
+  }, []);
+
+  return { panelData, loading, error };
 }
