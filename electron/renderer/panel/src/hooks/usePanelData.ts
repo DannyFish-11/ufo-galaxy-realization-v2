@@ -86,21 +86,20 @@ export interface PanelData {
     msgType: string;
   }>;
 
-  // === 新增：MCP/Skill 状态 ===
+  // MCP 服务器状态（星元面板花草丛）
   mcpServers: Array<{
-    id: string;
     name: string;
-    status: 'healthy' | 'degraded' | 'offline';
-    active: boolean;
-    toolCount: number;
-    activeTools: number;
+    url: string;
+    status: 'online' | 'offline' | 'error' | 'unknown';
+    toolsCount: number;
   }>;
+
+  // Skill 状态（星元面板花草丛）
   skills: Array<{
-    id: string;
     name: string;
-    status: 'healthy' | 'degraded' | 'offline';
-    active: boolean;
-    callCount: number;
+    version: string;
+    status: 'loaded' | 'unloaded' | 'error' | 'disabled';
+    description: string;
   }>;
 }
 
@@ -176,23 +175,25 @@ const DEFAULT_PANEL_DATA: PanelData = {
     { id: 'msg-005', timestamp: Date.now() - 5000, topic: 'llm.route', direction: 'out', payload: '{"model":"claude-fable-5"}', msgType: 'llm_route' },
   ],
 
-  // === MCP/Skill 默认值 ===
+  // MCP 服务器（星元面板左侧花丛）
   mcpServers: [
-    { id: 'filesystem', name: 'FileSystem', status: 'healthy', active: true, toolCount: 8, activeTools: 6 },
-    { id: 'browser', name: 'Browser', status: 'healthy', active: true, toolCount: 6, activeTools: 5 },
-    { id: 'database', name: 'Database', status: 'healthy', active: true, toolCount: 10, activeTools: 8 },
-    { id: 'search', name: 'Search', status: 'degraded', active: true, toolCount: 4, activeTools: 2 },
-    { id: 'terminal', name: 'Terminal', status: 'healthy', active: true, toolCount: 5, activeTools: 5 },
+    { name: 'filesystem', url: 'http://localhost:8091', status: 'online', toolsCount: 8 },
+    { name: 'web-search', url: 'http://localhost:8092', status: 'online', toolsCount: 3 },
+    { name: 'code-exec', url: 'http://localhost:8093', status: 'error', toolsCount: 0 },
+    { name: 'browser', url: 'http://localhost:8094', status: 'offline', toolsCount: 0 },
+    { name: 'vision', url: 'http://localhost:8095', status: 'online', toolsCount: 5 },
   ],
+
+  // Skills（星元面板右侧花丛）
   skills: [
-    { id: 'code-gen', name: 'CodeGen', status: 'healthy', active: true, callCount: 1543 },
-    { id: 'debug', name: 'Debug', status: 'healthy', active: true, callCount: 892 },
-    { id: 'review', name: 'Review', status: 'healthy', active: true, callCount: 1205 },
-    { id: 'doc-write', name: 'DocWrite', status: 'healthy', active: true, callCount: 678 },
-    { id: 'test-gen', name: 'TestGen', status: 'degraded', active: true, callCount: 445 },
-    { id: 'refactor', name: 'Refactor', status: 'healthy', active: true, callCount: 567 },
-    { id: 'analyze', name: 'Analyze', status: 'healthy', active: true, callCount: 2341 },
-    { id: 'deploy', name: 'Deploy', status: 'offline', active: false, callCount: 0 },
+    { name: 'planner', version: '2.1.0', status: 'loaded', description: '任务规划' },
+    { name: 'coder', version: '1.8.0', status: 'loaded', description: '代码生成' },
+    { name: 'grounding', version: '1.5.0', status: 'loaded', description: '视觉定位' },
+    { name: 'voice', version: '0.9.0', status: 'unloaded', description: '语音识别' },
+    { name: 'mesh-coord', version: '1.2.0', status: 'loaded', description: 'Mesh协调' },
+    { name: 'memory', version: '1.0.0', status: 'error', description: '记忆管理' },
+    { name: 'search', version: '1.3.0', status: 'loaded', description: '搜索增强' },
+    { name: 'analyzer', version: '0.8.0', status: 'unloaded', description: '数据分析' },
   ],
 };
 
@@ -264,12 +265,14 @@ export function usePanelData(): UsePanelDataReturn {
       }
     };
 
-    handlerRef.current = () => {};
-    (window as any).galaxyAPI.onBackendState(handleState);
+    // 注册 IPC 状态回调，保存 cleanup 函数以防止内存泄漏
+    const cleanup = (window as any).galaxyAPI.onBackendState(handleState);
+    if (cleanup) handlerRef.current = cleanup;
     setLoading(false);
 
     return () => {
-      // IPC 通道不支持取消订阅，这里只是清理引用
+      // 调用 cleanup 函数取消 IPC 订阅
+      if (handlerRef.current) handlerRef.current();
       handlerRef.current = null;
     };
   }, []);
