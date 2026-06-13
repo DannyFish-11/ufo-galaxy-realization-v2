@@ -14,7 +14,7 @@ Production safety:
 Gateway Bearer auth:
   - GALAXY_AUTH_ENABLED=true enables Bearer token enforcement on the
     gateway's REST and WebSocket endpoints.
-  - Defaults to true (secure-by-default); set to false to disable.
+  - Defaults to false (opt-in); GALAXY_MODE=production forces it on.
   - When enabled, unauthorized requests are rejected with HTTP 401.
 
 Key rotation:
@@ -49,11 +49,12 @@ _no_token_warning_issued: bool = False
 # ---------------------------------------------------------------------------
 
 def is_auth_enabled() -> bool:
-    """Return True when GALAXY_AUTH_ENABLED is not explicitly disabled.
+    """Return True when GALAXY_AUTH_ENABLED is explicitly enabled.
 
-    Defaults to True for secure-by-default behaviour.
-    Production mode forces authentication enabled regardless of settings.
-    Unknown values default to enabled (secure-by-default).
+    Defaults to False (opt-in) per the documented contract
+    (docs/DEPLOYMENT.md, core/routes/config.py, PR-20 ingress boundary).
+    Production mode (GALAXY_MODE=production) forces authentication enabled
+    regardless of settings.
     """
     # Production environment: force auth enabled, ignore all other settings
     if os.environ.get("GALAXY_MODE", "").lower() == "production":
@@ -67,14 +68,13 @@ def is_auth_enabled() -> bool:
             "Use proper test tokens instead."
         )
 
-    env = os.environ.get("GALAXY_AUTH_ENABLED", "true").strip().lower()
-    if env in ("0", "false", "no", ""):
-        return False
+    env = os.environ.get("GALAXY_AUTH_ENABLED", "false").strip().lower()
     if env in ("1", "true", "yes"):
         return True
-    # Secure default: unknown values default to enabled
-    logger.warning("Unknown GALAXY_AUTH_ENABLED value '%s', defaulting to enabled", env)
-    return True
+    if env in ("0", "false", "no", ""):
+        return False
+    logger.warning("Unknown GALAXY_AUTH_ENABLED value '%s', defaulting to disabled", env)
+    return False
 
 
 def validate_auth_config() -> None:
@@ -108,8 +108,8 @@ def validate_auth_config() -> None:
 
     if is_auth_enabled() and not os.getenv("GALAXY_API_TOKEN"):
         raise RuntimeError(
-            "GALAXY_AUTH_ENABLED=true (default) but GALAXY_API_TOKEN is not set. "
-            "Set a secure token or explicitly disable auth with GALAXY_AUTH_ENABLED=false"
+            "GALAXY_AUTH_ENABLED=true but GALAXY_API_TOKEN is not set. "
+            "Set a secure token or disable auth with GALAXY_AUTH_ENABLED=false"
         )
 
 
@@ -236,7 +236,7 @@ def _warn_no_token_once():
         _no_token_warning_issued = True
         logger.warning(
             "GALAXY_API_TOKEN is not set. "
-            "Authentication is enabled by default. Set GALAXY_API_TOKEN for production."
+            "Set GALAXY_API_TOKEN before enabling GALAXY_AUTH_ENABLED in production."
         )
 
 
@@ -333,7 +333,8 @@ async def require_auth(
     Raises:
         HTTPException: 鉴权失败时抛出 401 异常
     """
-    # Gateway-level auth flag — secure by default (enabled unless explicitly disabled)
+    # Gateway-level auth flag — opt-in (disabled unless explicitly enabled);
+    # production mode (GALAXY_MODE=production) forces it on.
     if not is_auth_enabled():
         return {"authenticated": True, "device_id": x_device_id, "auth_enabled": False}
 

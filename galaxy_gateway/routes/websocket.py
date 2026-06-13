@@ -59,6 +59,14 @@ DEVICE_WS_INGRESS_SURFACE_REGISTRY = [
         "classification": "compat",
     },
     {
+        "path": "/ws/ufo3/{device_id}",
+        "method": "WS",
+        "auth": "AIP_TOKEN",
+        "description": "Legacy UFO3 ingress — delegates to canonical handler",
+        "handler": "_handle_android_ws",
+        "classification": "compat",
+    },
+    {
         "path": "/ws/master",
         "method": "WS",
         "auth": "MASTER_TOKEN",
@@ -99,8 +107,8 @@ async def _handle_android_ws(
             message = await websocket.receive_json()
             if not isinstance(message, dict):
                 continue
-            if device_id:
-                message.setdefault("device_id", device_id)
+            # NOTE: do NOT inject the path device_id into the payload — the
+            # bridge enforces MISSING_REQUIRED_FIELDS on the payload itself.
             message.setdefault("_ingress_path", ingress_path)
             message.setdefault("_ingress_classification", ingress_classification)
             response = await android_bridge.handle_message(websocket, message)
@@ -145,6 +153,20 @@ def register_websocket_routes(app) -> None:
             ingress_path="/ws/android/{device_id}",
             ingress_classification="compat",
         )
+
+    @app.websocket("/ws/ufo3/{device_id}")
+    async def compat_ufo3_path_ws(websocket: WebSocket, device_id: str):
+        await _resolve_android_ws_handler()(
+            websocket,
+            device_id,
+            ingress_path="/ws/ufo3/{device_id}",
+            ingress_classification="compat",
+        )
+
+    @app.websocket("/ws/webrtc/{device_id}")
+    async def webrtc_signaling_ws(websocket: WebSocket, device_id: str):
+        from galaxy_gateway.webrtc_proxy import proxy_webrtc_signaling
+        await proxy_webrtc_signaling(websocket, device_id)
 
     @app.websocket("/ws/android")
     async def compat_android_query_ws(websocket: WebSocket):

@@ -73,6 +73,23 @@
 
 ---
 
+## 统一主体架构 (Unified Subject)
+
+`DesktopPresenceRuntime` 与 `OpenClawd` 不是两个并行主体，而是同一主体的两层：
+
+```
+UFO Galaxy Subject
+├─ DesktopPresenceRuntime  ← 运行时外壳（runtime shell），承载三态生命周期与桌面感知
+└─ OpenClawd               ← 主体认知核心（subject core），负责认知与执行
+```
+
+请求生命周期沿规范链路流动：
+`main.py → unified_launcher.py → DesktopPresenceRuntime.handle_request → OpenClawd.process → CommandRouter.route_envelope`
+
+详见 [docs/UNIFIED_SUBJECT_ARCHITECTURE.md](docs/UNIFIED_SUBJECT_ARCHITECTURE.md)。
+
+---
+
 ## 核心能力
 
 ### 1. 本地多模态 AI (Gemma 4 E4B)

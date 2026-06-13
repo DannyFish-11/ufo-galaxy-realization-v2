@@ -21,6 +21,9 @@ if str(PROJECT_ROOT) not in sys.path:
 os.environ.setdefault("GALAXY_MODE", "test")
 os.environ.setdefault("GALAXY_DEV_MODE", "1")
 os.environ.setdefault("PYTHONPATH", str(PROJECT_ROOT))
+# Auth is secure-by-default (GALAXY_AUTH_ENABLED=true): provide a test token so
+# gateway lifespan auth validation passes (DEV_MODE no longer bypasses auth).
+os.environ.setdefault("GALAXY_API_TOKEN", "galaxy-test-token")
 
 
 @pytest.fixture(scope="session")
