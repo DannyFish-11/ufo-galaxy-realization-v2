@@ -162,11 +162,12 @@ def _resolve_android_ws_handler():
     import galaxy_gateway.routes.websocket as _self
     return _self._handle_android_ws
 
+
 # ── WebSocket endpoint factory (for FastAPI) ──
 
 def create_device_websocket_routes(app, service_manager=None):
     """Register WebSocket endpoints on the FastAPI app."""
-    from fastapi import WebSocket, WebSocketDisconnect
+    from fastapi import WebSocket
 
     @app.websocket("/ws/device/{device_id}")
     async def device_ws_endpoint(websocket: WebSocket, device_id: str):
