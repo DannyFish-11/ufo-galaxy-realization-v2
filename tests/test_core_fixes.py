@@ -465,7 +465,10 @@ class TestAndroidBridge:
         assert health["total"] == 0
         assert health["healthy"] == 0
 
-    def test_device_register(self):
+    def test_device_register(self, monkeypatch):
+        # Ingress auth is secure-by-default: configure a test token so the
+        # registration passes the gateway authentication boundary.
+        monkeypatch.setenv("GALAXY_API_TOKEN", "test-token-device-register")
         bridge = self._make_bridge()
 
         class MockWebSocket:
@@ -479,6 +482,7 @@ class TestAndroidBridge:
             "platform": "android",
             "model": "Pixel 7",
             "os_version": "14",
+            "auth_token": "test-token-device-register",
         }
         result = asyncio.run(
             bridge.handle_message(MockWebSocket(), msg)

@@ -33,6 +33,7 @@ UNIFIED_LAUNCHER_ENTRY_ID: str = "unified_launcher.py:main"
 LEGACY_WINDOWS_RUN_UI_ENTRY_ID: str = (
     "enhancements.clients.windows_client.run_ui:module_import"
 )
+LEGACY_DOCKER_LAUNCHER_ENTRY_ID: str = "docker-compose.yml:galaxy"
 
 
 class EntrypointRole(str, Enum):
@@ -121,6 +122,14 @@ ENTRYPOINT_ROLE_REGISTRY: Dict[str, EntrypointRecord] = {
         module_path="enhancements/clients/windows_client/run_ui.py",
         trigger_boundary="hard-disabled legacy Windows launcher stub",
         non_main_reason="retired legacy launcher surface",
+    ),
+    LEGACY_DOCKER_LAUNCHER_ENTRY_ID: EntrypointRecord(
+        entry_id=LEGACY_DOCKER_LAUNCHER_ENTRY_ID,
+        role=EntrypointRole.COMPAT_FALLBACK_LEGACY,
+        module_path="docker-compose.yml",
+        trigger_boundary="containerised compose launcher surface (delegates to main.py)",
+        next_hop=MAIN_ENTRY_ID,
+        non_main_reason="container orchestration wrapper, not a startup authority",
     ),
 }
 

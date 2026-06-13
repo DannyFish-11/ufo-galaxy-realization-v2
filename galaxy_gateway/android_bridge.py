@@ -1176,7 +1176,7 @@ class AndroidBridge:
             )
 
         # LIQUID-ISLAND: 任何非心跳消息都标记发送设备为当前对话设备
-        if device_id and msg_type not in (MessageType.HEARTBEAT, MessageType.PING):
+        if device_id and msg_type not in (MessageType.DEVICE_HEARTBEAT, MessageType.AGENT_PING):
             self.set_active_conversation_device(device_id)
 
         schema_gate_evidence = None
@@ -1962,4 +1962,7 @@ class AndroidBridge:
 
 # =============================================================================
 # 全局实例
-# ===========================
+# =============================================================================
+
+#: Module-level singleton used by gateway routes and CI verification.
+android_bridge = AndroidBridge()

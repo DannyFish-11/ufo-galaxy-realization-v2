@@ -671,6 +671,18 @@ def main() -> int:
         _run_setup_wizard()
         return 0
 
+    # ── PR-01: entrypoint role contract enforcement ──────
+    if not assert_single_unique_main_entrypoint():
+        print_item("入口角色契约校验失败: 唯一主入口必须是 main.py", "error")
+        return 1
+    if not ensure_entrypoint_role(MAIN_ENTRY_ID, EntrypointRole.UNIQUE_MAIN):
+        print_item("入口角色契约校验失败: MAIN_ENTRY_ID 必须为 UNIQUE_MAIN", "error")
+        return 1
+    launcher_path = PROJECT_ROOT / "unified_launcher.py"
+    if not launcher_path.exists():
+        print_item(f"子入口缺失: {launcher_path}", "error")
+        return 1
+
     # ── Phase 0: Galaxy Banner ───────────────────────────
     print_banner()
 
@@ -696,6 +708,8 @@ def main() -> int:
     from unified_launcher import GalaxyUnified
 
     lumiv = GalaxyUnified()
+
+    async def _run() -> None:
         # ── Galaxy WebSocket Bridge — 桌面覆盖层事件推送 ──
         try:
             from core.lumiv_websocket_bridge import GalaxyWebSocketBridge
@@ -703,9 +717,10 @@ def main() -> int:
             asyncio.create_task(_ws_bridge.start())
         except Exception as _exc:
             logger.debug("GalaxyWebSocketBridge init skipped (non-fatal): %s", _exc)
+        await lumiv.start()
 
     try:
-        asyncio.run(lumiv.start())
+        asyncio.run(_run())
     except KeyboardInterrupt:
         print()
         print_phase("[系统停止]")

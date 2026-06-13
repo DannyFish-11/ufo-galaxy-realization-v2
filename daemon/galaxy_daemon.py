@@ -540,7 +540,6 @@ if __name__ == "__main__":
     
     if args.stop:
         # Send stop signal
-        import signal
         # Find and stop running daemon
         if psutil is None:
             print("psutil not available, cannot find daemon process")
@@ -549,8 +548,12 @@ if __name__ == "__main__":
             if 'galaxy_daemon' in ' '.join(proc.info['cmdline'] or []):
                 os.kill(proc.info['pid'], signal.SIGTERM)
                 print(f"Stopped daemon (PID {proc.info['pid']})")
+    elif args.status:
+        daemon = GalaxyDaemon(args.config)
+        print(json.dumps(daemon.get_status(), indent=2, ensure_ascii=False, default=str))
     else:
-        daemoinfo['pid'], signal.SIGTERM)
-                print(f"Stopped daemon (PID {proc.info['pid']})")
-    else:
-        daemo
+        daemon = GalaxyDaemon(args.config)
+        try:
+            daemon.start()  # blocks in the main loop until shutdown
+        except KeyboardInterrupt:
+            daemon.stop()

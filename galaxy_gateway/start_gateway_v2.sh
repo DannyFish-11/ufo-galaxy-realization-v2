@@ -43,4 +43,7 @@ echo "======================================================================"
 echo "LLM 提供商: $LLM_PROVIDER"
 echo "OLLAMA 模型: $OLLAMA_MODEL"
 echo "LLM API 地址: $LLM_API_BASE"
-echo "===========
+echo "======================================================================"
+
+cd "$(dirname "$0")/.." || exit 1
+exec python3 -m uvicorn galaxy_gateway.app:app --host 0.0.0.0 --port "${GATEWAY_PORT:-9000}"
