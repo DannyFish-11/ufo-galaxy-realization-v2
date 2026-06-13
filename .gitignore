@@ -107,3 +107,11 @@ data/runtime/delegated_runtime_execution_tracker.json
 learning_data.db
 audit/wiring_report_*.json
 electron/node_modules/
+
+# npm lockfiles are not tracked in this repo
+package-lock.json
+electron/package-lock.json
+
+# SQLite sidecar files (WAL mode)
+*.db-shm
+*.db-wal
