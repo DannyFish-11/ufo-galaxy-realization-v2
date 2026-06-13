@@ -115,3 +115,6 @@ electron/package-lock.json
 # SQLite sidecar files (WAL mode)
 *.db-shm
 *.db-wal
+
+# Panel runtime state written by unified_panel_aggregation during tests
+runtime/panel_last_operator_action.json
