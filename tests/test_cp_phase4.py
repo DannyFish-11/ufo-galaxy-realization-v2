@@ -416,8 +416,9 @@ class TestSessionMigration:
         sm._sessions = {}
         sm._user_active_session = {}
         sm._on_update_callback = None
+        sm._lock = asyncio.Lock()
 
-        session = sm.create_session(user_id="user_test", device_id="phone_01")
+        session = asyncio.run(sm.create_session(user_id="user_test", device_id="phone_01"))
         # Manually add context to the session
         if not hasattr(session, "context"):
             session.context = {}
@@ -491,7 +492,8 @@ class TestSessionMigration:
         sm._sessions = {}
         sm._user_active_session = {}
         sm._on_update_callback = None
-        session = sm.create_session(user_id="user_1", device_id="phone_01")
+        sm._lock = asyncio.Lock()
+        session = await sm.create_session(user_id="user_1", device_id="phone_01")
         if not hasattr(session, "context"):
             session.context = {}
         session.context = {"key": "value"}
@@ -561,7 +563,8 @@ class TestSessionMigration:
         sm._sessions = {}
         sm._user_active_session = {}
         sm._on_update_callback = None
-        session = sm.create_session(user_id="user_1", device_id="phone_01")
+        sm._lock = asyncio.Lock()
+        session = await sm.create_session(user_id="user_1", device_id="phone_01")
 
         app = FastAPI()
         with patch.object(sessions_mod, "get_session_manager", return_value=sm), \

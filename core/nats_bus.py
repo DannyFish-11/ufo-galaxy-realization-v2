@@ -264,6 +264,7 @@ class NATSBus:
         self._nc: Optional[Any] = None  # NATSClient
         self._js: Optional[Any] = None  # JetStreamContext
         self._connected = False
+        self._noop = False  # test/conformance no-op mode: publish succeeds without NATS
         self._embedded: Optional[Any] = None  # EmbeddedNATSServer instance
         self._subscriptions: list = []
         self._subscription_metadata: Dict[int, Dict[str, str]] = {}
@@ -491,8 +492,13 @@ class NATSBus:
         return await self.publish_aip_v3(NATSTopics.DEVICE_REGISTER, msg)
 
     async def publish_heartbeat(self, heartbeat: "HeartbeatMsg") -> dict:
-        """Publish HEARTBEAT to ``galaxy.device.heartbeat.{device_id}``."""
-        subject = NATSTopics.device_heartbeat(heartbeat.device_id)
+        """Publish HEARTBEAT to ``galaxy.device.heartbeat.{device_id}``.
+
+        Accepts both device-style heartbeats (``device_id``) and worker-style
+        ``WorkerHeartbeatModel`` heartbeats (``worker_id``).
+        """
+        source_id = getattr(heartbeat, "device_id", "") or getattr(heartbeat, "worker_id", "")
+        subject = NATSTopics.device_heartbeat(source_id)
         return await self.publish_aip_v3(subject, heartbeat)
 
     async def publish_heartbeat_ack(self, ack: "HeartbeatAckMsg") -> dict:
@@ -1037,6 +1043,7 @@ class NATSBus:
         subscription_metadata = getattr(self, "_subscription_metadata", {})
         return {
             "connected": self.is_connected(),
+            "noop_mode": bool(getattr(self, "_noop", False)),
             "url": self._url,
             "embedded": self._embedded is not None,
             "subscriptions": len(self._subscriptions),
@@ -1066,8 +1073,13 @@ class NATSBus:
     async def _publish(self, subject: str, data: dict) -> dict:
         """Serialize and publish a message to NATS JetStream.
 
-        PR-NATS-CORE: Auto-connects if not connected. No no-op mode.
+        PR-NATS-CORE: Auto-connects if not connected.
         """
+        # Conformance/test no-op mode: accept the publish without a broker.
+        if getattr(self, "_noop", False):
+            self._stats["published"] += 1
+            return {"success": True, "seq": 0, "noop": True}
+
         # Auto-connect if not connected
         if not self._connected or self._js is None:
             if not await self._ensure_connected():

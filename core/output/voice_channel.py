@@ -68,7 +68,48 @@ class VoiceChannel:
                 raise
         return self._tts_engine
 
-    async def build(
+    def build(
+        self,
+        response_text: str,
+        enabled: bool = False,
+        mode: str = "chat",
+        persona_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Build a JSON-safe voice plan WITHOUT performing TTS synthesis.
+
+        Synchronous (PR-6 contract): returns a stub plan only. Use
+        :meth:`build_with_synthesis` / :meth:`synthesize_and_play` for the
+        async edge-tts synthesis path.
+        """
+        if not enabled:
+            return {
+                "enabled": False,
+                "tts_plan": None,
+                "audio_path": None,
+                "note": "voice not requested for this interaction mode",
+            }
+
+        mood: str = "calm"
+        voice: str = _DEFAULT_VOICE_ID
+        if persona_state and isinstance(persona_state, dict):
+            mood = persona_state.get("mood", "calm")
+            voice = persona_state.get("voice", _MOOD_VOICE_MAP.get(mood, _DEFAULT_VOICE_ID))
+
+        return {
+            "enabled": True,
+            "tts_plan": {
+                "engine": "stub",
+                "text": response_text,
+                "voice_id": voice,
+                "speed": _DEFAULT_SPEED,
+                "pitch": _DEFAULT_PITCH,
+                "mood_hint": mood,
+            },
+            "audio_path": None,
+            "note": "TTS plan ready — synthesis deferred to async voice path",
+        }
+
+    async def build_with_synthesis(
         self,
         response_text: str,
         enabled: bool = False,

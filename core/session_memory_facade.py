@@ -89,12 +89,12 @@ async def record_session_turn(
         merged_metadata.setdefault("device_id", device_id)
 
     sm = get_session_manager()
-    sm.ensure_session(
+    await sm.ensure_session(
         conversation_session_id,
         user_id=user_id or f"device::{device_id or 'default'}",
         device_id=device_id,
     )
-    sm.add_message(
+    await sm.add_message(
         conversation_session_id,
         role,
         content,

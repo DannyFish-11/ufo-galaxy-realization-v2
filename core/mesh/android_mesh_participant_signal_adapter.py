@@ -938,4 +938,5 @@ __all__ = [
     "build_android_participation_record",
     "classify_android_proof_quality",
     "classify_android_proof_quality_for_signals",
-   
+    "evaluate_center_runtime_status_with_android_signals",
+]

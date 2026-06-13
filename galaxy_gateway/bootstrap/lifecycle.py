@@ -11,6 +11,7 @@ Module-level globals in ``galaxy_gateway.app`` are also updated for backward
 compatibility with legacy import paths (e.g. ``connection_manager.py``).
 """
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -447,6 +448,20 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # Shutdown
     # ------------------------------------------------------------------
     logger.info("Shutting down Galaxy Gateway...")
+
+    # Stop the multimodal ingest bus if it was started on this loop — its
+    # bus/pipeline tasks would otherwise be destroyed while pending when the
+    # loop closes.
+    try:
+        from core.multimodal.ingest_runtime import stop_ingest_bus
+        _ingest_tasks = stop_ingest_bus()
+        if _ingest_tasks:
+            await asyncio.wait_for(
+                asyncio.gather(*_ingest_tasks, return_exceptions=True),
+                timeout=5.0,
+            )
+    except Exception:
+        logger.debug("Ingest bus shutdown skipped", exc_info=True)
 
     # Cancel the stale-device cleanup background task first.
     # H3 fixed: await task cancellation with timeout; H5 fixed: use app.state

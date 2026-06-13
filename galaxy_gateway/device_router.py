@@ -1522,21 +1522,28 @@ class DeviceRouter:
 
             # Final fallback: direct websocket (legacy compat)
             if device.websocket:
-                _ws_timeout = 30.0
                 try:
-                    if _task_envelope is not None:
-                        _ws_timeout = _task_envelope.timeout
-                except Exception:
-                    pass
+                    _ws_timeout = float(task.get("timeout") or 30.0)
+                except (TypeError, ValueError):
+                    _ws_timeout = 30.0
 
-                ws_result = await _routing_dispatch_to_websocket(
-                    device=device,
-                    message=_aip_message,
-                    task_id=task_id,
-                    task_events=self._task_events,
-                    task_results=self.task_results,
-                    timeout=_ws_timeout,
-                )
+                # dispatch_to_websocket waits on an asyncio.Event keyed by
+                # task_id; asyncio.wait_for adds a hard upper bound so a lost
+                # result event can never hang the dispatch path.
+                try:
+                    ws_result = await asyncio.wait_for(
+                        _routing_dispatch_to_websocket(
+                            device=device,
+                            message=_aip_message,
+                            task_id=task_id,
+                            task_events=self._task_events,
+                            task_results=self.task_results,
+                            timeout=_ws_timeout,
+                        ),
+                        timeout=_ws_timeout + 5.0,
+                    )
+                except asyncio.TimeoutError:
+                    return {"success": False, "error": "任务执行超时"}
                 if not ws_result.get("success") and ws_result.get("error") == "timeout":
                     return {"success": False, "error": "任务执行超时"}
                 return ws_result

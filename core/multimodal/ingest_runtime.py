@@ -79,6 +79,7 @@ continuous host perception is now the canonical default runtime path.
 
 _ingest_bus: Optional["MultimodalIngressBus"] = None  # type: ignore[name-defined]
 _ingest_task: Optional[asyncio.Task] = None  # background task running bus.run()
+_pipeline_tasks: list = []  # background tasks running pipeline.run()
 
 
 def get_ingest_bus():
@@ -124,9 +125,11 @@ def start_ingest_bus(
         logger.debug("Could not read unified_config: %s — skipping ingest bus", _cfg_err)
         return False
 
-    # Idempotent: bus already running.
-    if _ingest_bus is not None and _ingest_bus._running:
-        logger.debug("MultimodalIngressBus already running — no-op")
+    # Idempotent: a bus instance already exists. (Its run() task may not
+    # have started ticking yet — checking ``_running`` here would race and
+    # respawn a new bus/task set on every call.)
+    if _ingest_bus is not None:
+        logger.debug("MultimodalIngressBus already started — no-op")
         return True
 
     # ── Construct bus ─────────────────────────────────────────────────────
@@ -170,10 +173,18 @@ def start_ingest_bus(
     # ── Start bus tick loop ───────────────────────────────────────────────
     try:
         loop = asyncio.get_running_loop()
-        _ingest_task = loop.create_task(bus.run())
     except RuntimeError:
         # No running event loop — bus will be started on next loop iteration.
         _ingest_task = None
+    else:
+        coro = bus.run()
+        try:
+            _ingest_task = loop.create_task(coro)
+        except RuntimeError:
+            # Loop is shutting down — close the coroutine to avoid a
+            # "never awaited" leak.
+            coro.close()
+            _ingest_task = None
 
     _ingest_bus = bus
 
@@ -199,12 +210,19 @@ def start_ingest_bus(
     return True
 
 
-def stop_ingest_bus() -> None:
+def stop_ingest_bus() -> list:
     """Stop and discard the singleton MultimodalIngressBus.
 
     Safe to call when the bus is not running.
+
+    Returns:
+        The list of cancelled background tasks. Async callers should await
+        them (e.g. ``asyncio.gather(*tasks, return_exceptions=True)``) so the
+        cancellations complete before the event loop closes.
     """
     global _ingest_bus, _ingest_task  # noqa: PLW0603
+
+    cancelled: list = []
 
     if _ingest_bus is not None:
         try:
@@ -216,11 +234,21 @@ def stop_ingest_bus() -> None:
     if _ingest_task is not None:
         try:
             _ingest_task.cancel()
+            cancelled.append(_ingest_task)
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
         _ingest_task = None
 
+    for task in _pipeline_tasks:
+        try:
+            task.cancel()
+            cancelled.append(task)
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
+    _pipeline_tasks.clear()
+
     logger.debug("MultimodalIngressBus stopped")
+    return cancelled
 
 
 # ---------------------------------------------------------------------------
@@ -232,13 +260,20 @@ def _schedule_pipeline(pipeline, name: str) -> None:
     """Schedule a pipeline's ``run()`` coroutine as a background asyncio task."""
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(pipeline.run())
-        logger.debug("Scheduled %s pipeline as background task", name)
     except RuntimeError:
         logger.debug(
             "No running event loop — %s pipeline not scheduled (will start on first loop)",
             name,
         )
+        return
+    coro = pipeline.run()
+    try:
+        _pipeline_tasks.append(loop.create_task(coro))
+        logger.debug("Scheduled %s pipeline as background task", name)
+    except RuntimeError:
+        # Loop is shutting down — close the coroutine to avoid a leak.
+        coro.close()
+        logger.debug("Event loop closing — %s pipeline not scheduled", name)
 
 
 def _emit_ingest_active(
