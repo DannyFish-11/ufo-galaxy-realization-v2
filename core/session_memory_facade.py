@@ -125,6 +125,25 @@ async def record_session_turn(
     except Exception as exc:
         logger.warning("Exception suppressed: %s", exc)
 
+    # 统一记忆层（core/memory：向量 + 可选 Omni-SimpleMem 跨模态）—— 写入用户/助手轮次。
+    # best-effort；offload 到线程避免嵌入/向量写入阻塞事件循环；任何异常都吞掉。
+    if content and role in ("user", "assistant"):
+        try:
+            import asyncio as _aio
+            from core.memory import get_unified_memory
+
+            _um = get_unified_memory()
+            if _um.enabled:
+                await _aio.to_thread(
+                    _um.remember,
+                    content,
+                    modality="text",
+                    tags=[role],
+                    metadata={"session_id": conversation_session_id, **merged_metadata},
+                )
+        except Exception as exc:  # noqa: BLE001 — 记忆写入失败不影响主流程
+            logger.debug("unified memory remember skipped: %s", exc)
+
 
 def get_session_context(
     conversation_session_id: str,
@@ -272,5 +291,23 @@ def get_unified_context(
             messages.append({"role": "system", "content": chain})
     except Exception as exc:
         logger.warning("Exception suppressed: %s", exc)
+
+    # 5. 统一记忆层语义召回（core/memory：向量 + 可选 Omni-SimpleMem 跨模态）
+    #    这是仓库里第一个真正接进 live 路径的语义/跨模态长程记忆召回点。
+    if query:
+        try:
+            from core.memory import get_unified_memory
+
+            _um = get_unified_memory()
+            if _um.enabled:
+                _hits = _um.recall(query, top_k=3)
+                _lines = [f"- {h.content[:300]}" for h in _hits if h.content]
+                if _lines:
+                    messages.append({
+                        "role": "system",
+                        "content": "[Semantic long-term memory]\n" + "\n".join(_lines),
+                    })
+        except Exception as exc:
+            logger.warning("Exception suppressed: %s", exc)
 
     return messages
