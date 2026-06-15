@@ -38,6 +38,36 @@ class UnifiedMemory:
             except Exception as exc:  # noqa: BLE001 — 单后端失败不影响其它
                 logger.debug("remember via %s failed: %s", p.backend_name, exc)
 
+    def remember_media(
+        self,
+        data_b64: str,
+        *,
+        modality: str,
+        mime: str = "",
+        tags: Optional[list] = None,
+        metadata: Optional[dict] = None,
+        caption: str = "",
+    ) -> None:
+        """记住一段 base64 媒体（摄像头帧/麦克风片段等）。
+
+        base64 → 临时文件 → 各 provider：跨模态后端(Omni-SimpleMem)经 media_path
+        原生摄入媒体；纯文本后端(vector)存其文字说明(caption)。摄入完即删临时文件。
+        """
+        if not self.providers or not data_b64:
+            return
+        from core.memory._media import write_temp_media, remove_temp
+
+        path = write_temp_media(data_b64, mime, modality)
+        try:
+            md = dict(metadata or {})
+            if path:
+                md["media_path"] = path
+            md.setdefault("modality", modality)
+            text = caption or f"[{modality} memory]"
+            self.remember(text, modality=modality, tags=tags, metadata=md)
+        finally:
+            remove_temp(path)
+
     def recall(self, query: str, *, top_k: int = 5) -> List[MemoryHit]:
         hits: List[MemoryHit] = []
         for p in self.providers:

@@ -102,6 +102,21 @@ class DesktopPerceptionStore:
         with self._lock:
             return bool(self._image_b64) and self._fresh(self._image_ts)
 
+    def snapshot_media(self) -> Dict[str, Any]:
+        """返回当前最新帧/音频的快照（供统一记忆层等消费方读取）。
+
+        仅当对应媒体「新鲜」(TTL 内) 时返回其 base64；否则该项为 None。
+        """
+        with self._lock:
+            img_fresh = bool(self._image_b64) and self._fresh(self._image_ts)
+            aud_fresh = bool(self._audio_b64) and self._fresh(self._audio_ts)
+            return {
+                "image_b64": self._image_b64 if img_fresh else None,
+                "image_mime": self._image_mime,
+                "audio_b64": self._audio_b64 if aud_fresh else None,
+                "audio_mime": self._audio_mime,
+            }
+
     def status(self) -> Dict[str, Any]:
         with self._lock:
             now = time.time()
