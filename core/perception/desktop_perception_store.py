@@ -55,6 +55,8 @@ class DesktopPerceptionStore:
         # counters (diagnostics)
         self._frames_received: int = 0
         self._audio_received: int = 0
+        # 自动注入去重：已被对话自动注入消费过的音频时间戳，避免同一片段反复转写
+        self._audio_autoinject_consumed_ts: float = 0.0
 
     @classmethod
     def get_instance(cls) -> "DesktopPerceptionStore":
@@ -101,6 +103,22 @@ class DesktopPerceptionStore:
     def has_fresh_frame(self) -> bool:
         with self._lock:
             return bool(self._image_b64) and self._fresh(self._image_ts)
+
+    def take_fresh_audio_for_autoinject(self):
+        """取一段「新鲜且未被自动注入消费过」的音频，用于对话自动注入。
+
+        返回 ``(audio_b64, mime)``；没有可用音频则返回 ``(None, None)``。
+        通过记录已消费时间戳去重，避免同一片段在多轮对话里被反复转写。
+        """
+        with self._lock:
+            if (
+                self._audio_b64
+                and self._fresh(self._audio_ts)
+                and self._audio_ts > self._audio_autoinject_consumed_ts
+            ):
+                self._audio_autoinject_consumed_ts = self._audio_ts
+                return self._audio_b64, self._audio_mime
+        return None, None
 
     def status(self) -> Dict[str, Any]:
         with self._lock:
