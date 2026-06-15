@@ -8,6 +8,7 @@ available。非文本模态在此后端只存其文本描述（真正跨模态�
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -24,8 +25,21 @@ class VectorBackendProvider(MemoryProvider):
 
     def _get(self):
         if self._backend is None:
-            from core.vector_backend import get_shared_backend
-            self._backend = get_shared_backend()
+            from core.vector_backend import create_vector_backend, get_shared_backend
+            pref = os.getenv("KB_VECTOR_BACKEND", "auto").strip().lower()
+            if pref == "auto":
+                # 优先 chroma(真嵌入语义检索)；chromadb 未装则内部自动降级到 local
+                # 关键词后端(零依赖)。即"装了 chromadb 就是语义、没装就退化关键词"，
+                # 不会因此报错、也不会偷偷下载(未装 chromadb 直接走 local)。
+                self._backend = create_vector_backend(backend="chroma")
+                _cls = type(self._backend).__name__
+                if _cls == "_LocalKeywordBackend":
+                    logger.info(
+                        "UnifiedMemory[vector]: chromadb 不可用，使用本地关键词后端"
+                        "(非语义)。装 chromadb 或设 KB_VECTOR_BACKEND=qdrant 可启用语义。"
+                    )
+            else:
+                self._backend = get_shared_backend()
         return self._backend
 
     def available(self) -> bool:
