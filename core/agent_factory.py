@@ -972,134 +972,79 @@ class AgentFactory:
             except Exception as e:
                 logger.debug(f"Agent 工具收集失败（降级为无工具模式）: {e}")
 
-            # ReAct 循环（使用结构化 ToolCallRecord）
+            # ReAct 循环 —— 复用统一执行器 core.agent.react_loop（与团队成员同构）。
+            # 反思自检 + 环路检测 + 上限/预算均由 ReactConfig 集中配置（环境变量可覆盖）。
             import time as _time
             from core.schemas.tool_call import ToolCallRecord, ToolCallStatus
+            from core.agent.react_loop import ReactConfig, run_react_tool_loop
 
+            cfg = ReactConfig.from_env()
             tool_records: list = []
-            max_react_iterations = 8
 
-            # ── 反思自检（Reflexion 式，有界、可关、失败即放行）──────────────
-            # 当 ReAct 循环给出候选最终答案（无 tool_calls）时，先做一次 LLM 自检：
-            # 若判定结果不充分且仍在迭代预算内，则把批评意见回灌、再迭代一轮。
-            # 默认开启 1 轮；GALAXY_AGENT_REFLECTION=0 可关闭，GALAXY_AGENT_MAX_REFLECTION
-            # 调整轮数。反思消耗的是同一个 max_react_iterations 预算，总 LLM 调用仍有上限。
-            import os as _os
-            reflection_enabled = _os.getenv("GALAXY_AGENT_REFLECTION", "1").strip().lower() not in ("0", "false", "no")
-            try:
-                max_reflection_rounds = max(0, int(_os.getenv("GALAXY_AGENT_MAX_REFLECTION", "1")))
-            except ValueError:
-                max_reflection_rounds = 1
-            reflection_rounds = 0
-
-            resp = None
-            iteration = 0
-            while iteration < max_react_iterations:
-                async def _llm_call():
-                    # PR-3: Use chat_with_tools() which is defined on both
-                    # UnifiedLLMRouter and MultiLLMRouter, ensuring the unified
-                    # policy layer is applied regardless of which router type is held.
+            async def _llm_call(msgs):
+                async def _call():
+                    # PR-3: chat_with_tools() 在 Unified/Multi 两种 router 上均有定义，
+                    # 确保统一策略层生效，无论持有哪种 router。
                     if hasattr(self.llm_router, "chat_with_tools"):
                         return await self.llm_router.chat_with_tools(
-                            messages=messages,
-                            tools=tools if tools else None,
-                            task_type="agent_control",
+                            messages=msgs, tools=tools if tools else None, task_type="agent_control",
                         )
                     return await self.llm_router.chat(
-                        messages=messages,
-                        tools=tools if tools else None,
-                        task_type="agent_control",
+                        messages=msgs, tools=tools if tools else None, task_type="agent_control",
                     )
-
                 if self._llm_circuit_breaker:
-                    resp = await self._llm_circuit_breaker.execute(_llm_call)
-                else:
-                    resp = await _llm_call()
-                iteration += 1
+                    return await self._llm_circuit_breaker.execute(_call)
+                return await _call()
 
-                if not resp.tool_calls:
-                    # 候选最终答案 — 反思自检（有界；任何异常都放行原答案）
-                    if (
-                        reflection_enabled
-                        and reflection_rounds < max_reflection_rounds
-                        and iteration < max_react_iterations
-                    ):
-                        verdict = await self._reflect_on_result(
-                            task, resp.content or "", tool_records
-                        )
-                        if verdict and not verdict.get("sufficient", True):
-                            reflection_rounds += 1
-                            critique = verdict.get("critique", "") or "结果可能不完整，请补全并复核后再给出最终答案。"
-                            messages.append({"role": "assistant", "content": resp.content or ""})
-                            messages.append({
-                                "role": "user",
-                                "content": f"[自检] 上述回答存在不足：{critique}\n请据此修正或补全，然后给出最终结果。",
-                            })
-                            continue
+            async def _dispatch(name, args):
+                logger.info(f"Agent {agent.id} 调用工具: {name}")
+                t0 = _time.time()
+                try:
+                    res = await clawd._dispatch_tool_call(name, args)
+                except Exception as exc:
+                    logger.debug("Fallback triggered: %s", exc)
+                    res = {"success": False, "error": f"工具 {name} 不可用"}
+                if isinstance(res, dict):
+                    res["_latency_ms"] = round((_time.time() - t0) * 1000, 1)
+                return res
 
-                    return {
-                        "task": task,
-                        "output": resp.content,
-                        "provider": resp.provider,
-                        "tool_calls": [r.model_dump() for r in tool_records],
-                        "iterations": iteration,
-                        "reflection_rounds": reflection_rounds,
-                    }
+            def _record(name, args, result, it_index):
+                layer = ToolCallRecord.classify_layer(name)
+                status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
+                result_str = str(result.get("result", result.get("error", "")))
+                tool_records.append(ToolCallRecord(
+                    tool_name=name,
+                    layer=layer,
+                    arguments=args,
+                    result=result_str[:2000],
+                    status=status,
+                    error=result.get("error") if not result.get("success", True) else None,
+                    latency_ms=result.get("_latency_ms", 0.0),
+                    iteration=it_index,
+                ))
 
-                # 处理 tool_calls
-                assistant_msg = {"role": "assistant", "content": resp.content or ""}
-                if resp.tool_calls:
-                    assistant_msg["tool_calls"] = resp.tool_calls
-                messages.append(assistant_msg)
+            async def _reflect_cb(content):
+                return await self._reflect_on_result(task, content, tool_records)
 
-                for tc in resp.tool_calls:
-                    tc_func = tc.get("function", {})
-                    tc_name = tc_func.get("name", "")
-                    tc_id = tc.get("id", f"call_{tc_name}")
-
-                    try:
-                        tc_args = json.loads(tc_func.get("arguments", "{}"))
-                    except (ValueError, TypeError):
-                        tc_args = {}
-
-                    logger.info(f"Agent {agent.id} 调用工具: {tc_name}")
-
-                    t0 = _time.time()
-                    try:
-                        result = await clawd._dispatch_tool_call(tc_name, tc_args)
-                    except Exception as exc:
-                        logger.debug("Fallback triggered: %s", exc)
-                        result = {"success": False, "error": f"工具 {tc_name} 不可用"}
-                    elapsed_ms = (_time.time() - t0) * 1000
-
-                    layer = ToolCallRecord.classify_layer(tc_name)
-                    status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
-                    result_str = str(result.get("result", result.get("error", "")))
-                    tool_records.append(ToolCallRecord(
-                        tool_name=tc_name,
-                        layer=layer,
-                        arguments=tc_args,
-                        result=result_str[:2000],
-                        status=status,
-                        error=result.get("error") if not result.get("success", True) else None,
-                        latency_ms=round(elapsed_ms, 1),
-                        iteration=iteration - 1,
-                    ))
-
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "content": result_str[:4000],
-                    })
-
-            # 达到最大迭代次数
+            loop = await run_react_tool_loop(
+                messages=messages,
+                llm_call=_llm_call,
+                dispatch_tool=_dispatch,
+                max_iterations=cfg.single_agent_max_iterations,
+                on_tool_result=_record,
+                reflect=_reflect_cb if cfg.reflection_enabled else None,
+                max_reflection_rounds=cfg.max_reflection_rounds,
+                loop_detection_window=cfg.loop_detection_window,
+            )
+            resp = loop.final_response
             return {
                 "task": task,
-                "output": resp.content if resp else "Agent 达到最大迭代次数",
-                "provider": resp.provider if resp else "",
+                "output": (resp.content if resp else None) or "Agent 达到最大迭代次数",
+                "provider": getattr(resp, "provider", "") if resp else "",
                 "tool_calls": [r.model_dump() for r in tool_records],
-                "iterations": max_react_iterations,
-                "reflection_rounds": reflection_rounds,
+                "iterations": loop.iterations,
+                "reflection_rounds": loop.reflection_rounds,
+                "stop_reason": loop.stop_reason,
             }
 
         else:

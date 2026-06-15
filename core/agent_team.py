@@ -328,58 +328,51 @@ class AgentTeam:
     # ─────── 成员 ReAct 执行 (带工具) ───────
 
     async def _call_member_with_tools(
-        self, member: TeamMember, messages: List[Dict], max_iterations: int = 6,
+        self, member: TeamMember, messages: List[Dict], max_iterations: Optional[int] = None,
     ) -> MemberResult:
-        """带 ReAct 工具调用的成员执行 — 有工具走循环，无工具走直连"""
+        """带 ReAct 工具调用的成员执行 — 有工具走循环，无工具走直连。
+
+        ReAct 循环复用统一执行器 core.agent.react_loop（与 agent_factory 同构），
+        上限/环路检测由 ReactConfig 集中配置。max_iterations 为 None 时取配置默认。
+        """
         t0 = time.monotonic()
         total_tokens = 0
 
         try:
             if self._tools and self._dispatch_fn:
-                # ReAct 循环
-                resp = None
-                for _ in range(max_iterations):
-                    resp = await self._router.chat(
-                        messages=messages,
+                from core.agent.react_loop import ReactConfig, run_react_tool_loop
+                cfg = ReactConfig.from_env()
+                iters = max_iterations if max_iterations is not None else cfg.team_member_max_iterations
+
+                async def _llm_call(msgs):
+                    nonlocal total_tokens
+                    r = await self._router.chat(
+                        messages=msgs,
                         tools=self._tools,
                         provider=member.provider,
                         model=member.model,
                         max_tokens=2048,
                     )
-                    total_tokens += resp.input_tokens + resp.output_tokens
+                    total_tokens += (getattr(r, "input_tokens", 0) or 0) + (getattr(r, "output_tokens", 0) or 0)
+                    return r
 
-                    if not resp.tool_calls:
-                        break
+                async def _dispatch(name, args):
+                    try:
+                        return await asyncio.wait_for(
+                            self._dispatch_fn(name, args),
+                            timeout=30.0,  # 单个工具调用最多 30 秒
+                        )
+                    except asyncio.TimeoutError:
+                        return {"success": False, "error": f"工具 {name} 执行超时 (30s)"}
 
-                    # 追加 assistant tool_calls
-                    assistant_msg = {"role": "assistant", "content": resp.content or ""}
-                    if resp.tool_calls:
-                        assistant_msg["tool_calls"] = resp.tool_calls
-                    messages.append(assistant_msg)
-
-                    # 执行每个 tool_call
-                    for tc in resp.tool_calls:
-                        tc_func = tc.get("function", {})
-                        tc_name = tc_func.get("name", "")
-                        tc_id = tc.get("id", f"call_{tc_name}")
-                        try:
-                            tc_args = json.loads(tc_func.get("arguments", "{}"))
-                        except (ValueError, TypeError):
-                            tc_args = {}
-
-                        try:
-                            result = await asyncio.wait_for(
-                                self._dispatch_fn(tc_name, tc_args),
-                                timeout=30.0  # 单个工具调用最多 30 秒
-                            )
-                        except asyncio.TimeoutError:
-                            result = {"success": False, "error": f"工具 {tc_name} 执行超时 (30s)"}
-                        result_str = str(result.get("result", result.get("error", "")))
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc_id,
-                            "content": result_str[:4000],
-                        })
+                loop = await run_react_tool_loop(
+                    messages=messages,
+                    llm_call=_llm_call,
+                    dispatch_tool=_dispatch,
+                    max_iterations=iters,
+                    loop_detection_window=cfg.loop_detection_window,
+                )
+                resp = loop.final_response
 
                 return MemberResult(
                     member=member,

@@ -252,8 +252,11 @@ class LocalAgentRuntime:
 
     async def _execute_react(self, manifest_dict: Dict) -> RuntimeResult:
         """LLM 驱动的 ReAct Loop"""
+        from core.agent.react_loop import ReactConfig, is_repeating
+        _cfg = ReactConfig.from_env()
         manifest_id = manifest_dict["manifest_id"]
-        max_turns = manifest_dict.get("max_react_turns", 10)
+        # max_turns 取 manifest 显式值，否则取集中配置默认（统一 8/6/10 魔数来源）
+        max_turns = manifest_dict.get("max_react_turns") or _cfg.manifest_max_turns
         system_prompt = manifest_dict.get("system_prompt", "")
         tasks = manifest_dict.get("tasks", [])
 
@@ -272,6 +275,7 @@ class LocalAgentRuntime:
 
         steps = []
         final_reply = ""
+        _sig_history: List[str] = []
 
         for turn in range(max_turns):
             step = AgentStep(step_id=turn + 1)
@@ -300,6 +304,18 @@ class LocalAgentRuntime:
             if not tool_calls:
                 # LLM 认为完成
                 final_reply = content
+                steps.append(step.to_dict())
+                await self._report_status(manifest_id, step)
+                break
+
+            # 环路检测：连续重复相同工具+参数 → 提前终止，避免空转耗尽 turns
+            _sig = "|".join(
+                f"{tc.get('name', '')}:{tc.get('arguments', '')}" for tc in tool_calls
+            )
+            _sig_history.append(_sig)
+            if is_repeating(_sig_history, _cfg.loop_detection_window):
+                logger.info("ReAct(manifest) loop-detection triggered at turn=%d", turn + 1)
+                final_reply = content or "Detected repeating tool calls; stopping."
                 steps.append(step.to_dict())
                 await self._report_status(manifest_id, step)
                 break
