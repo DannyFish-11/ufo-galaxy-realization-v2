@@ -45,6 +45,12 @@ class DesktopAnalyze(BaseModel):
     session_id: str = ""
 
 
+class DesktopListen(BaseModel):
+    audio_base64: str = ""
+    mime: str = "audio/webm"
+    prompt: str = ""
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create desktop perception ingest routes."""
     router = APIRouter(prefix="/api/perception/desktop", tags=["perception"])
@@ -136,6 +142,36 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             }
         except Exception as exc:  # noqa: BLE001
             logger.warning("desktop analyze failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    @router.post("/listen")
+    async def listen_now(req: DesktopListen):
+        """「现在听一下」：把当前音频（或存储里的最新音频）原生送音频能力模型理解。
+
+        复用 AudioPipeline 的原生音频通路（Gemini inline_data / OpenAI input_audio），
+        返回模型对这段音频的理解/转写文本。需配置 GEMINI/GOOGLE 或 OPENAI key。
+        """
+        audio_b64 = req.audio_base64
+        mime = req.mime or "audio/webm"
+        if not audio_b64:
+            try:
+                from core.perception.desktop_perception_store import get_desktop_perception_store
+                _store = get_desktop_perception_store()
+                with _store._lock:  # noqa: SLF001 — 读快照
+                    audio_b64 = _store._audio_b64 or ""
+                    mime = _store._audio_mime
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("store audio snapshot failed: %s", exc)
+        if not audio_b64:
+            return {"success": False, "error": "no_audio_available"}
+        try:
+            from core.audio_pipeline import get_audio_pipeline
+            result = await get_audio_pipeline().understand(
+                audio_b64, mime=mime, prompt=req.prompt or "",
+            )
+            return result
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("desktop listen failed: %s", exc)
             return {"success": False, "error": str(exc)}
 
     return router
