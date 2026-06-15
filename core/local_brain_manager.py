@@ -87,24 +87,21 @@ class LocalBrainManager:
         "fast": "gemma4:e4b",             # 4B 快速响应
         "creative": "gemma4:12b",         # 创意任务
         "reasoning": "gemma4:12b",        # 推理任务
-        "multimodal": "minicpm-o4.5:9b",  # MiniCPM-o 4.5 全模态(看+听+说)
+        # MiniCPM-o 4.5 全模态(看+听+说) — Ollama 真实 tag 带 openbmb/ 命名空间，
+        # 此前误写为 "minicpm-o4.5:9b" 会 pull 失败 → 本地多模态静默不可用。
+        "multimodal": "openbmb/minicpm-o4.5",
     }
 
     # 模型大小估算（MB，用于 VRAM 评估）
     MODEL_SIZE_ESTIMATE_MB = {
-        # Gemma 4 系列
+        # Gemma 4 系列（Ollama 官方 library 真实 tag）
         "gemma4:12b": 8000,
         "gemma4:26b": 16000,
         "gemma4:31b": 20000,
         "gemma4:e2b": 1800,
         "gemma4:e4b": 3000,
-        "gemma4:27b": 18000,
-        # MiniCPM-o 4.5 全模态
-        "minicpm-o4.5:9b": 6000,
-        "minicpm-o4.5:3.5b": 2500,
-        "minicpm-o4.5:2.5b": 1800,
-        "minicpm-o4.5:8b": 5500,
-        "minicpm-o4.5:7.6b": 5000,
+        # MiniCPM-o 4.5 全模态（9B）
+        "openbmb/minicpm-o4.5": 6000,
         # 旧模型（兼容保留）
         "qwen2:7b": 4500,
         "qwen2:1.5b": 1000,

@@ -1487,6 +1487,20 @@ class MultiLLMRouter:
                 )
 
         # 4. 本地主脑不可用 → 升级到云端
+        # 明确告警（而非静默回落）：本地主脑预期可用却未就绪时，提示用户检查
+        # Ollama / 模型 tag（最常见是模型未 pull 或 tag 名不对），便于排查
+        # "看着配了本地原生多模态、实际一直走云端" 的情况。
+        _local_present = any(
+            p in self.providers and self.providers[p].status != ProviderStatus.DOWN
+            for p in ("ollama", "hf_local")
+        )
+        if not _local_present:
+            logger.warning(
+                "LOCAL-BRAIN-FIRST: 本地主脑不可用(ollama/hf_local 未就绪)，本次回落云端。"
+                "请检查 `ollama list` 是否含所需模型(如 gemma4:12b / openbmb/minicpm-o4.5)、"
+                "Ollama 是否在 %s 运行。",
+                getattr(self, "ollama_url", "localhost:11434"),
+            )
         # 如果有多模态输入，先尝试多模态路由
         if has_multimodal:
             decision = self.route_multimodal_first(
@@ -1805,6 +1819,20 @@ class MultiLLMRouter:
                 )
 
         # 4. 本地主脑不可用 → 升级到云端
+        # 明确告警（而非静默回落）：本地主脑预期可用却未就绪时，提示用户检查
+        # Ollama / 模型 tag（最常见是模型未 pull 或 tag 名不对），便于排查
+        # "看着配了本地原生多模态、实际一直走云端" 的情况。
+        _local_present = any(
+            p in self.providers and self.providers[p].status != ProviderStatus.DOWN
+            for p in ("ollama", "hf_local")
+        )
+        if not _local_present:
+            logger.warning(
+                "LOCAL-BRAIN-FIRST: 本地主脑不可用(ollama/hf_local 未就绪)，本次回落云端。"
+                "请检查 `ollama list` 是否含所需模型(如 gemma4:12b / openbmb/minicpm-o4.5)、"
+                "Ollama 是否在 %s 运行。",
+                getattr(self, "ollama_url", "localhost:11434"),
+            )
         # 如果有多模态输入，先尝试多模态路由
         if has_multimodal:
             decision = self.route_multimodal_first(

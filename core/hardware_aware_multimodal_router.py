@@ -379,7 +379,7 @@ class HardwareAwareMultimodalRouter:
             elif profile.max_model_size_mb > 4000:
                 # 中等显存 (4-8GB) → Gemma 4 4B 或 MiniCPM-o 4.5
                 if task_type == "multimodal":
-                    return "minicpm-o4.5:9b"
+                    return "openbmb/minicpm-o4.5"  # Ollama 真实 tag（带命名空间）
                 return "gemma4:e4b"
             elif profile.max_model_size_mb > 2000:
                 # 较小显存 (2-4GB) → Gemma 4 2B
