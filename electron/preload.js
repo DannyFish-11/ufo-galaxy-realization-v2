@@ -22,6 +22,12 @@ contextBridge.exposeInMainWorld('galaxyAPI', {
   getWindowSize: () => ipcRenderer.invoke('get-window-size'),
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
 
+  // ── 桌面连续感知（摄像头/麦克风/屏幕）─
+  // 配置（默认关闭，隐私优先）由 main.js 经环境变量决定。
+  getPerceptionConfig: () => ipcRenderer.invoke('galaxy:perception-config'),
+  // 渲染层采到的帧/音频片段 → main.js → 转发到网关 /api/perception/desktop/*
+  sendDesktopPerception: (payload) => ipcRenderer.send('galaxy:desktop-perception', payload),
+
   // ── 工具 ─
   platform: process.platform,
 
