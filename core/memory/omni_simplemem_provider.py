@@ -1,14 +1,13 @@
-"""core/memory/omni_simplemem_provider.py — 路 B：Omni-SimpleMem 跨模态终身记忆。
+"""core/memory/omni_simplemem_provider.py — SimpleMem 文本终身记忆后端（可选）。
 
-封装 `simplemem`(Omni-SimpleMem, arXiv 2604.01007)：原生支持文/图/音/视频的
-终身记忆，选择性摄入 + FAISS/BM25 渐进检索 + 知识图谱多跳。
+⚠️ 重要事实校正（实测 `pip install simplemem==0.1.0` 后）：
+PyPI 上的 `simplemem` 是 **纯文本** 的 SimpleMem(`SimpleMemSystem`: add_dialogue/ask)，
+**不是论文里的多模态 Omni-SimpleMem**(后者未发布到 PyPI)。因此本后端提供的是
+**文本终身记忆**(选择性摄入 + 反思/规划),不是图像/音频原生记忆。真正的跨模态需要
+另接图像/音频 embedding(如 CLIP)或从 GitHub 源码装 Omni-SimpleMem。
 
-依赖为**可选**：未 `pip install simplemem` 时 available()=False，上层自动跳过，
-绝不影响主流程。需要嵌入模型(Qwen3-Embedding)+LanceDB+一个 OpenAI 兼容 key。
-
-注意：simplemem 的 add_image/add_audio/add_video 接收**文件路径**；本系统的摄像头/
-麦克风是 base64 内存数据，因此媒体写入需先落临时文件（media_path 经 metadata 传入）。
-纯文本路径(add_text/query)是当前 live 主用法。
+依赖为可选：未安装 `simplemem` 或未配置 LLM key 时 available()=False，上层自动跳过，
+绝不影响主流程。需要一个 OpenAI 兼容 key（SimpleMem 用 LLM 构建记忆并回答 ask）。
 """
 
 from __future__ import annotations
@@ -19,35 +18,56 @@ from typing import Any, Dict, List, Optional
 
 from core.memory.base import MemoryHit, MemoryProvider
 
-logger = logging.getLogger("Galaxy.Memory.Omni")
+logger = logging.getLogger("Galaxy.Memory.SimpleMem")
+
+
+def _api_key() -> str:
+    return (
+        os.getenv("GALAXY_SIMPLEMEM_API_KEY")
+        or os.getenv("OPENAI_API_KEY")
+        or os.getenv("DEEPSEEK_API_KEY")
+        or ""
+    )
 
 
 class OmniSimpleMemProvider(MemoryProvider):
+    # 名称保留 backend_name="omni_simplemem" 以兼容配置，但实为 SimpleMem 文本后端。
     backend_name = "omni_simplemem"
 
     def __init__(self) -> None:
         self._mem = None
         self._available: Optional[bool] = None
+        self._dirty = False
 
     def available(self) -> bool:
         if self._available is None:
+            ok = False
             try:
                 import simplemem  # noqa: F401
-                self._available = True
-            except Exception:  # noqa: BLE001 — 未安装即不可用
-                self._available = False
+                ok = hasattr(simplemem, "SimpleMemSystem") and bool(_api_key())
+            except Exception:  # noqa: BLE001
+                ok = False
+            if not ok:
+                logger.debug(
+                    "SimpleMem backend unavailable (need `pip install simplemem` + an LLM key)"
+                )
+            self._available = ok
         return self._available
 
     def _ensure(self):
         if self._mem is None:
-            from simplemem import SimpleMem  # 可选依赖
-            # 持久化目录可经环境变量配置；其余走 simplemem 默认（嵌入模型/向量库）
-            workdir = os.getenv("GALAXY_OMNIMEM_DIR", "./data/omni_simplemem")
+            from simplemem import SimpleMemSystem
+            db_dir = os.getenv("GALAXY_OMNIMEM_DIR", "./data/omni_simplemem")
             try:
-                os.makedirs(workdir, exist_ok=True)
+                os.makedirs(db_dir, exist_ok=True)
             except Exception:  # noqa: BLE001
                 pass
-            self._mem = SimpleMem(workdir=workdir)
+            self._mem = SimpleMemSystem(
+                api_key=_api_key(),
+                model=os.getenv("GALAXY_SIMPLEMEM_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-4o-mini",
+                base_url=os.getenv("GALAXY_SIMPLEMEM_BASE_URL") or os.getenv("OPENAI_API_BASE"),
+                db_path=os.path.join(db_dir, "simplemem.db"),
+            )
         return self._mem
 
     def remember(
@@ -58,42 +78,31 @@ class OmniSimpleMemProvider(MemoryProvider):
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        if not self.available():
+        # SimpleMem 是文本后端：媒体只能以其文字说明(caption=content)写入。
+        if not content or not self.available():
             return
         try:
-            mem = self._ensure()
-            _tags = tags or []
-            md = metadata or {}
-            if modality == "image" and md.get("media_path"):
-                mem.add_image(md["media_path"], tags=_tags)
-            elif modality == "audio" and md.get("media_path"):
-                mem.add_audio(md["media_path"], tags=_tags)
-            elif modality == "video" and md.get("media_path"):
-                mem.add_video(md["media_path"], tags=_tags)
-            elif content:
-                mem.add_text(content, tags=_tags)
+            speaker = (tags[0] if tags else None) or "user"
+            self._ensure().add_dialogue(speaker, content)
+            self._dirty = True
         except Exception as exc:  # noqa: BLE001 — 写入失败不影响主流程
-            logger.debug("omni remember failed: %s", exc)
+            logger.debug("simplemem remember failed: %s", exc)
 
     def recall(self, query: str, *, top_k: int = 5) -> List[MemoryHit]:
         if not query or not self.available():
             return []
         try:
             mem = self._ensure()
-            items = mem.query(query, top_k=top_k) or []
+            if self._dirty:
+                # 把累积的对话固化成记忆（涉及 LLM 处理，故批量在召回时做）
+                try:
+                    mem.finalize()
+                finally:
+                    self._dirty = False
+            answer = mem.ask(query)
         except Exception as exc:  # noqa: BLE001
-            logger.debug("omni recall failed: %s", exc)
+            logger.debug("simplemem recall failed: %s", exc)
             return []
-        hits: List[MemoryHit] = []
-        for it in items:
-            if isinstance(it, dict):
-                hits.append(MemoryHit(
-                    content=str(it.get("summary") or it.get("content") or ""),
-                    score=float(it.get("score", 0.0) or 0.0),
-                    source=self.backend_name,
-                    modality=str(it.get("modality", "text")),
-                    metadata=it,
-                ))
-            else:
-                hits.append(MemoryHit(content=str(it), source=self.backend_name))
-        return hits
+        if not answer:
+            return []
+        return [MemoryHit(content=str(answer), score=0.6, source=self.backend_name, modality="text")]
