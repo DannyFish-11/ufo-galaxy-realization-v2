@@ -3912,6 +3912,24 @@ class OpenClawd:
             "",
         )
 
+        # ── Desktop ambient perception injection ─────────────────────────────
+        # 电脑端 Electron 壳持续上传摄像头/屏幕/麦克风帧到 DesktopPerceptionStore。
+        # 若本次请求自身不带图像、且存储里有「新鲜」帧（TTL 内），则把它作为原生
+        # 多模态上下文注入——这样模型在普通对话时也能「看到」桌面摄像头/屏幕。
+        # 显式上传图像的请求不受影响；任何异常都静默跳过，绝不影响主流程。
+        try:
+            _has_req_images = bool(getattr(multimodal_context, "images", None)) if multimodal_context else False
+            if not _has_req_images:
+                from core.perception.desktop_perception_store import get_desktop_perception_store
+                _injected_ctx = get_desktop_perception_store().build_multimodal_context(
+                    existing=multimodal_context
+                )
+                if _injected_ctx is not None:
+                    multimodal_context = _injected_ctx
+                    logger.debug("Injected fresh desktop perception frame into request context")
+        except Exception as _dp_err:  # noqa: BLE001 — 注入失败不影响请求
+            logger.debug("desktop perception injection skipped: %s", _dp_err)
+
         # ── Multimodal Perception Bus (PR 1) ─────────────────────────────────
         # Run MultimodalBus.ingest() for every request (text-only requests
         # produce an empty fusion_summary and leave the message unchanged).

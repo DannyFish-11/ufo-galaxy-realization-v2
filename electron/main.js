@@ -40,6 +40,13 @@ const GATEWAY_PORT = parseInt(process.env.GALAXY_GATEWAY_PORT || process.env.POR
 const GATEWAY_BASE = `http://localhost:${GATEWAY_PORT}`;
 let ipcHttpServer = null;
 
+// 桌面连续感知（摄像头/麦克风/屏幕）配置 —— 默认关闭（隐私优先）。
+// 仅当 GALAXY_DESKTOP_PERCEPTION=1 时才在渲染层启动采集。
+const PERCEPTION_ENABLED = ['1', 'true', 'yes', 'on'].includes(
+    String(process.env.GALAXY_DESKTOP_PERCEPTION || '').trim().toLowerCase()
+);
+const PERCEPTION_INTERVAL_MS = parseInt(process.env.GALAXY_DESKTOP_PERCEPTION_INTERVAL_MS || '2000', 10);
+
 // ── Two-window architecture ──
 // mainWindow  : Three-State Full-Screen AI (always on, never hidden)
 // panelWindow : AI Control Panel — Colorless Lens (toggled by F12)
@@ -98,6 +105,21 @@ app.whenReady().then(() => {
     // 未取得单实例锁的后来者：什么都不做，等待 app.quit() 收尾，
     // 避免它创建窗口或去争抢已被占用的 IPC 端口。
     if (!gotSingleInstanceLock) return;
+
+    // 媒体权限：Electron 默认拒绝 getUserMedia。仅当桌面感知启用时放行
+    // 摄像头/麦克风/屏幕权限；否则一律拒绝（隐私优先）。
+    try {
+        const { session } = require('electron');
+        session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
+            const mediaPerms = ['media', 'audioCapture', 'videoCapture', 'display-capture'];
+            if (PERCEPTION_ENABLED && mediaPerms.includes(permission)) {
+                return callback(true);
+            }
+            return callback(false);
+        });
+    } catch (e) {
+        console.warn('[Main] 设置媒体权限处理器失败:', e && e.message);
+    }
 
     createWindow();
 
@@ -311,6 +333,48 @@ ipcMain.handle('get-window-size', () => {
 ipcMain.on('set-ignore-mouse', (event, ignore) => {
     if (mainWindow) {
         mainWindow.setIgnoreMouseEvents(ignore, { forward: true });
+    }
+});
+
+// ═══════════════════════════════════════════
+// Desktop Perception — 摄像头/麦克风/屏幕连续感知
+// ═══════════════════════════════════════════
+
+// 渲染层询问是否启用 + 采集参数
+ipcMain.handle('galaxy:perception-config', () => ({
+    enabled: PERCEPTION_ENABLED,
+    intervalMs: PERCEPTION_INTERVAL_MS,
+    video: true,
+    audio: true,
+}));
+
+// 渲染层采到的帧/音频 → 转发到网关的桌面感知接收端
+ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
+    if (!PERCEPTION_ENABLED || !payload) return;
+    try {
+        if (payload.type === 'frame' && payload.image_base64) {
+            await fetch(`${GATEWAY_BASE}/api/perception/desktop/frame`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    image_base64: payload.image_base64,
+                    mime: payload.mime || 'image/jpeg',
+                    source: payload.source || 'desktop_camera',
+                }),
+            });
+        } else if (payload.type === 'audio' && payload.audio_base64) {
+            await fetch(`${GATEWAY_BASE}/api/perception/desktop/audio`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    audio_base64: payload.audio_base64,
+                    mime: payload.mime || 'audio/webm',
+                }),
+            });
+        }
+    } catch (e) {
+        // 后端未就绪/网络抖动等非致命；丢弃本帧即可
+        console.debug('[Perception] forward failed:', e && e.message);
     }
 });
 
