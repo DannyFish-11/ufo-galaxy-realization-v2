@@ -71,6 +71,13 @@ class GalaxyPresenceBridge:
     # 桥接已启动
     _started: bool = False
 
+    # 主事件循环引用 —— 在 start() 中捕获。
+    # StateEventBus 的相位回调是**同步**的、且 desktop_presence_runtime.advance()
+    # 也是同步方法；若它从无运行 loop 的线程/同步上下文触发，直接 asyncio.create_task
+    # 会抛 RuntimeError，并被 StateEventBus.publish 的 try/except 静默吞掉 —— 唤醒
+    # 推送从此无声失效。捕获 loop 后用 _schedule() 做跨线程安全调度即可根治。
+    _loop: Optional["asyncio.AbstractEventLoop"] = None
+
     @classmethod
     def get_instance(cls) -> "GalaxyPresenceBridge":
         if cls._instance is None:
@@ -84,6 +91,12 @@ class GalaxyPresenceBridge:
         if self._started:
             return
         self._started = True
+
+        # 捕获主事件循环，供同步/跨线程回调安全调度 _broadcast_state。
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None
 
         try:
             from core.state_event_bus import StateEventBus
@@ -101,6 +114,31 @@ class GalaxyPresenceBridge:
         except Exception as exc:
             logger.warning("StateEventBus subscription failed (non-fatal): %s", exc)
 
+    # ── 安全调度 ──
+
+    def _schedule_broadcast(self) -> None:
+        """跨线程/同步上下文安全调度 _broadcast_state()。
+
+        - 当前线程有运行 loop → 直接 create_task。
+        - 无运行 loop 但已捕获主 loop → run_coroutine_threadsafe 投递到主 loop。
+        - 都没有 → 记 debug 并放弃（不产生 "coroutine never awaited" 泄漏）。
+        永不抛出，避免被 StateEventBus.publish 的 try/except 静默吞掉。
+        """
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._broadcast_state())
+            return
+        except RuntimeError:
+            pass  # 本线程无运行 loop —— 尝试投递到主 loop
+        loop = self._loop
+        if loop is not None and not loop.is_closed():
+            try:
+                asyncio.run_coroutine_threadsafe(self._broadcast_state(), loop)
+                return
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("run_coroutine_threadsafe failed: %s", exc)
+        logger.debug("presence broadcast skipped — no usable event loop")
+
     # ── StateEventBus 回调 ──
 
     def _on_phase_silent(self, payload: Dict[str, Any]) -> None:
@@ -108,7 +146,7 @@ class GalaxyPresenceBridge:
         self._current_depth = MODE_DEPTH_MAP["static"]
         self._intent = 0.0
         self._speaking = False
-        asyncio.create_task(self._broadcast_state())
+        self._schedule_broadcast()
 
     def _on_phase_liminal(self, payload: Dict[str, Any]) -> None:
         self._current_mode = "liminal"
@@ -116,14 +154,14 @@ class GalaxyPresenceBridge:
         # intent 从 payload 中提取，如果没有则默认 0.5
         self._intent = payload.get("intent_strength", 0.5)
         self._speaking = payload.get("speaking", False)
-        asyncio.create_task(self._broadcast_state())
+        self._schedule_broadcast()
 
     def _on_phase_manifest(self, payload: Dict[str, Any]) -> None:
         self._current_mode = "manifest"
         self._current_depth = MODE_DEPTH_MAP["manifest"]
         self._intent = 1.0
         self._speaking = False
-        asyncio.create_task(self._broadcast_state())
+        self._schedule_broadcast()
 
     def _on_intent_update(self, payload: Dict[str, Any]) -> None:
         """意图强度持续更新 — Liminal 态下微调 depth。"""
@@ -134,7 +172,7 @@ class GalaxyPresenceBridge:
         # depth 在 0.15-0.85 之间随 intent 线性映射
         self._current_depth = 0.15 + intent * 0.70
         self._speaking = payload.get("speaking", False)
-        asyncio.create_task(self._broadcast_state())
+        self._schedule_broadcast()
 
     # ── WebSocket 客户端管理 ──
 
