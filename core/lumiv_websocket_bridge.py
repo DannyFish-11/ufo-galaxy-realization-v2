@@ -153,14 +153,21 @@ class GalaxyPresenceBridge:
     # ── 广播 ──
 
     async def _broadcast_state(self) -> None:
-        """广播状态到前端。优先 IPC HTTP，fallback WebSocket。"""
+        """广播状态到前端。
+
+        同时推送两条通道，而非二选一：
+        - IPC HTTP → Electron 主进程 → 三态全屏覆盖层（主窗口经 IPC 接收）。
+        - WebSocket → 已注册客户端（控制面板经 /ws/desktop-presence，以及浏览器预览）。
+
+        二者面向不同的消费者：主覆盖层只听 IPC，控制面板只听 WebSocket。
+        早期实现里 IPC 成功就 return，导致面板永远收不到状态更新。
+        """
         msg = self._build_message()
 
-        # PR-IPC: 优先推送到 Electron main.js HTTP 接收端
-        if await self._try_ipc_http(msg):
-            return
+        # 桌面主覆盖层（Electron 主进程内存级 IPC 转发）
+        await self._try_ipc_http(msg)
 
-        # Fallback: 传统 WebSocket 广播（浏览器预览模式）
+        # 控制面板 / 浏览器预览（WebSocket 广播）
         await self._ws_broadcast(msg)
 
     async def _try_ipc_http(self, msg: Dict[str, Any]) -> bool:

@@ -11,7 +11,12 @@ contextBridge.exposeInMainWorld('galaxyAPI', {
   },
 
   // ── Panel 数据获取 ─
-  getBackendUrl: () => Promise.resolve('http://localhost:8000'),
+  // 统一网关端口（默认 9000），与 main.js / useWebSocket.ts 保持一致。
+  // 此前硬编码 8000，与实际后端端口不符，导致回退连接打不通。
+  getBackendUrl: () => {
+    const port = process.env.GALAXY_GATEWAY_PORT || process.env.PORT || '9000';
+    return Promise.resolve(`http://localhost:${port}`);
+  },
 
   // ── 窗口控制 ─
   getWindowSize: () => ipcRenderer.invoke('get-window-size'),

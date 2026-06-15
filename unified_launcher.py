@@ -1246,6 +1246,13 @@ def main():
         asyncio.set_event_loop(loop)
         loop.add_signal_handler(signal.SIGINT, _graceful_shutdown)
         loop.add_signal_handler(signal.SIGTERM, _graceful_shutdown)
+        # 桌面覆盖层事件桥：订阅三态事件并推送到 Electron / WebSocket 客户端。
+        # 必须在此入口路径显式启动，否则唤醒事件无法到达前端覆盖层与面板。
+        try:
+            from core.lumiv_websocket_bridge import GalaxyPresenceBridge
+            loop.run_until_complete(GalaxyPresenceBridge.get_instance().start())
+        except Exception as _bridge_exc:  # noqa: BLE001 — 非阻塞
+            logger.warning("GalaxyPresenceBridge 启动失败（非阻塞）: %s", _bridge_exc)
         loop.run_until_complete(lumiv.start())
     except KeyboardInterrupt:
         lumiv.stop()

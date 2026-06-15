@@ -1,5 +1,33 @@
-const { app, BrowserWindow, globalShortcut, ipcMain } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, dialog } = require('electron');
 const path = require('path');
+
+// ── 单实例锁 ──
+// 端口 EADDRINUSE 崩溃最常见的根因就是"已有一个实例在跑"。单实例锁从源头
+// 杜绝第二个进程争抢 IPC 端口；后来者直接退出，并唤起已存在的窗口。
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+    console.warn('[Main] 已有 Galaxy 桌面实例在运行，本实例退出。');
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        // 第二个实例被拉起时，把已有主窗口带到前台
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+        }
+    });
+}
+
+// ── 主进程兜底 ──
+// 任何未捕获异常都记录而不是直接弹出系统级崩溃框并杀进程。覆盖层与快捷键
+// 应当尽可能保持存活，宁可某个子功能降级也不要整个外壳消失。
+process.on('uncaughtException', (err) => {
+    console.error('[Main] Uncaught exception (kept alive):', err);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('[Main] Unhandled promise rejection (kept alive):', reason);
+});
 
 // PR-IPC: HTTP 接收端 — Python 后端推送到此端点，转发到前端 IPC
 // 注意：9229 是 Node/V8 inspector 的默认端口（--inspect），会与调试器或
@@ -67,6 +95,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    // 未取得单实例锁的后来者：什么都不做，等待 app.quit() 收尾，
+    // 避免它创建窗口或去争抢已被占用的 IPC 端口。
+    if (!gotSingleInstanceLock) return;
+
     createWindow();
 
     // ── IPC HTTP 接收端 ──
@@ -138,13 +170,31 @@ app.whenReady().then(() => {
         console.warn('Failed to start system tray:', err);
     }
 
-    // F12: Toggle AI Control Panel (Colorless Lens)
-    // P21 修复：检查快捷键注册是否成功
-    const f12Registered = globalShortcut.register('F12', () => {
-        togglePanel();
+    // Toggle AI Control Panel (Colorless Lens)
+    // F12 在很多环境会被开发者工具/输入法/其他应用占用，因此注册一组候选
+    // 快捷键：任意一个成功即可开关面板，避免"按了没反应"。
+    const PANEL_SHORTCUTS = ['F12', 'CommandOrControl+F12', 'CommandOrControl+Shift+P'];
+    const registeredShortcuts = PANEL_SHORTCUTS.filter((accel) => {
+        try {
+            return globalShortcut.register(accel, () => togglePanel());
+        } catch (e) {
+            return false;
+        }
     });
-    if (!f12Registered) {
-        console.warn('[Main] F12 快捷键注册失败，可能已被系统或其他应用占用');
+    if (registeredShortcuts.length === 0) {
+        // 一个都没注册上：给出可见反馈，而不是只在控制台里 warn。
+        console.warn('[Main] 面板快捷键全部注册失败，可能被系统或其他应用占用');
+        try {
+            dialog.showMessageBox(mainWindow, {
+                type: 'warning',
+                title: 'Galaxy 控制面板',
+                message: '面板快捷键注册失败',
+                detail: `尝试过：${PANEL_SHORTCUTS.join(' / ')}。\n` +
+                    '可能被系统或其他应用占用。可关闭占用 F12 的程序后重启，或通过托盘菜单打开面板。',
+            });
+        } catch (e) { /* 无窗口时忽略 */ }
+    } else {
+        console.log(`[Main] 面板快捷键已注册: ${registeredShortcuts.join(', ')}`);
     }
 
     app.on('browser-window-created', (event, window) => {
@@ -160,9 +210,13 @@ app.whenReady().then(() => {
 
 function createPanelWindow() {
     const fs = require('fs');
-    const panelPath = path.join(__dirname, 'renderer', 'panel', 'index.html');
+    // 优先加载 Vite 构建产物 (dist/)。renderer/panel/index.html 现在是构建
+    // 入口（指向 src/main.tsx），不能直接被浏览器/Electron 当页面加载。
+    const distPath = path.join(__dirname, 'renderer', 'panel', 'dist', 'index.html');
+    const legacyPath = path.join(__dirname, 'renderer', 'panel', 'index.html');
+    const panelPath = fs.existsSync(distPath) ? distPath : legacyPath;
     if (!fs.existsSync(panelPath)) {
-        console.log('[Panel] renderer/panel/index.html not found');
+        console.log('[Panel] panel build not found — run: cd electron/renderer/panel && npm install && npm run build');
         return null;
     }
 

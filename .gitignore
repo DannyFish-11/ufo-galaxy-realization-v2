@@ -7,6 +7,9 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+# Exception: Electron 控制面板的构建产物需要随仓库分发，供 Electron 直接加载。
+!electron/renderer/panel/dist/
+!electron/renderer/panel/dist/**
 downloads/
 eggs/
 .eggs/
@@ -107,6 +110,7 @@ data/runtime/delegated_runtime_execution_tracker.json
 learning_data.db
 audit/wiring_report_*.json
 electron/node_modules/
+electron/renderer/panel/node_modules/
 
 # npm lockfiles are not tracked in this repo
 package-lock.json
