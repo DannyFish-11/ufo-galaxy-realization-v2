@@ -4,7 +4,7 @@ Lumiv Presence Bridge — 桌面覆盖层事件推送
 职责：
 1. 订阅 DesktopPresenceRuntime 的状态事件
 2. 将 DesktopPresenceMode (STATIC/LIMINAL/MANIFEST) 映射为 depth_factor
-3. 优先通过 IPC HTTP POST 推送到 Electron main.js (localhost:9229)
+3. 优先通过 IPC HTTP POST 推送到 Electron main.js (默认 localhost:9231, 见 GALAXY_IPC_PORT)
 4. Fallback 到 WebSocket 广播（浏览器预览模式）
 
 这是 DesktopPresenceRuntime 与 Electron 外壳之间的唯一桥梁。
@@ -13,6 +13,7 @@ Lumiv Presence Bridge — 桌面覆盖层事件推送
 
 import asyncio
 import logging
+import os
 from typing import Optional, Dict, Any, Set
 
 try:
@@ -27,6 +28,11 @@ except ImportError:
     aiohttp = None  # type: ignore
 
 logger = logging.getLogger("Lumiv.PresenceBridge")
+
+# Electron IPC 接收端口。必须与 electron/main.js 的 GALAXY_IPC_PORT 保持一致。
+# 默认 9231（避开 Node/V8 inspector 默认端口 9229，否则会与调试器/第二实例冲突）。
+IPC_PORT = int(os.getenv("GALAXY_IPC_PORT", "9231"))
+IPC_PRESENCE_URL = f"http://localhost:{IPC_PORT}/ipc/presence-state"
 
 
 # ── DesktopPresenceMode → depth_factor 映射 ──
@@ -46,7 +52,7 @@ class GalaxyPresenceBridge:
     将 presence 模式转换为 depth_factor 推送到前端。
 
     推送策略（PR-IPC）：
-    1. 优先 HTTP POST 到 Electron main.js: http://localhost:9229/ipc/presence-state
+    1. 优先 HTTP POST 到 Electron main.js: http://localhost:${GALAXY_IPC_PORT:-9231}/ipc/presence-state
     2. Electron 不可用时 fallback 到 WebSocket 广播（浏览器预览模式）
     """
 
@@ -164,7 +170,7 @@ class GalaxyPresenceBridge:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    "http://localhost:9229/ipc/presence-state",
+                    IPC_PRESENCE_URL,
                     json=msg,
                     timeout=aiohttp.ClientTimeout(total=1),
                 ) as resp:

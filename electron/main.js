@@ -2,7 +2,14 @@ const { app, BrowserWindow, globalShortcut, ipcMain } = require('electron');
 const path = require('path');
 
 // PR-IPC: HTTP 接收端 — Python 后端推送到此端点，转发到前端 IPC
-const IPC_HTTP_PORT = 9229;
+// 注意：9229 是 Node/V8 inspector 的默认端口（--inspect），会与调试器或
+// 第二个实例冲突，导致 listen EADDRINUSE 崩溃主进程。改用独立端口，
+// 并通过环境变量与 Python 端 (core/lumiv_websocket_bridge.py) 保持一致。
+const IPC_HTTP_PORT = parseInt(process.env.GALAXY_IPC_PORT || '9231', 10);
+// 配置 API 由统一网关 (unified_launcher / core.routes) 提供，监听 PORT(默认 9000)，
+// 而非本进程的 IPC 接收端。此前误指向 9229 导致配置读写永远 404。
+const GATEWAY_PORT = parseInt(process.env.GALAXY_GATEWAY_PORT || process.env.PORT || '9000', 10);
+const GATEWAY_BASE = `http://localhost:${GATEWAY_PORT}`;
 let ipcHttpServer = null;
 
 // ── Two-window architecture ──
@@ -93,6 +100,20 @@ app.whenReady().then(() => {
                 res.writeHead(404);
                 res.end('{"error": "not found"}');
             }
+        });
+        // listen 的错误是异步 'error' 事件，try/catch 捕获不到。
+        // 缺少该处理器时，EADDRINUSE（端口被占用 / 已有实例 / inspector）
+        // 会变成未捕获异常，直接弹出 "A JavaScript error occurred in the
+        // main process" 并杀死主进程 —— 导致桌面覆盖层（唤醒）和 F12 面板
+        // 全部失效。这里降级为告警，IPC 接收端不可用不影响窗口与快捷键。
+        ipcHttpServer.on('error', (err) => {
+            if (err && err.code === 'EADDRINUSE') {
+                console.warn(`[IPC] Port ${IPC_HTTP_PORT} already in use — presence push disabled. ` +
+                    `Set GALAXY_IPC_PORT to use a different port. App continues running.`);
+            } else {
+                console.warn('[IPC] HTTP receiver error:', err);
+            }
+            ipcHttpServer = null;
         });
         ipcHttpServer.listen(IPC_HTTP_PORT, '127.0.0.1', () => {
             console.log(`[IPC] HTTP receiver on localhost:${IPC_HTTP_PORT}`);
@@ -249,7 +270,7 @@ let configCache = {};
 // 从 Python 后端获取配置
 async function fetchConfigFromBackend() {
     try {
-        const response = await fetch('http://localhost:9229/api/config');
+        const response = await fetch(`${GATEWAY_BASE}/api/config`);
         if (response.ok) {
             configCache = await response.json();
             return configCache;
@@ -268,7 +289,7 @@ ipcMain.handle('galaxy:get-config', async () => {
 // SET 配置（批量更新）
 ipcMain.handle('galaxy:set-config', async (_, config) => {
     try {
-        const response = await fetch('http://localhost:9229/api/config', {
+        const response = await fetch(`${GATEWAY_BASE}/api/config`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config),
@@ -291,7 +312,7 @@ ipcMain.handle('galaxy:set-config', async (_, config) => {
 // 保存配置到文件
 ipcMain.handle('galaxy:save-config', async () => {
     try {
-        const response = await fetch('http://localhost:9229/api/config/save', {
+        const response = await fetch(`${GATEWAY_BASE}/api/config/save`, {
             method: 'POST',
         });
         return { success: response.ok };
