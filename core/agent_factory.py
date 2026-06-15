@@ -979,7 +979,22 @@ class AgentFactory:
             tool_records: list = []
             max_react_iterations = 8
 
-            for iteration in range(max_react_iterations):
+            # ── 反思自检（Reflexion 式，有界、可关、失败即放行）──────────────
+            # 当 ReAct 循环给出候选最终答案（无 tool_calls）时，先做一次 LLM 自检：
+            # 若判定结果不充分且仍在迭代预算内，则把批评意见回灌、再迭代一轮。
+            # 默认开启 1 轮；GALAXY_AGENT_REFLECTION=0 可关闭，GALAXY_AGENT_MAX_REFLECTION
+            # 调整轮数。反思消耗的是同一个 max_react_iterations 预算，总 LLM 调用仍有上限。
+            import os as _os
+            reflection_enabled = _os.getenv("GALAXY_AGENT_REFLECTION", "1").strip().lower() not in ("0", "false", "no")
+            try:
+                max_reflection_rounds = max(0, int(_os.getenv("GALAXY_AGENT_MAX_REFLECTION", "1")))
+            except ValueError:
+                max_reflection_rounds = 1
+            reflection_rounds = 0
+
+            resp = None
+            iteration = 0
+            while iteration < max_react_iterations:
                 async def _llm_call():
                     # PR-3: Use chat_with_tools() which is defined on both
                     # UnifiedLLMRouter and MultiLLMRouter, ensuring the unified
@@ -1000,14 +1015,35 @@ class AgentFactory:
                     resp = await self._llm_circuit_breaker.execute(_llm_call)
                 else:
                     resp = await _llm_call()
+                iteration += 1
 
                 if not resp.tool_calls:
+                    # 候选最终答案 — 反思自检（有界；任何异常都放行原答案）
+                    if (
+                        reflection_enabled
+                        and reflection_rounds < max_reflection_rounds
+                        and iteration < max_react_iterations
+                    ):
+                        verdict = await self._reflect_on_result(
+                            task, resp.content or "", tool_records
+                        )
+                        if verdict and not verdict.get("sufficient", True):
+                            reflection_rounds += 1
+                            critique = verdict.get("critique", "") or "结果可能不完整，请补全并复核后再给出最终答案。"
+                            messages.append({"role": "assistant", "content": resp.content or ""})
+                            messages.append({
+                                "role": "user",
+                                "content": f"[自检] 上述回答存在不足：{critique}\n请据此修正或补全，然后给出最终结果。",
+                            })
+                            continue
+
                     return {
                         "task": task,
                         "output": resp.content,
                         "provider": resp.provider,
                         "tool_calls": [r.model_dump() for r in tool_records],
-                        "iterations": iteration + 1,
+                        "iterations": iteration,
+                        "reflection_rounds": reflection_rounds,
                     }
 
                 # 处理 tool_calls
@@ -1047,7 +1083,7 @@ class AgentFactory:
                         status=status,
                         error=result.get("error") if not result.get("success", True) else None,
                         latency_ms=round(elapsed_ms, 1),
-                        iteration=iteration,
+                        iteration=iteration - 1,
                     ))
 
                     messages.append({
@@ -1063,6 +1099,7 @@ class AgentFactory:
                 "provider": resp.provider if resp else "",
                 "tool_calls": [r.model_dump() for r in tool_records],
                 "iterations": max_react_iterations,
+                "reflection_rounds": reflection_rounds,
             }
 
         else:
@@ -1073,6 +1110,99 @@ class AgentFactory:
                 "simulated": True,
                 "status": "simulated",
             }
+
+    async def _reflect_on_result(
+        self, task: Dict, answer: str, tool_records: list
+    ) -> Optional[Dict[str, Any]]:
+        """对 ReAct 候选最终答案做一次 LLM 自检（Reflexion 式）。
+
+        返回 ``{"sufficient": bool, "critique": str}``；任何失败/无法解析时返回
+        ``None``（调用方据此放行原答案，反思绝不阻断交付）。
+
+        设计约束：
+          - 一次性、低成本（temperature=0、max_tokens 小）。
+          - 不调用工具，只做结果质量判断。
+          - 最佳努力地把反思 thought 记入元认知引擎（可观测，失败忽略）。
+        """
+        if not self.llm_router or not hasattr(self.llm_router, "chat"):
+            return None
+        try:
+            crit_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是严格的结果审查员。判断给定回答是否充分且正确地完成了任务。"
+                        "只输出 JSON，不要任何额外文字："
+                        '{"sufficient": true 或 false, "critique": "若不足，简述缺什么/如何改；若充分则留空"}'
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "task": task.get("description", task) if isinstance(task, dict) else task,
+                            "answer": answer,
+                            "tools_used": [getattr(r, "tool_name", "") for r in tool_records],
+                        },
+                        ensure_ascii=False,
+                    )[:6000],
+                },
+            ]
+            raw = await self.llm_router.chat(
+                messages=crit_messages,
+                temperature=0.0,
+                max_tokens=300,
+                task_type="reasoning",
+            )
+            if hasattr(raw, "content"):
+                content = raw.content
+            elif isinstance(raw, dict):
+                content = raw.get("content") or raw.get("response") or ""
+            else:
+                content = str(raw)
+
+            verdict = self._extract_json_object(content)
+            if not isinstance(verdict, dict) or "sufficient" not in verdict:
+                return None
+
+            result = {
+                "sufficient": bool(verdict.get("sufficient", True)),
+                "critique": str(verdict.get("critique", "")).strip(),
+            }
+
+            # 最佳努力记录到元认知引擎（让反思轨迹真正在线、可观测）
+            try:
+                from core.metacognition_engine import get_metacognition_engine, ThoughtType
+                get_metacognition_engine().track_thought(
+                    ThoughtType.REFLECTION,
+                    result["critique"] or "result judged sufficient",
+                    context={"sufficient": result["sufficient"], "tools": len(tool_records)},
+                )
+            except Exception as _mc_err:
+                logger.debug("metacognition record skipped: %s", _mc_err)
+
+            return result
+        except Exception as exc:
+            logger.debug("reflection skipped (non-fatal): %s", exc)
+            return None
+
+    @staticmethod
+    def _extract_json_object(text: str) -> Optional[Dict[str, Any]]:
+        """从可能夹带散文/代码块的文本中提取第一个 JSON 对象。"""
+        if not text:
+            return None
+        try:
+            return json.loads(text)
+        except (ValueError, TypeError):
+            pass
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(text[start:end + 1])
+            except (ValueError, TypeError):
+                return None
+        return None
 
     # ─────── 内部工具 ─────────
 

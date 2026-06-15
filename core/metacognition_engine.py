@@ -172,3 +172,22 @@ class MetaCognitionEngine:
     def _get_common_biases(self, thoughts: List[Thought]) -> List[str]:
         all_biases = [b for t in thoughts for b in t.biases_detected]
         return list(set(all_biases))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 模块级单例
+# ──────────────────────────────────────────────────────────────────────────────
+
+_engine: Optional["MetaCognitionEngine"] = None
+
+
+def get_metacognition_engine() -> "MetaCognitionEngine":
+    """返回全局元认知引擎单例。
+
+    生产 ReAct 反思路径（core/agent_factory.py 的自检步骤）通过此入口记录
+    反思 thought，使元认知轨迹在运行时真正在线、可观测。
+    """
+    global _engine
+    if _engine is None:
+        _engine = MetaCognitionEngine()
+    return _engine
