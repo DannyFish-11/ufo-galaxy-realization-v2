@@ -84,4 +84,18 @@ export function useWebSocket(): UseWebSocketReturn {
     connect();
 
     return () => {
-      isMountedRef.current = fal
+      isMountedRef.current = false;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+      try {
+        wsRef.current?.close();
+      } catch {
+        /* ignore */
+      }
+      wsRef.current = null;
+    };
+  }, [connect]);
+
+  return { connected, lastMessage, send };
+}

@@ -71,7 +71,7 @@ const WeitaiTab: React.FC<Props> = ({ data }) => {
       topic: m.topic,
       direction: m.direction,
       payload: m.payload,
-      msgType: m.msgType,
+      msgType: m.msgType as NATSMessage['msgType'],
     }));
   }, [data.natsMessages]);
 

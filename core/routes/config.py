@@ -40,7 +40,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "LOCAL_VLLM_URL": {"default": "", "type": "url", "category": "llm", "description": "Local vLLM URL"},
 
     # --- Service Ports & Nodes ---
-    "GATEWAY_PORT": {"default": "9229", "type": "number", "category": "ports", "description": "Galaxy Gateway Port"},
+    "GATEWAY_PORT": {"default": "9000", "type": "number", "category": "ports", "description": "Galaxy Gateway Port"},
     "UFO_NODE_HOST": {"default": "localhost", "type": "string", "category": "ports", "description": "Node Host"},
     "NODE_92_URL": {"default": "http://localhost:8092", "type": "url", "category": "ports", "description": "Device Control Service"},
     "NODE_45_URL": {"default": "http://localhost:8045", "type": "url", "category": "ports", "description": "Desktop Endpoint"},

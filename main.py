@@ -712,8 +712,8 @@ def main() -> int:
     async def _run() -> None:
         # ── Galaxy WebSocket Bridge — 桌面覆盖层事件推送 ──
         try:
-            from core.lumiv_websocket_bridge import GalaxyWebSocketBridge
-            _ws_bridge = GalaxyWebSocketBridge.get_instance()
+            from core.lumiv_websocket_bridge import GalaxyPresenceBridge
+            _ws_bridge = GalaxyPresenceBridge.get_instance()
             asyncio.create_task(_ws_bridge.start())
         except Exception as _exc:
             logger.debug("GalaxyWebSocketBridge init skipped (non-fatal): %s", _exc)

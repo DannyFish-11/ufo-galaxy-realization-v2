@@ -1368,30 +1368,50 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
 
     @app.websocket("/ws/desktop-presence")
     async def lumiv_desktop_ws(websocket: WebSocket):
-        """Galaxy 桌面覆盖层 — 三态流转事件通道"""
+        """Galaxy 桌面覆盖层 / 控制面板 — 三态流转事件通道。
+
+        客户端在连接后即注册到 GalaxyPresenceBridge（单例），由桥在三态
+        转换时统一广播 state_event。早期实现保留私有 _desktop_clients 集合
+        且强制 register 握手，但桥从不向该集合推送、面板也不发握手，导致
+        面板 10 秒超时被关、且永远收不到状态更新。这里改为直接注册到桥。
+        """
         await websocket.accept()
+        bridge = None
         try:
-            raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
-            msg = json.loads(raw)
-            if msg.get("type") == "register" and msg.get("client") == "desktop-presence":
-                async with _desktop_lock:
-                    _desktop_clients.add(websocket)
-                await websocket.send_json({"type": "registered", "accepted": True})
-            else:
-                await websocket.close(code=1008); return
+            from core.lumiv_websocket_bridge import GalaxyPresenceBridge
+            bridge = GalaxyPresenceBridge.get_instance()
+            # 注册即推送一次当前状态（register_client 内部会立即下发）。
+            await bridge.register_client(websocket)
+        except Exception as exc:  # noqa: BLE001 — 桥不可用时退化为本地集合
+            logger.debug("presence bridge register failed: %s", exc)
+            async with _desktop_lock:
+                _desktop_clients.add(websocket)
+        try:
+            # register 握手现为可选；缺失不再关闭连接。仅处理保活与显式查询。
             while True:
                 raw = await websocket.receive_text()
                 if raw == "ping":
                     await websocket.send_json({"type": "pong"}); continue
                 try:
                     msg = json.loads(raw)
-                    if msg.get("type") == "get_state":
-                        await websocket.send_json({
-                            "type": "state_event", "event_category": "ambient_tick",
-                            "payload": {"phase": "silent", "intent": 0.0, "speaking": False, "depth_factor": 0.05}
-                        })
-                except: pass
+                    if msg.get("type") == "register":
+                        await websocket.send_json({"type": "registered", "accepted": True})
+                    elif msg.get("type") == "get_state":
+                        if bridge is not None:
+                            await bridge._send_to(websocket)
+                        else:
+                            await websocket.send_json({
+                                "type": "state_event", "event_category": "ambient_tick",
+                                "payload": {"phase": "silent", "intent": 0.0, "speaking": False, "depth_factor": 0.05}
+                            })
+                except (json.JSONDecodeError, ValueError):
+                    pass
         except (WebSocketDisconnect, asyncio.TimeoutError): pass
         except Exception as exc: logger.debug("desktop-presence ws error: %s", exc)
         finally:
+            if bridge is not None:
+                try:
+                    await bridge.unregister_client(websocket)
+                except Exception:  # noqa: BLE001
+                    pass
             async with _desktop_lock: _desktop_clients.discard(websocket)
