@@ -972,97 +972,79 @@ class AgentFactory:
             except Exception as e:
                 logger.debug(f"Agent 工具收集失败（降级为无工具模式）: {e}")
 
-            # ReAct 循环（使用结构化 ToolCallRecord）
+            # ReAct 循环 —— 复用统一执行器 core.agent.react_loop（与团队成员同构）。
+            # 反思自检 + 环路检测 + 上限/预算均由 ReactConfig 集中配置（环境变量可覆盖）。
             import time as _time
             from core.schemas.tool_call import ToolCallRecord, ToolCallStatus
+            from core.agent.react_loop import ReactConfig, run_react_tool_loop
 
+            cfg = ReactConfig.from_env()
             tool_records: list = []
-            max_react_iterations = 8
 
-            for iteration in range(max_react_iterations):
-                async def _llm_call():
-                    # PR-3: Use chat_with_tools() which is defined on both
-                    # UnifiedLLMRouter and MultiLLMRouter, ensuring the unified
-                    # policy layer is applied regardless of which router type is held.
+            async def _llm_call(msgs):
+                async def _call():
+                    # PR-3: chat_with_tools() 在 Unified/Multi 两种 router 上均有定义，
+                    # 确保统一策略层生效，无论持有哪种 router。
                     if hasattr(self.llm_router, "chat_with_tools"):
                         return await self.llm_router.chat_with_tools(
-                            messages=messages,
-                            tools=tools if tools else None,
-                            task_type="agent_control",
+                            messages=msgs, tools=tools if tools else None, task_type="agent_control",
                         )
                     return await self.llm_router.chat(
-                        messages=messages,
-                        tools=tools if tools else None,
-                        task_type="agent_control",
+                        messages=msgs, tools=tools if tools else None, task_type="agent_control",
                     )
-
                 if self._llm_circuit_breaker:
-                    resp = await self._llm_circuit_breaker.execute(_llm_call)
-                else:
-                    resp = await _llm_call()
+                    return await self._llm_circuit_breaker.execute(_call)
+                return await _call()
 
-                if not resp.tool_calls:
-                    return {
-                        "task": task,
-                        "output": resp.content,
-                        "provider": resp.provider,
-                        "tool_calls": [r.model_dump() for r in tool_records],
-                        "iterations": iteration + 1,
-                    }
+            async def _dispatch(name, args):
+                logger.info(f"Agent {agent.id} 调用工具: {name}")
+                t0 = _time.time()
+                try:
+                    res = await clawd._dispatch_tool_call(name, args)
+                except Exception as exc:
+                    logger.debug("Fallback triggered: %s", exc)
+                    res = {"success": False, "error": f"工具 {name} 不可用"}
+                if isinstance(res, dict):
+                    res["_latency_ms"] = round((_time.time() - t0) * 1000, 1)
+                return res
 
-                # 处理 tool_calls
-                assistant_msg = {"role": "assistant", "content": resp.content or ""}
-                if resp.tool_calls:
-                    assistant_msg["tool_calls"] = resp.tool_calls
-                messages.append(assistant_msg)
+            def _record(name, args, result, it_index):
+                layer = ToolCallRecord.classify_layer(name)
+                status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
+                result_str = str(result.get("result", result.get("error", "")))
+                tool_records.append(ToolCallRecord(
+                    tool_name=name,
+                    layer=layer,
+                    arguments=args,
+                    result=result_str[:2000],
+                    status=status,
+                    error=result.get("error") if not result.get("success", True) else None,
+                    latency_ms=result.get("_latency_ms", 0.0),
+                    iteration=it_index,
+                ))
 
-                for tc in resp.tool_calls:
-                    tc_func = tc.get("function", {})
-                    tc_name = tc_func.get("name", "")
-                    tc_id = tc.get("id", f"call_{tc_name}")
+            async def _reflect_cb(content):
+                return await self._reflect_on_result(task, content, tool_records)
 
-                    try:
-                        tc_args = json.loads(tc_func.get("arguments", "{}"))
-                    except (ValueError, TypeError):
-                        tc_args = {}
-
-                    logger.info(f"Agent {agent.id} 调用工具: {tc_name}")
-
-                    t0 = _time.time()
-                    try:
-                        result = await clawd._dispatch_tool_call(tc_name, tc_args)
-                    except Exception as exc:
-                        logger.debug("Fallback triggered: %s", exc)
-                        result = {"success": False, "error": f"工具 {tc_name} 不可用"}
-                    elapsed_ms = (_time.time() - t0) * 1000
-
-                    layer = ToolCallRecord.classify_layer(tc_name)
-                    status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
-                    result_str = str(result.get("result", result.get("error", "")))
-                    tool_records.append(ToolCallRecord(
-                        tool_name=tc_name,
-                        layer=layer,
-                        arguments=tc_args,
-                        result=result_str[:2000],
-                        status=status,
-                        error=result.get("error") if not result.get("success", True) else None,
-                        latency_ms=round(elapsed_ms, 1),
-                        iteration=iteration,
-                    ))
-
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "content": result_str[:4000],
-                    })
-
-            # 达到最大迭代次数
+            loop = await run_react_tool_loop(
+                messages=messages,
+                llm_call=_llm_call,
+                dispatch_tool=_dispatch,
+                max_iterations=cfg.single_agent_max_iterations,
+                on_tool_result=_record,
+                reflect=_reflect_cb if cfg.reflection_enabled else None,
+                max_reflection_rounds=cfg.max_reflection_rounds,
+                loop_detection_window=cfg.loop_detection_window,
+            )
+            resp = loop.final_response
             return {
                 "task": task,
-                "output": resp.content if resp else "Agent 达到最大迭代次数",
-                "provider": resp.provider if resp else "",
+                "output": (resp.content if resp else None) or "Agent 达到最大迭代次数",
+                "provider": getattr(resp, "provider", "") if resp else "",
                 "tool_calls": [r.model_dump() for r in tool_records],
-                "iterations": max_react_iterations,
+                "iterations": loop.iterations,
+                "reflection_rounds": loop.reflection_rounds,
+                "stop_reason": loop.stop_reason,
             }
 
         else:
@@ -1073,6 +1055,99 @@ class AgentFactory:
                 "simulated": True,
                 "status": "simulated",
             }
+
+    async def _reflect_on_result(
+        self, task: Dict, answer: str, tool_records: list
+    ) -> Optional[Dict[str, Any]]:
+        """对 ReAct 候选最终答案做一次 LLM 自检（Reflexion 式）。
+
+        返回 ``{"sufficient": bool, "critique": str}``；任何失败/无法解析时返回
+        ``None``（调用方据此放行原答案，反思绝不阻断交付）。
+
+        设计约束：
+          - 一次性、低成本（temperature=0、max_tokens 小）。
+          - 不调用工具，只做结果质量判断。
+          - 最佳努力地把反思 thought 记入元认知引擎（可观测，失败忽略）。
+        """
+        if not self.llm_router or not hasattr(self.llm_router, "chat"):
+            return None
+        try:
+            crit_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是严格的结果审查员。判断给定回答是否充分且正确地完成了任务。"
+                        "只输出 JSON，不要任何额外文字："
+                        '{"sufficient": true 或 false, "critique": "若不足，简述缺什么/如何改；若充分则留空"}'
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "task": task.get("description", task) if isinstance(task, dict) else task,
+                            "answer": answer,
+                            "tools_used": [getattr(r, "tool_name", "") for r in tool_records],
+                        },
+                        ensure_ascii=False,
+                    )[:6000],
+                },
+            ]
+            raw = await self.llm_router.chat(
+                messages=crit_messages,
+                temperature=0.0,
+                max_tokens=300,
+                task_type="reasoning",
+            )
+            if hasattr(raw, "content"):
+                content = raw.content
+            elif isinstance(raw, dict):
+                content = raw.get("content") or raw.get("response") or ""
+            else:
+                content = str(raw)
+
+            verdict = self._extract_json_object(content)
+            if not isinstance(verdict, dict) or "sufficient" not in verdict:
+                return None
+
+            result = {
+                "sufficient": bool(verdict.get("sufficient", True)),
+                "critique": str(verdict.get("critique", "")).strip(),
+            }
+
+            # 最佳努力记录到元认知引擎（让反思轨迹真正在线、可观测）
+            try:
+                from core.metacognition_engine import get_metacognition_engine, ThoughtType
+                get_metacognition_engine().track_thought(
+                    ThoughtType.REFLECTION,
+                    result["critique"] or "result judged sufficient",
+                    context={"sufficient": result["sufficient"], "tools": len(tool_records)},
+                )
+            except Exception as _mc_err:
+                logger.debug("metacognition record skipped: %s", _mc_err)
+
+            return result
+        except Exception as exc:
+            logger.debug("reflection skipped (non-fatal): %s", exc)
+            return None
+
+    @staticmethod
+    def _extract_json_object(text: str) -> Optional[Dict[str, Any]]:
+        """从可能夹带散文/代码块的文本中提取第一个 JSON 对象。"""
+        if not text:
+            return None
+        try:
+            return json.loads(text)
+        except (ValueError, TypeError):
+            pass
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(text[start:end + 1])
+            except (ValueError, TypeError):
+                return None
+        return None
 
     # ─────── 内部工具 ─────────
 

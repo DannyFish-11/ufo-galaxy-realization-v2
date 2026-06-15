@@ -540,11 +540,43 @@ class ExecutionPlanner:
                 logger.debug("ExecutionPlanner: 任务记忆注入失败（跳过）: %s", _mem_err)
 
         try:
-            result = await asyncio.wait_for(
-                self._dispatch(plan, strategy, steps, tool_calls),
-                timeout=plan.timeout,
-            )
+            # ── 外层重规划（有界、可关、按结果触发）────────────────────────
+            # 单 Agent 内部已有 ReAct 闭环；这里是 strategy 层的重规划：当一次
+            # dispatch 以 success=False 软失败返回时，退到最稳妥的 single 路径并把
+            # 失败原因回灌上下文重试。默认最多 1 次；GALAXY_PLANNER_MAX_REPLANS 调整。
+            import os as _os
+            try:
+                _max_replans = max(0, int(_os.getenv("GALAXY_PLANNER_MAX_REPLANS", "1")))
+            except ValueError:
+                _max_replans = 1
+            _replans = 0
+            while True:
+                result = await asyncio.wait_for(
+                    self._dispatch(plan, strategy, steps, tool_calls),
+                    timeout=plan.timeout,
+                )
+                if result.success or _replans >= _max_replans:
+                    break
+                _replans += 1
+                _prev_strategy = strategy
+                strategy = "single"  # 重规划：退到最稳妥的单 Agent 路径
+                logger.info(
+                    "ExecutionPlanner: 重规划 #%d | prev_strategy=%s → single | reason=%s",
+                    _replans, _prev_strategy, (result.error or result.reply or "")[:120],
+                )
+                # 失败原因回灌上下文，供下一次执行参考
+                plan.context = (plan.context or []) + [{
+                    "role": "system",
+                    "content": (
+                        f"[重规划] 上一次以「{_prev_strategy}」执行未成功："
+                        f"{(result.error or result.reply or '')[:200]}。"
+                        "请用更稳妥的方式重试并修正问题。"
+                    ),
+                }]
             duration_ms = (time.monotonic() - t0) * 1000
+            if _replans:
+                result.task_result = result.task_result or {}
+                result.task_result["replans"] = _replans
             result.agent_steps = steps
             result.tool_calls = tool_calls
             result.duration_ms = duration_ms
