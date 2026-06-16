@@ -105,6 +105,9 @@ def _build() -> UnifiedMemory:
     if {"clip", "crossmodal", "cross_modal"} & wanted:
         from core.memory.clip_provider import ClipMemoryProvider
         providers.append(ClipMemoryProvider())
+    if {"clap", "audio"} & wanted:
+        from core.memory.clap_provider import ClapMemoryProvider
+        providers.append(ClapMemoryProvider())
     um = UnifiedMemory(providers)
     logger.info("UnifiedMemory initialised | backends=%s", um.backend_names or "none")
     return um

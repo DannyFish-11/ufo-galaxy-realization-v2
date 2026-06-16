@@ -107,6 +107,7 @@ data/_verify_clip2/
 data/_verify_clip3/
 data/_verify_clip_mock/
 data/clip_memory/
+data/clap_memory/
 chroma_db/
 
 # Local unified configuration authority (PR-3)
