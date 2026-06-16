@@ -1,4 +1,7 @@
 """
+[DEPRECATED — 未接入 live 路径] 记忆召回职责已由统一记忆层 ``core/memory`` 接管。
+新代码请用 ``from core.memory import get_unified_memory``；本模块仅为兼容保留。
+
 core/context_compressor.py — 上下文压缩与记忆召回系统
 ============================================================
 

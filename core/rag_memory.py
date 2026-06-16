@@ -1,4 +1,8 @@
 """
+[DEPRECATED — 未接入 live 路径] 语义记忆职责已由统一记忆层 ``core/memory`` 接管
+并真正接进 SessionMemoryFacade。新代码请用 ``from core.memory import get_unified_memory``；
+本模块仅为兼容/外部节点保留，勿在主请求路径新增依赖。
+
 RAGMemory — 检索增强记忆系统 (Knowledge Core 统一入口)
 ======================================================
 

@@ -539,6 +539,25 @@ class ExecutionPlanner:
             except Exception as _mem_err:
                 logger.debug("ExecutionPlanner: 任务记忆注入失败（跳过）: %s", _mem_err)
 
+        # 经验复用（READ）：从统一记忆层语义召回与本任务相关的历史经验，注入上下文。
+        # 与 ReAct 反思形成闭环：做→反思→沉淀(见下方 WRITE)→下次规划时召回。失败即跳过。
+        try:
+            from core.memory import get_unified_memory
+            _um = get_unified_memory()
+            if _um.enabled and plan.message:
+                _exp_hits = _um.recall(plan.message, top_k=3)
+                _exp_lines = [
+                    f"- {h.content[:240]}" for h in _exp_hits
+                    if h.content and "experience" in (h.metadata.get("tags") or [])
+                ]
+                if _exp_lines:
+                    plan.context = (plan.context or []) + [{
+                        "role": "system",
+                        "content": "[相关历史经验 — 供参考，避免重蹈覆辙]\n" + "\n".join(_exp_lines),
+                    }]
+        except Exception as _exp_err:  # noqa: BLE001
+            logger.debug("ExecutionPlanner: 经验召回跳过: %s", _exp_err)
+
         try:
             # ── 外层重规划（有界、可关、按结果触发）────────────────────────
             # 单 Agent 内部已有 ReAct 闭环；这里是 strategy 层的重规划：当一次
@@ -623,6 +642,27 @@ class ExecutionPlanner:
                     )
                 except Exception as _rec_err:
                     logger.debug("ExecutionPlanner: 任务记忆记录失败（跳过）: %s", _rec_err)
+
+            # 经验复用（WRITE）：把本次执行沉淀成一条"经验"写入统一记忆层，
+            # 供未来语义召回（见上方 READ）。tags 含 "experience" 以便召回时筛选。
+            try:
+                from core.memory import get_unified_memory
+                _um_w = get_unified_memory()
+                if _um_w.enabled and plan.message:
+                    _outcome = "成功" if result.success else "失败"
+                    _lesson = (result.reply or result.error or "")[:200]
+                    _exp_text = (
+                        f"经验: 任务[{plan.message[:160]}] 策略[{result.chosen_strategy or strategy}] "
+                        f"结果[{_outcome}] 要点[{_lesson}]"
+                    )
+                    _um_w.remember(
+                        _exp_text,
+                        modality="text",
+                        tags=["experience", "success" if result.success else "failure"],
+                        metadata={"session_id": plan.session_id, "kind": "experience"},
+                    )
+            except Exception as _exp_w_err:  # noqa: BLE001
+                logger.debug("ExecutionPlanner: 经验写入跳过: %s", _exp_w_err)
             return result
 
         except asyncio.TimeoutError:
