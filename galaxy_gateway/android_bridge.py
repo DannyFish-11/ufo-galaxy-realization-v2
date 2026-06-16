@@ -1074,20 +1074,24 @@ class AndroidBridge:
             if msg_type not in self._message_handlers:
                 self._message_handlers[msg_type] = _wrap(handle_unregistered)
 
-    async def push_decision_to_wearos(self, device_id: str, decision_context: Dict[str, Any]) -> bool:
-        """向 WearOS 设备推送决策通知。
+    async def push_decision_to_wearos(
+        self,
+        device_id: str,
+        decision_context: Dict[str, Any],
+        decision_id: Optional[str] = None,
+    ) -> bool:
+        """向 WearOS 设备推送决策通知（低层 emit 原语）。
 
-        当 OpenClawd 需要人类确认时，通过此方法向已注册的 WearOS 设备
-        推送决策上下文，手表显示通知并等待用户操作。
+        PR-HITL: 规范的人在回路入口是
+        :func:`core.interaction.pending_decision_registry.request_human_decision`,
+        它登记 pending decision 并阻塞等待回复。本方法只是一个底层 emit 原语:
+        ``decision_id`` 由调用方(注册表)传入,**不再**内联 mint-and-discard,否则手表
+        回传的 ``human_input`` 无法按 id 关联回 pending decision。未传时回退随机 id。
 
         Args:
             device_id: 目标 WearOS 设备 ID
-            decision_context: 决策上下文，包含:
-                - title: 决策标题
-                - summary: 一句话摘要
-                - options: 预设选项列表 [{"id": "confirm", "label": "确认"}, ...]
-                - urgency: 紧急程度 ("low" | "normal" | "high")
-                - timeout_ms: 超时时间（毫秒）
+            decision_context: 决策上下文(title/summary/options/urgency/timeout_ms)
+            decision_id: 关联用决策 ID(应由 PendingDecisionRegistry 提供)
 
         Returns:
             bool: 是否成功推送
@@ -1105,7 +1109,7 @@ class AndroidBridge:
                 "type": "decision_request",
                 "payload": {
                     **decision_context,
-                    "decision_id": str(uuid.uuid4()),
+                    "decision_id": decision_id or str(uuid.uuid4()),
                     "timestamp": time.time(),
                     "source": "openclawd",
                 }
