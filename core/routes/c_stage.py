@@ -42,6 +42,45 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as exc:  # noqa: BLE001
             return {"success": False, "enabled": False, "backends": [], "error": str(exc)}
 
+    # ── 三仓一体: Android 任务记忆回流(store/query) ───────────────────────
+    # Android 端 OpenClawdMemoryBackflow 把每次任务结果回流到这里，并可按 task_id
+    # 取回。落盘精确存取 + 汇入统一语义/跨模态记忆(手机任务历史进入桌面长程记忆)。
+    @router.post("/api/v1/memory/store")
+    async def android_memory_store(body: dict = Body(...)):
+        """接收 Android 端任务记忆回流(MemoryEntry)。
+
+        请求体字段(均来自 android MemoryEntry):
+          task_id, goal, status, summary, steps[], route_mode, timestamp_ms
+        """
+        try:
+            import asyncio
+            from core.memory.android_backflow import get_android_backflow
+            # store() 含落盘 + 汇入统一记忆(首次可能触发嵌入模型加载)，放线程池避免阻塞事件循环
+            saved = await asyncio.to_thread(get_android_backflow().store, body or {})
+            return JSONResponse({"success": True, "task_id": saved.get("task_id")})
+        except Exception as e:
+            logger.warning("android_memory_store error: %s", e)
+            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+    @router.get("/api/v1/memory/query")
+    async def android_memory_query(task_id: str = ""):
+        """按 task_id 取回此前回流的 Android 任务记忆。
+
+        命中返回 ``[entry]`` 数组(与 android parseFirstEntry 兼容)；未命中返回 404。
+        """
+        try:
+            from core.memory.android_backflow import get_android_backflow
+            entry = get_android_backflow().get(task_id)
+            if entry is None:
+                return JSONResponse(
+                    {"success": False, "error": "not found", "task_id": task_id},
+                    status_code=404,
+                )
+            return JSONResponse([entry])
+        except Exception as e:
+            logger.warning("android_memory_query error: %s", e)
+            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
     # ── 4B / G6: 任务记忆 ────────────────────────────────────────────────
 
     @router.get("/api/v1/memory/tasks")
