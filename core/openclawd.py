@@ -3912,6 +3912,30 @@ class OpenClawd:
             "",
         )
 
+        # ── Desktop ambient AUDIO auto-injection（普通对话也能「听见」麦克风）──
+        # 统一 router 不携带原生媒体，普通 chat 路径会把媒体文本摘要化；故让音频
+        # 能力模型（Gemini/OpenAI）先原生听懂这段新鲜麦克风音频，再把其转写/理解
+        # 文本注入到本次对话 prompt。默认关闭（每次新音频会多一次音频模型调用）；
+        # GALAXY_DESKTOP_AUDIO_AUTOINJECT=1 开启。去重 + TTL + 失败即跳过。
+        try:
+            import os as _os_aa
+            if _os_aa.getenv("GALAXY_DESKTOP_AUDIO_AUTOINJECT", "0").strip().lower() in ("1", "true", "yes", "on"):
+                from core.perception.desktop_perception_store import get_desktop_perception_store
+                _aud_b64, _aud_mime = get_desktop_perception_store().take_fresh_audio_for_autoinject()
+                if _aud_b64:
+                    from core.audio_pipeline import get_audio_pipeline
+                    _aud_res = await get_audio_pipeline().understand(
+                        _aud_b64, mime=_aud_mime or "audio/webm",
+                        prompt="转写这段麦克风音频，只输出其中的话语内容。",
+                    )
+                    if _aud_res.get("success") and _aud_res.get("text"):
+                        _aud_text = str(_aud_res["text"]).strip()[:1000]
+                        if _aud_text:
+                            message = f"{message}\n\n[麦克风/语音] {_aud_text}"
+                            logger.debug("Injected desktop mic transcript into request message")
+        except Exception as _aa_err:  # noqa: BLE001 — 音频自动注入失败不影响请求
+            logger.debug("desktop audio auto-inject skipped: %s", _aa_err)
+
         # ── Desktop ambient perception injection ─────────────────────────────
         # 电脑端 Electron 壳持续上传摄像头/屏幕/麦克风帧到 DesktopPerceptionStore。
         # 若本次请求自身不带图像、且存储里有「新鲜」帧（TTL 内），则把它作为原生
