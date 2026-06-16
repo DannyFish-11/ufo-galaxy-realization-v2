@@ -113,6 +113,7 @@ OPENCLAWD_ROUTING_AUTHORITY = (
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Dict, FrozenSet, Set
 import uuid
@@ -475,6 +476,8 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
             await handle_status(connection_id, aip_msg)
         elif event.kind == IngressEventKind.WAKE_EVENT:
             await handle_wake_event(connection_id, aip_msg)
+        elif event.kind == IngressEventKind.DEVICE_PERCEPTION_EMISSION:
+            await handle_device_perception_emission(connection_id, aip_msg)
         else:
             # SESSION_MIGRATE and any future transport-class kinds are handled here
             # by falling through to per-type checks using MessageType for backward
@@ -965,6 +968,96 @@ async def handle_wake_event(connection_id: str, aip_msg):
 
     except Exception as e:
         logger.error(f"❌ 处理唤醒事件失败: {e}")
+
+
+async def handle_device_perception_emission(connection_id: str, aip_msg):
+    """处理 Android 多模态感知上行 (三仓打通 / 最小可用桥)。
+
+    Android 端 sendDevicePerceptionEmission 持续把 DEVICE_PERCEPTION_EMISSION
+    上行给 V2（含 vision / grounding / local-perception / screenshot）。本处理器把
+    其中的文本语义与（可选）截图喂进 core.memory 统一/跨模态长程记忆，使手机端的
+    视觉/本地感知能被桌面大脑一句话召回——V2 始终是多模态权威。
+
+    默认开启（GALAXY_ANDROID_PERCEPTION_INGEST=1）；置 0 关闭。任何异常都吞掉，
+    绝不影响 WS 主流程。截图入记忆需另外打开 GALAXY_MEMORY_MEDIA=1。
+    """
+    try:
+        if os.getenv("GALAXY_ANDROID_PERCEPTION_INGEST", "1").strip().lower() in ("0", "false", "no", "off"):
+            return
+
+        device_id = aip_msg.device_id
+        payload = aip_msg.payload or {}
+
+        def _g(d, *keys):
+            for k in keys:
+                v = (d or {}).get(k)
+                if v not in (None, "", []):
+                    return v
+            return None
+
+        vision = payload.get("vision_payload") or {}
+        grounding = payload.get("grounding_payload") or {}
+        local = payload.get("local_perception_payload") or {}
+
+        # 组装可读文本语义（只取有信息量的字段）
+        parts = []
+        kind = _g(payload, "emission_kind")
+        stage = _g(payload, "perception_stage")
+        head = "[Android感知]"
+        if kind:
+            head += f" {kind}"
+        if stage:
+            head += f"@{stage}"
+        parts.append(head)
+        for txt in (
+            _g(vision, "prompt_text"),
+            _g(vision, "request_reason"),
+            _g(grounding, "intent"),
+            _g(grounding, "element_description"),
+            _g(grounding, "error"),
+        ):
+            if txt:
+                parts.append(str(txt))
+        content = "  ".join(p for p in parts if p).strip()
+
+        task_id = _g(payload, "task_id")
+        meta = {
+            "source": "android_perception_emission",
+            "device_id": device_id,
+            "task_id": task_id,
+            "emission_kind": kind,
+            "perception_stage": stage,
+        }
+
+        from core.memory import get_unified_memory
+        um = get_unified_memory()
+        # 文本语义入记忆（仅当确有内容时；纯头部无信息量则跳过文本，仍可走截图）
+        if content and len(content) > len(head) + 2:
+            await asyncio.to_thread(um.remember, content, metadata=meta)
+
+        # 可选：截图入跨模态记忆（CLIP），仅当 GALAXY_MEMORY_MEDIA 开启且有 base64 图像
+        screenshot = payload.get("screenshot") or {}
+        img_b64 = _g(screenshot, "data")
+        if img_b64 and os.getenv("GALAXY_MEMORY_MEDIA", "0").strip().lower() in ("1", "true", "yes", "on"):
+            try:
+                await asyncio.to_thread(
+                    lambda: um.remember_media(
+                        img_b64,
+                        modality="image",
+                        mime="image/jpeg",
+                        caption=content or head,
+                        metadata=meta,
+                    )
+                )
+            except Exception as _media_err:  # noqa: BLE001
+                logger.debug("android perception screenshot ingest skipped: %s", _media_err)
+
+        logger.info(
+            "✅ Android 感知已入记忆: device=%s kind=%s stage=%s text=%s img=%s",
+            device_id, kind, stage, bool(content), bool(img_b64),
+        )
+    except Exception as e:  # noqa: BLE001 — 感知入记忆失败绝不影响 WS 主流程
+        logger.debug("handle_device_perception_emission skipped: %s", e)
 
 
 async def handle_session_migrate(connection_id: str, aip_msg):
