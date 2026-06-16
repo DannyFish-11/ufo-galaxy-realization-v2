@@ -102,20 +102,48 @@ install_deps() {
 
     source .venv/bin/activate
 
+    # ── pip 换源（国内可达）──
+    # 默认走清华镜像；境外/自建可用 GALAXY_PIP_INDEX 覆盖，或设为 "default"/"" 用官方 PyPI。
+    PIP_INDEX="${GALAXY_PIP_INDEX:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+    PIP_ARGS=()
+    if [[ -n "$PIP_INDEX" && "$PIP_INDEX" != "default" ]]; then
+        PIP_HOST="$(echo "$PIP_INDEX" | sed -E 's#^https?://([^/]+)/.*#\1#')"
+        PIP_ARGS=(-i "$PIP_INDEX" --trusted-host "$PIP_HOST")
+        info "pip 使用镜像: $PIP_INDEX  (设 GALAXY_PIP_INDEX=default 用官方 PyPI)"
+    fi
+
     info "Upgrading pip"
-    pip install --quiet --upgrade pip
+    pip install --quiet "${PIP_ARGS[@]}" --upgrade pip
 
     info "Installing core dependencies (this may take a few minutes)"
-    pip install --quiet -r requirements.txt
+    pip install --quiet "${PIP_ARGS[@]}" -r requirements.txt
 
     ok "Python dependencies installed"
 
     # Voice dependencies (required)
     info "Installing voice dependencies (required)"
-    pip install --quiet pvporcupine webrtcvad faster-whisper pyaudio 2>/dev/null && \
+    pip install --quiet "${PIP_ARGS[@]}" pvporcupine webrtcvad faster-whisper pyaudio 2>/dev/null && \
         ok "Voice dependencies installed" || \
         warn "Voice dependencies failed — microphone support may be limited"
 
+    echo ""
+}
+
+# ── Phase 2b: Pre-download Models (clone-stage) ──
+# 把记忆/跨模态用到的 HF 嵌入模型在安装阶段就拉到本地缓存，首次运行无需等下载。
+# 走国内 HF 镜像(hf-mirror.com)；下载失败只告警，不中断安装。
+predownload_models() {
+    info "Phase 2b: Pre-downloading models (HF mirror, clone-stage)"
+    source .venv/bin/activate
+    # HF 镜像默认开启(由 core.memory._hf_mirror / predownload 脚本读取)
+    export GALAXY_HF_MIRROR="${GALAXY_HF_MIRROR:-1}"
+    export GALAXY_HF_ENDPOINT="${GALAXY_HF_ENDPOINT:-https://hf-mirror.com}"
+    # 让预下载读取已生成的 .env 里的 GALAXY_EMBED_MODEL（若 Phase 3 先于此运行则尊重）
+    if [[ -f ".env" ]]; then
+        EMBED_FROM_ENV="$(grep -E '^GALAXY_EMBED_MODEL=' .env | head -1 | cut -d= -f2-)"
+        [[ -n "$EMBED_FROM_ENV" ]] && export GALAXY_EMBED_MODEL="$EMBED_FROM_ENV"
+    fi
+    python3 scripts/predownload_models.py || warn "模型预下载有项目失败(运行时会自动回退，不影响启动)"
     echo ""
 }
 
@@ -180,6 +208,14 @@ OLLAMA_PRIORITY=1
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 
+# ── Memory / Embeddings ──
+# 多语言文本嵌入器：显著改善中英文跨语言召回(默认 all-MiniLM 偏英文)。
+GALAXY_EMBED_MODEL=paraphrase-multilingual-MiniLM-L12-v2
+# HuggingFace 国内镜像：模型下载走 hf-mirror.com(设 GALAXY_HF_MIRROR=0 用官方域名)。
+GALAXY_HF_MIRROR=1
+GALAXY_HF_ENDPOINT=https://hf-mirror.com
+HF_ENDPOINT=https://hf-mirror.com
+
 # ── Electron ──
 ELECTRON_START=true
 
@@ -242,6 +278,7 @@ main() {
     check_env
     install_deps
     setup_env
+    predownload_models
     setup_data_dir
     verify
 }

@@ -138,6 +138,13 @@ class _ChromaBackend:
             _model = os.getenv("GALAXY_EMBED_MODEL", "paraphrase-multilingual-MiniLM-L12-v2").strip()
             if _model and _model.lower() not in ("default", "all-minilm-l6-v2"):
                 try:
+                    # 国内可达：加载嵌入模型前把 HF_ENDPOINT 指向镜像(hf-mirror.com)，
+                    # 否则多语言模型在国内常常下不动。设 GALAXY_HF_MIRROR=0 可关闭。
+                    try:
+                        from core.memory._hf_mirror import ensure_hf_mirror
+                        ensure_hf_mirror()
+                    except Exception:
+                        pass
                     from chromadb.utils import embedding_functions
                     _kwargs["embedding_function"] = embedding_functions.SentenceTransformerEmbeddingFunction(
                         model_name=_model
