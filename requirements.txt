@@ -106,6 +106,9 @@ selenium>=4.16.0
 # ============================================================================
 chromadb>=0.4.22
 sentence-transformers>=2.3.1
+# 跨模态记忆: 图像(CLIP)用 sentence-transformers + Pillow(已声明)，文本语义用 chromadb，
+# 音频(CLAP)解码 webm/wav 需 librosa(+ 系统 ffmpeg)。
+librosa>=0.10.1
 
 # ============================================================================
 # Utilities
