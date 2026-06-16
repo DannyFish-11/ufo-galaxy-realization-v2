@@ -680,7 +680,8 @@ async def handle_command(connection_id: str, aip_msg):
         device_id = aip_msg.device_id
 
         # PR-DEVICE-LIST-QUERY: Short-circuit for device status queries
-        if command_text == "query_device_list":
+        # ("query_devices" is the WearOS AIPClient variant of the same query.)
+        if command_text in ("query_device_list", "query_devices"):
             try:
                 result = device_router.get_device_status()
             except Exception as _dev_err:
@@ -756,6 +757,94 @@ async def handle_command(connection_id: str, aip_msg):
                 "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
                 "success": result.get("success", False),
                 # 手表 AIPClient 读 command_result 的 json["data"]；同时保留 payload 约定
+                "data": result,
+                "payload": result,
+            }
+            await connection_manager.send_message(connection_id, response)
+            return
+        elif command_text == "phase_report":
+            # WearOS sendPhaseReport → command="phase_report" {phase, device}.
+            # 手表上报自身三态相位。v2 暂无 canonical 设备相位库,故记入
+            # registered_devices 镜像条目(供 operator 面板观测)并 ack;关键是不再被
+            # 误当设备命令路由(那样会进 send_gateway_command 当作设备动作失败)。
+            reported_phase = str(_payload.get("phase") or "").strip()
+            try:
+                from core.routes._shared import registered_devices as _reg
+                if device_id in _reg and reported_phase:
+                    _reg[device_id]["reported_phase"] = reported_phase  # COMPAT_MIRROR_WRITE
+                    _reg[device_id]["reported_phase_at"] = (
+                        datetime.now(timezone.utc).isoformat()
+                    )
+            except Exception as _pr_err:
+                logger.debug("phase_report record skipped: %s", _pr_err)
+            logger.info("📲 设备相位上报: device=%s phase=%s", device_id, reported_phase)
+            result = {"success": bool(reported_phase), "phase": reported_phase}
+            response = {
+                "version": "3.0",
+                "message_id": str(uuid.uuid4()),
+                "correlation_id": aip_msg.message_id,
+                "type": MessageType.COMMAND_RESULT.value,
+                "device_id": aip_msg.device_id,
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "success": result["success"],
+                "data": result,
+                "payload": result,
+            }
+            await connection_manager.send_message(connection_id, response)
+            return
+        elif command_text == "human_input":
+            # WearOS sendHumanInput → command="human_input"
+            # {decision_id, selected_option?, voice_input?}. 人在回路(HITL)的决策回复。
+            # 注：v2 当前发决策(android_bridge decision_request)是 fire-and-forget——
+            # decision_id 未登记,没有 pending-decision 注册表可按 decision_id 关联解析
+            # (更深的架构缺口,见 PR 说明)。在补齐注册表之前,这里把人类回复(语音/所选项)
+            # 作为一条人类输入送进认知闭环 handle_request(source="wear_decision"),确保用户
+            # 意图抵达大脑、而非像此前那样被当设备命令丢弃。
+            decision_id = str(_payload.get("decision_id") or "")
+            voice_input = str(_payload.get("voice_input") or "").strip()
+            selected = str(_payload.get("selected_option") or "").strip()
+            human_msg = voice_input or selected
+            if not human_msg:
+                result = {"success": False, "error": "empty human input", "decision_id": decision_id}
+            else:
+                try:
+                    from core.desktop_presence_runtime import get_desktop_presence_runtime
+                    runtime = get_desktop_presence_runtime()
+                    rt = await runtime.handle_request(
+                        message=human_msg,
+                        source="wear_decision",
+                        device_id=device_id,
+                        session_id=_payload.get("session_id") or None,
+                        context=(
+                            [{
+                                "role": "system",
+                                "content": (
+                                    f"human_decision_reply decision_id={decision_id} "
+                                    f"selected_option={selected}"
+                                ),
+                            }]
+                            if decision_id else None
+                        ),
+                    )
+                    reply = str(rt.get("response") or "")
+                    result = {
+                        "success": bool(rt.get("success", True)),
+                        "response": reply,
+                        "text": reply,
+                        "decision_id": decision_id,
+                        "runtime_session_id": rt.get("runtime_session_id", ""),
+                    }
+                except Exception as _hi_err:
+                    logger.error("human_input routing failed: %s", _hi_err)
+                    result = {"success": False, "error": "human input routing failed", "decision_id": decision_id}
+            response = {
+                "version": "3.0",
+                "message_id": str(uuid.uuid4()),
+                "correlation_id": aip_msg.message_id,
+                "type": MessageType.COMMAND_RESULT.value,
+                "device_id": aip_msg.device_id,
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "success": result.get("success", False),
                 "data": result,
                 "payload": result,
             }
