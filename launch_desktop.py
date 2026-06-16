@@ -42,7 +42,7 @@ UFO Galaxy — 系统化完整启动器 (Systematic Launcher)
 用法：
     python launch_desktop.py                    # 完整启动（推荐）
     python launch_desktop.py --model gemma4:12b # 指定模型
-    python launch_desktop.py --model minicpm-o4.5:9b
+    python launch_desktop.py --model openbmb/minicpm-o4.5
     python launch_desktop.py --skip-model-download  # 跳过模型下载
     python launch_desktop.py --check            # 只检查环境
     python launch_desktop.py --backend          # 只启动 Gateway
@@ -99,7 +99,7 @@ AVAILABLE_MODELS = {
         "vram": "8GB+",
         "recommended": True,
     },
-    "minicpm-o4.5:9b": {
+    "openbmb/minicpm-o4.5": {
         "name": "MiniCPM-o 4.5 9B",
         "desc": "全模态(看+听+说)，全双工实时交互",
         "size": "~6GB",
