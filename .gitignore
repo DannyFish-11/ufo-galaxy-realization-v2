@@ -102,6 +102,11 @@ data/rag_memory/
 # 统一记忆层运行时数据（不入库）
 data/omni_simplemem/
 data/_verify_chroma/
+data/_verify_clip/
+data/_verify_clip2/
+data/_verify_clip3/
+data/_verify_clip_mock/
+data/clip_memory/
 chroma_db/
 
 # Local unified configuration authority (PR-3)

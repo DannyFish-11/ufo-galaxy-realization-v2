@@ -102,6 +102,9 @@ def _build() -> UnifiedMemory:
     if {"omni", "omni_simplemem", "simplemem"} & wanted:
         from core.memory.omni_simplemem_provider import OmniSimpleMemProvider
         providers.append(OmniSimpleMemProvider())
+    if {"clip", "crossmodal", "cross_modal"} & wanted:
+        from core.memory.clip_provider import ClipMemoryProvider
+        providers.append(ClipMemoryProvider())
     um = UnifiedMemory(providers)
     logger.info("UnifiedMemory initialised | backends=%s", um.backend_names or "none")
     return um
