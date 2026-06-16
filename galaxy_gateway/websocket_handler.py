@@ -798,16 +798,37 @@ async def handle_command(connection_id: str, aip_msg):
         elif command_text == "human_input":
             # WearOS sendHumanInput → command="human_input"
             # {decision_id, selected_option?, voice_input?}. 人在回路(HITL)的决策回复。
-            # 注：v2 当前发决策(android_bridge decision_request)是 fire-and-forget——
-            # decision_id 未登记,没有 pending-decision 注册表可按 decision_id 关联解析
-            # (更深的架构缺口,见 PR 说明)。在补齐注册表之前,这里把人类回复(语音/所选项)
-            # 作为一条人类输入送进认知闭环 handle_request(source="wear_decision"),确保用户
-            # 意图抵达大脑、而非像此前那样被当设备命令丢弃。
+            # 两条路:
+            #  1) 该回复应答某个 pending decision(由 request_human_decision 登记)→
+            #     resolve 之,等待中的认知协程在原上下文恢复(PR-HITL 闭环)。
+            #  2) 未命中任何 pending(主动/无主语音)→ 回退把人类输入送进认知闭环
+            #     handle_request(source="wear_decision"),确保意图不丢、不被当设备命令。
             decision_id = str(_payload.get("decision_id") or "")
             voice_input = str(_payload.get("voice_input") or "").strip()
             selected = str(_payload.get("selected_option") or "").strip()
             human_msg = voice_input or selected
-            if not human_msg:
+
+            # PR-HITL: if this reply answers a pending decision (registered by
+            # request_human_decision), resolve it — the asking coroutine resumes
+            # in its original context. First reply wins; fan-out duplicates no-op.
+            resolved = False
+            if decision_id:
+                try:
+                    from core.interaction.pending_decision_registry import (
+                        get_pending_decision_registry,
+                    )
+                    resolved = get_pending_decision_registry().resolve(
+                        decision_id,
+                        selected_option=selected or None,
+                        voice_input=voice_input,
+                        source="wear",
+                    )
+                except Exception as _reg_err:
+                    logger.debug("human_input resolve skipped: %s", _reg_err)
+
+            if resolved:
+                result = {"success": True, "decision_id": decision_id, "resolved": True}
+            elif not human_msg:
                 result = {"success": False, "error": "empty human input", "decision_id": decision_id}
             else:
                 try:
