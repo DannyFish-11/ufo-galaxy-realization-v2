@@ -126,6 +126,10 @@ class IngressEventKind:
     DEVICE_STATE_SNAPSHOT: str = "device_state_snapshot"
     DEVICE_EXECUTION_EVENT: str = "device_execution_event"
 
+    # Android multimodal perception uplink (三仓打通) — absorbed into core.memory
+    # unified semantic/cross-modal memory by handle_device_perception_emission.
+    DEVICE_PERCEPTION_EMISSION: str = "device_perception_emission"
+
     # Unknown / unrecognised
     UNKNOWN: str = "unknown"
 
@@ -139,6 +143,7 @@ class IngressEventKind:
         GOAL_EXECUTION_RESULT, GOAL_RESULT,
         HANDOFF_ACK, HANDOFF_RESULT, HANDOFF_FAILURE, HANDOFF_ENVELOPE_V2_RESULT,
         DEVICE_STATE_SNAPSHOT, DEVICE_EXECUTION_EVENT,
+        DEVICE_PERCEPTION_EMISSION,
         UNKNOWN,
     }
 
