@@ -26,6 +26,22 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     """Create C-stage feature routes."""
     router = APIRouter()
 
+    # ── 统一记忆层状态(语义/跨模态) — 供面板/诊断查询哪些后端在线 ──────────
+    @router.get("/api/v1/memory/unified/status")
+    async def unified_memory_status():
+        """统一记忆层状态：启用了哪些后端(vector/clip/clap/omni)、是否在线。"""
+        try:
+            from core.memory import get_unified_memory
+            um = get_unified_memory()
+            return {
+                "success": True,
+                "enabled": um.enabled,
+                "backends": um.backend_names,
+                "config": __import__("os").getenv("GALAXY_MEMORY_BACKENDS", "vector"),
+            }
+        except Exception as exc:  # noqa: BLE001
+            return {"success": False, "enabled": False, "backends": [], "error": str(exc)}
+
     # ── 4B / G6: 任务记忆 ────────────────────────────────────────────────
 
     @router.get("/api/v1/memory/tasks")
