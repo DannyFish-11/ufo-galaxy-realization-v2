@@ -602,6 +602,49 @@ _RESOURCE_BUILTIN_TOOLS: List[Dict] = [
 ]
 
 
+# PR-HITL: agent-callable "ask the human" tool.  Lets the LLM decide, during its
+# own reasoning, to ask a human a question and block for the answer via the real
+# decision loop (request_human_decision → device notification → human_input).
+_ASK_HUMAN_BUILTIN_TOOLS: List[Dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "ask_human__request",
+            "description": (
+                "Ask a human for a decision or input and wait (bounded) for the reply. "
+                "Use when you genuinely need human clarification, approval, or a choice "
+                "before continuing — e.g. ambiguous intent, or an irreversible/risky step. "
+                "Blocks up to timeout_s; on timeout the configured fallback applies. "
+                "Returns {status, selected_option, voice_input, should_proceed}."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Short question/title shown to the human."},
+                    "summary": {"type": "string", "description": "Optional fuller explanation of what is being asked."},
+                    "options": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string"},
+                                "label": {"type": "string"},
+                            },
+                            "required": ["id", "label"],
+                        },
+                        "description": "Optional choice list; omit for free-form/voice reply.",
+                    },
+                    "default_option": {"type": "string", "description": "Option id to fall back to on timeout (optional)."},
+                    "urgency": {"type": "string", "enum": ["low", "normal", "high"], "description": "Affects notification priority and timeout fallback (default normal)."},
+                    "timeout_s": {"type": "integer", "description": "Seconds to wait (default 60, clamped 5–3600)."},
+                },
+                "required": ["title"],
+            },
+        },
+    },
+]
+
+
 # PR-515 / GAP-512-009: OpenClawd is the multimodal ingress authority.
 # CriticalPathHarness records are written from _select_multimodal_route()
 # so that routing decisions are canonical-runtime-inspectable, not only
@@ -6746,6 +6789,9 @@ class OpenClawd:
         # ── Governed system resource layer tools (始终收集, PR-7) ─────────
         tools.extend(_RESOURCE_BUILTIN_TOOLS)
 
+        # ── Agent-callable human-decision tool (PR-HITL) ─────────────────────
+        tools.extend(_ASK_HUMAN_BUILTIN_TOOLS)
+
         return tools
 
     async def _dispatch_tool_call(self, tool_name: str, arguments: dict) -> dict:
@@ -6982,6 +7028,11 @@ class OpenClawd:
                 # Governed system resource layer tools (PR-7): resource__list, __status, etc.
                 action = tool_name[10:]  # strip "resource__"
                 return await self._dispatch_resource_tool(action, arguments)
+
+            elif tool_name.startswith("ask_human__"):
+                # Agent-callable human-decision tool (PR-HITL): ask_human__request
+                action = tool_name[len("ask_human__"):]
+                return await self._dispatch_ask_human_tool(action, arguments)
 
             else:
                 return {"success": False, "error": f"未知工具前缀: {tool_name}"}
@@ -7452,6 +7503,41 @@ class OpenClawd:
                 }
         except Exception as exc:
             logger.warning("_dispatch_resource_tool '%s' failed: %s", action, exc)
+            return {"success": False, "error": str(exc)}
+
+    async def _dispatch_ask_human_tool(self, action: str, arguments: dict) -> dict:
+        """Dispatch ``ask_human__*`` — let the agent ask a human and block for the reply.
+
+        Canonical HITL entry from the cognitive loop: routes to
+        ``request_human_decision`` (→ device notification → ``human_input`` →
+        registry resolve), threading the current session for traceability.
+        """
+        if action != "request":
+            return {"success": False, "error": f"Unknown ask_human action: {action!r} (valid: request)"}
+        title = str(arguments.get("title") or "").strip()
+        if not title:
+            return {"success": False, "error": "ask_human__request requires 'title'"}
+        try:
+            from core.interaction.pending_decision_registry import request_human_decision
+            try:
+                timeout_s = float(arguments.get("timeout_s") or 60)
+            except (TypeError, ValueError):
+                timeout_s = 60.0
+            timeout_s = max(5.0, min(3600.0, timeout_s))
+            sid = getattr(self, "_current_session_id", "") or ""
+            outcome = await request_human_decision(
+                title=title,
+                summary=str(arguments.get("summary") or ""),
+                options=arguments.get("options") or None,
+                default_option=arguments.get("default_option"),
+                urgency=str(arguments.get("urgency") or "normal"),
+                timeout_s=timeout_s,
+                session_id=sid,
+                runtime_session_id=sid,
+            )
+            return {"success": True, **outcome.to_dict()}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ask_human tool failed: %s", exc)
             return {"success": False, "error": str(exc)}
 
     # ========================================================================

@@ -796,6 +796,43 @@ class CommandRouter:
         cmd_lower = command.lower()
         return any(kw in cmd_lower for kw in self._HIGH_RISK_COMMANDS)
 
+    async def _await_high_risk_confirmation(
+        self, command: str, device_id: str, task_id: str, trace_id: str
+    ) -> Dict[str, Any]:
+        """PR-HITL: block for explicit human confirmation of a high-risk command.
+
+        Uses the real blocking decision loop (``request_human_decision`` → device
+        notification → ``human_input`` → registry resolve).  Fail-CLOSED: timeout,
+        no connected device, an explicit "deny", or any error ⇒ ``proceed=False``.
+        The gate is opt-in (``GALAXY_HITL_CONFIRM_GATE``), so a high-risk action is
+        never executed without an explicit human "approve".
+
+        Returns ``{"proceed": bool, "status": str}``.
+        """
+        try:
+            from core.interaction.pending_decision_registry import (
+                request_human_decision,
+                OnTimeout,
+                DecisionStatus,
+            )
+            outcome = await request_human_decision(
+                title="高风险操作确认",
+                summary=f"是否执行高风险命令 '{command}'?（目标设备 {device_id}）",
+                options=[{"id": "approve", "label": "批准"}, {"id": "deny", "label": "拒绝"}],
+                urgency="high",                 # high ⇒ timeout derives CANCEL (no auto-proceed)
+                on_timeout=OnTimeout.CANCEL,
+                timeout_s=float(os.getenv("GALAXY_HITL_CONFIRM_TIMEOUT_S", "60")),
+                session_id=trace_id,
+            )
+            proceed = (
+                outcome.status == DecisionStatus.RESOLVED
+                and outcome.selected_option == "approve"
+            )
+            return {"proceed": bool(proceed), "status": outcome.status.value}
+        except Exception as exc:  # noqa: BLE001 — fail-closed: do not execute on gate error
+            logger.warning("HITL confirm gate failed (fail-closed, not executing): %s", exc)
+            return {"proceed": False, "status": "gate_error"}
+
     def _emit_audit(
         self,
         event_type,
@@ -4117,6 +4154,38 @@ class CommandRouter:
                 _exec_params = dict(payload)
                 _exec_params.setdefault("_galaxy_task_id", task_id)
                 _exec_params.setdefault("_galaxy_trace_id", trace_id)
+
+                # PR-HITL: high-risk action confirmation gate (opt-in via
+                # GALAXY_HITL_CONFIRM_GATE).  Destructive/high-risk commands must be
+                # confirmed by a human (real blocking decision loop) before reaching
+                # the executor; without an explicit "approve" the action is aborted.
+                if (
+                    os.getenv("GALAXY_HITL_CONFIRM_GATE", "0").strip().lower()
+                    in ("1", "true", "yes", "on")
+                    and self._is_high_risk_command(command)
+                ):
+                    _gate = await self._await_high_risk_confirmation(
+                        command, device_id, task_id, trace_id
+                    )
+                    if not _gate.get("proceed", False):
+                        latency_ms = (time.monotonic() - t0) * 1000
+                        _timed_out = _gate.get("status") == "timeout_cancel"
+                        return {
+                            **trace_base,
+                            "success": False,
+                            "result": None,
+                            "error_code": (
+                                GatewayErrorCode.HITL_TIMEOUT.value if _timed_out
+                                else GatewayErrorCode.HITL_DENIED.value
+                            ),
+                            "error_message": (
+                                f"High-risk command '{command}' not confirmed by human "
+                                f"(status={_gate.get('status')})"
+                            ),
+                            "requires_hitl": True,
+                            "latency_ms": round(latency_ms, 1),
+                        }
+
                 raw_result = await asyncio.wait_for(
                     self._executor(device_id, command, _exec_params),
                     timeout=timeout,
