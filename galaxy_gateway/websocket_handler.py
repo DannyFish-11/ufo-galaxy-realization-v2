@@ -717,6 +717,50 @@ async def handle_command(connection_id: str, aip_msg):
             }
             await connection_manager.send_message(connection_id, response)
             return
+        elif command_text == "voice_query":
+            # 三仓打通：WearOS/手表语音 (sendVoiceQuery → command="voice_query"
+            # {text:<转写>}) 是自然语言查询，应进 AI 母体走 agent 主链——而非被当成
+            # 设备命令路由(那样转写文本永远到不了大脑)。经 canonical 运行时入口
+            # DesktopPresenceRuntime.handle_request(source="wear_voice") 处理，顺带
+            # 推进三态(手表据此显示 SILENT/LIMINAL/MANIFEST)。
+            transcript = str(_payload.get("text") or _payload.get("transcript") or "").strip()
+            if not transcript:
+                result = {"success": False, "error": "empty voice transcript"}
+            else:
+                try:
+                    from core.desktop_presence_runtime import get_desktop_presence_runtime
+                    runtime = get_desktop_presence_runtime()
+                    rt = await runtime.handle_request(
+                        message=transcript,
+                        source="wear_voice",
+                        device_id=device_id,
+                        session_id=_payload.get("session_id") or None,
+                    )
+                    reply = str(rt.get("response") or "")
+                    result = {
+                        "success": bool(rt.get("success", True)),
+                        "response": reply,
+                        "text": reply,
+                        "intent": rt.get("intent", "chat"),
+                        "runtime_session_id": rt.get("runtime_session_id", ""),
+                    }
+                except Exception as _vq_err:
+                    logger.error("voice_query routing failed: %s", _vq_err)
+                    result = {"success": False, "error": "voice query routing failed"}
+            response = {
+                "version": "3.0",
+                "message_id": str(uuid.uuid4()),
+                "correlation_id": aip_msg.message_id,
+                "type": MessageType.COMMAND_RESULT.value,
+                "device_id": aip_msg.device_id,
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "success": result.get("success", False),
+                # 手表 AIPClient 读 command_result 的 json["data"]；同时保留 payload 约定
+                "data": result,
+                "payload": result,
+            }
+            await connection_manager.send_message(connection_id, response)
+            return
 
         # PR-OPENCLAWD-ROUTING-AUTHORITY: route through OpenClawd instead of
         # directly calling device_router.route_task().
