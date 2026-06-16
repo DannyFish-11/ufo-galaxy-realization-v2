@@ -220,6 +220,25 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception:  # noqa: BLE001
             pass
 
+        # 节点/设备拓扑(真实设备数:在线 / 降级)
+        try:
+            from core.routes._shared import registered_devices
+            devs = dict(registered_devices)
+            if devs:
+                healthy = sum(1 for d in devs.values()
+                              if str((d or {}).get("status", "online")).lower() in ("online", "healthy", "connected"))
+                feed["node_topology"] = {
+                    "total_nodes": len(devs),
+                    "healthy_nodes": healthy,
+                    "degraded_nodes": len(devs) - healthy,
+                }
+        except Exception:  # noqa: BLE001
+            pass
+
+        # 注: mesh_session / nats_messages / topology_nodes(图) 依赖活跃的跨设备
+        # fabric(NATS),desktop-local 默认为空;fabric 启用后由对应运行时填充,
+        # 此处不伪造,前端保留其默认占位。
+
         return JSONResponse(content={"success": True, "feed": feed})
 
     return router
