@@ -4258,6 +4258,7 @@ class OpenClawd:
                         runtime_attachment_session_id=runtime_attachment_session_id or "",
                         device_id=device_id or "",
                         context=context or [],
+                        multimodal_context=multimodal_context,
                     )
                     api_dict = kernel_result.to_api_dict()
                     mode = kernel_result.mode
