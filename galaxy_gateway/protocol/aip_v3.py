@@ -382,6 +382,16 @@ class MessageType(str, Enum):
     DEVICE_STATE_SNAPSHOT = "device_state_snapshot"
     DEVICE_EXECUTION_EVENT = "device_execution_event"
 
+    # === V2_INTERNAL: Android Multimodal Perception Uplink (三仓打通) ===
+    # Emitted by GalaxyWebSocketClient.kt::sendDevicePerceptionEmission on the
+    # Android side (MsgType.DEVICE_PERCEPTION_EMISSION).  Carries continuous
+    # perception emissions — screenshot / vision / grounding / local-perception —
+    # for V2 multimodal ingestion.  Previously absent from this enum, which made
+    # MessageType('device_perception_emission') raise ValueError and the gateway
+    # drop the message.  Now registered so handle_device_perception_emission can
+    # absorb it into the unified semantic/cross-modal memory layer (core.memory).
+    DEVICE_PERCEPTION_EMISSION = "device_perception_emission"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""
