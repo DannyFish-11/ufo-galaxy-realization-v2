@@ -34,5 +34,12 @@ if [[ ! -f ".env" ]]; then
     exit 0
 fi
 
+# Export HF mirror vars from .env so model downloads honor the user's setting.
+# (Runtime reads HF_ENDPOINT from os.environ; .env is otherwise not auto-exported.)
+for _k in HF_ENDPOINT GALAXY_HF_MIRROR GALAXY_HF_ENDPOINT GALAXY_EMBED_MODEL GALAXY_PIP_INDEX; do
+    _v="$(grep -E "^${_k}=" .env 2>/dev/null | head -1 | cut -d= -f2-)"
+    [[ -n "$_v" ]] && export "${_k}=${_v}"
+done
+
 # Delegate to main.py (unified entrypoint)
 python main.py "$@"
