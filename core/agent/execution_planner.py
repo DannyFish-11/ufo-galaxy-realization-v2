@@ -478,6 +478,10 @@ class ExecutionPlanner:
         if _memory_guidance is not None and _memory_guidance.influenced_by_memory:
             _memory_influenced_strategy = True
 
+        # 经验学习闭环(上层)：根据历史经验里"策略→成败"记录,若当前策略在相似任务上
+        # 反复失败、而另一策略明显更优,则自动改用更优策略。失败即沿用原策略。
+        strategy = self._experience_strategy_adjust(plan.message, strategy)
+
         logger.info(
             "ExecutionPlanner: 开始执行 | strategy=%s complexity=%.2f intent=%s "
             "budget_influenced=%s memory_influenced=%s",
@@ -715,6 +719,51 @@ class ExecutionPlanner:
     # ──────────────────────────────────────────────────────────────────
     # 策略选择
     # ──────────────────────────────────────────────────────────────────
+
+    def _experience_strategy_adjust(self, message: str, current: str) -> str:
+        """经验学习闭环(上层)：用历史经验里的"策略→成败"记录微调策略。
+
+        从统一记忆语义召回相似任务的经验,解析其中 ``策略[X] 结果[成功|失败]``,
+        统计各策略成功率;若某策略样本足够(>=3)且成功率明显高于当前策略(>+0.34),
+        则切换到它。GALAXY_EXPERIENCE_STRATEGY=0 可关闭;任何异常都沿用原策略。
+        """
+        try:
+            import os
+            import re
+            if os.getenv("GALAXY_EXPERIENCE_STRATEGY", "1").strip().lower() in ("0", "false", "no"):
+                return current
+            from core.memory import get_unified_memory
+            um = get_unified_memory()
+            if not um.enabled or not message:
+                return current
+            stats: Dict[str, List[int]] = {}  # strategy -> [success, total]
+            for h in um.recall(message, top_k=8):
+                m = re.search(r"策略\[([^\]]+)\].*?结果\[([^\]]+)\]", h.content or "")
+                if not m:
+                    continue
+                strat = m.group(1).strip()
+                s = stats.setdefault(strat, [0, 0])
+                s[1] += 1
+                if "成功" in m.group(2):
+                    s[0] += 1
+
+            def rate(st: str):
+                return stats[st][0] / stats[st][1] if st in stats and stats[st][1] >= 3 else None
+
+            cur = rate(current)
+            cands = [(st, rate(st)) for st in stats if rate(st) is not None]
+            if not cands:
+                return current
+            best_st, best_rate = max(cands, key=lambda x: x[1])
+            if best_st != current and (cur is None or best_rate > cur + 0.34):
+                logger.info(
+                    "ExecutionPlanner: 经验学习改策略 %s -> %s (历史成功率 %.2f, n=%d)",
+                    current, best_st, best_rate, stats[best_st][1],
+                )
+                return best_st
+        except Exception as exc:  # noqa: BLE001 — 经验调整失败不影响主流程
+            logger.debug("experience strategy adjust skipped: %s", exc)
+        return current
 
     def _pick_strategy(self, message: str, complexity: float, task_type: str = "", breadth_guidance: Optional[Any] = None, memory_guidance: Optional[Any] = None) -> str:
         """选择执行策略：fractal / swarm / specialized / single。
