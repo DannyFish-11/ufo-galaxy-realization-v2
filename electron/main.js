@@ -224,6 +224,23 @@ app.whenReady().then(() => {
             mainWindow.setAlwaysOnTop(true, 'screen-saver');
         }
     });
+
+    // ── 面板真实数据轮询 ──
+    // 控制面板的数据契约(usePanelData)走 IPC 'presence-state'。这里定期从网关拉取
+    // 真实聚合数据 /api/v1/panel/feed(MCP/Skills/OpenClawd/LLM路由/统一记忆)并推给
+    // 面板窗口 —— 无需重建前端 bundle，面板即显示真实状态而非写死的占位数据。
+    setInterval(async () => {
+        if (!panelWindow || panelWindow.isDestroyed() || !panelWindow.isVisible()) return;
+        try {
+            const resp = await fetch(`${GATEWAY_BASE}/api/v1/panel/feed`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const feed = data && data.feed;
+            if (feed && Object.keys(feed).length) {
+                panelWindow.webContents.send('presence-state', feed);
+            }
+        } catch (e) { /* 网关未就绪等，静默重试下一轮 */ }
+    }, 5000);
 });
 
 // ═══════════════════════════════════════════

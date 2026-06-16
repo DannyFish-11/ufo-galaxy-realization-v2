@@ -132,4 +132,94 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 status_code=500,
             )
 
+    @router.get("/api/v1/panel/feed")
+    async def get_panel_feed() -> JSONResponse:
+        """面板实时数据(桌面 Electron 面板的 IPC 契约 snake_case 字段)。
+
+        把真实后端数据(MCP/Skills 来自 CapabilityRegistry、OpenClawd 运行状态、
+        LLM 路由 providers、统一记忆后端)聚合成 usePanelData 直接消费的形状。
+        每个来源都 best-effort：取不到就略过该字段，前端用其默认值兜底。
+        """
+        feed: dict = {}
+
+        # 相位 / presence(复用统一面板聚合)
+        try:
+            from core.unified_panel_aggregation import build_unified_panel_payload
+            p = build_unified_panel_payload(mode="chat").to_dict()
+            for k in ("tri_state_phase", "presence_intensity", "coherence"):
+                if k in p:
+                    feed[k] = p[k]
+        except Exception:  # noqa: BLE001
+            pass
+
+        # MCP 服务器 + Skills(来自 CapabilityRegistry)
+        try:
+            from core.agent.capability_registry import get_capability_registry
+            reg = get_capability_registry()
+            mcp_by_server: dict = {}
+            for it in reg.list_tools(source="mcp"):
+                sid = getattr(it, "source_id", "") or "mcp"
+                e = mcp_by_server.setdefault(sid, {"name": sid, "url": "", "status": "online", "toolsCount": 0})
+                e["toolsCount"] += 1
+                if not e["url"]:
+                    e["url"] = (getattr(it, "metadata", {}) or {}).get("url", "")
+                if not getattr(it, "available", True):
+                    e["status"] = "error"
+            if mcp_by_server:
+                feed["mcp_servers"] = list(mcp_by_server.values())
+            skills = []
+            for it in reg.list_tools(source="skill"):
+                skills.append({
+                    "name": getattr(it, "name", "skill"),
+                    "version": (getattr(it, "metadata", {}) or {}).get("version", "1.0.0"),
+                    "status": "loaded" if getattr(it, "available", True) else "error",
+                    "description": getattr(it, "description", "")[:60],
+                })
+            # 把"统一记忆"作为一个真实条目并入 skills(取代面板里写死的假 memory)
+            try:
+                from core.memory import get_unified_memory
+                um = get_unified_memory()
+                skills.append({
+                    "name": "memory",
+                    "version": "2.0.0",
+                    "status": "loaded" if um.enabled else "unloaded",
+                    "description": "统一记忆: " + (",".join(um.backend_names) or "none"),
+                })
+            except Exception:  # noqa: BLE001
+                pass
+            if skills:
+                feed["skills"] = skills
+        except Exception:  # noqa: BLE001
+            pass
+
+        # LLM 路由 active providers
+        try:
+            from core.multi_llm_router import get_llm_router
+            r = get_llm_router()
+            provs = list(getattr(r, "providers", {}) or {})
+            if provs:
+                feed["llm_routing"] = {"active_providers": provs, "last_model_used": getattr(r, "_last_model", "") or ""}
+        except Exception:  # noqa: BLE001
+            pass
+
+        # OpenClawd 运行状态
+        try:
+            from core.openclawd import get_openclawd
+            st = await get_openclawd().get_status()
+            if isinstance(st, dict):
+                feed["openclawd_status"] = {
+                    "runtimeState": str(st.get("runtime_state") or st.get("state") or "RUNNING").upper(),
+                    "phase": st.get("phase", "silent"),
+                    "coherence": st.get("coherence", 0.95),
+                    "activeTasks": st.get("active_tasks", 0),
+                    "completedTasks": st.get("completed_tasks", 0),
+                    "connectedDevices": st.get("connected_devices", 0),
+                    "lastTick": st.get("last_tick", 0),
+                    "uptime": st.get("uptime", 0),
+                }
+        except Exception:  # noqa: BLE001
+            pass
+
+        return JSONResponse(content={"success": True, "feed": feed})
+
     return router
