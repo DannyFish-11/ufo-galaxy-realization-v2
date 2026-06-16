@@ -351,6 +351,7 @@ class AgentKernel:
         device_id: str = "",
         context: Optional[List[Dict[str, str]]] = None,
         timeout: float = 90.0,
+        multimodal_context: Optional[Any] = None,
     ) -> KernelResponse:
         """
         统一消息处理入口。
@@ -383,6 +384,7 @@ class AgentKernel:
                     runtime_attachment_session_id,
                     device_id,
                     ctx,
+                    multimodal_context,
                 ),
                 timeout=timeout,
             )
@@ -424,6 +426,7 @@ class AgentKernel:
         runtime_attachment_session_id: str,
         device_id: str,
         context: List[Dict[str, str]],
+        multimodal_context: Optional[Any] = None,
     ) -> KernelResponse:
         t0 = time.monotonic()
         self._ensure_components()
@@ -508,6 +511,7 @@ class AgentKernel:
             result = await self._handle_chat(
                 message, session_id, context, user_policy,
                 task_hint=intent.task_hint,
+                multimodal_context=multimodal_context,
             )
             result.intent = intent
             result.latency_ms = (time.monotonic() - t0) * 1000
@@ -665,6 +669,7 @@ class AgentKernel:
         context: List[Dict[str, str]],
         user_policy: str,
         task_hint: str = "",
+        multimodal_context: Optional[Any] = None,
     ) -> KernelResponse:
         """纯聊天处理路径——完全不加载 SOUL。
 
@@ -679,7 +684,10 @@ class AgentKernel:
                 rather than defaulting to generic keyword classification.
         """
         # 直接调用 LLM Router 处理聊天（保持单向依赖，不回调 OpenClawd）
-        return await self._fallback_chat(message, session_id, context, user_policy, task_hint=task_hint)
+        return await self._fallback_chat(
+            message, session_id, context, user_policy,
+            task_hint=task_hint, multimodal_context=multimodal_context,
+        )
 
     async def _fallback_chat(
         self,
@@ -688,6 +696,7 @@ class AgentKernel:
         context: List[Dict[str, str]],
         user_policy: str,
         task_hint: str = "",
+        multimodal_context: Optional[Any] = None,
     ) -> KernelResponse:
         """直接通过 LLM Router 处理聊天（最终降级路径）。
 
@@ -715,7 +724,10 @@ class AgentKernel:
             ]
             for turn in context[-8:]:
                 messages.append(turn)
-            messages.append({"role": "user", "content": message})
+            # 原生多模态：有图像且 GALAXY_NATIVE_MM_CHAT=1 时，user content 用 OpenAI
+            # content 数组(text+image_url)，让图像原生送达模型；否则纯文本(默认)。
+            from core.agent.multimodal_messages import build_user_message_content
+            messages.append({"role": "user", "content": build_user_message_content(message, multimodal_context)})
 
             # PR-17: pass task_hint as task_type when available so the router
             # uses real task semantics instead of generic keyword fallback.
