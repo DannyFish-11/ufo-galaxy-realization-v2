@@ -983,6 +983,10 @@ class AndroidBridge:
         self._message_handlers[MessageType.SESSION_MIGRATE] = _wrap(handle_session_migrate)
         self._message_handlers[MessageType.AGENT_PING] = _wrap(handle_agent_ping)
         self._message_handlers[MessageType.AGENT_STATUS] = _wrap(handle_agent_status)
+        # Device-side operator-action completion: forward so operator surfaces can
+        # observe the result instead of it silently hanging. (ACK/PING need no
+        # handler — they are accepted as graceful no-ops via the else branch.)
+        self._message_handlers[MessageType.OPERATOR_ACTION_RESULT] = _wrap(handle_generic_forward)
         # Bounded compat path: generic-forward is an explicit allowlist gate,
         # not an open fallback for unclassified message semantics.
         for _compat_message_type in get_generic_forward_compat_allowlist():

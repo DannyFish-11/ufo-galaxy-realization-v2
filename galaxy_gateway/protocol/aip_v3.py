@@ -392,6 +392,20 @@ class MessageType(str, Enum):
     # absorb it into the unified semantic/cross-modal memory layer (core.memory).
     DEVICE_PERCEPTION_EMISSION = "device_perception_emission"
 
+    # === V2_INTERNAL: Android transport acks / uplink reports previously dropped ===
+    # Emitted by Android (GalaxyConnectionService.sendAdvancedAck / handleOperatorAction)
+    # and WearOS.  Previously absent → MessageType(...) raised ValueError and the
+    # gateway returned UNKNOWN_MESSAGE_TYPE error to the device:
+    #  - ACK: delivery confirmation for advanced types (relay/wake/lock/takeover);
+    #    accepted as a graceful no-op (no handler needed; never error back).
+    #  - OPERATOR_ACTION_RESULT: device-side completion of an operator action;
+    #    routed to handle_generic_forward so operator surfaces can observe it
+    #    instead of the result silently hanging.
+    #  - PING: low-priority transport ping (backpressure fallback); accepted no-op.
+    ACK = "ack"
+    OPERATOR_ACTION_RESULT = "operator_action_result"
+    PING = "ping"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""

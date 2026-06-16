@@ -130,6 +130,12 @@ class IngressEventKind:
     # unified semantic/cross-modal memory by handle_device_perception_emission.
     DEVICE_PERCEPTION_EMISSION: str = "device_perception_emission"
 
+    # Android transport acks / operator-action results / ping — previously dropped
+    # (UNKNOWN → error response); now recognised and routed to graceful handling.
+    ACK: str = "ack"
+    OPERATOR_ACTION_RESULT: str = "operator_action_result"
+    PING: str = "ping"
+
     # Unknown / unrecognised
     UNKNOWN: str = "unknown"
 
@@ -144,6 +150,7 @@ class IngressEventKind:
         HANDOFF_ACK, HANDOFF_RESULT, HANDOFF_FAILURE, HANDOFF_ENVELOPE_V2_RESULT,
         DEVICE_STATE_SNAPSHOT, DEVICE_EXECUTION_EVENT,
         DEVICE_PERCEPTION_EMISSION,
+        ACK, OPERATOR_ACTION_RESULT, PING,
         UNKNOWN,
     }
 

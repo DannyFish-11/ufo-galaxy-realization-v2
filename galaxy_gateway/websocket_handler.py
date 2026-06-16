@@ -180,6 +180,12 @@ _ANDROID_DOMAIN_KINDS: FrozenSet[str] = frozenset({
     # through to the catch-all, miss the store, and return no ACK.
     IngressEventKind.DEVICE_STATE_SNAPSHOT,
     IngressEventKind.DEVICE_EXECUTION_EVENT,
+    # Android transport acks / operator-action results / ping — delegate to
+    # android_bridge so they are accepted gracefully (generic-forward / no-op)
+    # instead of hitting the catch-all and returning an error response.
+    IngressEventKind.ACK,
+    IngressEventKind.OPERATOR_ACTION_RESULT,
+    IngressEventKind.PING,
 })
 
 
