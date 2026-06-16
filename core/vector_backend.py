@@ -130,10 +130,22 @@ class _ChromaBackend:
 
             os.makedirs(self._persist_dir, exist_ok=True)
             self._client = chromadb.PersistentClient(path=self._persist_dir)
-            self._collection = self._client.get_or_create_collection(
-                name=self._collection_name,
-                metadata={"hnsw:space": "cosine"},
-            )
+            # 多语言嵌入器(默认 paraphrase-multilingual-MiniLM-L12-v2)显著改善中英文
+            # 跨语言召回(eval 实测默认 all-MiniLM 偏英文、跨语言仅 ~50% recall@1)。
+            # GALAXY_EMBED_MODEL="" 或 "default" → 用 chroma 默认 all-MiniLM。
+            # 优雅降级链：多语言模型加载失败(如 HF 不可达) → chroma 默认 all-MiniLM。
+            _kwargs = {"name": self._collection_name, "metadata": {"hnsw:space": "cosine"}}
+            _model = os.getenv("GALAXY_EMBED_MODEL", "paraphrase-multilingual-MiniLM-L12-v2").strip()
+            if _model and _model.lower() not in ("default", "all-minilm-l6-v2"):
+                try:
+                    from chromadb.utils import embedding_functions
+                    _kwargs["embedding_function"] = embedding_functions.SentenceTransformerEmbeddingFunction(
+                        model_name=_model
+                    )
+                    logger.info("ChromaDB 使用多语言嵌入器: %s", _model)
+                except Exception as _ef_err:
+                    logger.warning("多语言嵌入器 %s 加载失败(%s)，回退 chroma 默认 all-MiniLM", _model, _ef_err)
+            self._collection = self._client.get_or_create_collection(**_kwargs)
             self._ready = True
             logger.info(f"ChromaDB 已连接，集合: {self._collection_name}，目录: {self._persist_dir}")
             return True
