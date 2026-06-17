@@ -215,21 +215,9 @@ app.whenReady().then(() => {
         console.warn('[IPC] Failed to start HTTP receiver:', err);
     }
 
-    // PR-D5: Start system tray alongside Electron GUI
-    // P22 修复：根据平台选择 python/python3，避免硬编码
-    try {
-        const { spawn } = require('child_process');
-        const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-        const trayProcess = spawn(pythonCmd, ['-m', 'windows_service.tray_icon'], {
-            cwd: path.join(__dirname, '..'),
-            detached: true,
-            stdio: 'ignore'
-        });
-        trayProcess.unref();
-        console.log('System tray started');
-    } catch (err) {
-        console.warn('Failed to start system tray:', err);
-    }
+    // 系统托盘已改由 Python 启动器 (unified_launcher.start_system_tray) 在其自身进程
+    // 内常驻启动，与 Electron 解耦 —— 避免 Electron 崩溃/重启把右下角托盘图标带没，
+    // 也避免与 Python 侧重复启动出现两个托盘图标。此处不再 spawn。
 
     // Toggle AI Control Panel (Colorless Lens)
     // F12 在很多环境会被开发者工具/输入法/其他应用占用，因此注册一组候选
