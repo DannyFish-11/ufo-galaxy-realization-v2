@@ -627,8 +627,9 @@ class SystemOrchestrator:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
-                # Detached so Electron survives if Python parent exits
-                start_new_task=True if sys.platform != "win32" else False,
+                # Detached so Electron survives if Python parent exits.
+                # (POSIX: setsid via start_new_session; ignored on Windows.)
+                start_new_session=True if sys.platform != "win32" else False,
             )
 
             # Start a background thread to drain stdout (prevents pipe buffer fill)

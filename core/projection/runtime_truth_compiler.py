@@ -335,9 +335,9 @@ def _compile_continuum() -> Optional[Dict[str, Any]]:
     """Source #1: ContinuumState."""
     # Try cognitive field engine (Block-3 integration)
     try:
-        from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
+        from core.cognitive.cognitive_field_engine import get_cognitive_field_engine
 
-        engine = CognitiveFieldEngine.get_instance()
+        engine = get_cognitive_field_engine()
         if engine is not None and hasattr(engine, "get_continuum_state"):
             state = engine.get_continuum_state()
             if state is not None:
@@ -465,7 +465,7 @@ def _compile_oneapi() -> Dict[str, Any]:
             build_oneapi_integration_summary,
         )
 
-        summary = build_oneapi_integration_summary()
+        summary = build_oneapi_integration_summary().to_dict()
         summary.setdefault("system_layer", ONEAPI_SYSTEM_LAYER)
         return summary
     except Exception as exc:
