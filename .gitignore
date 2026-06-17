@@ -132,3 +132,6 @@ electron/package-lock.json
 
 # Panel runtime state written by unified_panel_aggregation during tests
 runtime/panel_last_operator_action.json
+
+# Client-discovery entrypoint written by unified_launcher on every launch
+runtime/entrypoint.json
