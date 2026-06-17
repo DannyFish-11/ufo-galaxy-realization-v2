@@ -654,13 +654,19 @@ class GalaxyUnified:
                 env["GALAXY_ELECTRON_GPU"] = "0"
             # Prefer the locally-installed electron binary — robust and avoids the
             # `npm electron .` bug (invalid command) that hit when npx was absent.
+            # CRITICAL: use ABSOLUTE paths for both the binary and the app dir.
+            # 之前用相对路径 electron\node_modules\.bin\electron.cmd，而 Popen 的 cwd=electron，
+            # 系统会按 electron\electron\... 解析 → "The system cannot find the path specified."
+            # → Electron 根本起不来、闪退循环。绝对路径彻底消除该 cwd 相对解析歧义。
+            app_dir = electron_dir.resolve()
             bin_name = "electron.cmd" if os.name == "nt" else "electron"
-            local_electron = electron_dir / "node_modules" / ".bin" / bin_name
+            local_electron = (app_dir / "node_modules" / ".bin" / bin_name)
             if local_electron.exists():
-                cmd = [str(local_electron), "."]
+                cmd = [str(local_electron), str(app_dir)]
             else:
                 npx = shutil.which("npx")
-                cmd = [npx, "electron", "."] if npx else [npm, "exec", "--", "electron", "."]
+                cmd = ([npx, "electron", str(app_dir)] if npx
+                       else [npm, "exec", "--", "electron", str(app_dir)])
             # Capture Electron stdout/stderr to logs/electron.log so crashes are
             # diagnosable (previously DEVNULL-swallowed → impossible to debug the
             # "exited, restarting" loop / why Ctrl+Space overlay never appears).
@@ -674,7 +680,7 @@ class GalaxyUnified:
             _elog.flush()
             self.electron_proc = sp.Popen(
                 cmd,
-                cwd=str(electron_dir),
+                cwd=str(app_dir),
                 stdout=_elog, stderr=sp.STDOUT,
                 env=env,
             )
