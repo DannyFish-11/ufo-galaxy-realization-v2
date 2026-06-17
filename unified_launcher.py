@@ -438,12 +438,27 @@ class UnifiedWebUI:
                 self.config.host, self.config.web_ui_port
             )
             logger.info("API 文档: http://localhost:%d/docs", self.config.web_ui_port)
-            # Bind socket and run ASGI startup before probing HTTP — otherwise
-            # run_startup_health_check hits connection refused (WinError 10061).
-            await server.startup()
+            # Run uvicorn via the public serve() entrypoint in a background task.
+            # serve() correctly loads the config AND initialises self.lifespan;
+            # manually calling server.startup() breaks on uvicorn ≥0.30 with
+            # "'Server' object has no attribute 'lifespan'" (the gateway then never
+            # binds — /api/v1/chat is unreachable even though the banner says ready).
+            # We wait on the public ``server.started`` flag so the socket is bound
+            # before probing, then let serve()'s main_loop keep running in the
+            # background so the launcher proceeds to later phases (Electron / ready
+            # banner) instead of blocking here.
+            self._server = server
+            self._serve_task = asyncio.create_task(server.serve())
+            for _ in range(300):  # up to ~30s for bind + ASGI startup
+                if server.started or self._serve_task.done():
+                    break
+                await asyncio.sleep(0.1)
+            if self._serve_task.done():
+                # serve() exited during startup — re-raise the real error so the
+                # caller logs an accurate "API 网关启动失败" cause.
+                self._serve_task.result()
             print_section("启动后健康检查")
             await run_startup_health_check(self.config.web_ui_port)
-            await server.main_loop()
 
         except ImportError as e:
             logger.error("API 服务依赖未安装: %s", e)

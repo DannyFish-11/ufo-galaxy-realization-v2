@@ -665,6 +665,11 @@ def _run_setup_wizard() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Galaxy V2 Unified Entry")
     parser.add_argument("--setup", action="store_true", help="Run interactive setup wizard")
+    # Accept --host/--port so the documented start command
+    # (`python main.py --host 127.0.0.1 --port 8299`) works instead of crashing
+    # with "unrecognized arguments".  Default None ⇒ keep the config default.
+    parser.add_argument("--host", type=str, default=None, help="API 服务监听地址 (默认取配置)")
+    parser.add_argument("--port", "-p", type=int, default=None, help="API 服务端口 (默认 9000)")
     args = parser.parse_args()
 
     if args.setup:
@@ -708,6 +713,11 @@ def main() -> int:
     from unified_launcher import GalaxyUnified
 
     lumiv = GalaxyUnified()
+    # Apply optional CLI overrides for the API gateway bind address/port.
+    if args.host:
+        lumiv.config.host = args.host
+    if args.port:
+        lumiv.config.web_ui_port = args.port
 
     async def _run() -> None:
         # ── Galaxy WebSocket Bridge — 桌面覆盖层事件推送 ──

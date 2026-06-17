@@ -721,9 +721,9 @@ class NodeLifecycleGovernor:
         # Identify wild-growth nodes in NodeFabricRegistry not governed here
         wild_growth: List[str] = []
         try:
-            from core.nodes.node_fabric_registry import NodeFabricRegistry
+            from core.nodes.node_fabric_registry import get_node_fabric_registry
 
-            registry = NodeFabricRegistry.get_instance()
+            registry = get_node_fabric_registry()
             governed_names = {r.node_name for r in records}
             for node in registry.get_all_nodes():
                 if node.node_id not in governed_names and node.node_name not in governed_names:

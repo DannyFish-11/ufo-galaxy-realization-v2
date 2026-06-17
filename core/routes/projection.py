@@ -4617,9 +4617,9 @@ def _get_continuum_state_with_source() -> Tuple[Optional["ContinuumState"], str,
     """
     try:
         # Try the cognitive field engine first (Block-3 integration).
-        from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
+        from core.cognitive.cognitive_field_engine import get_cognitive_field_engine
 
-        engine = CognitiveFieldEngine.get_instance()
+        engine = get_cognitive_field_engine()
         if engine is not None and hasattr(engine, "get_continuum_state"):
             state = engine.get_continuum_state()
             if state is not None:
