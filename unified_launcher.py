@@ -683,6 +683,25 @@ class GalaxyUnified:
             logger.error(f"Electron start failed: {exc}")
             return False
 
+    async def start_system_tray(self) -> bool:
+        """启动系统托盘（右下角），与 Electron 解耦、常驻于本启动器进程。
+
+        以前托盘由 Electron `spawn('python -m windows_service.tray_icon')` 拉起，
+        Electron 崩溃/重启就把托盘也带没了。现在在 Python 启动器自身进程的后台线程里
+        启动（start_tray_in_thread 内部 run_detached），后端存活期间托盘一直在。
+        缺 pystray/Pillow 时优雅降级（非致命）。
+        """
+        try:
+            from windows_service.tray_icon import start_tray_in_thread
+            tray = await asyncio.to_thread(start_tray_in_thread)
+            if tray is not None:
+                self._tray = tray
+                return True
+            return False
+        except Exception as exc:
+            logger.warning("系统托盘启动失败(非致命): %s", exc)
+            return False
+
     async def watch_processes(self):
         """进程保活 + GPU 自适应：监控 Electron，崩溃时自动重启。
 
@@ -887,6 +906,16 @@ class GalaxyUnified:
                 "如需桌面覆盖层：安装 Node.js≥18 后在 electron/ 执行 `npm install`。",
                 self.config.web_ui_port,
             )
+
+        # ── 系统托盘（独立于 Electron，常驻）──
+        # 托盘原先仅由 Electron 进程 spawn；Electron 在部分机器上崩溃/重启会让右下角
+        # 托盘图标随之消失。改由 Python 启动器在自身进程的后台线程启动，与 Electron
+        # 解耦 —— 后端在，托盘就在。
+        tray_ok = await self.start_system_tray()
+        if tray_ok:
+            print_status_row("系统托盘 — 右下角常驻", True)
+        else:
+            print_status_row("系统托盘 — 不可用 (pip install pystray Pillow)", False)
 
         # ── Ready ──
         print()
