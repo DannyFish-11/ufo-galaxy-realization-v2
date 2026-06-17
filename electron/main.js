@@ -12,6 +12,32 @@ if (process.platform === 'win32') {
     app.setAppUserModelId('ai.galaxy.desktop');
 }
 
+// ── 透明全屏覆盖层稳定性 ──
+// mainWindow 是 transparent + fullscreen + alwaysOnTop + WebGL(three.js) 覆盖层。
+// 在不少 Windows GPU/驱动组合上，透明窗口 + GPU 合成会让 GPU 进程崩溃 → 窗口关闭
+// → window-all-closed → app.quit() → 进程退出，外层 watch_processes 再拉起又崩，
+// 形成「exited, restarting」循环（Ctrl+Space 永远点不出来）。默认禁用硬件加速以
+// 保证覆盖层稳定显示（WebGL 退化为软件渲染，覆盖层够用）；如确认 GPU 正常可设
+// GALAXY_ELECTRON_GPU=1 恢复硬件加速。
+if (!['1', 'true', 'yes', 'on'].includes(
+        String(process.env.GALAXY_ELECTRON_GPU || '').trim().toLowerCase())) {
+    try {
+        app.disableHardwareAcceleration();
+    } catch (_e) { /* older electron may not support; non-fatal */ }
+}
+
+// ── GPU / 渲染进程崩溃诊断 ──
+// 把崩溃原因打到 stdout（→ logs/electron.log），便于定位「闪退循环」根因。
+app.on('gpu-process-gone', (_e, details) => {
+    console.error('[Main] gpu-process-gone:', JSON.stringify(details));
+});
+app.on('child-process-gone', (_e, details) => {
+    console.error('[Main] child-process-gone:', JSON.stringify(details));
+});
+app.on('render-process-gone', (_e, _wc, details) => {
+    console.error('[Main] render-process-gone:', JSON.stringify(details));
+});
+
 // ── 单实例锁 ──
 // 端口 EADDRINUSE 崩溃最常见的根因就是"已有一个实例在跑"。单实例锁从源头
 // 杜绝第二个进程争抢 IPC 端口；后来者直接退出，并唤起已存在的窗口。
