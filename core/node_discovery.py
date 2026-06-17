@@ -347,26 +347,47 @@ class NodeDiscoveryService:
                 await asyncio.sleep(HEARTBEAT_INTERVAL)
                 now = time.time()
 
+                newly_offline: list = []
+                newly_suspect: list = []
                 for node in list(self.nodes.values()):
                     if node.node_id == self.node_id:
                         continue
 
                     elapsed = now - node.last_heartbeat
-                    old_state = node.state
 
                     if elapsed > NODE_TIMEOUT:
                         if node.state != DiscoveryState.OFFLINE:
                             node.state = DiscoveryState.OFFLINE
-                            logger.warning(f"节点离线: {node.node_id} (超时 {elapsed:.0f}s)")
+                            newly_offline.append(node.node_id)
                             for cb in self._on_node_left:
                                 _safe_call(cb, node)
                     elif elapsed > HEARTBEAT_INTERVAL * 2:
                         if node.state != DiscoveryState.SUSPECT:
                             node.state = DiscoveryState.SUSPECT
-                            logger.info(f"节点可疑: {node.node_id} (心跳延迟 {elapsed:.0f}s)")
+                            newly_suspect.append(node.node_id)
                     else:
                         if node.state not in (DiscoveryState.HEALTHY, DiscoveryState.REGISTERED):
                             node.state = DiscoveryState.HEALTHY
+
+                # 聚合日志：避免一次刷出上百行红色「节点离线」。desktop-local 单机下，
+                # 从静态注册表 seed 的节点并不广播 UDP 心跳（其可用性以 HTTP 健康为准），
+                # 因此批量 UDP 超时属预期、非致命，不影响 API/网关。状态与回调逻辑不变。
+                if newly_offline:
+                    if len(newly_offline) > 8:
+                        logger.warning(
+                            "%d 个节点 UDP 心跳超时转为离线（单机下未广播心跳的节点属正常，"
+                            "以 HTTP 健康为准，不影响 API）。示例: %s …",
+                            len(newly_offline), ", ".join(newly_offline[:8]),
+                        )
+                        for _nid in newly_offline:
+                            logger.debug("节点离线明细: %s", _nid)
+                    else:
+                        logger.warning("节点离线: %s", ", ".join(newly_offline))
+                if newly_suspect:
+                    if len(newly_suspect) > 8:
+                        logger.debug("%d 个节点心跳延迟（可疑）", len(newly_suspect))
+                    else:
+                        logger.info("节点可疑(心跳延迟): %s", ", ".join(newly_suspect))
 
             except asyncio.CancelledError:
                 break
