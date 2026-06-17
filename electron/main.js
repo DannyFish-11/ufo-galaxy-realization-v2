@@ -12,17 +12,18 @@ if (process.platform === 'win32') {
     app.setAppUserModelId('ai.galaxy.desktop');
 }
 
-// ── 透明全屏覆盖层稳定性 ──
+// ── 透明全屏覆盖层稳定性（GPU 自适应）──
 // mainWindow 是 transparent + fullscreen + alwaysOnTop + WebGL(three.js) 覆盖层。
-// 在不少 Windows GPU/驱动组合上，透明窗口 + GPU 合成会让 GPU 进程崩溃 → 窗口关闭
-// → window-all-closed → app.quit() → 进程退出，外层 watch_processes 再拉起又崩，
-// 形成「exited, restarting」循环（Ctrl+Space 永远点不出来）。默认禁用硬件加速以
-// 保证覆盖层稳定显示（WebGL 退化为软件渲染，覆盖层够用）；如确认 GPU 正常可设
-// GALAXY_ELECTRON_GPU=1 恢复硬件加速。
-if (!['1', 'true', 'yes', 'on'].includes(
+// 在部分 Windows GPU/驱动（尤其笔记本双显卡/混合输出）上，透明窗口 + GPU 合成会让
+// GPU 进程崩溃 → 窗口关闭 → window-all-closed → app.quit() → 闪退循环。
+// 策略：默认【开启】硬件加速（有独显的机器走 GPU、更流畅）；只有当启动器在检测到
+// GPU 模式反复崩溃后注入 GALAXY_ELECTRON_GPU=0 时，才禁用硬件加速（软件渲染兜底）。
+// 这样按机器实际情况自适应，无需用户手动判断有没有 GPU。
+if (['0', 'false', 'no', 'off'].includes(
         String(process.env.GALAXY_ELECTRON_GPU || '').trim().toLowerCase())) {
     try {
         app.disableHardwareAcceleration();
+        console.error('[Main] 硬件加速已禁用（软件渲染模式，GALAXY_ELECTRON_GPU=0）');
     } catch (_e) { /* older electron may not support; non-fatal */ }
 }
 
