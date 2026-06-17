@@ -860,14 +860,14 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
             display_name="Start V2 Backend",
             path_tier=PathTier.MAIN_CHAIN,
             instructions=(
-                "python main.py --host 127.0.0.1 --port 8299\n"
+                "python main.py --host 127.0.0.1 --port 9000\n"
                 "# main.py is the canonical system orchestrator (PR-2).\n"
                 "# Runs staged bring-up Phases 1-7 then delegates to\n"
                 "# unified_launcher.py for full async bring-up."
             ),
             verification=(
                 "Logs show 'Orchestrator bring-up complete'. "
-                "Backend accepts connections on port 8299."
+                "Backend accepts connections on port 9000."
             ),
             blocking=True,
         ),
@@ -876,10 +876,10 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
             display_name="Verify Backend Reachability",
             path_tier=PathTier.MAIN_CHAIN,
             instructions=(
-                "curl -sS http://127.0.0.1:8299/health\n"
+                "curl -sS http://127.0.0.1:9000/health\n"
                 "# Expected: HTTP 200, {\"status\": \"ok\"} or similar.\n\n"
                 "# Minimal chat verification:\n"
-                "curl -sS -X POST http://127.0.0.1:8299/api/v1/chat \\\n"
+                "curl -sS -X POST http://127.0.0.1:9000/api/v1/chat \\\n"
                 "  -H 'Content-Type: application/json' \\\n"
                 "  -d '{\"message\":\"hello\",\"device_id\":\"local_cli\"}'"
             ),
@@ -912,8 +912,8 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
             display_name="Verify Android Registration on V2 Side",
             path_tier=PathTier.CROSS_DEVICE,
             instructions=(
-                "curl -sS http://127.0.0.1:8299/api/v1/devices\n"
-                "curl -sS http://127.0.0.1:8299/api/v1/projection/runtime"
+                "curl -sS http://127.0.0.1:9000/api/v1/devices\n"
+                "curl -sS http://127.0.0.1:9000/api/v1/projection/runtime"
             ),
             verification=(
                 "Android device appears with status=online. "
@@ -927,7 +927,7 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
             path_tier=PathTier.MAIN_CHAIN,
             instructions=(
                 "# Local natural language request (main chain):\n"
-                "curl -sS -X POST http://127.0.0.1:8299/api/v1/chat \\\n"
+                "curl -sS -X POST http://127.0.0.1:9000/api/v1/chat \\\n"
                 "  -H 'Content-Type: application/json' \\\n"
                 "  -d '{\"message\":\"请帮我查一下当前时间\",\"device_id\":\"local_cli\"}'\n\n"
                 "# Cross-device NL initiation (from Android app):\n"
@@ -945,7 +945,7 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
             display_name="Verify Result Return and Closure",
             path_tier=PathTier.MAIN_CHAIN,
             instructions=(
-                "curl -sS http://127.0.0.1:8299/api/v1/projection/runtime-truth\n"
+                "curl -sS http://127.0.0.1:9000/api/v1/projection/runtime-truth\n"
                 "# Confirm task result is present and reconciliation is complete."
             ),
             verification=(

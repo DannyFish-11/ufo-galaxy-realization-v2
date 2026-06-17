@@ -33,7 +33,7 @@ pip install -r requirements-dev.txt
 Primary startup command:
 
 ```bash
-python main.py --host 127.0.0.1 --port 8299
+python main.py --host 127.0.0.1 --port 9000
 ```
 
 `main.py` is the top-level orchestrator and delegates to `unified_launcher.py`.
@@ -52,7 +52,7 @@ After startup, use these surfaces first:
 Minimal local interaction check:
 
 ```bash
-curl -sS -X POST "http://127.0.0.1:8299/api/v1/chat" \
+curl -sS -X POST "http://127.0.0.1:9000/api/v1/chat" \
   -H "Content-Type: application/json" \
   -d '{"message":"你好","device_id":"local_cli"}'
 ```
@@ -64,7 +64,7 @@ curl -sS -X POST "http://127.0.0.1:8299/api/v1/chat" \
 Wake command:
 
 ```bash
-python -m windows_client.status_board_v2 --host 127.0.0.1 --port 8299
+python -m windows_client.status_board_v2 --host 127.0.0.1 --port 9000
 ```
 
 Truthful boundary:
@@ -190,11 +190,11 @@ PR1114 之后，如果你不只想看“有哪些注册种类”，而是想直�
 可直接查询：
 
 ```bash
-curl -sS http://127.0.0.1:8299/api/v1/projection/operational-readiness
-curl -sS http://127.0.0.1:8299/api/v1/projection/clone-to-use-acceptance
+curl -sS http://127.0.0.1:9000/api/v1/projection/operational-readiness
+curl -sS http://127.0.0.1:9000/api/v1/projection/clone-to-use-acceptance
 ```
 
-这里沿用上文 canonical backend startup 示例（见第 2 节）的默认本地端口 `8299`；如果你的
+这里沿用上文 canonical backend startup 示例（见第 2 节）的默认本地端口 `9000`；如果你的
 部署改了端口，请把 URL 换成实际监听地址。
 
 这两个只读 surface 建立在现有 canonical 模块之上：

@@ -666,7 +666,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Galaxy V2 Unified Entry")
     parser.add_argument("--setup", action="store_true", help="Run interactive setup wizard")
     # Accept --host/--port so the documented start command
-    # (`python main.py --host 127.0.0.1 --port 8299`) works instead of crashing
+    # (`python main.py --host 127.0.0.1 --port 9000`) works instead of crashing
     # with "unrecognized arguments".  Default None ⇒ keep the config default.
     parser.add_argument("--host", type=str, default=None, help="API 服务监听地址 (默认取配置)")
     parser.add_argument("--port", "-p", type=int, default=None, help="API 服务端口 (默认 9000)")

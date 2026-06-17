@@ -23,13 +23,13 @@ Primary fields:
 1. Start Galaxy backend (canonical startup):
 
 ```bash
-python main.py --host 127.0.0.1 --port 8299
+python main.py --host 127.0.0.1 --port 9000
 ```
 
 2. In another terminal, wake the desktop status board:
 
 ```bash
-python -m windows_client.status_board_v2 --host 127.0.0.1 --port 8299
+python -m windows_client.status_board_v2 --host 127.0.0.1 --port 9000
 ```
 
 The board then polls every interval and renders runtime projection snapshots.
