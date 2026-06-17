@@ -58,6 +58,7 @@ function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1920,
         height: 1080,
+        icon: path.join(__dirname, 'assets', 'icon.png'),
         frame: false,
         transparent: true,
         alwaysOnTop: true,
@@ -264,6 +265,7 @@ function createPanelWindow() {
     panelWindow = new BrowserWindow({
         width: 1200,
         height: 700,
+        icon: path.join(__dirname, 'assets', 'icon.png'),
         frame: false,
         transparent: true,
         alwaysOnTop: true,

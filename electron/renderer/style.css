@@ -21,7 +21,9 @@
 /* ---------- 全局重置 ---------- */
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 /* P24 修复：cursor:none 仅在非 Liminal 态时生效（Liminal 态需要交互） */
-html, body { width:100%; height:100%; overflow:hidden; background:#080810; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif; }
+html, body { width:100%; height:100%; overflow:hidden; background:#080810;
+  font-family:'Inter','SF Pro Display','Segoe UI Variable Text','Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:optimizeLegibility; }
 body:not(.liminal-active) { cursor:none; }
 
 /* ═══════════════════════════════════════════
@@ -166,7 +168,7 @@ body.liminal-active .desktop .bg{
 .l-text{position:absolute;bottom:12%;left:50%;transform:translateX(-50%);
   font-size:13px;color:rgba(200,210,255,0.5);letter-spacing:5px;text-transform:uppercase;
   opacity:0;transition:opacity 2s var(--ease-expo) 0.8s;
-  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;font-weight:300;}
+  font-family:'Inter','SF Pro Display','Segoe UI Variable Text','Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;font-weight:300;}
 .l.on .l-text{opacity:1;}
 
 /* ═══════════════════════════════════════════
@@ -192,7 +194,7 @@ body.liminal-active .desktop .bg{
 .ws-connected .ws-dot{background:rgba(80,200,120,0.8);box-shadow:0 0 6px rgba(80,200,120,0.5);}
 .ws-connecting .ws-dot{background:rgba(200,180,80,0.8);box-shadow:0 0 6px rgba(200,180,80,0.5);animation:wsDotPulse 1s ease-in-out infinite;}
 @keyframes wsDotPulse{0%,100%{opacity:0.5;transform:scale(1);}50%{opacity:1;transform:scale(1.3);}}
-#ws-status-text{color:rgba(138,155,168,0.5);font-size:9px;letter-spacing:2px;font-family:'Courier New',monospace;}
+#ws-status-text{color:rgba(138,155,168,0.5);font-size:9px;letter-spacing:2px;font-family:'JetBrains Mono','SF Mono','Cascadia Code','Fira Code',ui-monospace,Consolas,'Courier New',monospace;}
 
 .cursor-blink{animation:cursorBlink 1s step-end infinite;}
 @keyframes cursorBlink{0%,100%{opacity:1;}50%{opacity:0;}}

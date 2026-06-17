@@ -39,7 +39,7 @@ logger = logging.getLogger("Galaxy.Tray")
 
 _HAVE_TRAY = False
 try:
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
     import pystray
 
@@ -84,53 +84,34 @@ def create_icon_image(
 
     color = _STATUS_COLORS.get(status, (100, 100, 100))
 
-    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    dc = ImageDraw.Draw(image)
+    # 与桌面应用图标一致的「发光环 + 内核」造型（去掉旧的圈中 "G"），
+    # 状态颜色仍区分 running/warning/error/offline。4x 超采样后缩回求平滑。
+    S = max(width, height) * 4
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    cx = cy = S // 2
+    R = int(S * 0.34)
 
-    # 外发光（柔和阴影）
-    for i in range(3):
-        alpha = 40 - i * 10
-        offset = 6 - i * 2
-        dc.ellipse(
-            [offset, offset, width - offset, height - offset],
-            fill=(color[0], color[1], color[2], alpha),
-        )
+    # 外发光（高斯模糊的柔光晕）
+    glow = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    gd.ellipse([cx - R, cy - R, cx + R, cy + R],
+               fill=(color[0], color[1], color[2], 95))
+    glow = glow.filter(ImageFilter.GaussianBlur(S * 0.06))
+    img = Image.alpha_composite(img, glow)
 
-    # 主圆
-    margin = 4
-    dc.ellipse(
-        [margin, margin, width - margin, height - margin],
-        fill=color,
-        outline=(255, 255, 255, 180),
-        width=2,
-    )
+    dc = ImageDraw.Draw(img)
+    # 细环
+    dc.ellipse([cx - R, cy - R, cx + R, cy + R],
+               outline=(color[0], color[1], color[2], 255), width=int(S * 0.05))
+    # 明亮内核
+    cr = int(S * 0.17)
+    dc.ellipse([cx - cr, cy - cr, cx + cr, cy + cr], fill=color)
+    # 内核高光（左上偏移，模拟体积感）
+    hr = int(cr * 0.55)
+    hx, hy = cx - int(cr * 0.28), cy - int(cr * 0.28)
+    dc.ellipse([hx - hr, hy - hr, hx + hr, hy + hr], fill=(255, 255, 255, 150))
 
-    # 内部高光（模拟 3D 效果）
-    highlight_margin = margin + 8
-    dc.ellipse(
-        [highlight_margin, highlight_margin, width // 2, height // 2],
-        fill=(255, 255, 255, 60),
-    )
-
-    # 中心 "G" 文字
-    try:
-        font = ImageFont.truetype("segoeui.ttf", 24)
-    except Exception:
-        font = ImageFont.load_default()
-
-    text = "G"
-    bbox = dc.textbbox((0, 0), text, font=font)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-    text_x = (width - text_w) // 2
-    text_y = (height - text_h) // 2 - 2
-
-    # 文字阴影
-    dc.text((text_x + 1, text_y + 1), text, font=font, fill=(0, 0, 0, 120))
-    # 文字本体
-    dc.text((text_x, text_y), text, font=font, fill=(255, 255, 255, 230))
-
-    return image
+    return img.resize((width, height), Image.LANCZOS)
 
 
 # ---------------------------------------------------------------------------

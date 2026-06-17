@@ -1,11 +1,17 @@
 {
   "name": "ufo-galaxy-desktop-presence",
+  "productName": "Galaxy",
   "version": "1.0.0",
   "description": "Three-state fullscreen AI assistant desktop overlay",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev"
+  },
+  "build": {
+    "appId": "ai.galaxy.desktop",
+    "productName": "Galaxy",
+    "icon": "assets/icon.png"
   },
   "dependencies": {
     "electron": "^28.0.0",

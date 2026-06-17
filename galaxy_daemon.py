@@ -167,3 +167,10 @@ class GalaxyDaemon:
                     f"Galaxy 连续重启超过 {MAX_RESTARTS_PER_HOUR} 次限制，停止重启。"
                 )
                 return 1
+
+
+if __name__ == "__main__":
+    # Entry point — without this, `python galaxy_daemon.py` defined the class and
+    # exited doing nothing ("守护进程点不开").  Now it supervises main.py with
+    # crash-restart so one command wakes AND keeps the whole stack alive.
+    sys.exit(GalaxyDaemon().run())
