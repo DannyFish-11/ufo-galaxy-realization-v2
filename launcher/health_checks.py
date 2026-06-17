@@ -63,6 +63,14 @@ async def run_startup_health_check(web_ui_port: int) -> None:
             is listening (used for probes 1 and 2).
     """
     import urllib.request
+    import asyncio
+
+    # The uvicorn server now runs as a background task on THIS event loop, so the
+    # probes MUST NOT block the loop — otherwise the server can't answer its own
+    # /health and every HTTP probe times out.  Offload all blocking I/O to threads.
+    def _http_code(url: str, timeout: float) -> int:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            return resp.getcode()
 
     base_url = f"http://localhost:{web_ui_port}"
     node71_url = "http://localhost:8071"
@@ -72,8 +80,7 @@ async def run_startup_health_check(web_ui_port: int) -> None:
 
     # 1) Gateway / core health
     try:
-        with urllib.request.urlopen(f"{base_url}/health", timeout=5) as resp:
-            code = resp.getcode()
+        code = await asyncio.to_thread(_http_code, f"{base_url}/health", 5)
         print_status(f"Launcher /health: HTTP {code}", "success")
     except Exception as exc:
         print_status(f"Launcher /health: 失败 — {exc}", "error")
@@ -81,24 +88,23 @@ async def run_startup_health_check(web_ui_port: int) -> None:
 
     # 2) system info
     try:
-        with urllib.request.urlopen(f"{base_url}/api/v1/system/info", timeout=5) as resp:
-            code = resp.getcode()
+        code = await asyncio.to_thread(_http_code, f"{base_url}/api/v1/system/info", 5)
         print_status(f"system/info: HTTP {code}", "success")
     except Exception as exc:
         print_status(f"system/info: 失败 — {exc}", "warning")
 
     # 3) Node_71 health
     try:
-        with urllib.request.urlopen(f"{node71_url}/health", timeout=3) as resp:
-            code = resp.getcode()
+        code = await asyncio.to_thread(_http_code, f"{node71_url}/health", 3)
         print_status(f"Node_71 /health: HTTP {code}", "success")
     except Exception as exc:
         print_status(f"Node_71 /health: 不可达 — {exc}", "warning")
 
     # 4) NATS port check (optional for single-machine / noop bus)
     try:
-        with socket.create_connection((nats_host, nats_port), timeout=3):
-            pass
+        await asyncio.to_thread(
+            lambda: socket.create_connection((nats_host, nats_port), timeout=3).close()
+        )
         print_status(f"NATS port {nats_port}: 已监听", "success")
     except Exception as exc:
         if _nats_tcp_failure_is_critical():
@@ -112,7 +118,8 @@ async def run_startup_health_check(web_ui_port: int) -> None:
 
     # 5) Docker container status (best-effort)
     try:
-        result = subprocess.run(
+        result = await asyncio.to_thread(
+            subprocess.run,
             [
                 "docker", "ps",
                 "--filter", "name=nats",

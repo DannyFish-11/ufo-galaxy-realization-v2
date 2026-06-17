@@ -1,6 +1,17 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, dialog } = require('electron');
 const path = require('path');
 
+// 应用图标：Windows 用多尺寸 .ico（任务栏/窗口才正确显示），其余平台用 .png。
+const ICON_PATH = path.join(
+    __dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+);
+// Windows 任务栏图标身份：未设置 AppUserModelId 时，从源码运行的 Electron 会沿用
+// electron.exe 的默认原子图标（用户看到「图标没显示/很怪」）。显式设置后任务栏才
+// 关联到本应用并显示自定义图标。
+if (process.platform === 'win32') {
+    app.setAppUserModelId('ai.galaxy.desktop');
+}
+
 // ── 单实例锁 ──
 // 端口 EADDRINUSE 崩溃最常见的根因就是"已有一个实例在跑"。单实例锁从源头
 // 杜绝第二个进程争抢 IPC 端口；后来者直接退出，并唤起已存在的窗口。
@@ -58,7 +69,7 @@ function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1920,
         height: 1080,
-        icon: path.join(__dirname, 'assets', 'icon.png'),
+        icon: ICON_PATH,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
@@ -265,7 +276,7 @@ function createPanelWindow() {
     panelWindow = new BrowserWindow({
         width: 1200,
         height: 700,
-        icon: path.join(__dirname, 'assets', 'icon.png'),
+        icon: ICON_PATH,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
