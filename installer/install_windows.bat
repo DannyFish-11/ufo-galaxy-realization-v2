@@ -85,6 +85,7 @@ echo Set oLink = oWS.CreateShortcut(sLinkFile) >> CreateShortcut.vbs
 echo oLink.TargetPath = "%SCRIPT_DIR%start_galaxy.bat" >> CreateShortcut.vbs
 echo oLink.WorkingDirectory = "%SCRIPT_DIR%" >> CreateShortcut.vbs
 echo oLink.Description = "Galaxy L4 自主智能系统" >> CreateShortcut.vbs
+echo oLink.IconLocation = "%SCRIPT_DIR%..\electron\assets\icon.ico" >> CreateShortcut.vbs
 echo oLink.Save >> CreateShortcut.vbs
 cscript //nologo CreateShortcut.vbs
 del CreateShortcut.vbs
