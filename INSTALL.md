@@ -61,9 +61,9 @@ bash start.sh          # Linux/macOS
 ```
 
 系统启动后访问：
-- 🌐 **API 文档**: http://localhost:8299/docs
-- 📊 **状态板**: http://localhost:8299/api/status
-- 💬 **聊天 API**: http://localhost:8299/api/v1/chat
+- 🌐 **API 文档**: http://localhost:9000/docs
+- 📊 **状态板**: http://localhost:9000/api/status
+- 💬 **聊天 API**: http://localhost:9000/api/v1/chat
 
 ---
 
@@ -222,13 +222,13 @@ python unified_launcher.py --check-only
 
 ```bash
 # 健康检查
-curl http://localhost:8299/health
+curl http://localhost:9000/health
 
 # 获取系统状态
-curl http://localhost:8299/api/status
+curl http://localhost:9000/api/status
 
 # 测试聊天 API
-curl -X POST http://localhost:8299/api/v1/chat \
+curl -X POST http://localhost:9000/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello, Galaxy!"}'
 ```
@@ -271,7 +271,7 @@ export OPENAI_API_KEY=sk-...
 python setup_wizard.py --quick
 ```
 
-### ❌ "Port 8299 already in use"
+### ❌ "Port 9000 already in use"
 
 **解决方案**：
 ```bash
@@ -279,7 +279,7 @@ python setup_wizard.py --quick
 python main.py --port 8300
 
 # 或查找并停止占用该端口的进程
-lsof -i :8299        # 查看占用进程
+lsof -i :9000        # 查看占用进程
 kill -9 <PID>        # 停止进程
 ```
 
@@ -371,7 +371,7 @@ python setup_wizard.py --interactive
 ## 📚 后续资源
 
 - 📖 **Architecture**: 查看 `docs/UNIFIED_SUBJECT_ARCHITECTURE.md`
-- 🔌 **API 文档**: 启动后访问 http://localhost:8299/docs
+- 🔌 **API 文档**: 启动后访问 http://localhost:9000/docs
 - 📝 **贡献指南**: 见 `CONTRIBUTING.md`
 - 🚀 **部署指南**: 见 `deploy/README.md`
 - 🐛 **故障排查**: 见 `docs/TROUBLESHOOTING.md`

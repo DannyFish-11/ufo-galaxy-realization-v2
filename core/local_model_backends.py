@@ -367,6 +367,18 @@ class TransformersBackend(LocalModelBackend):
             local_path = self._resolve_model_path(model_id)
             load_target = local_path if local_path else model_id
 
+            # Ollama-style tags ("name:tag", e.g. "gemma4:12b") are NOT valid
+            # HuggingFace repo ids (the colon is rejected) — they belong to the
+            # Ollama backend.  Skip the transformers loader quietly instead of
+            # raising a noisy ERROR on every fresh clone without Ollama running.
+            if local_path is None and ":" in model_id and "/" not in model_id:
+                logger.debug(
+                    "Transformers backend skipping Ollama-style id %r "
+                    "(not a HF repo id; handled by the Ollama backend)",
+                    model_id,
+                )
+                return False
+
             tokenizer = AutoTokenizer.from_pretrained(
                 load_target, trust_remote_code=True
             )

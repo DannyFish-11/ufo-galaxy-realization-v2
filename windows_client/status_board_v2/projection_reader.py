@@ -86,7 +86,7 @@ class ProjectionReader:
     Parameters
     ----------
     base_url:
-        Base URL of the Galaxy server, e.g. ``"http://127.0.0.1:8299"``.
+        Base URL of the Galaxy server, e.g. ``"http://127.0.0.1:9000"``.
         Used for HTTP polling.  ``None`` disables HTTP mode.
     file_path:
         Path to a local JSON file containing a serialised projection.
@@ -100,7 +100,7 @@ class ProjectionReader:
 
     def __init__(
         self,
-        base_url: Optional[str] = "http://127.0.0.1:8299",
+        base_url: Optional[str] = "http://127.0.0.1:9000",
         file_path: Optional[str] = None,
         from_stdin: bool = False,
         timeout: float = 3.0,

@@ -80,7 +80,7 @@ def _write_entrypoint(host: str, port: int) -> None:
     文件格式::
 
         {
-            "api_base": "http://localhost:8299",
+            "api_base": "http://localhost:9000",
             "written_at": "2026-01-01T00:00:00Z"
         }
 
@@ -123,7 +123,7 @@ class SystemConfig:
 
     # Service ports (defaults resolved from PortConfig / config/unified_ports.yaml)
     host: str = "0.0.0.0"
-    web_ui_port: int = 8299
+    web_ui_port: int = 9000
     device_api_port: int = 8766
     ufo_api_port: int = 8767
 
@@ -133,7 +133,7 @@ class SystemConfig:
         端口来源优先级（高→低）：
           1. 环境变量 GALAXY_UNIFIED_LAUNCHER_PORT / GALAXY_DEVICE_API_PORT / GALAXY_UFO_API_PORT
           2. config/unified_ports.yaml（统一端口事实来源）
-          3. 内置硬编码默认值（8299 / 8766 / 8767）
+          3. 内置硬编码默认值（9000 / 8766 / 8767）
         """
         try:
             from core.port_config import get_service_port

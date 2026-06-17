@@ -71,7 +71,7 @@ main.py                 ← 规范的系统编排器入口（SYSTEM_ORCHESTRATOR
 
 **验证命令：**
 ```bash
-python main.py --host 127.0.0.1 --port 8299   # 完整启动
+python main.py --host 127.0.0.1 --port 9000   # 完整启动
 python main.py --status                         # 状态检查
 python scripts/validate_runtime.py             # 运行时验证
 ```
