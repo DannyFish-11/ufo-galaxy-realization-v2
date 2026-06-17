@@ -656,10 +656,21 @@ class GalaxyUnified:
             else:
                 npx = shutil.which("npx")
                 cmd = [npx, "electron", "."] if npx else [npm, "exec", "--", "electron", "."]
+            # Capture Electron stdout/stderr to logs/electron.log so crashes are
+            # diagnosable (previously DEVNULL-swallowed → impossible to debug the
+            # "exited, restarting" loop / why Ctrl+Space overlay never appears).
+            _log_dir = Path("logs")
+            _log_dir.mkdir(exist_ok=True)
+            _elog = open(_log_dir / "electron.log", "ab")
+            _elog.write(
+                f"\n===== electron start {__import__('datetime').datetime.now().isoformat()} "
+                f"cmd={cmd} =====\n".encode("utf-8", "replace")
+            )
+            _elog.flush()
             self.electron_proc = sp.Popen(
                 cmd,
                 cwd=str(electron_dir),
-                stdout=sp.DEVNULL, stderr=sp.DEVNULL,
+                stdout=_elog, stderr=sp.STDOUT,
                 env=env,
             )
             return True
@@ -668,15 +679,42 @@ class GalaxyUnified:
             return False
 
     async def watch_processes(self):
-        """进程保活：监控 Gateway 和 Electron，崩溃时自动重启。"""
+        """进程保活：监控 Electron，崩溃时自动重启（带退避与上限，避免无限刷屏）。
+
+        Electron 的 stdout/stderr 现写入 logs/electron.log；若它反复快速崩溃，
+        在 60s 窗口内重启达到上限后停止自动重启并给出明确指引（后端/API 不受影响）。
+        """
         import asyncio
+        import time
+        restarts: list = []          # 最近一次窗口内的重启时间戳
+        MAX_RAPID = 5                 # 60s 内连续崩溃上限
+        gave_up = False
         while True:
-            await asyncio.sleep(10)
-            # Check Electron
-            if hasattr(self, 'electron_proc') and self.electron_proc:
-                if self.electron_proc.poll() is not None:
-                    logger.warning("Electron exited, restarting...")
-                    await self.start_electron()
+            await asyncio.sleep(5)
+            proc = getattr(self, 'electron_proc', None)
+            if not proc:
+                continue
+            if proc.poll() is None:
+                continue              # 仍在运行
+            if gave_up:
+                continue
+            now = time.time()
+            restarts = [t for t in restarts if now - t < 60]
+            if len(restarts) >= MAX_RAPID:
+                gave_up = True
+                logger.error(
+                    "Electron 桌面覆盖层在 60s 内反复崩溃 %d 次，已停止自动重启。"
+                    "崩溃详情见 logs/electron.log；后端与 API 仍在 "
+                    "http://localhost:%d 正常运行（Ctrl+Space 覆盖层暂不可用）。",
+                    len(restarts), self.config.web_ui_port,
+                )
+                continue
+            restarts.append(now)
+            logger.warning(
+                "Electron 已退出，重启中（60s 内第 %d/%d 次；详情见 logs/electron.log）…",
+                len(restarts), MAX_RAPID,
+            )
+            await self.start_electron()
 
     async def setup(self):
         """加载配置并初始化服务管理器。"""
