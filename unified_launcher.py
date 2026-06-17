@@ -647,6 +647,11 @@ class GalaxyUnified:
         try:
             env = os.environ.copy()
             env["PATH"] = str(Path(npm).parent) + os.pathsep + env.get("PATH", "")
+            # GPU 自适应：默认让 Electron 走硬件加速（有独显的机器更流畅）。若 watch_processes
+            # 检测到 GPU 模式反复崩溃，会置 _electron_force_software=True，这里注入
+            # GALAXY_ELECTRON_GPU=0 → main.js 据此 disableHardwareAcceleration（软件渲染兜底）。
+            if getattr(self, "_electron_force_software", False):
+                env["GALAXY_ELECTRON_GPU"] = "0"
             # Prefer the locally-installed electron binary — robust and avoids the
             # `npm electron .` bug (invalid command) that hit when npx was absent.
             bin_name = "electron.cmd" if os.name == "nt" else "electron"
@@ -679,40 +684,59 @@ class GalaxyUnified:
             return False
 
     async def watch_processes(self):
-        """进程保活：监控 Electron，崩溃时自动重启（带退避与上限，避免无限刷屏）。
+        """进程保活 + GPU 自适应：监控 Electron，崩溃时自动重启。
 
-        Electron 的 stdout/stderr 现写入 logs/electron.log；若它反复快速崩溃，
-        在 60s 窗口内重启达到上限后停止自动重启并给出明确指引（后端/API 不受影响）。
+        按机器实际情况自适应渲染模式（无需用户手动判断有没有 GPU）：
+        - 默认 GPU（硬件加速）模式启动；
+        - 若 GPU 模式 60s 内崩溃 >= MAX_GPU 次（常见于笔记本双显卡/驱动不支持透明窗口
+          GPU 合成）→ 自动切换为软件渲染重试；
+        - 若软件渲染也 60s 内崩溃 >= MAX_SW 次 → 停止自动重启并给出指引。
+        Electron 的 stdout/stderr 写入 logs/electron.log（含 *-process-gone 崩溃原因）。
         """
         import asyncio
         import time
-        restarts: list = []          # 最近一次窗口内的重启时间戳
-        MAX_RAPID = 5                 # 60s 内连续崩溃上限
+        restarts: list = []          # 最近 60s 窗口内的重启时间戳
+        MAX_GPU = 3                  # GPU 模式连续崩溃达此数 → 切软件渲染
+        MAX_SW = 5                   # 软件渲染也崩到此数 → 放弃
         gave_up = False
+        if not hasattr(self, "_electron_force_software"):
+            self._electron_force_software = False
         while True:
             await asyncio.sleep(5)
             proc = getattr(self, 'electron_proc', None)
-            if not proc:
-                continue
-            if proc.poll() is None:
-                continue              # 仍在运行
-            if gave_up:
-                continue
+            if not proc or proc.poll() is None or gave_up:
+                continue              # 未启动 / 仍在运行 / 已放弃
             now = time.time()
             restarts = [t for t in restarts if now - t < 60]
-            if len(restarts) >= MAX_RAPID:
+
+            # GPU 模式反复崩溃 → 自动降级为软件渲染（自适应核心）
+            if (not self._electron_force_software) and len(restarts) >= MAX_GPU:
+                self._electron_force_software = True
+                restarts = []
+                logger.warning(
+                    "Electron GPU 模式 60s 内崩溃 %d 次，自动切换为软件渲染重试"
+                    "（你的显卡/驱动可能不支持透明窗口 GPU 合成；详情见 logs/electron.log）…",
+                    MAX_GPU,
+                )
+                await self.start_electron()
+                continue
+
+            # 软件渲染也反复崩溃 → 放弃
+            if self._electron_force_software and len(restarts) >= MAX_SW:
                 gave_up = True
                 logger.error(
-                    "Electron 桌面覆盖层在 60s 内反复崩溃 %d 次，已停止自动重启。"
+                    "Electron 在 GPU 与软件渲染下均反复崩溃，已停止自动重启。"
                     "崩溃详情见 logs/electron.log；后端与 API 仍在 "
                     "http://localhost:%d 正常运行（Ctrl+Space 覆盖层暂不可用）。",
-                    len(restarts), self.config.web_ui_port,
+                    self.config.web_ui_port,
                 )
                 continue
+
             restarts.append(now)
+            _mode = "软件渲染" if self._electron_force_software else "GPU"
             logger.warning(
-                "Electron 已退出，重启中（60s 内第 %d/%d 次；详情见 logs/electron.log）…",
-                len(restarts), MAX_RAPID,
+                "Electron 已退出，重启中（%s 模式，60s 内第 %d 次；详情见 logs/electron.log）…",
+                _mode, len(restarts),
             )
             await self.start_electron()
 
