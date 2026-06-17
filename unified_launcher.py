@@ -630,22 +630,34 @@ class GalaxyUnified:
             return False
         # Ensure npm deps
         if not (electron_dir / "node_modules").exists():
-            print_status_row("正在安装 Electron 依赖...", True)
-            print_status_row("正在安装 Electron 依赖...", True)
+            print_status_row("首次启动：安装 Electron 桌面层依赖 (npm install，可能数分钟)…", True)
             try:
-                rc = sp.run([npm, "install"], cwd=str(electron_dir),
-                           capture_output=True, text=True, timeout=180).returncode
-                if rc != 0:
+                _r = sp.run([npm, "install"], cwd=str(electron_dir),
+                            capture_output=True, text=True, timeout=600)
+                if _r.returncode != 0:
+                    logger.error(
+                        "Electron npm install 失败 (rc=%s):\n%s",
+                        _r.returncode, (_r.stderr or _r.stdout or "")[-1000:],
+                    )
                     return False
-            except Exception:
+            except Exception as exc:
+                logger.error("Electron npm install 异常: %s", exc)
                 return False
         # Start Electron — PR-ABSOLUTE-PATH: use absolute paths on Windows
         try:
-            npx = shutil.which("npx") or npm
             env = os.environ.copy()
             env["PATH"] = str(Path(npm).parent) + os.pathsep + env.get("PATH", "")
+            # Prefer the locally-installed electron binary — robust and avoids the
+            # `npm electron .` bug (invalid command) that hit when npx was absent.
+            bin_name = "electron.cmd" if os.name == "nt" else "electron"
+            local_electron = electron_dir / "node_modules" / ".bin" / bin_name
+            if local_electron.exists():
+                cmd = [str(local_electron), "."]
+            else:
+                npx = shutil.which("npx")
+                cmd = [npx, "electron", "."] if npx else [npm, "exec", "--", "electron", "."]
             self.electron_proc = sp.Popen(
-                [npx, "electron", "."],
+                cmd,
                 cwd=str(electron_dir),
                 stdout=sp.DEVNULL, stderr=sp.DEVNULL,
                 env=env,
@@ -806,7 +818,13 @@ class GalaxyUnified:
             print_status_row("三态 UI — Active / Standby / Dormant", True)
             print_status_row("快捷键 — Ctrl+Space 唤醒 / Ctrl+H 隐藏", True)
         else:
-            print_status_row("Electron — npm install 失败或缺失", False)
+            print_status_row("桌面覆盖层未启动 — 后端/API 仍完全可用", False)
+            logger.warning(
+                "Electron 三态覆盖层未启动（缺 Node.js 或 electron 依赖安装失败）。"
+                "后端与 API 已就绪 http://localhost:%d ；"
+                "如需桌面覆盖层：安装 Node.js≥18 后在 electron/ 执行 `npm install`。",
+                self.config.web_ui_port,
+            )
 
         # ── Ready ──
         print()
