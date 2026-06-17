@@ -73,7 +73,7 @@ Usage
     python -m windows_client.status_board_v2
 
     # Specify a different server:
-    python -m windows_client.status_board_v2 --host 10.0.0.5 --port 8299
+    python -m windows_client.status_board_v2 --host 10.0.0.5 --port 9000
 
     # Read from a JSON file instead of the server:
     python -m windows_client.status_board_v2 --file /tmp/projection.json
@@ -148,7 +148,7 @@ class StatusBoardV2App:
     def __init__(
         self,
         host: str = "127.0.0.1",
-        port: int = 8299,
+        port: int = 9000,
         interval: float = 1.0,
         file_path: Optional[str] = None,
         from_stdin: bool = False,
@@ -351,7 +351,7 @@ def _format_control_result(result) -> str:
 
 def run(
     host: str = "127.0.0.1",
-    port: int = 8299,
+    port: int = 9000,
     interval: float = 1.0,
     file_path: Optional[str] = None,
     from_stdin: bool = False,
@@ -430,8 +430,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--port",
         type=int,
-        default=8299,
-        help="Galaxy server port (default: 8299)",
+        default=9000,
+        help="Galaxy server port (default: 9000)",
     )
     p.add_argument(
         "--interval",

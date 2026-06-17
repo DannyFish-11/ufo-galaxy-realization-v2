@@ -356,7 +356,7 @@ class TestProjectionReaderAllFail:
             RUNTIME_TRUTH_ENDPOINT,
             PROJECTION_ENDPOINT,
         )
-        reader = ProjectionReader(base_url="http://127.0.0.1:8299")
+        reader = ProjectionReader(base_url="http://127.0.0.1:9000")
 
         def _fake_read(endpoint: str):
             if endpoint == RUNTIME_TRUTH_ENDPOINT:

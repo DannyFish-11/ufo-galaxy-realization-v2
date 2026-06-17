@@ -243,7 +243,9 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
             logger.info("Fallback to pyautogui")
             return True
         except ImportError:
-            logger.error("pyautogui not available")
+            # pyautogui 是可选的 GUI 自动化回退依赖；缺失属正常(非致命)，降为
+            # warning，避免新克隆启动刷出吓人的红色 ERROR。
+            logger.warning("pyautogui 未安装，GUI 自动化回退不可用(可选功能，不影响启动)")
             return False
     
     async def get_active_window(self) -> Optional[UIElement]:

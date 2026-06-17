@@ -1156,7 +1156,7 @@ infrastructure:
     unified_launcher:
       port: 9000
       name: "UnifiedLauncher"
-      description: "统一启动器 Web UI (端口 8299；避免与 galaxy-core:9000 冲突)"
+      description: "统一启动器 Web UI / API 网关 (默认端口 9000；desktop-local 单进程下后端+API 均在此)"
       
     gateway:
       port: 9000

@@ -96,7 +96,9 @@ class VoiceLoop:
                 AudioCaptureConfig,
             )
         except ImportError as exc:
-            logger.error("VoiceLoop dependencies not available: %s", exc)
+            # 语音(麦克风)是可选功能；依赖缺失时降为 warning 再向上抛由调用方处理，
+            # 不在启动期刷红色 ERROR。
+            logger.warning("VoiceLoop 可选依赖未安装(语音功能不可用): %s", exc)
             raise
 
         logger.info("Starting VoiceLoop...")
