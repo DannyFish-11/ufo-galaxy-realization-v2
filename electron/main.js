@@ -246,6 +246,24 @@ app.whenReady().then(() => {
         console.log(`[Main] 面板快捷键已注册: ${registeredShortcuts.join(', ')}`);
     }
 
+    // ── 三态覆盖层「唤醒/隐藏」全局快捷键 ──
+    // 之前没有任何唤醒快捷键被真正注册（启动横幅写的 Ctrl+Space 是假的），而且
+    // Ctrl+Space 在中文 Windows 会被输入法抢去切换中英文 → 用户「按不开」。
+    // 这里注册一组【不与输入法/系统冲突】的候选键，任一成功即可唤出覆盖层。
+    const WAKE_SHORTCUTS = [
+        'CommandOrControl+Alt+Space', 'CommandOrControl+Shift+Space',
+        'CommandOrControl+Alt+G', 'CommandOrControl+Shift+G',
+    ];
+    const wakeRegistered = WAKE_SHORTCUTS.filter((accel) => {
+        try { return globalShortcut.register(accel, () => toggleOverlayWake()); }
+        catch (e) { return false; }
+    });
+    const HIDE_SHORTCUTS = ['CommandOrControl+Alt+H', 'CommandOrControl+Shift+H'];
+    HIDE_SHORTCUTS.forEach((accel) => {
+        try { globalShortcut.register(accel, () => setOverlayPhase(false)); } catch (e) { /* ignore */ }
+    });
+    console.log('[Main] 覆盖层唤醒快捷键: ' + (wakeRegistered.join(', ') || '(全部注册失败)'));
+
     app.on('browser-window-created', (event, window) => {
         if (mainWindow) {
             mainWindow.setAlwaysOnTop(true, 'screen-saver');
@@ -320,6 +338,33 @@ function createPanelWindow() {
     });
 
     return panelWindow;
+}
+
+// ── 三态覆盖层手动唤醒/隐藏 ──
+// 覆盖层渲染层(app.js)根据 presence-state 的 depth_factor 决定 silent/liminal/manifest
+// 的可见度：depth≈0 几乎不可见(silent)，depth≈0.9 完全显现(manifest)。手动唤醒即向
+// 渲染层推一个高 depth 的 manifest 态并取消鼠标穿透以便交互；隐藏则推 silent。
+let _overlayAwake = false;
+function setOverlayPhase(awake) {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    _overlayAwake = awake;
+    const payload = awake
+        ? { phase: 'manifest', depth_factor: 0.92, intent: 'manual_wake', speaking: false, source: 'hotkey' }
+        : { phase: 'silent', depth_factor: 0.0, intent: 'manual_sleep', speaking: false, source: 'hotkey' };
+    try { mainWindow.webContents.send('presence-state', payload); } catch (e) { /* ignore */ }
+    try {
+        // 唤醒时允许点击交互并置顶聚焦；隐藏时恢复点击穿透(不挡操作)。
+        mainWindow.setIgnoreMouseEvents(!awake, { forward: true });
+        if (awake) {
+            mainWindow.show();
+            mainWindow.setAlwaysOnTop(true, 'screen-saver');
+            mainWindow.focus();
+        }
+    } catch (e) { /* ignore */ }
+    console.log('[Overlay] ' + (awake ? '已唤醒(manifest)' : '已隐藏(silent)'));
+}
+function toggleOverlayWake() {
+    setOverlayPhase(!_overlayAwake);
 }
 
 function togglePanel() {

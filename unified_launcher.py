@@ -752,7 +752,7 @@ class GalaxyUnified:
                 logger.error(
                     "Electron 在 GPU 与软件渲染下均反复崩溃，已停止自动重启。"
                     "崩溃详情见 logs/electron.log；后端与 API 仍在 "
-                    "http://localhost:%d 正常运行（Ctrl+Space 覆盖层暂不可用）。",
+                    "http://localhost:%d 正常运行（Ctrl+Alt+Space 覆盖层暂不可用）。",
                     self.config.web_ui_port,
                 )
                 continue
@@ -903,7 +903,7 @@ class GalaxyUnified:
             print_status_row("Electron — v28.2.0", True)
             print_status_row("Three.js 3D 覆盖层 — 就绪", True)
             print_status_row("三态 UI — Active / Standby / Dormant", True)
-            print_status_row("快捷键 — Ctrl+Space 唤醒 / Ctrl+H 隐藏", True)
+            print_status_row("快捷键 — Ctrl+Alt+Space 唤醒 / Ctrl+Alt+H 隐藏 (避开输入法占用的 Ctrl+Space)", True)
         else:
             print_status_row("桌面覆盖层未启动 — 后端/API 仍完全可用", False)
             logger.warning(
@@ -933,7 +933,7 @@ class GalaxyUnified:
         print(f"  {Colors.CYAN}WebSocket:{Colors.ENDC}    ws://localhost:{self.config.web_ui_port}/ws")
         print(f"  {Colors.CYAN}状态面板:{Colors.ENDC}     http://localhost:{self.config.web_ui_port}/api/v1/projection/operability-contract")
         print(f"  {Colors.CYAN}API 文档:{Colors.ENDC}     http://localhost:{self.config.web_ui_port}/docs")
-        print(f"  {Colors.CYAN}桌面覆盖层:{Colors.ENDC}   Ctrl+Space 唤醒")
+        print(f"  {Colors.CYAN}桌面覆盖层:{Colors.ENDC}   Ctrl+Alt+Space 唤醒 (Ctrl+Alt+H 隐藏)")
         print(f"  {Colors.CYAN}进程保活:{Colors.ENDC}     Gateway + Electron 监控中")
         print()
         print(f"  {Colors.DIM}按 Ctrl+C 停止系统{Colors.ENDC}")

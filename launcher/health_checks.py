@@ -88,10 +88,10 @@ async def run_startup_health_check(web_ui_port: int) -> None:
 
     # 2) system info
     try:
-        code = await asyncio.to_thread(_http_code, f"{base_url}/api/v1/system/info", 5)
-        print_status(f"system/info: HTTP {code}", "success")
+        code = await asyncio.to_thread(_http_code, f"{base_url}/api/v1/system/status", 5)
+        print_status(f"system/status: HTTP {code}", "success")
     except Exception as exc:
-        print_status(f"system/info: 失败 — {exc}", "warning")
+        print_status(f"system/status: 失败 — {exc}", "warning")
 
     # 3) Node_71 health
     try:
