@@ -2,7 +2,8 @@
 windows_service.tray_icon -- Galaxy System Tray
 ===============================================
 
-- 托盘图标显示运行状态（绿色=运行中 / 黄色=警告 / 红色=错误）
+- 托盘图标为彩色渐变球，色调与 Galaxy ASCII 启动横幅一致；
+  warning/error/offline 时在右下角叠加状态色圆点（黄/红/灰）
 - 右键菜单：显示GUI / 配置 / 重启 / 退出
 - 双击显示主 GUI
 - 启动时自动检查 Galaxy 服务状态
@@ -52,13 +53,49 @@ except ImportError:
 # 图标生成
 # ---------------------------------------------------------------------------
 
-# 状态 -> 颜色映射 (R, G, B)
+# 状态指示圆点颜色 (R, G, B) —— 仅在非 running 状态时叠加到渐变球右下角
 _STATUS_COLORS = {
     "running": (0, 200, 100),    # 鲜绿 — 正常运行
     "warning": (255, 200, 0),    # 琥珀黄 — 警告/降级
     "error": (255, 60, 60),      # 红色 — 错误/停止
     "offline": (128, 128, 128),  # 灰色 — 离线
 }
+
+# Galaxy ASCII 横幅渐变锚点（极光青 → 科技蓝 → 靛蓝 → 霓虹紫 → 赛博粉）。
+# 与 core/ascii_art.py 的 _ANCHOR_COLORS 保持一致；优先复用其 _interp_rgb 作为
+# 单一真相来源，导入失败时用此本地副本兜底，保证托盘渐变与横幅色调精确一致。
+_BANNER_ANCHORS = [
+    (  0, 225, 253),  # aurora cyan
+    ( 41, 156, 255),  # tech blue
+    (109,  92, 255),  # indigo
+    (184,  61, 245),  # neon purple
+    (255,  46, 147),  # cyber pink
+]
+
+
+def _banner_gradient_rgb(t: float) -> tuple:
+    """返回横幅渐变在位置 t∈[0,1] 处的 RGB（左→右与启动横幅一致）。
+
+    优先复用 core.ascii_art._interp_rgb（单一真相来源），导入失败时本地插值。
+    """
+    try:
+        from core.ascii_art import _interp_rgb
+        return _interp_rgb(t)
+    except Exception:
+        anchors = _BANNER_ANCHORS
+        n = len(anchors) - 1
+        scaled = max(0.0, min(1.0, t)) * n
+        i = int(scaled)
+        if i >= n:
+            return anchors[-1]
+        frac = scaled - i
+        r1, g1, b1 = anchors[i]
+        r2, g2, b2 = anchors[i + 1]
+        return (
+            int(r1 + (r2 - r1) * frac),
+            int(g1 + (g2 - g1) * frac),
+            int(b1 + (b2 - b1) * frac),
+        )
 
 # 状态 -> 提示文本
 _STATUS_TOOLTIPS = {
@@ -74,44 +111,67 @@ def create_icon_image(
     width: int = 64,
     height: int = 64,
 ) -> Image.Image | None:
-    """为系统托盘生成状态图标。
+    """为系统托盘生成彩色渐变图标。
 
-    绘制一个带有内部发光高光和外边框的圆形，
-    以呈现专业外观。
+    绘制一个左→右多彩渐变的发光球体，色调与 Galaxy ASCII 启动横幅完全一致
+    （极光青 → 科技蓝 → 靛蓝 → 霓虹紫 → 赛博粉）。正常运行时是一颗干净的
+    渐变球；warning/error/offline 时在右下角叠加一个状态色圆点用于区分。
+    4x 超采样后缩回以求平滑。
     """
     if not _HAVE_TRAY:
         return None
 
-    color = _STATUS_COLORS.get(status, (100, 100, 100))
-
-    # 与桌面应用图标一致的「发光环 + 内核」造型（去掉旧的圈中 "G"），
-    # 状态颜色仍区分 running/warning/error/offline。4x 超采样后缩回求平滑。
     S = max(width, height) * 4
-    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     cx = cy = S // 2
-    R = int(S * 0.34)
+    R = int(S * 0.40)
 
-    # 外发光（高斯模糊的柔光晕）
-    glow = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(glow)
-    gd.ellipse([cx - R, cy - R, cx + R, cy + R],
-               fill=(color[0], color[1], color[2], 95))
-    glow = glow.filter(ImageFilter.GaussianBlur(S * 0.06))
-    img = Image.alpha_composite(img, glow)
+    # 1) 左→右横幅渐变：先做 1px 高的渐变条，再拉伸成正方形（与横幅同向同色）。
+    row = Image.new("RGBA", (S, 1))
+    rpx = row.load()
+    for x in range(S):
+        r, g, b = _banner_gradient_rgb(x / (S - 1))
+        rpx[x, 0] = (r, g, b, 255)
+    grad = row.resize((S, S), Image.LANCZOS)
 
-    dc = ImageDraw.Draw(img)
-    # 细环
-    dc.ellipse([cx - R, cy - R, cx + R, cy + R],
-               outline=(color[0], color[1], color[2], 255), width=int(S * 0.05))
-    # 明亮内核
-    cr = int(S * 0.17)
-    dc.ellipse([cx - cr, cy - cr, cx + cr, cy + cr], fill=color)
-    # 内核高光（左上偏移，模拟体积感）
-    hr = int(cr * 0.55)
-    hx, hy = cx - int(cr * 0.28), cy - int(cr * 0.28)
-    dc.ellipse([hx - hr, hy - hr, hx + hr, hy + hr], fill=(255, 255, 255, 150))
+    # 2) 圆形遮罩 → 渐变球
+    mask = Image.new("L", (S, S), 0)
+    ImageDraw.Draw(mask).ellipse([cx - R, cy - R, cx + R, cy + R], fill=255)
+    orb = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    orb.paste(grad, (0, 0), mask)
 
-    return img.resize((width, height), Image.LANCZOS)
+    # 3) 外发光：用球体自身的模糊副本作柔光晕，颜色天然跟随渐变
+    canvas = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    glow = orb.filter(ImageFilter.GaussianBlur(S * 0.075))
+    canvas = Image.alpha_composite(canvas, glow)
+    canvas = Image.alpha_composite(canvas, orb)
+
+    # 4) 体积高光（左上偏移柔光），裁剪到球体内
+    hr = int(R * 0.52)
+    hx, hy = cx - int(R * 0.30), cy - int(R * 0.32)
+    highlight = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    ImageDraw.Draw(highlight).ellipse(
+        [hx - hr, hy - hr, hx + hr, hy + hr], fill=(255, 255, 255, 95)
+    )
+    highlight = highlight.filter(ImageFilter.GaussianBlur(S * 0.05))
+    hclip = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    hclip.paste(highlight, (0, 0), mask)
+    canvas = Image.alpha_composite(canvas, hclip)
+
+    # 5) 状态圆点（仅非 running 状态）：右下角，带白色描边以保证对比度
+    if status != "running":
+        pip = _STATUS_COLORS.get(status, (128, 128, 128))
+        pr = int(S * 0.135)
+        px = cx + int(R * 0.66)
+        py = cy + int(R * 0.66)
+        pd = ImageDraw.Draw(canvas)
+        ring = int(pr * 0.28)
+        pd.ellipse(
+            [px - pr - ring, py - pr - ring, px + pr + ring, py + pr + ring],
+            fill=(255, 255, 255, 235),
+        )
+        pd.ellipse([px - pr, py - pr, px + pr, py + pr], fill=(pip[0], pip[1], pip[2], 255))
+
+    return canvas.resize((width, height), Image.LANCZOS)
 
 
 # ---------------------------------------------------------------------------
