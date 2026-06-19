@@ -99,8 +99,8 @@ class GalaxyPresenceBridge:
             self._loop = None
 
         try:
-            from core.state_event_bus import StateEventBus
-            bus = StateEventBus.get_instance()
+            from core.state_event_bus import get_state_event_bus
+            bus = get_state_event_bus()
 
             # 订阅三态转换事件
             bus.subscribe("phase.silent",   self._on_phase_silent)

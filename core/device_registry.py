@@ -1056,4 +1056,9 @@ class DeviceRegistry:
 # 全局实例
 # ============================================================================
 
-device_reg
+device_registry = DeviceRegistry()
+
+
+def get_device_registry() -> "DeviceRegistry":
+    """Return the process-wide DeviceRegistry singleton."""
+    return device_registry
