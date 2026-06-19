@@ -34,6 +34,8 @@ python main.py
   cp .env.example .env   # 然后编辑 .env
   ```
 
+> 完整安装、数据库 / NATS 配置与故障排查见 [INSTALL.md](INSTALL.md)。
+
 ### 常用入口
 
 ```bash
@@ -149,6 +151,19 @@ Android 快速开始见 `docs/ANDROID_COMPAT.md`。
 | 系统托盘 | `windows_service/tray_icon.py` |
 | 启动横幅 / 配色 | `core/ascii_art.py` |
 | 环境模板 | `.env.example` |
+
+---
+
+## 文档导航
+
+| 文档 | 内容 |
+|------|------|
+| [INSTALL.md](INSTALL.md) | 完整安装、数据库 / NATS 配置、故障排查 |
+| [docs/guides/QUICKSTART.md](docs/guides/QUICKSTART.md) | 10 分钟本地验证、烟雾测试、手机跨设备联通 |
+| [docs/guides/L4_QUICK_START_GUIDE.md](docs/guides/L4_QUICK_START_GUIDE.md) | L4 自主性、物理设备控制、systemd 部署 |
+| [docs/ANDROID_COMPAT.md](docs/ANDROID_COMPAT.md) | Android 客户端对接 |
+| [docs/UNIFIED_SUBJECT_ARCHITECTURE.md](docs/UNIFIED_SUBJECT_ARCHITECTURE.md) | 统一主体架构（规范源） |
+| `docs/reports/` | 历史审计 / 集成报告归档 |
 
 ---
 
