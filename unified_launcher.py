@@ -903,6 +903,7 @@ class GalaxyUnified:
             print_status_row("Electron — v28.2.0", True)
             print_status_row("Three.js 3D 覆盖层 — 就绪", True)
             print_status_row("三态 UI — Active / Standby / Dormant", True)
+            print_status_row("覆盖层 — 启动后自动显示「已就绪」提示，约 3.5s 回落静默（无需唤醒）", True)
             print_status_row("快捷键 — Ctrl+Alt+Space 唤醒 / Ctrl+Alt+H 隐藏 (避开输入法占用的 Ctrl+Space)", True)
         else:
             print_status_row("桌面覆盖层未启动 — 后端/API 仍完全可用", False)

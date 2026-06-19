@@ -124,6 +124,34 @@ function createWindow() {
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
         mainWindow.setIgnoreMouseEvents(true, { forward: true });
+
+        // ── 启动即可见的「已就绪」提示 ──
+        // 用户要求 main.py 起来后整套自启、无需唤醒就能看到覆盖层活着。这里在渲染层
+        // 就绪后推一个短暂的 manifest 态（显出「Galaxy 已唤醒/就绪」提示与光点），约 3.5s
+        // 后回落到 silent 静默环境态。全程保持点击穿透，不锁屏、不挡操作。
+        // 唤醒快捷键仍提供完整的可交互 manifest。可用 GALAXY_OVERLAY_SPLASH=0 关闭。
+        const splashOn = !['0', 'false', 'no', 'off'].includes(
+            String(process.env.GALAXY_OVERLAY_SPLASH || '').trim().toLowerCase());
+        if (splashOn) {
+            setTimeout(() => {
+                if (!mainWindow || mainWindow.isDestroyed()) return;
+                try {
+                    mainWindow.webContents.send('presence-state', {
+                        phase: 'manifest', depth_factor: 0.85, intent: 'startup_ready',
+                        speaking: false, source: 'startup',
+                    });
+                } catch (e) { /* ignore */ }
+                setTimeout(() => {
+                    if (!mainWindow || mainWindow.isDestroyed()) return;
+                    try {
+                        mainWindow.webContents.send('presence-state', {
+                            phase: 'silent', depth_factor: 0.05, intent: 'idle',
+                            speaking: false, source: 'startup',
+                        });
+                    } catch (e) { /* ignore */ }
+                }, 3500);
+            }, 1200);
+        }
     });
 
     mainWindow.on('closed', () => {
