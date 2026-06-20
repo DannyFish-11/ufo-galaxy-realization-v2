@@ -25,6 +25,12 @@ class GalaxyRenderer {
     this.fallbackOrb = null;
     this.wakeHint = null;
     this._idleCleared = false;  // 静默时只清屏一次的标记
+    // 轻量模式（默认）：只渲染廉价的暖香槟辉光(silent)，跳过会卡死低配/软件渲染机器的
+    // 鎏金透视空间(liminal)。完整三态用 ?full=1 开启(由 main.js 据 GALAXY_OVERLAY_FULL 注入)。
+    this.overlayFull = false;
+    try {
+      this.overlayFull = new URLSearchParams(window.location.search).get('full') === '1';
+    } catch (e) { /* ignore */ }
 
     // Spring 物理（只用于平滑 depth 变化，不做状态切换）
     this.currentDepth = 0.0;
@@ -157,14 +163,19 @@ class GalaxyRenderer {
     // Spring 平滑（不做状态切换）
     this._springUpdate(dt);
 
-    // 关键省电：仅在「非静默」或动画未稳定时才跑昂贵的全屏着色器；静默空闲时只清屏一次。
-    // 这样大部分时间(silent)几乎零 GPU/CPU 负载，从根本上避免卡死。
-    const active = this.currentDepth > 0.015 || Math.abs(this.springV) > 0.0015;
+    // 轻量模式：把喂给着色器的 depth 钳在 silent 区间(≤0.12)，绝不进入会卡死的 liminal。
+    // currentDepth 本身不变(DOM「已唤醒」提示卡仍按真实 depth 显示)，只钳渲染用的值。
+    const renderDepth = this.overlayFull
+      ? this.currentDepth
+      : Math.min(this.currentDepth, 0.12);
+
+    // 关键省电：仅在「非静默」或动画未稳定时才跑全屏着色器；静默空闲时只清屏一次。
+    const active = renderDepth > 0.015 || Math.abs(this.springV) > 0.0015;
     if (this.webglOK) {
       if (active) {
         this.webgl.setUniform('u_time',       this.time);
         this.webgl.setUniform('u_resolution', [this.canvas.width, this.canvas.height]);
-        this.webgl.setUniform('u_depth',      this.currentDepth);
+        this.webgl.setUniform('u_depth',      renderDepth);
         this.webgl.setUniform('u_intent',     this.intent);
         this.webgl.setUniform('u_speaking',   this.speaking ? 1.0 : 0.0);
         this.webgl.render();
@@ -269,7 +280,7 @@ class GalaxyRenderer {
     // 限制内部渲染分辨率：着色器开销 ∝ 像素数。软件渲染下 1920x1080(≈2.1M 像素/帧)
     // 会卡死；把长边压到 ≤960 像素(并忽略 devicePixelRatio)后开销降到 ~1/4~1/5，
     // 氛围模糊视觉放大铺满全屏几乎无损。CSS 尺寸仍是全屏。
-    const MAX = 960;
+    const MAX = 800;
     const scale = Math.min(1, MAX / Math.max(w, h, 1));
     this.canvas.width  = Math.max(1, Math.round(w * scale));
     this.canvas.height = Math.max(1, Math.round(h * scale));
