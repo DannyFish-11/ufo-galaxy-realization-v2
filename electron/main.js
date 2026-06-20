@@ -195,6 +195,20 @@ app.whenReady().then(() => {
     try {
         const http = require('http');
         ipcHttpServer = http.createServer((req, res) => {
+            // 托盘/外部触发：打开面板 或 唤醒覆盖层 —— 不依赖全局快捷键（F12 常被占用）。
+            // 让系统托盘菜单可以可靠地打开面板，即使所有快捷键都注册失败。
+            if (req.method === 'POST' && req.url === '/ipc/toggle-panel') {
+                try { togglePanel(); } catch (e) { /* ignore */ }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end('{"success": true, "action": "toggle-panel"}');
+                return;
+            }
+            if (req.method === 'POST' && (req.url === '/ipc/wake' || req.url === '/ipc/toggle-overlay')) {
+                try { toggleOverlayWake(); } catch (e) { /* ignore */ }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end('{"success": true, "action": "toggle-overlay"}');
+                return;
+            }
             if (req.method === 'POST' && req.url === '/ipc/presence-state') {
                 let body = '';
                 req.on('data', chunk => body += chunk);
@@ -359,6 +373,30 @@ function createPanelWindow() {
     });
 
     panelWindow.loadFile(panelPath);
+
+    // ── 面板加载诊断 + 可见兜底 ──
+    // 历史问题：面板窗口 transparent，一旦渲染失败(如 Vite 产物带 crossorigin 在
+    // file:// 被 CORS 拦截 → React 不挂载)，窗口全透明=不可见，用户以为「F12 打不开」。
+    // 现在：把渲染层日志/加载失败打到 logs/electron.log，并在彻底加载失败时回退到一张
+    // 不透明的提示页，保证窗口「看得见」而不是一片空白。
+    const wc = panelWindow.webContents;
+    wc.on('did-finish-load', () => console.log('[Panel] did-finish-load:', panelPath));
+    wc.on('did-fail-load', (_e, code, desc, url) => {
+        console.error(`[Panel] did-fail-load code=${code} desc=${desc} url=${url}`);
+        try {
+            panelWindow.setBackgroundColor('#11131c');
+            panelWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(
+                '<body style="margin:0;background:#11131c;color:#eaf6ff;font-family:Segoe UI,system-ui;' +
+                'display:flex;align-items:center;justify-content:center;height:100vh;text-align:center">' +
+                '<div><h2>Galaxy 控制面板加载失败</h2>' +
+                '<p style="opacity:.7">请重建面板：cd electron/renderer/panel &amp;&amp; npm install &amp;&amp; npm run build<br>' +
+                '详情见 logs/electron.log</p></div></body>'));
+        } catch (e) { /* ignore */ }
+    });
+    wc.on('render-process-gone', (_e, details) =>
+        console.error('[Panel] render-process-gone:', JSON.stringify(details)));
+    wc.on('console-message', (_e, level, message, line, sourceId) =>
+        console.log(`[Panel:renderer] ${message} (${sourceId}:${line})`));
 
     panelWindow.on('closed', () => {
         panelWindow = null;

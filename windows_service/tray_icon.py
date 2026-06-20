@@ -228,32 +228,59 @@ class GalaxyTray:
 
     # ── 菜单动作 ──
 
-    def _open_gui(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """打开 Galaxy 桌面 GUI（Electron）。"""
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        electron_dir = os.path.join(project_root, "electron")
+    @staticmethod
+    def _post_ipc(path: str, timeout: float = 1.0) -> bool:
+        """向 Electron 主进程的 IPC HTTP 端点 POST（用于托盘可靠地控制 UI）。
 
-        if not os.path.isdir(electron_dir):
-            logger.error("Electron GUI directory not found: %s", electron_dir)
-            self._show_notification(
-                "GUI Not Found",
-                f"Electron directory missing:\n{electron_dir}",
-            )
+        端口与 main.js / core.lumiv_websocket_bridge 一致：GALAXY_IPC_PORT 默认 9231。
+        成功返回 True；Electron 未运行（连接被拒）返回 False。
+        """
+        import urllib.request
+        port = os.environ.get("GALAXY_IPC_PORT", "9231")
+        url = f"http://127.0.0.1:{port}{path}"
+        try:
+            req = urllib.request.Request(url, data=b"{}", method="POST",
+                                         headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.getcode() == 200
+        except Exception:
+            return False
+
+    def _open_gui(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
+        """打开 Galaxy 控制面板。
+
+        优先通过 IPC 让【正在运行的】Electron 打开/切换面板窗口 —— 这条路径不依赖
+        全局快捷键（F12 常被输入法/开发者工具占用），是「面板打不开」时最可靠的入口。
+        若 Electron 未运行（IPC 连接被拒），回退为 npm start 拉起桌面层。
+        """
+        # 1) 首选：IPC 直接打开面板（Electron 在跑）
+        if self._post_ipc("/ipc/toggle-panel"):
+            logger.info("Panel toggled via IPC")
             return
 
+        # 2) 回退：Electron 未运行 → 拉起桌面层
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        electron_dir = os.path.join(project_root, "electron")
+        if not os.path.isdir(electron_dir):
+            logger.error("Electron GUI directory not found: %s", electron_dir)
+            self._show_notification("GUI Not Found", f"Electron directory missing:\n{electron_dir}")
+            return
         try:
             if sys.platform == "win32":
-                subprocess.Popen(
-                    ["npm", "start"],
-                    cwd=electron_dir,
-                    shell=True,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
-                )
+                subprocess.Popen(["npm", "start"], cwd=electron_dir, shell=True,
+                                 creationflags=subprocess.CREATE_NO_WINDOW)
             else:
                 subprocess.Popen(["npm", "start"], cwd=electron_dir)
             logger.info("Electron GUI launched from %s", electron_dir)
         except Exception as exc:
             logger.error("Failed to launch GUI: %s", exc)
+
+    def _wake_overlay(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
+        """通过 IPC 唤醒/切换三态覆盖层（不依赖快捷键）。"""
+        if self._post_ipc("/ipc/toggle-overlay"):
+            logger.info("Overlay toggled via IPC")
+        else:
+            self._show_notification("Galaxy", "覆盖层未就绪（Electron 可能未运行）")
 
     def _open_config(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         """在浏览器中打开配置面板。"""
@@ -341,7 +368,8 @@ class GalaxyTray:
                 enabled=False,
             ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Show AI Assistant", self._open_gui),
+            pystray.MenuItem("Show Panel (F12)", self._open_gui, default=True),
+            pystray.MenuItem("Wake Overlay (Ctrl+Alt+Space)", self._wake_overlay),
             pystray.MenuItem("Config Panel", self._open_config),
             pystray.MenuItem("View Logs", self._open_logs),
             pystray.Menu.SEPARATOR,
