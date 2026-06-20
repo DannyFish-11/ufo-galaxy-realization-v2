@@ -36,72 +36,31 @@ bool inQuad(vec2 p, vec2 a, vec2 b, vec2 c, vec2 d) {
          (c1 <= 0.0 && c2 <= 0.0 && c3 <= 0.0 && c4 <= 0.0);
 }
 
-// ── Silent: 边缘光环（带收回动画）─────────────────
+// ── Silent: 暖香槟边缘辉光 ─────────────────────────
+// 宽而柔的暖光把屏幕温柔框起来；中心透明、桌面可见。开销极低（每像素一个 smoothstep），
+// 软件渲染也能流畅。保留"收回"过渡语义：底边先消失、顶边最后消失。
 
 vec4 renderSilent(vec2 pixel, float t, float weight, float retract) {
   if (weight < 0.001) return vec4(0);
 
   float W = u_resolution.x;
   float H = u_resolution.y;
-  float peakA = 55.0 / 255.0;
-  float px = pixel.x;
-  float py = pixel.y;
 
-  // 收回动画参数:
-  // retract=0: 四边正常
-  // retract=0.3: 底部消失
-  // retract=0.5: 左右收缩到上半部
-  // retract=0.7: 左右只剩顶部区域
-  // retract=1.0: 顶部消失
+  // 到最近屏幕边缘的距离 → 宽柔暖辉光带（短边的 ~18%）
+  float dEdge = min(min(pixel.x, W - pixel.x), min(pixel.y, H - pixel.y));
+  float band = min(W, H) * 0.18;
+  float g = 1.0 - smoothstep(0.0, band, dEdge);
+  g = pow(g, 1.7);                       // 更柔的内收拖尾
 
-  float bottomFade = 1.0 - smoothstep(0.0, 0.25, retract);   // 底部先消失
-  float topFade    = 1.0 - smoothstep(0.6, 1.0, retract);     // 顶部最后消失
-  float sideShrink = 1.0 - smoothstep(0.0, 0.7, retract) * 0.85; // 左右收缩
+  // 收回动画：底边先消失、顶边最后消失（保留原过渡语义，廉价实现）
+  float vy = pixel.y / H;                // 0=顶 1=底
+  float bottomFade = 1.0 - smoothstep(0.0, 0.5, retract);
+  float topFade    = 1.0 - smoothstep(0.45, 1.0, retract);
+  float retractFade = mix(topFade, bottomFade, vy);
 
-  float bt = breathe(t) * weight;
-  float a = 0.0;
-
-  float edgeH = H * 0.022;
-  float edgeW = W * 0.022;
-
-  // 上边缘 — 最后消失
-  if (py < edgeH && topFade > 0.001) {
-    float ta = peakA * bt * (1.0 - py / edgeH) * topFade;
-    a = max(a, ta);
-  }
-
-  // 下边缘 — 最先消失
-  if (py > H - edgeH && bottomFade > 0.001) {
-    float ba = peakA * bt * (1.0 - (H - py) / edgeH) * bottomFade;
-    a = max(a, ba);
-  }
-
-  // 左边缘 — 向上收缩
-  float leftTop = H * (1.0 - sideShrink);  // 收缩后顶部边界
-  if (px < edgeW && py >= leftTop) {
-    float la = peakA * bt * (1.0 - px / edgeW);
-    a = max(a, la);
-  }
-
-  // 右边缘 — 向上收缩
-  if (px > W - edgeW && py >= leftTop) {
-    float ra = peakA * bt * (1.0 - (W - px) / edgeW);
-    a = max(a, ra);
-  }
-
-  // 收回时的顶部汇聚光（收缩到顶部中央的一条亮光）
-  if (retract > 0.5) {
-    float converge = smoothstep(0.5, 1.0, retract);
-    float convW = W * 0.3 * (1.0 - converge);
-    float cx = W * 0.5;
-    if (py < edgeH * 2.0 && abs(px - cx) < convW + (W*0.15)*(1.0-converge)) {
-      float ca = peakA * bt * (1.0 - abs(px - cx) / max(convW, 1.0)) * topFade * 0.6;
-      a = max(a, ca);
-    }
-  }
-
-  vec3 c = vec3(255.0, 248.0, 235.0) / 255.0;
-  return vec4(c * a, a);
+  float intensity = g * breathe(t) * weight * 0.62 * retractFade;
+  vec3 warm = vec3(1.0, 0.82, 0.60);     // 暖香槟金 (255,209,153)
+  return vec4(warm, intensity);
 }
 
 // ── Liminal: 鎏金透视空间（桌面安全区）───────────

@@ -119,7 +119,12 @@ function createWindow() {
         }
     });
 
-    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+    // 覆盖层视觉模式：默认轻量(只渲染暖香槟辉光，跳过会卡死低配机的鎏金透视空间)。
+    // GALAXY_OVERLAY_FULL=1 时通过 ?full=1 让渲染层启用完整三态(适合有独显的机器)。
+    const OVERLAY_FULL = ['1', 'true', 'yes', 'on'].includes(
+        String(process.env.GALAXY_OVERLAY_FULL || '').trim().toLowerCase());
+    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'),
+        OVERLAY_FULL ? { search: 'full=1' } : undefined);
 
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
