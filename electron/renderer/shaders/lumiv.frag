@@ -52,13 +52,15 @@ vec4 renderSilent(vec2 pixel, float t, float weight, float retract) {
   float g = 1.0 - smoothstep(0.0, band, dEdge);
   g = pow(g, 1.7);                       // 更柔的内收拖尾
 
-  // 收回动画：底边先消失、顶边最后消失（保留原过渡语义，廉价实现）
-  float vy = pixel.y / H;                // 0=顶 1=底
-  float bottomFade = 1.0 - smoothstep(0.0, 0.5, retract);
-  float topFade    = 1.0 - smoothstep(0.45, 1.0, retract);
-  float retractFade = mix(topFade, bottomFade, vy);
+  // 收回动画：随 retract「从下往上」把整圈辉光抹去（底先消失、顶最后），即原来的
+  // “一整个收回”。抹除前沿 cut 从底(1.0)升到顶(0.0)；收回完成后第二态(liminal)展开，
+  // 由 main() 的分阶段曲线无缝衔接。
+  float yNorm = pixel.y / H;             // 0=顶 1=底
+  // 收回前沿 cut：retract=0 时 =1.12(整圈完整、底边不被预削)，retract=1 时 =-0.12(全部收回到顶)
+  float cut = 1.12 - 1.24 * retract;
+  float retractMask = 1.0 - smoothstep(cut - 0.07, cut + 0.07, yNorm);
 
-  float intensity = g * breathe(t) * weight * 0.62 * retractFade;
+  float intensity = g * breathe(t) * weight * 0.62 * retractMask;
   vec3 warm = vec3(1.0, 0.82, 0.60);     // 暖香槟金 (255,209,153)
   return vec4(warm, intensity);
 }
