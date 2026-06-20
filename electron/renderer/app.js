@@ -14,8 +14,9 @@ class GalaxyRenderer {
     this.time = 0;
     this.lastFrame = 0;
 
-    // 当前渲染状态（由后端驱动）
-    this.depth = 0.0;
+    // 当前渲染状态（由后端驱动）。默认 silent(0.05) → 启动即显示暖香槟辉光(第一态)，
+    // 后端 presence 事件到达后再平滑过渡到 liminal/manifest。
+    this.depth = 0.05;
     this.intent = 0.0;
     this.speaking = false;
     this.phase = 'static';
@@ -25,15 +26,9 @@ class GalaxyRenderer {
     this.fallbackOrb = null;
     this.wakeHint = null;
     this._idleCleared = false;  // 静默时只清屏一次的标记
-    // 轻量模式（默认）：只渲染廉价的暖香槟辉光(silent)，跳过会卡死低配/软件渲染机器的
-    // 鎏金透视空间(liminal)。完整三态用 ?full=1 开启(由 main.js 据 GALAXY_OVERLAY_FULL 注入)。
-    this.overlayFull = false;
-    try {
-      this.overlayFull = new URLSearchParams(window.location.search).get('full') === '1';
-    } catch (e) { /* ignore */ }
 
     // Spring 物理（只用于平滑 depth 变化，不做状态切换）
-    this.currentDepth = 0.0;
+    this.currentDepth = 0.05;
     this.springV = 0;
 
     // 灵动岛
@@ -163,19 +158,14 @@ class GalaxyRenderer {
     // Spring 平滑（不做状态切换）
     this._springUpdate(dt);
 
-    // 轻量模式：把喂给着色器的 depth 钳在 silent 区间(≤0.12)，绝不进入会卡死的 liminal。
-    // currentDepth 本身不变(DOM「已唤醒」提示卡仍按真实 depth 显示)，只钳渲染用的值。
-    const renderDepth = this.overlayFull
-      ? this.currentDepth
-      : Math.min(this.currentDepth, 0.12);
-
-    // 关键省电：仅在「非静默」或动画未稳定时才跑全屏着色器；静默空闲时只清屏一次。
-    const active = renderDepth > 0.015 || Math.abs(this.springV) > 0.0015;
+    // 完整三态：真实 depth 直接喂着色器，silent→liminal→manifest 连贯过渡，绝不切割。
+    // 静默(接近 0)空闲时只清屏一次，避免空跑着色器（不影响任何状态/过渡）。
+    const active = this.currentDepth > 0.015 || Math.abs(this.springV) > 0.0015;
     if (this.webglOK) {
       if (active) {
         this.webgl.setUniform('u_time',       this.time);
         this.webgl.setUniform('u_resolution', [this.canvas.width, this.canvas.height]);
-        this.webgl.setUniform('u_depth',      renderDepth);
+        this.webgl.setUniform('u_depth',      this.currentDepth);
         this.webgl.setUniform('u_intent',     this.intent);
         this.webgl.setUniform('u_speaking',   this.speaking ? 1.0 : 0.0);
         this.webgl.render();
@@ -227,14 +217,18 @@ class GalaxyRenderer {
   }
 
   _updateFallback() {
+    // DOM 兜底【仅在 WebGL 不可用时】出现，绝不叠加在正常三态之上（不乱加）。
+    // WebGL 正常时，画面 100% 由着色器的完整三态负责。
     const d = this.currentDepth;
-    // 呼吸光点：WebGL 不可用时一直作为「系统在线」指示；可用时不抢戏（只在唤醒时亮）。
+    if (this.webglOK) {
+      if (this.fallbackOrb) this.fallbackOrb.style.opacity = '0';
+      if (this.wakeHint) this.wakeHint.style.opacity = '0';
+      return;
+    }
     if (this.fallbackOrb) {
       const breathe = 0.55 + 0.45 * Math.sin(this.time * 2.0);
-      const base = this.webglOK ? Math.max(0, (d - 0.5) * 2) : Math.max(0.35, d);
-      this.fallbackOrb.style.opacity = Math.min(1, base * breathe).toFixed(2);
+      this.fallbackOrb.style.opacity = Math.min(1, Math.max(0.35, d) * breathe).toFixed(2);
     }
-    // 唤醒提示卡：depth 越高越显形（manifest 态）。
     if (this.wakeHint) {
       const awake = d > 0.55;
       this.wakeHint.style.opacity = awake ? Math.min(1, (d - 0.55) / 0.30).toFixed(2) : '0';
