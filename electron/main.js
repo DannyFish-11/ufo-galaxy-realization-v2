@@ -381,31 +381,36 @@ function createPanelWindow() {
 }
 
 // ── 三态覆盖层手动唤醒/隐藏 ──
-// 渲染层(app.js)按 presence-state 的 depth_factor 决定 silent/liminal/manifest 可见度：
-//   depth≈0.05  → silent  : 暖香槟边缘辉光（待机氛围）
-//   depth≈0.60  → liminal : 鎏金透视空间「完全展开、最显眼」← 手动唤醒应停在这里
-//   depth≈0.92+ → manifest: 「透明执行」态，几乎不画任何东西（给执行/结果让位）
-// 注意：早期把手动唤醒设成 0.92(manifest)，结果一按唤醒画面几乎透明 → 用户以为「换不醒」。
-// 手动唤醒的目的是让 AI 存在感「显出来」，因此应停在 liminal(0.60)，而非透明的 manifest。
+// 「唤醒」= 把 AI 这一整套三态外壳显示出来，停在【第一态(silent 暖金边缘氛围光)】。
+// 三态(silent→liminal→manifest)之间的切换由后端 DesktopPresenceRuntime 按 AI 的【实际
+// 活动】自行驱动(待机=silent / 思考=liminal / 执行=manifest)，唤醒不强制跳到某个具体态。
+// 早期错误：曾把唤醒强制设成 0.92(manifest 透明执行) → 一按唤醒几乎全透明，像「换不醒」；
+// 又曾强制设成 0.60(liminal) → 等于硬切第二态。二者都不对：唤醒只该显示外壳、停第一态。
+// 「隐藏」= 收起整套外壳(隐藏窗口)。
 let _overlayAwake = false;
 function setOverlayPhase(awake) {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     _overlayAwake = awake;
-    const payload = awake
-        ? { phase: 'liminal', depth_factor: 0.60, intent: 'manual_wake', speaking: false, source: 'hotkey' }
-        : { phase: 'silent', depth_factor: 0.05, intent: 'manual_sleep', speaking: false, source: 'hotkey' };
-    try { mainWindow.webContents.send('presence-state', payload); } catch (e) { /* ignore */ }
     try {
-        // 始终保持鼠标穿透(forward)。覆盖层是全屏透明窗口；若唤醒时取消穿透，整块屏幕
-        // 的点击都会被这个「看不见」的窗口接管 → 用户点哪都没反应、像死机(此前卡死的元凶之一)。
-        // 覆盖层只做氛围可视化，交互在 F12 面板里完成，故永不接管鼠标，保证用户随时能操作桌面。
+        // 始终保持鼠标穿透(forward)：覆盖层是全屏透明窗口，绝不接管鼠标，保证随时能操作桌面。
         mainWindow.setIgnoreMouseEvents(true, { forward: true });
         if (awake) {
+            // 停在第一态(暖金辉光)；不强制后续态，交给后端按 AI 实际活动驱动 1→2→3。
+            try {
+                mainWindow.webContents.send('presence-state', {
+                    phase: 'silent', depth_factor: 0.05, intent: 'manual_wake',
+                    speaking: false, source: 'hotkey',
+                });
+            } catch (e) { /* ignore */ }
             mainWindow.show();
             mainWindow.setAlwaysOnTop(true, 'screen-saver');
+        } else {
+            mainWindow.hide();   // 隐藏整套外壳
         }
     } catch (e) { /* ignore */ }
-    console.log('[Overlay] ' + (awake ? '已唤醒(liminal 鎏金透视空间)' : '已隐藏(silent 暖辉光)'));
+    console.log('[Overlay] ' + (awake
+        ? '已唤醒(第一态 暖金辉光；三态随 AI 实际活动自行切换)'
+        : '已隐藏(收起外壳)'));
 }
 function toggleOverlayWake() {
     setOverlayPhase(!_overlayAwake);
