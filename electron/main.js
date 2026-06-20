@@ -78,12 +78,59 @@ const GATEWAY_PORT = parseInt(process.env.GALAXY_GATEWAY_PORT || process.env.POR
 const GATEWAY_BASE = `http://localhost:${GATEWAY_PORT}`;
 let ipcHttpServer = null;
 
-// 桌面连续感知（摄像头/麦克风/屏幕）配置 —— 默认关闭（隐私优先）。
-// 仅当 GALAXY_DESKTOP_PERCEPTION=1 时才在渲染层启动采集。
-const PERCEPTION_ENABLED = ['1', 'true', 'yes', 'on'].includes(
-    String(process.env.GALAXY_DESKTOP_PERCEPTION || '').trim().toLowerCase()
-);
+// 桌面连续感知（摄像头/麦克风/屏幕）。
+// 隐私处理：首次启动弹一次「授权」对话框；授权后持久化记住，之后每次启动自动开启，
+// 省得手动设环境变量。可用 GALAXY_DESKTOP_PERCEPTION=1/0 强制覆盖（跳过询问）。
 const PERCEPTION_INTERVAL_MS = parseInt(process.env.GALAXY_DESKTOP_PERCEPTION_INTERVAL_MS || '2000', 10);
+let perceptionEnabled = false;   // 运行期最终状态，由 env 覆盖或持久化授权决定
+
+function _perceptionConsentFile() {
+    try {
+        return path.join(app.getPath('userData'), 'perception_consent.json');
+    } catch (e) {
+        return null;
+    }
+}
+function _readPerceptionConsent() {
+    try {
+        const fs = require('fs');
+        const f = _perceptionConsentFile();
+        if (f && fs.existsSync(f)) return JSON.parse(fs.readFileSync(f, 'utf-8'));
+    } catch (e) { /* ignore */ }
+    return null;
+}
+function _writePerceptionConsent(granted) {
+    try {
+        const fs = require('fs');
+        const f = _perceptionConsentFile();
+        if (f) fs.writeFileSync(f, JSON.stringify({ granted: !!granted, ts: Date.now() }), 'utf-8');
+    } catch (e) { /* ignore */ }
+}
+// 解析最终的感知开关：env 强制 > 已持久化授权 > 首次弹框询问。
+async function resolvePerceptionConsent() {
+    const env = String(process.env.GALAXY_DESKTOP_PERCEPTION || '').trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(env)) { perceptionEnabled = true; return; }
+    if (['0', 'false', 'no', 'off'].includes(env)) { perceptionEnabled = false; return; }
+    const saved = _readPerceptionConsent();
+    if (saved && typeof saved.granted === 'boolean') { perceptionEnabled = saved.granted; return; }
+    // 首次：弹一次授权框
+    try {
+        const { response } = await dialog.showMessageBox({
+            type: 'question',
+            buttons: ['授权', '暂不'],
+            defaultId: 0,
+            cancelId: 1,
+            title: 'Galaxy 多模态感知授权',
+            message: '允许 Galaxy 使用摄像头与麦克风？',
+            detail: '授权后，Galaxy 能"看到/听到"你的桌面环境，由本地多模态模型(Gemma4 / MiniCPM-o)原生理解，' +
+                '提供更自然的助理体验。\n采集仅在本机处理；可随时在设置中关闭。\n（系统稍后还会再弹一次摄像头/麦克风权限，请一并允许。）',
+        });
+        perceptionEnabled = (response === 0);
+        _writePerceptionConsent(perceptionEnabled);
+    } catch (e) {
+        perceptionEnabled = false;
+    }
+}
 
 // ── Two-window architecture ──
 // mainWindow  : Three-State Full-Screen AI (always on, never hidden)
@@ -142,18 +189,20 @@ function createWindow() {
     return mainWindow;
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
     // 未取得单实例锁的后来者：什么都不做，等待 app.quit() 收尾，
     // 避免它创建窗口或去争抢已被占用的 IPC 端口。
     if (!gotSingleInstanceLock) return;
 
-    // 媒体权限：Electron 默认拒绝 getUserMedia。仅当桌面感知启用时放行
-    // 摄像头/麦克风/屏幕权限；否则一律拒绝（隐私优先）。
+    // 解析感知授权（首次弹框 → 持久化；env 可强制覆盖）。在创建窗口/放行权限前确定。
+    await resolvePerceptionConsent();
+
+    // 媒体权限：Electron 默认拒绝 getUserMedia。授权后放行摄像头/麦克风/屏幕权限。
     try {
         const { session } = require('electron');
         session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
             const mediaPerms = ['media', 'audioCapture', 'videoCapture', 'display-capture'];
-            if (PERCEPTION_ENABLED && mediaPerms.includes(permission)) {
+            if (perceptionEnabled && mediaPerms.includes(permission)) {
                 return callback(true);
             }
             return callback(false);
@@ -481,7 +530,7 @@ ipcMain.on('set-ignore-mouse', (event, ignore) => {
 
 // 渲染层询问是否启用 + 采集参数
 ipcMain.handle('galaxy:perception-config', () => ({
-    enabled: PERCEPTION_ENABLED,
+    enabled: perceptionEnabled,
     intervalMs: PERCEPTION_INTERVAL_MS,
     video: true,
     audio: true,
@@ -489,7 +538,7 @@ ipcMain.handle('galaxy:perception-config', () => ({
 
 // 渲染层采到的帧/音频 → 转发到网关的桌面感知接收端
 ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
-    if (!PERCEPTION_ENABLED || !payload) return;
+    if (!perceptionEnabled || !payload) return;
     try {
         if (payload.type === 'frame' && payload.image_base64) {
             await fetch(`${GATEWAY_BASE}/api/perception/desktop/frame`, {
