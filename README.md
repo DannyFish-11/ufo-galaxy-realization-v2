@@ -109,9 +109,17 @@ GALAXY_LOG_LEVEL=INFO
 # 可选：AI 搜索 / 远程服务器
 TAVILY_API_KEY=tvly-...
 SSH_HOST=...   SSH_USER=root   SSH_KEY_PATH=~/.ssh/id_rsa
+
+# 可选：节点的 Docker 基础设施自动拉起（默认 auto = 装了 Docker 就自动起）
+GALAXY_AUTO_DOCKER=auto               # 0 关闭
 ```
 
 完整可配置项见 `.env.example`。
+
+> **节点 / Docker**：`main.py` 会在「Phase 3.5 基础设施」自动检测 Docker —— 装了就后台
+> 拉起 `nats/redis/qdrant/neo4j/mongodb` 并把依赖它们的节点带上线（首次下载镜像在后台，
+> 进度见 `logs/docker.log`）。没装 Docker 也能用，依赖基础设施的节点会被清晰标注「跳过」，
+> 不影响桌面功能。`GALAXY_AUTO_DOCKER=0` 可关闭。
 
 ---
 

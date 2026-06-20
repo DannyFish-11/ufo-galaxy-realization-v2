@@ -42,12 +42,14 @@ python scripts/bootstrap.py
 ```
 
 **脚本会自动完成**：
-- ✅ 创建虚拟环境 (`venv`)
+- ✅ 校验 Python 版本 (>= 3.10)
+- ✅ 创建虚拟环境 (`.venv`)
 - ✅ 安装 Python 依赖 (`requirements.txt`)
-- ✅ 初始化 `.env` 配置文件
-- ✅ 生成/初始化 `config/` 目录
-- ✅ 启动 NATS 服务（Docker 或本地）
-- ✅ 运行系统预检检查
+- ✅ 从 `.env.example` 生成 `.env`（若缺失）
+- ✅ 确保 `config/` 目录存在
+
+> NATS / Docker 基础设施 / 系统预检由 `python main.py` 在运行时自动处理（见
+> 启动时的 Phase 3.5 基础设施 与 Phase 4 消息总线），无需在初始化阶段单独执行。
 
 ### 3️⃣ 启动系统
 
