@@ -156,6 +156,35 @@ def print_section(title: str):
     print_section_header(title)
 
 
+def _try_start_docker_daemon(docker_path: str) -> None:
+    """尽力拉起 Docker 守护进程（已安装但未运行时）。永不抛出。
+
+    - Windows: 启动 Docker Desktop.exe（常见安装路径）。
+    - macOS:   open -a Docker。
+    - Linux:   尝试 systemctl start docker（无 sudo；rootless/已授权时生效）。
+    安装 Docker 本身需要管理员权限/重启，无法可靠地静默完成，因此不在此处尝试安装。
+    """
+    import subprocess as sp
+    try:
+        if sys.platform == "win32":
+            candidates = [
+                os.path.join(os.environ.get("ProgramFiles", r"C:\\Program Files"),
+                             "Docker", "Docker", "Docker Desktop.exe"),
+                os.path.join(os.environ.get("ProgramW6432", r"C:\\Program Files"),
+                             "Docker", "Docker", "Docker Desktop.exe"),
+            ]
+            for exe in candidates:
+                if os.path.exists(exe):
+                    sp.Popen([exe], creationflags=getattr(sp, "DETACHED_PROCESS", 0))
+                    return
+        elif sys.platform == "darwin":
+            sp.Popen(["open", "-a", "Docker"])
+        else:
+            sp.run(["systemctl", "start", "docker"], capture_output=True, timeout=20)
+    except Exception:
+        pass
+
+
 def _get_lan_ip() -> str:
     """Return the host's primary LAN IPv4 address, or empty string if unavailable."""
     try:
@@ -615,6 +644,107 @@ class GalaxyUnified:
             len(nodes_to_start), (time.perf_counter() - t0) * 1000,
         )
 
+    async def ensure_docker_infra(self) -> bool:
+        """后台静默拉起 Docker 基础设施(NATS/Redis/Qdrant/Neo4j/Mongo)，让依赖它们的节点可用。
+
+        尽力而为、不阻塞事件循环、不因失败中断启动：
+        - ``GALAXY_AUTO_DOCKER=0/false/off`` → 跳过（默认 ``auto`` = Docker 存在即拉起）。
+        - Docker CLI 不存在 → 打印安装指引并跳过（安装 Docker 需管理员/重启，
+          无法可靠静默完成，不在此尝试）。
+        - Docker 已装但守护未运行 → 尝试启动 Docker Desktop/daemon 并轮询等待。
+        - 守护就绪 → ``docker compose up -d`` 指定的基础设施服务（不含 galaxy 应用本身、
+          也不含 ollama 以免与本地 Ollama 端口冲突），输出写 ``logs/docker.log``。
+          镜像已就绪 → 秒级拉起（本轮节点即可连上）；首次需下载 → 放后台（本轮先跳过
+          依赖节点，下次启动即生效）。
+
+        Returns:
+            True 表示基础设施已就绪；False 表示跳过/后台下载中/未就绪（均非致命）。
+        """
+        import shutil
+        import subprocess as sp
+        import time as _time
+
+        flag = os.environ.get("GALAXY_AUTO_DOCKER", "auto").strip().lower()
+        if flag in ("0", "false", "no", "off"):
+            print_status_row("Docker 基础设施 — 已禁用 (GALAXY_AUTO_DOCKER=0)", False)
+            return False
+
+        docker = shutil.which("docker")
+        if not docker:
+            print_status_row("Docker 未安装 — 依赖基础设施的节点将跳过（不影响桌面功能）", False)
+            print_status("如需启用全部节点：安装 Docker 后重跑 — https://docs.docker.com/get-docker/", "info")
+            return False
+
+        compose_file = PROJECT_ROOT / "docker-compose.yml"
+        if not compose_file.exists():
+            print_status_row("docker-compose.yml 不存在 — 跳过 Docker 基础设施", False)
+            return False
+
+        # 仅基础设施后端；排除 galaxy/galaxy-gateway(应用本身) 与 ollama(避免与本地 Ollama 冲突)。
+        services = ["nats", "redis", "qdrant", "neo4j", "mongodb"]
+
+        def _run(cmd, timeout=None):
+            return sp.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+        def _daemon_up() -> bool:
+            try:
+                return _run([docker, "info"], timeout=15).returncode == 0
+            except Exception:
+                return False
+
+        def _compose_base():
+            try:
+                if _run([docker, "compose", "version"], timeout=15).returncode == 0:
+                    return [docker, "compose"]
+            except Exception:
+                pass
+            dc = shutil.which("docker-compose")
+            return [dc] if dc else None
+
+        def _bring_up():
+            if not _daemon_up():
+                _try_start_docker_daemon(docker)
+                deadline = _time.time() + float(os.environ.get("GALAXY_AUTO_DOCKER_DAEMON_WAIT", "60"))
+                while _time.time() < deadline:
+                    if _daemon_up():
+                        break
+                    _time.sleep(3)
+                if not _daemon_up():
+                    return ("daemon_down", None)
+            base = _compose_base()
+            if not base:
+                return ("no_compose", None)
+            log_dir = PROJECT_ROOT / "logs"
+            log_dir.mkdir(exist_ok=True)
+            logf = open(log_dir / "docker.log", "ab")
+            cmd = base + ["-f", str(compose_file), "up", "-d"] + services
+            logf.write(f"\n== docker infra up: {cmd} ==\n".encode("utf-8", "replace"))
+            logf.flush()
+            proc = sp.Popen(cmd, cwd=str(PROJECT_ROOT), stdout=logf, stderr=sp.STDOUT)
+            wait_s = float(os.environ.get("GALAXY_AUTO_DOCKER_WAIT", "90"))
+            try:
+                proc.wait(timeout=wait_s)
+                return ("up", proc.returncode)
+            except sp.TimeoutExpired:
+                return ("pulling", None)  # 首次拉镜像，留后台继续
+
+        status, rc = await asyncio.to_thread(_bring_up)
+        if status == "up" and rc == 0:
+            print_status_row("Docker 基础设施 — nats/redis/qdrant/neo4j/mongodb 已就绪", True)
+            return True
+        if status == "pulling":
+            print_status_row("Docker 基础设施 — 首次镜像下载中(后台)", True)
+            print_status("进度见 logs/docker.log；本轮先跳过依赖节点，下次启动即生效", "info")
+            return False
+        if status == "daemon_down":
+            print_status_row("Docker 守护未能自动启动 — 手动启动 Docker Desktop 后重跑", False)
+            return False
+        if status == "no_compose":
+            print_status_row("未找到 docker compose 命令 — 跳过", False)
+            return False
+        print_status_row(f"Docker 基础设施启动异常(rc={rc})，详情见 logs/docker.log", False)
+        return False
+
     async def start_electron(self) -> bool:
         """启动 Electron 桌面三态覆盖层。"""
         import shutil
@@ -823,6 +953,16 @@ class GalaxyUnified:
         except Exception as exc:
             print_status_row("核心服务启动失败", False)
             logger.error(f"Core services: {exc}")
+
+        # ── Phase 3.5: 基础设施 (Docker，自动拉起) ──
+        # 让依赖 NATS/Redis/Qdrant/Neo4j/Mongo 的节点能起来。放在消息总线/节点之前，
+        # 镜像已缓存时本轮即可用；首次下载则后台进行，下次启动生效。非致命。
+        print_section_header("[Phase 3.5] 基础设施 (Docker)")
+        try:
+            await self.ensure_docker_infra()
+        except Exception as exc:
+            print_status_row("Docker 基础设施(非致命)", False)
+            logger.warning("ensure_docker_infra failed: %s", exc)
 
         # ── Phase 4: 消息总线 ──
         print_section_header("[Phase 4] 消息总线")
