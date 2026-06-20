@@ -381,16 +381,19 @@ function createPanelWindow() {
 }
 
 // ── 三态覆盖层手动唤醒/隐藏 ──
-// 覆盖层渲染层(app.js)根据 presence-state 的 depth_factor 决定 silent/liminal/manifest
-// 的可见度：depth≈0 几乎不可见(silent)，depth≈0.9 完全显现(manifest)。手动唤醒即向
-// 渲染层推一个高 depth 的 manifest 态并取消鼠标穿透以便交互；隐藏则推 silent。
+// 渲染层(app.js)按 presence-state 的 depth_factor 决定 silent/liminal/manifest 可见度：
+//   depth≈0.05  → silent  : 暖香槟边缘辉光（待机氛围）
+//   depth≈0.60  → liminal : 鎏金透视空间「完全展开、最显眼」← 手动唤醒应停在这里
+//   depth≈0.92+ → manifest: 「透明执行」态，几乎不画任何东西（给执行/结果让位）
+// 注意：早期把手动唤醒设成 0.92(manifest)，结果一按唤醒画面几乎透明 → 用户以为「换不醒」。
+// 手动唤醒的目的是让 AI 存在感「显出来」，因此应停在 liminal(0.60)，而非透明的 manifest。
 let _overlayAwake = false;
 function setOverlayPhase(awake) {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     _overlayAwake = awake;
     const payload = awake
-        ? { phase: 'manifest', depth_factor: 0.92, intent: 'manual_wake', speaking: false, source: 'hotkey' }
-        : { phase: 'silent', depth_factor: 0.0, intent: 'manual_sleep', speaking: false, source: 'hotkey' };
+        ? { phase: 'liminal', depth_factor: 0.60, intent: 'manual_wake', speaking: false, source: 'hotkey' }
+        : { phase: 'silent', depth_factor: 0.05, intent: 'manual_sleep', speaking: false, source: 'hotkey' };
     try { mainWindow.webContents.send('presence-state', payload); } catch (e) { /* ignore */ }
     try {
         // 始终保持鼠标穿透(forward)。覆盖层是全屏透明窗口；若唤醒时取消穿透，整块屏幕
@@ -402,7 +405,7 @@ function setOverlayPhase(awake) {
             mainWindow.setAlwaysOnTop(true, 'screen-saver');
         }
     } catch (e) { /* ignore */ }
-    console.log('[Overlay] ' + (awake ? '已唤醒(manifest)' : '已隐藏(silent)'));
+    console.log('[Overlay] ' + (awake ? '已唤醒(liminal 鎏金透视空间)' : '已隐藏(silent 暖辉光)'));
 }
 function toggleOverlayWake() {
     setOverlayPhase(!_overlayAwake);
