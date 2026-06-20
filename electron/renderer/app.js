@@ -24,6 +24,7 @@ class GalaxyRenderer {
     this.webglOK = false;
     this.fallbackOrb = null;
     this.wakeHint = null;
+    this._idleCleared = false;  // 静默时只清屏一次的标记
 
     // Spring 物理（只用于平滑 depth 变化，不做状态切换）
     this.currentDepth = 0.0;
@@ -142,6 +143,13 @@ class GalaxyRenderer {
   // ── 渲染循环 ──
 
   _loop(now) {
+    // 先排下一帧，再做限帧早退 —— 保证循环不中断。
+    requestAnimationFrame((t) => this._loop(t));
+
+    // 帧率上限 ~30fps。全屏片段着色器开销 ∝ 像素数；在无独显/软件渲染(SwiftShader)
+    // 的笔记本上，每帧跑全屏着色器会把 CPU 打满 → 整机卡死。限帧是第一道闸。
+    const minFrameMs = 1000 / 30;
+    if (now - this.lastFrame < minFrameMs) return;
     const dt = Math.min((now - this.lastFrame) / 1000, 0.05);
     this.lastFrame = now;
     this.time += dt;
@@ -149,23 +157,27 @@ class GalaxyRenderer {
     // Spring 平滑（不做状态切换）
     this._springUpdate(dt);
 
-    // 更新 WebGL Uniforms（仅当 WebGL 可用）
+    // 关键省电：仅在「非静默」或动画未稳定时才跑昂贵的全屏着色器；静默空闲时只清屏一次。
+    // 这样大部分时间(silent)几乎零 GPU/CPU 负载，从根本上避免卡死。
+    const active = this.currentDepth > 0.015 || Math.abs(this.springV) > 0.0015;
     if (this.webglOK) {
-      this.webgl.setUniform('u_time',       this.time);
-      this.webgl.setUniform('u_resolution', [this.canvas.width, this.canvas.height]);
-      this.webgl.setUniform('u_depth',      this.currentDepth);
-      this.webgl.setUniform('u_intent',     this.intent);
-      this.webgl.setUniform('u_speaking',   this.speaking ? 1.0 : 0.0);
-      this.webgl.render();
+      if (active) {
+        this.webgl.setUniform('u_time',       this.time);
+        this.webgl.setUniform('u_resolution', [this.canvas.width, this.canvas.height]);
+        this.webgl.setUniform('u_depth',      this.currentDepth);
+        this.webgl.setUniform('u_intent',     this.intent);
+        this.webgl.setUniform('u_speaking',   this.speaking ? 1.0 : 0.0);
+        this.webgl.render();
+        this._idleCleared = false;
+      } else if (!this._idleCleared) {
+        this.webgl.clear();        // 静默时只清一次，之后不再跑着色器
+        this._idleCleared = true;
+      }
     }
 
-    // 灵动岛
+    // 灵动岛 + DOM 兜底视觉（都很轻）
     this._updateIsland();
-
-    // DOM 兜底视觉（WebGL 不可用时承担主视觉；可用时仅作唤醒提示）
     this._updateFallback();
-
-    requestAnimationFrame((t) => this._loop(t));
   }
 
   // ── DOM 兜底渲染 ──
@@ -252,11 +264,15 @@ class GalaxyRenderer {
   // ── DPI 自适应 ──
 
   _resize() {
-    const dpr = window.devicePixelRatio || 1;
     const w = window.innerWidth;
     const h = window.innerHeight;
-    this.canvas.width  = Math.round(w * dpr);
-    this.canvas.height = Math.round(h * dpr);
+    // 限制内部渲染分辨率：着色器开销 ∝ 像素数。软件渲染下 1920x1080(≈2.1M 像素/帧)
+    // 会卡死；把长边压到 ≤960 像素(并忽略 devicePixelRatio)后开销降到 ~1/4~1/5，
+    // 氛围模糊视觉放大铺满全屏几乎无损。CSS 尺寸仍是全屏。
+    const MAX = 960;
+    const scale = Math.min(1, MAX / Math.max(w, h, 1));
+    this.canvas.width  = Math.max(1, Math.round(w * scale));
+    this.canvas.height = Math.max(1, Math.round(h * scale));
     this.canvas.style.width  = w + 'px';
     this.canvas.style.height = h + 'px';
   }

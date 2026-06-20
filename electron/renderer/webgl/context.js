@@ -174,6 +174,15 @@ class WebGLContext {
     gl.bindVertexArray(null);
   }
 
+  // 仅清屏（不跑片段着色器）。静默/空闲帧用它代替 render()，避免软件渲染下
+  // 每帧跑全屏着色器把 CPU 打满。
+  clear() {
+    const gl = this.gl;
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+
   // ── 资源释放 ────────────────────────────────────
 
   destroy() {

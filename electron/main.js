@@ -419,12 +419,13 @@ function setOverlayPhase(awake) {
         : { phase: 'silent', depth_factor: 0.0, intent: 'manual_sleep', speaking: false, source: 'hotkey' };
     try { mainWindow.webContents.send('presence-state', payload); } catch (e) { /* ignore */ }
     try {
-        // 唤醒时允许点击交互并置顶聚焦；隐藏时恢复点击穿透(不挡操作)。
-        mainWindow.setIgnoreMouseEvents(!awake, { forward: true });
+        // 始终保持鼠标穿透(forward)。覆盖层是全屏透明窗口；若唤醒时取消穿透，整块屏幕
+        // 的点击都会被这个「看不见」的窗口接管 → 用户点哪都没反应、像死机(此前卡死的元凶之一)。
+        // 覆盖层只做氛围可视化，交互在 F12 面板里完成，故永不接管鼠标，保证用户随时能操作桌面。
+        mainWindow.setIgnoreMouseEvents(true, { forward: true });
         if (awake) {
             mainWindow.show();
             mainWindow.setAlwaysOnTop(true, 'screen-saver');
-            mainWindow.focus();
         }
     } catch (e) { /* ignore */ }
     console.log('[Overlay] ' + (awake ? '已唤醒(manifest)' : '已隐藏(silent)'));
