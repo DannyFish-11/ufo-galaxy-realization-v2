@@ -237,14 +237,25 @@ class VoiceChannel:
 
     @staticmethod
     def is_voice_enabled_for_mode(mode: str) -> bool:
-        """Check if voice is enabled by default for a given interaction mode.
+        """Check if voice (TTS) output is enabled for a given interaction mode.
+
+        全局开关 ``GALAXY_VOICE`` 优先：
+        - ``1/true/on`` → 任何模式都开口（默认行为，让 AI 起来就会说话）；
+        - ``0/false/off`` → 一律静音；
+        - 未设置 → 回退到按模式判定（field_assistant / ambient_companion）。
 
         Args:
             mode: Interaction mode string.
 
         Returns:
-            True if voice is enabled by default.
+            True if voice output should be produced.
         """
+        import os
+        env = os.environ.get("GALAXY_VOICE", "1").strip().lower()
+        if env in ("1", "true", "yes", "on"):
+            return True
+        if env in ("0", "false", "no", "off"):
+            return False
         return mode in _VOICE_ENABLED_MODES
 
 

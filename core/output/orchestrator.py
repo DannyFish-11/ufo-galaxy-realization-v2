@@ -146,7 +146,12 @@ class OutputOrchestrator:
         mode = _extract_mode(interaction_envelope)
 
         ui_surface: str = op.get("ui_surface", "chat_panel") if isinstance(op, dict) else "chat_panel"
-        voice_enabled: bool = bool(op.get("voice", False)) if isinstance(op, dict) else False
+        # 语音默认开关：OutputPlan 显式指定则尊重之；否则按全局 GALAXY_VOICE（默认开）/模式判定，
+        # 让 AI 起来就会用本地 edge-tts 说话。
+        if isinstance(op, dict) and "voice" in op:
+            voice_enabled = bool(op.get("voice"))
+        else:
+            voice_enabled = VoiceChannel.is_voice_enabled_for_mode(mode)
         avatar_enabled: bool = bool(op.get("avatar", False)) if isinstance(op, dict) else False
         overlay_enabled: bool = bool(op.get("overlay", False)) if isinstance(op, dict) else False
 
@@ -161,6 +166,15 @@ class OutputOrchestrator:
             mode=mode,
             persona_state=persona_state,
         )
+        # build 只产计划；启用语音时再后台「合成并播放」让 AI 真开口（不阻塞、失败静默降级）。
+        if voice_enabled and response_text:
+            try:
+                import asyncio
+                asyncio.get_running_loop().create_task(
+                    self._voice.synthesize_and_play(response_text, persona_state)
+                )
+            except Exception:
+                pass  # 无运行事件循环 / edge-tts 不可用 → 跳过播放，不影响文本输出
         avatar_plan = self._avatar.build(
             enabled=avatar_enabled,
             mode=mode,

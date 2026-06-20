@@ -583,12 +583,56 @@ class GroqAdapter(OpenAIAdapter):
 class OllamaAdapter(BaseProviderAdapter):
     """Ollama local model adapter"""
 
+    @staticmethod
+    def _to_ollama_messages(messages):
+        """把消息规范成 Ollama 原生格式，让本地多模态模型(Gemma4/MiniCPM-o)真正"看到"图像。
+
+        Ollama /api/chat 的图像约定：在 message 上挂 ``images: ["<base64>", ...]``（纯 base64，
+        不含 data: 前缀）。上游可能用 OpenAI 风格的 ``content: [{type:"text"...},
+        {type:"image_url", image_url:{url:"data:image/..;base64,XXXX"}}]``，也可能已带 ``images``。
+        这里统一抽取：文本部分拼回 content 字符串，图像部分收进 images 数组。无图则原样返回。
+        """
+        out = []
+        for m in messages:
+            if not isinstance(m, dict):
+                out.append(m)
+                continue
+            content = m.get("content")
+            imgs = list(m.get("images") or [])
+            if isinstance(content, list):
+                text_parts = []
+                for part in content:
+                    if not isinstance(part, dict):
+                        text_parts.append(str(part))
+                        continue
+                    ptype = part.get("type")
+                    if ptype == "text":
+                        text_parts.append(part.get("text", ""))
+                    elif ptype in ("image_url", "image"):
+                        url = ""
+                        if isinstance(part.get("image_url"), dict):
+                            url = part["image_url"].get("url", "")
+                        else:
+                            url = part.get("image_url") or part.get("data") or part.get("image", "")
+                        if isinstance(url, str) and url:
+                            # 去掉 data:image/...;base64, 前缀
+                            imgs.append(url.split(",", 1)[1] if url.startswith("data:") else url)
+                new_m = {**m, "content": "\n".join(t for t in text_parts if t)}
+            else:
+                new_m = {**m}
+            if imgs:
+                new_m["images"] = imgs
+            elif "images" in new_m and not new_m["images"]:
+                new_m.pop("images", None)
+            out.append(new_m)
+        return out
+
     async def chat(self, messages, model, tools=None,
                    temperature=0.7, max_tokens=4096,
                    response_format=None, **kwargs) -> LLMResponse:
         body = {
             "model": model,
-            "messages": messages,
+            "messages": self._to_ollama_messages(messages),
             "stream": False,
             "options": {"temperature": temperature, "num_predict": max_tokens},
         }
