@@ -131,6 +131,37 @@ class NodeSystemLauncher:
         self.config = config
         self.nodes_dir = PROJECT_ROOT / "nodes"
         self.node_configs = self._load_node_configs()
+        # 节点启动失败原因分类：node_name -> "infra" | "import" | "other"
+        # 用于在 start_all 汇总时把「缺少基础设施(需 Docker)」与真实错误区分开，
+        # 避免 desktop-local 单机模式下满屏超时告警噪音。
+        self._node_failure_reasons: Dict[str, str] = {}
+
+    @staticmethod
+    def _classify_node_failure(stderr_text: str) -> str:
+        """根据子进程 stderr 把节点启动失败归类。
+
+        Returns:
+            "infra"  — 依赖外部基础设施(Postgres/Qdrant/Redis/Neo4j/NATS/Mongo)未就绪，
+                       典型为连接被拒/超时；在 desktop-local 单机模式下属预期(需 Docker)。
+            "import" — 缺 Python 依赖(ImportError/ModuleNotFoundError)，装依赖即可修。
+            "other"  — 其他/未知错误。
+        """
+        if not stderr_text:
+            return "other"
+        low = stderr_text.lower()
+        # 先判 import：缺 Python 依赖的修法是 pip，而非 docker —— 即使缺的是某个基础设施
+        # 客户端库(如 qdrant_client)，也应归到 import，给用户可执行的正确指引。
+        if "modulenotfounderror" in low or "importerror" in low or "no module named" in low:
+            return "import"
+        infra_signals = (
+            "connection refused", "errno 111", "could not connect", "connect call failed",
+            "timed out", "timeout", "5432", "6333", "6379", "7687", "4222", "27017",
+            "psycopg", "qdrant", "redis", "neo4j", "nats", "pymongo", "mongo",
+            "name or service not known", "max retries exceeded",
+        )
+        if any(s in low for s in infra_signals):
+            return "infra"
+        return "other"
 
     def _load_node_configs(self) -> Dict[str, Any]:
         """加载节点配置
@@ -552,7 +583,16 @@ class NodeSystemLauncher:
 
         if port is not None:
             health_url = f"http://127.0.0.1:{port}/health"
-            for attempt in range(1, 11):
+            # 健康检查重试次数可配置。desktop-local 单机模式下默认收敛到 5 次，
+            # 这样「注定起不来」的节点(缺基础设施/依赖)不会各自空等 ~12s 拖慢启动；
+            # 非桌面模式保持 10 次。可用 GALAXY_NODE_HEALTH_RETRIES 显式覆盖。
+            _mode = os.environ.get("GALAXY_SYSTEM_MODE", "").strip().lower()
+            _default_retries = 5 if "desktop" in _mode else 10
+            try:
+                _retries = max(2, int(os.environ.get("GALAXY_NODE_HEALTH_RETRIES", _default_retries)))
+            except (TypeError, ValueError):
+                _retries = _default_retries
+            for attempt in range(1, _retries + 1):
                 await asyncio.sleep(1)
                 try:
                     async with aiohttp.ClientSession(
@@ -581,8 +621,13 @@ class NodeSystemLauncher:
                                 return True
                 except Exception:
                     pass
-                logger.debug("节点 %s 健康检查等待 (尝试 %d/10)", node_name, attempt)
+                logger.debug("节点 %s 健康检查等待 (尝试 %d/%d)", node_name, attempt, _retries)
 
+            # 读取子进程 stderr 并对失败原因归类（infra/import/other）。
+            # 关键降噪：不再对每个失败节点 logger.error 整段 stderr + logger.warning 超时
+            #（desktop-local 下会满屏刷屏）。改为 debug 记录细节、把分类结果存起来，
+            # 由 start_all 汇总成一行清晰摘要。
+            stderr_text = ""
             svc = self.service_manager.services.get(node_name)
             if svc and svc.process and svc.process.stderr:
                 try:
@@ -590,14 +635,17 @@ class NodeSystemLauncher:
                     if _select.select([svc.process.stderr], [], [], 0.5)[0]:
                         stderr_out = svc.process.stderr.read1(4096)  # type: ignore[attr-defined]
                         if stderr_out:
-                            logger.error(
-                                "节点 %s 健康检查失败，stderr:\n%s",
-                                node_name,
-                                stderr_out.decode(errors="replace"),
-                            )
+                            stderr_text = stderr_out.decode(errors="replace")
                 except Exception:
                     pass
-            logger.warning("节点 %s 健康检查超时（10 次），视为启动失败", node_name)
+            reason = self._classify_node_failure(stderr_text)
+            self._node_failure_reasons[node_name] = reason
+            if stderr_text:
+                logger.debug("节点 %s 启动失败(%s)，stderr:\n%s", node_name, reason, stderr_text)
+            logger.debug(
+                "节点 %s 健康检查超时（%d 次, 归类=%s），视为启动失败",
+                node_name, _retries, reason,
+            )
             self._register_node_in_canonical_registry(node_name, port, "offline")
             return False
 
@@ -896,16 +944,39 @@ class NodeSystemLauncher:
 
         logger.info("即将启动 %d 个节点: %s", len(nodes), nodes)
         print_status(f"启动 {len(nodes)} 个节点...", "step")
+        self._node_failure_reasons.clear()
         results = await self.start_nodes(nodes, parallel=True)
 
         success_nodes = [n for n, ok in results.items() if ok]
         failed_nodes = [n for n, ok in results.items() if not ok]
-        logger.info(
-            "节点启动完成: %d 成功 / %d 失败%s",
-            len(success_nodes),
-            len(failed_nodes),
-            f"  失败节点: {failed_nodes}" if failed_nodes else "",
-        )
+
+        # 把失败节点按原因分桶：infra(缺基础设施/需 Docker) vs import(缺依赖) vs other。
+        # desktop-local 单机模式下 infra 类属预期 —— 用一行可执行的摘要替代满屏告警。
+        infra_failed = [n for n in failed_nodes if self._node_failure_reasons.get(n) == "infra"]
+        import_failed = [n for n in failed_nodes if self._node_failure_reasons.get(n) == "import"]
+        other_failed = [n for n in failed_nodes
+                        if self._node_failure_reasons.get(n) not in ("infra", "import")]
+
+        logger.info("节点启动完成: %d 就绪 / %d 未就绪", len(success_nodes), len(failed_nodes))
+        if infra_failed:
+            print_status(
+                f"{len(infra_failed)} 个节点因缺少基础设施跳过（单机模式属正常；"
+                f"如需启用：docker compose up -d）: {infra_failed}",
+                "warning",
+            )
+        if import_failed:
+            print_status(
+                f"{len(import_failed)} 个节点因缺 Python 依赖未启动"
+                f"（pip install -r requirements.txt 可修）: {import_failed}",
+                "warning",
+            )
+        if other_failed:
+            print_status(
+                f"{len(other_failed)} 个节点启动失败（详情见日志 DEBUG）: {other_failed}",
+                "warning" if not success_nodes else "info",
+            )
+        if not failed_nodes:
+            print_status(f"全部 {len(success_nodes)} 个节点就绪", "success")
 
         # PR-12: Bulk-seed all healthy fabric-registry nodes into
         # NodeDiscoveryService now that the startup batch has completed.
