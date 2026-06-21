@@ -91,24 +91,22 @@ _shutting_down = False
 # 模型配置 — 用户可选择的本地模型
 # ───────────────────────────────────────────────────────────────────────────
 
+# 模型注册表与选择逻辑统一到 core.model_selection（与 main.py 共用一套：全部 Gemma4 系列
+# + MiniCPM-o 4.5，硬件推荐 + 手动选择 + 共享 .galaxy_model 持久化）。
+from core import model_selection as _ms
+
 AVAILABLE_MODELS = {
-    "gemma4:12b": {
-        "name": "Google Gemma 4 12B",
-        "desc": "文本+视觉+原生工具调用，128K上下文",
-        "size": "~8GB",
-        "vram": "8GB+",
-        "recommended": True,
-    },
-    "openbmb/minicpm-o4.5": {
-        "name": "MiniCPM-o 4.5 9B",
-        "desc": "全模态(看+听+说)，全双工实时交互",
-        "size": "~6GB",
-        "vram": "9GB+",
+    tag: {
+        "name": info["name"],
+        "desc": info["modalities"],
+        "size": info["size"],
+        "vram": f"{info['required_mb'] // 1000}GB+",
         "recommended": False,
-    },
+    }
+    for tag, info in _ms.MODELS.items()
 }
 
-DEFAULT_MODEL = "gemma4:12b"
+DEFAULT_MODEL = _ms.DEFAULT_MODEL
 _model_download_thread = None  # 后台下载线程
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -164,51 +162,24 @@ def ok(msg: str):
 
 
 def select_model_interactive() -> str:
-    """交互式模型选择 — 首次克隆时让用户选择要下载的模型。"""
-    print()
-    print("  ╔═══════════════════════════════════════════════════════════╗")
-    print("  ║  选择本地 AI 模型（首次启动需要下载，约 2-8GB）         ║")
-    print("  ╚═══════════════════════════════════════════════════════════╝")
-    print()
-    
-    models = list(AVAILABLE_MODELS.items())
-    for i, (tag, info) in enumerate(models, 1):
-        rec = " [推荐]" if info["recommended"] else ""
-        print(f"  [{i}] {info['name']}{rec}")
-        print(f"      {info['desc']}")
-        print(f"      大小: {info['size']} | VRAM: {info['vram']}")
-        print()
-    
-    print("  [s] 跳过模型下载（稍后手动执行: ollama pull <模型>）")
-    print()
-    
-    while True:
-        choice = input("  请选择 [1/2/s，默认 1]: ").strip().lower()
-        if choice == "" or choice == "1":
-            return models[0][0]
-        elif choice == "2" and len(models) >= 2:
-            return models[1][0]
-        elif choice == "s":
-            return ""
-        else:
-            print("  无效选择，请重试。")
+    """交互式主脑选择 —— 委托给统一实现（硬件推荐 + 列出全部 + 手动选择）。"""
+    return _ms.interactive_select()
 
 
 def select_model_auto(args) -> str:
-    """自动/参数化模型选择（非交互式）。"""
-    # 1. 命令行参数指定
+    """自动/参数化主脑选择（非交互式）：参数 > 环境变量 > 已保存 > 硬件推荐。"""
     if args.model and args.model in AVAILABLE_MODELS:
         return args.model
-    # 2. 环境变量指定
     env_model = os.getenv("OLLAMA_MODEL", "")
     if env_model and env_model in AVAILABLE_MODELS:
         return env_model
-    # 3. 配置文件中的已选模型
     config_model = _load_model_choice()
     if config_model and config_model in AVAILABLE_MODELS:
         return config_model
-    # 4. 默认推荐模型
-    return DEFAULT_MODEL
+    try:
+        return _ms.recommend()      # 4. 按 GPU/CPU 实际情况推荐
+    except Exception:
+        return DEFAULT_MODEL
 
 
 def _load_model_choice() -> str:

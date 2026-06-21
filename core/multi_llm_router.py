@@ -1050,10 +1050,24 @@ class MultiLLMRouter:
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
 
+            # AI 主脑：用户在启动时选定的模型(OLLAMA_MODEL，见 core.model_selection)作为默认主脑。
+            # 把它提到 models 列表最前并设为 default_model；未设置则回退第一个已安装模型。
+            _main_brain = os.environ.get("OLLAMA_MODEL", "").strip()
+            if _main_brain:
+                _norm = lambda s: s.split(":")[0]  # noqa: E731
+                if not any(m == _main_brain or _norm(m) == _norm(_main_brain) for m in detected_models):
+                    detected_models = [_main_brain] + detected_models
+                else:
+                    detected_models = sorted(
+                        detected_models,
+                        key=lambda m: 0 if (m == _main_brain or _norm(m) == _norm(_main_brain)) else 1,
+                    )
+            _default_model = _main_brain or (detected_models[0] if detected_models else "llama3")
+
             cfg = ProviderConfig(
                 name="ollama", api_key="", base_url=ollama_url,
                 models=detected_models,
-                default_model=detected_models[0] if detected_models else "llama3",
+                default_model=_default_model,
                 supports_tools=True, supports_json_mode=True,
                 multimodal=True,  # PR-HA: Ollama now marked multimodal-capable
                 env_key="OLLAMA_URL",
