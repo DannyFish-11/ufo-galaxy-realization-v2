@@ -91,19 +91,19 @@ _shutting_down = False
 # 模型配置 — 用户可选择的本地模型
 # ───────────────────────────────────────────────────────────────────────────
 
-# 模型注册表与选择逻辑统一到 core.model_selection（与 main.py 共用一套：全部 Gemma4 系列
-# + MiniCPM-o 4.5，硬件推荐 + 手动选择 + 共享 .galaxy_model 持久化）。
+# 模型注册表与选择逻辑统一到 core.model_selection（其模型清单/尺寸取自现有
+# core.local_brain_manager.LocalBrainManager —— 单一真相来源；这里只做展示适配）。
 from core import model_selection as _ms
 
 AVAILABLE_MODELS = {
     tag: {
         "name": info["name"],
-        "desc": info["modalities"],
-        "size": info["size"],
-        "vram": f"{info['required_mb'] // 1000}GB+",
+        "desc": info["desc"],
+        "size": (f"~{info['size_mb'] // 1000}GB" if info["size_mb"] >= 1000 else "<1GB") if info["size_mb"] else "?",
+        "vram": (f"{info['size_mb'] // 1000}GB+" if info["size_mb"] >= 1000 else "1GB") if info["size_mb"] else "?",
         "recommended": False,
     }
-    for tag, info in _ms.MODELS.items()
+    for tag, info in _ms.list_models()
 }
 
 DEFAULT_MODEL = _ms.DEFAULT_MODEL
