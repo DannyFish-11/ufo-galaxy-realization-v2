@@ -276,9 +276,13 @@ class GalaxyTray:
             logger.error("Failed to launch GUI: %s", exc)
 
     def _wake_overlay(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """通过 IPC 唤醒/切换三态覆盖层（不依赖快捷键）。"""
-        if self._post_ipc("/ipc/toggle-overlay"):
-            logger.info("Overlay toggled via IPC")
+        """通过 IPC 唤醒三态覆盖层（不依赖快捷键）。
+
+        走 /ipc/wake（始终【显示】，幂等不隐藏），保证点「Wake Overlay」一定看得见，
+        不会因 toggle 把已显示的外壳反而藏起来。
+        """
+        if self._post_ipc("/ipc/wake"):
+            logger.info("Overlay shown via IPC (/ipc/wake)")
         else:
             self._show_notification("Galaxy", "覆盖层未就绪（Electron 可能未运行）")
 

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 
 // 应用图标：Windows 用多尺寸 .ico（任务栏/窗口才正确显示），其余平台用 .png。
@@ -140,14 +140,26 @@ let panelWindow = null;
 let isPanelVisible = false;
 
 function createWindow() {
+    // ── 覆盖层尺寸：用主显示器实际 bounds，而非 fullscreen:true ──
+    // 关键修复（「唤不起来/打不开」根因之一）：在 Windows 上 transparent:true 与
+    // fullscreen:true 同时开启极易出问题——尤其笔记本双显卡/混合输出，OS 独占全屏与
+    // 透明合成冲突，窗口经常【全黑】或【根本不显示】。改成「无边框 + 覆盖整块屏幕 bounds」
+    // 的覆盖层（视觉上等同全屏，但不触发 OS 独占全屏），是透明置顶覆盖层的稳健做法。
+    let bounds = { x: 0, y: 0, width: 1920, height: 1080 };
+    try {
+        bounds = screen.getPrimaryDisplay().bounds;
+    } catch (e) { /* app 未就绪时兜底；createWindow 实际在 whenReady 后调用 */ }
+
     mainWindow = new BrowserWindow({
-        width: 1920,
-        height: 1080,
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
         icon: ICON_PATH,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
-        fullscreen: true,
+        fullscreen: false,          // 见上：不用 OS 独占全屏，改用 bounds 覆盖
         skipTaskbar: true,
         hasShadow: false,
         resizable: false,
@@ -168,12 +180,38 @@ function createWindow() {
 
     mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
-    mainWindow.once('ready-to-show', () => {
-        mainWindow.show();
-        mainWindow.setIgnoreMouseEvents(true, { forward: true });
-        // 渲染层默认 silent(0.05) → 启动即显示第一态暖香槟辉光，无需推送任何「splash」。
+    // ── 加固「窗口一定看得见」──
+    // 历史问题：窗口只在 ready-to-show 里 show()。若渲染层加载异常导致该事件未如期
+    // 触发，窗口就永远不显示 → 用户「唤不起来/打不开」。现在多重保险：
+    //  1) ready-to-show / did-finish-load 任一触发即显示并定位；
+    //  2) 兜底定时器：1.5s 后无论如何强制显示（绝不把外壳卡在不可见状态）；
+    //  3) did-fail-load 打日志到 logs/electron.log，便于定位根因。
+    let _shown = false;
+    const _showOverlay = () => {
+        if (_shown || !mainWindow || mainWindow.isDestroyed()) return;
+        _shown = true;
+        try {
+            // 覆盖整块主屏（DIP 坐标），并置于最顶层、全工作区可见。
+            mainWindow.setBounds(bounds);
+            mainWindow.show();
+            mainWindow.setAlwaysOnTop(true, 'screen-saver');
+            try { mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch (e) {}
+            // 始终鼠标穿透：覆盖层绝不接管鼠标，随时能操作桌面。
+            mainWindow.setIgnoreMouseEvents(true, { forward: true });
+            _overlayAwake = true;   // 启动即显示第一态 → 视为已唤醒（与可见状态一致）
+        } catch (e) { console.error('[Main] 显示覆盖层失败:', e && e.message); }
+        // 渲染层默认 silent(0.05) → 启动即显示第一态暖香槟辉光，无需任何「splash」。
         // 完整三态由后端 presence 事件 / 唤醒快捷键驱动，连贯过渡、不切割。
+    };
+    mainWindow.once('ready-to-show', _showOverlay);
+    mainWindow.webContents.once('did-finish-load', _showOverlay);
+    setTimeout(_showOverlay, 1500);   // 兜底：无论如何 1.5s 内显示
+    mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+        console.error(`[Main] 覆盖层 did-fail-load code=${code} desc=${desc} url=${url}`);
+        _showOverlay();   // 即便加载失败也显示窗口（DOM 兜底视觉仍可见），不让外壳消失
     });
+    mainWindow.webContents.on('console-message', (_e, _lvl, message, line, sourceId) =>
+        console.log(`[Overlay:renderer] ${message} (${sourceId}:${line})`));
 
     mainWindow.on('closed', () => {
         mainWindow = null;
@@ -226,7 +264,16 @@ app.whenReady().then(async () => {
                 res.end('{"success": true, "action": "toggle-panel"}');
                 return;
             }
-            if (req.method === 'POST' && (req.url === '/ipc/wake' || req.url === '/ipc/toggle-overlay')) {
+            // /ipc/wake = 始终【显示】覆盖层（幂等，永不隐藏）——托盘「Wake Overlay」走这条，
+            // 保证「按了就一定看得见」，不会因 toggle 把已显示的外壳反而藏起来。
+            if (req.method === 'POST' && req.url === '/ipc/wake') {
+                try { setOverlayPhase(true); } catch (e) { /* ignore */ }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end('{"success": true, "action": "wake"}');
+                return;
+            }
+            // /ipc/toggle-overlay = 显示/隐藏切换（供快捷键用）。
+            if (req.method === 'POST' && req.url === '/ipc/toggle-overlay') {
                 try { toggleOverlayWake(); } catch (e) { /* ignore */ }
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end('{"success": true, "action": "toggle-overlay"}');
@@ -451,8 +498,15 @@ function setOverlayPhase(awake) {
                     speaking: false, source: 'hotkey',
                 });
             } catch (e) { /* ignore */ }
+            // 幂等地「显示并置顶」：重定位到主屏 bounds（防止被移到屏外）、显示、全工作区可见、
+            // 顶到 screen-saver 层。即使本来就可见，再调用一次也只是确保它在最前、看得见。
+            try {
+                mainWindow.setBounds(screen.getPrimaryDisplay().bounds);
+            } catch (e) { /* ignore */ }
             mainWindow.show();
             mainWindow.setAlwaysOnTop(true, 'screen-saver');
+            try { mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch (e) {}
+            mainWindow.moveTop();
         } else {
             mainWindow.hide();   // 隐藏整套外壳
         }
