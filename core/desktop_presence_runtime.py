@@ -533,16 +533,20 @@ class DesktopPresenceRuntime:
             _registry = CapabilityRegistry.get_instance()
             _registry.inject_item(
                 CapabilityItem(
-                    device_id=self._device_id,
-                    capability="llm_host",
-                    metadata={"description": "Local LLM execution host", "priority": 1},
+                    name="llm_host",
+                    description="Local LLM execution host",
+                    source="gateway",
+                    source_id=self._device_id,
+                    parameters={"priority": 1},
                 )
             )
             _registry.inject_item(
                 CapabilityItem(
-                    device_id=self._device_id,
-                    capability="cross_device_coord",
-                    metadata={"description": "Cross-device coordination authority", "priority": 1},
+                    name="cross_device_coord",
+                    description="Cross-device coordination authority",
+                    source="gateway",
+                    source_id=self._device_id,
+                    parameters={"priority": 1},
                 )
             )
             logger.info(

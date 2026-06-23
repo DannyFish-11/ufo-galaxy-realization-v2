@@ -3493,7 +3493,7 @@ class CommandRouter:
                     try:
                         from core.nats_bus import nats_bus
                         if nats_bus.is_connected():
-                            nats_bus._publish(
+                            await nats_bus._publish(
                                 f"galaxy.tasks.result.{task_id}",
                                 {
                                     "task_id": task_id,

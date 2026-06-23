@@ -107,6 +107,10 @@ reconciliation gaps``.
 
 from __future__ import annotations
 
+import logging  # auto: ensure module _logger is defined
+_logger = logging.getLogger(__name__)
+
+
 import copy
 import threading as _threading
 import time

@@ -189,7 +189,7 @@ class TaskMemory:
 
     def __init__(
         self,
-        data_dir: str = None,
+        data_dir: Optional[str] = None,
         hot_limit: int = _MAX_IN_MEMORY,
         ttl_seconds: float = 0.0,
     ):
@@ -241,8 +241,8 @@ class TaskMemory:
         strategy: str = "",
         duration_ms: float = 0.0,
         session_id: str = "",
-        tags: List[str] = None,
-        extra: Dict[str, Any] = None,
+        tags: Optional[List[str]] = None,
+        extra: Optional[Dict[str, Any]] = None,
         task_type: str = "",  # G6: 新增，向后兼容（默认为空字符串）
     ) -> TaskSummary:
         """记录一条任务摘要，持久化到本地文件。"""
@@ -644,7 +644,7 @@ class TaskMemory:
 _instance: Optional[TaskMemory] = None
 
 
-def get_task_memory(data_dir: str = None) -> TaskMemory:
+def get_task_memory(data_dir: Optional[str] = None) -> TaskMemory:
     """返回全局单例 TaskMemory（首次调用时创建）。"""
     global _instance
     if _instance is None:
