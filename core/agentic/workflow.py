@@ -242,12 +242,31 @@ def from_team(team_manager: Any, strategy: Any = "specialized", *,
 
 def from_fractal(fractal: Any, *, name: str = "fractal",
                  description: str = "") -> Agent:
-    """分形：``fractal.execute(FractalTask(...))``。"""
+    """分形 agent：``fractal.execute(FractalTask(...))``。"""
     async def _invoke(task: str) -> Any:
         from core.fractal_agent import FractalTask
         import uuid as _uuid
         return await fractal.execute(
             FractalTask(id=f"ft_{_uuid.uuid4().hex[:8]}", description=task))
+    return Agent(_invoke, name=name, description=description)
+
+
+def from_fractal_executor(executor: Any, *, name: str = "fractal",
+                          description: str = "递归分解复杂任务并并行执行") -> Agent:
+    """分形执行器（系统级入口）：``executor.run(task, context)``。"""
+    async def _invoke(task: str) -> Any:
+        return await executor.run(task, {})
+    return Agent(_invoke, name=name, description=description)
+
+
+def from_team_manager(manager: Any, strategy: Any = "specialized", *,
+                      member_count: int = 3, providers: Optional[List[str]] = None,
+                      name: str = "team",
+                      description: str = "多专家协作完成任务") -> Agent:
+    """团队（一站式）：``manager.execute_team_task(task, strategy, ...)``。"""
+    async def _invoke(task: str) -> Any:
+        return await manager.execute_team_task(
+            task, strategy, member_count=member_count, providers=providers)
     return Agent(_invoke, name=name, description=description)
 
 

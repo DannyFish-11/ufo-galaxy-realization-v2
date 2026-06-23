@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Union
@@ -879,6 +880,30 @@ class ExecutionPlanner:
         steps: List[StepRecord],
         tool_calls: List[ToolCallRecord],
     ) -> ExecutionResult:
+        # ── Phase B（灰度，默认关闭）：统一 Workflow 层接入 ──
+        # 开关 GALAXY_UNIFIED_WORKFLOW=1 时，经 core.agentic 的统一 forward(session)->session
+        # 层运行该策略；任何异常都回退到下面的 legacy 路径。默认关闭 → 零默认行为变化。
+        if os.environ.get("GALAXY_UNIFIED_WORKFLOW", "").strip().lower() in (
+                "1", "true", "yes", "on"):
+            try:
+                from core.agentic.strategy import run_strategy_workflow
+                _wf = await run_strategy_workflow(
+                    message=plan.message, strategy=strategy,
+                    session_id=plan.session_id, device_id=plan.device_id,
+                    llm_router=self._llm_router,
+                )
+                return ExecutionResult(
+                    success=bool(_wf.get("success", True)),
+                    reply=_wf.get("reply", ""),
+                    task_result=_wf.get("task_result"),
+                    chosen_strategy=_wf.get("chosen_strategy", strategy),
+                    agent_steps=steps,
+                    tool_calls=tool_calls,
+                )
+            except Exception as _wf_exc:  # noqa: BLE001 —— 实验路径失败即回退 legacy
+                logger.warning(
+                    "统一 Workflow 路径失败，回退 legacy 执行: %s", _wf_exc)
+
         if strategy == "fractal":
             return await self._run_fractal(plan, steps, tool_calls)
         if strategy in ("specialized", "parallel", "swarm"):
