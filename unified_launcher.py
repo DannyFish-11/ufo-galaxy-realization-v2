@@ -912,12 +912,13 @@ class GalaxyUnified:
         await bus.connect()
 
     async def start_tailscale(self):
-        """启动 Tailscale 网络。"""
+        """启动 Tailscale 网络。返回真实 Tailscale IP（供显示）。"""
         from core.tailscale_manager import TailscaleManager
         ts = TailscaleManager()
         ts_ip = await ts.initialize()
         if not ts_ip:
             raise RuntimeError("Tailscale not installed")
+        return ts_ip
 
     async def start_local_brain(self):
         """启动本地 Ollama 大脑。"""
@@ -961,10 +962,12 @@ class GalaxyUnified:
         try:
             from launcher.core_services import CoreServiceLauncher
             cs = CoreServiceLauncher(self.service_manager, self.config)
-            await cs.start_all()
-            print_status_row("Device Agent 管理器", True)
-            print_status_row("设备状态 API (port: 8766)", True)
-            print_status_row("Microsoft UFO 集成", True)
+            results = await cs.start_all()
+            _r = results if isinstance(results, dict) else {}
+            # 真实逐组件结果，不再写死全绿。
+            print_status_row("Device Agent 管理器", bool(_r.get("device_agent_manager", False)))
+            print_status_row("设备状态 API (port: 8766)", bool(_r.get("device_status_api", False)))
+            print_status_row("Microsoft UFO 集成", bool(_r.get("microsoft_ufo_integration", False)))
         except Exception as exc:
             print_status_row("核心服务启动失败", False)
             logger.error(f"Core services: {exc}")
@@ -989,8 +992,8 @@ class GalaxyUnified:
         except Exception as exc:
             print_status_row(f"NATS — {exc}", False)
         try:
-            await self.start_tailscale()
-            print_status_row("Tailscale", True)
+            ts_ip = await self.start_tailscale()
+            print_status_row(f"Tailscale — {ts_ip}" if ts_ip else "Tailscale", True)
         except Exception:
             print_status_row("Tailscale — 未安装 (LAN直连模式)", False)
 
@@ -1036,15 +1039,18 @@ class GalaxyUnified:
         try:
             l4 = L4EnhancementLauncher(self.service_manager, self.config)
             result = await l4.start_all()
-            modules = result.get("modules", {})
-            for name, ok in modules.items():
-                print_status_row(name, ok)
-            if not modules:
-                print_status_row("感知模块", True)
-                print_status_row("推理模块", True)
-                print_status_row("学习模块", True)
-                print_status_row("执行模块", True)
-                print_status_row("安全模块", True)
+            modules = result.get("modules", {}) if isinstance(result, dict) else {}
+            if modules:
+                # 有逐模块明细 → 按真实结果显示
+                for name, ok in modules.items():
+                    print_status_row(name, bool(ok))
+            else:
+                # 无逐模块明细时不假装 5 个全绿；按整体结果如实显示（L4 是后台增强层、可选）。
+                started = bool(result)
+                print_status_row(
+                    "L4 增强模块 — 后台增强层已就绪" if started else "L4 增强模块 — 未启用(可选)",
+                    started,
+                )
         except Exception as exc:
             print_status_row("L4 模块启动失败", False)
             logger.error(f"L4 modules: {exc}")
