@@ -389,19 +389,39 @@ class TaskMemory:
     # ── 跨会话相似度检索 ──
 
     def retrieve_similar(self, query: str, k: int = 5, min_score: float = 0.3) -> List[TaskSummary]:
-        """跨会话检索与 query 最相似的历史任务。"""
+        """跨会话检索与 query 最相似的历史任务（BM25 词法排序）。
+
+        历史实现引用了不存在的 ``self._tokenize`` / ``self.jaccard``，调用即 AttributeError；
+        改用零依赖 BM25（``core.cognitive.bm25_index``），既修了该 bug，又比 Jaccard 更准
+        （考虑词频饱和、文档长度归一、稀有词 IDF）。``min_score`` 作为「相对最高分」的占比
+        阈值（0–1），过滤低相关项；BM25 不可用时退化为词集合 Jaccard 兜底。
+        """
         if not query or not self._records:
             return []
-        query_words = set(self._tokenize(query))
-        scored = []
-        for rec in self._records:
-            text = f"{rec.task} {rec.result_summary}"
-            text_words = set(self._tokenize(text))
-            score = self.jaccard(query_words, text_words)
-            if score >= min_score:
-                scored.append((score, rec))
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return [rec for _, rec in scored[:k]]
+        docs = [
+            (str(i), f"{rec.task} {rec.result_summary}")
+            for i, rec in enumerate(self._records)
+        ]
+        try:
+            from core.cognitive.bm25_index import bm25_rank
+            ranked = bm25_rank(query, docs, top_k=max(k, len(docs)))
+            if ranked:
+                top = ranked[0][1] or 1.0
+                out = [self._records[int(i)] for i, s in ranked if (s / top) >= min_score]
+                return out[:k]
+            return []
+        except Exception as exc:  # noqa: BLE001 —— BM25 不可用时退化为 Jaccard 兜底
+            logger.debug("retrieve_similar: BM25 不可用，退化 Jaccard: %s", exc)
+            q_words = set(query.lower().split())
+            scored = []
+            for rec in self._records:
+                t_words = set(f"{rec.task} {rec.result_summary}".lower().split())
+                if q_words and t_words:
+                    sim = len(q_words & t_words) / len(q_words | t_words)
+                    if sim >= min_score:
+                        scored.append((sim, rec))
+            scored.sort(key=lambda x: x[0], reverse=True)
+            return [rec for _, rec in scored[:k]]
 
     # ── 意图感知检索深度 ──
 
