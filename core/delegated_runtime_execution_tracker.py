@@ -155,6 +155,10 @@ Functions::
 
 from __future__ import annotations
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import json
 import os
 import tempfile

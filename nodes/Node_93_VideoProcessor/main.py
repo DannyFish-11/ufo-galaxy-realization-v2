@@ -12,6 +12,10 @@ Node 93: Video Processor
 6. 支持格式查询
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import base64
 import logging

@@ -13,6 +13,10 @@ Node 15: OCR - 光学字符识别（增强版）
 作者：Manus AI
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import tempfile
 import base64

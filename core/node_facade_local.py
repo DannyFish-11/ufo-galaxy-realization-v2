@@ -22,6 +22,9 @@ contract. Over time, all nodes migrate to the unified path.
 """
 from __future__ import annotations
 
+import asyncio  # auto: missing import
+
+
 import importlib.util
 import logging
 import sys

@@ -11,6 +11,10 @@ This layer is intentionally distinct from the technical lifecycle:
 
 from __future__ import annotations
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import time
 from dataclasses import dataclass
 from enum import Enum

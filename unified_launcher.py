@@ -1385,6 +1385,7 @@ def main():
     # PR-UVLOOP-WIN: uvloop is Linux/macOS only — skip on Windows to avoid startup delay
     if sys.platform != "win32":
         try:
+            import uvloop  # Linux/macOS only；缺失或导入失败时静默跳过
             uvloop.install()
         except Exception:
             pass

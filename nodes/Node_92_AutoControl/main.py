@@ -12,6 +12,10 @@ Node 92: AutoControl - 统一自动操控接口
 作者：Manus AI
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import asyncio
 import httpx

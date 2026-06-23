@@ -8,6 +8,10 @@ OpenCode Engine - OpenCode 专用引擎核心模块
 4. 与系统其他节点深度协同
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import json
 import shlex

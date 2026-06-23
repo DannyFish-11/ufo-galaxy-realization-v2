@@ -43,6 +43,10 @@ Galaxy - 增强版 NLU 引擎 v2.0（Legacy Compat — 仅保留向后兼容性�
 版本：2.0
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import json
 import re
 import os

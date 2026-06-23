@@ -21,6 +21,13 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 from abc import ABC, abstractmethod
 
+# 模块级可选导入：多个方法直接用 mavutil.X，此前仅在某一方法内局部 import，其余方法引用即
+# NameError。改为模块级 guarded import：未安装 pymavlink 时为 None，由既有「pymavlink未安装」分支处理。
+try:
+    from pymavlink import mavutil
+except Exception:  # noqa: BLE001
+    mavutil = None
+
 logger = logging.getLogger(__name__)
 
 

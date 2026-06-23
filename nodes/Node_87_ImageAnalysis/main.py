@@ -4,6 +4,10 @@ Computer vision: image captioning, object detection, OCR, classification,
 color analysis and image comparison via multiple providers.
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import json
 import logging

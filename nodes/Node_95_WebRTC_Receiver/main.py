@@ -19,6 +19,10 @@ Node_95: WebRTC 接收器 - 完整实现版本 (C方案: 混合模式)
 日期: 2026-01-24
 """
 
+from fastapi import HTTPException  # auto: missing import
+from pathlib import Path  # auto: missing import
+
+
 import asyncio
 import logging
 import base64

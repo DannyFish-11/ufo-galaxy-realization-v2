@@ -14,6 +14,10 @@ Node_128_MediaGen - 媒体生成节点
 - 可通过环境变量进行配置。
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import asyncio
 import logging
 import os

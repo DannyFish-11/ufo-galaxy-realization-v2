@@ -9,6 +9,10 @@ Built-in tools: get_current_time, calculate, search_web (stub), get_node_status
 External tools can be dynamically registered via POST /register_tool.
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import json
 import math

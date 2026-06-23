@@ -41,6 +41,9 @@ Design principles
 
 from __future__ import annotations
 
+from collections import defaultdict  # auto: missing import
+
+
 import logging
 import threading
 import time

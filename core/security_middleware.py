@@ -15,6 +15,10 @@
 4. IP 黑名单
 """
 
+import logging  # auto: ensure module logger is defined
+_logger = logging.getLogger(__name__)
+
+
 import asyncio
 import hashlib
 import logging

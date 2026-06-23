@@ -10,6 +10,10 @@ Integrates with:
   - OpenAI            for fusion reasoning
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import logging
 from datetime import datetime

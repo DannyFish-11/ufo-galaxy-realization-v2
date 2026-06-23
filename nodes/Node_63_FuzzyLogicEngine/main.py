@@ -2,6 +2,10 @@
 Node 63: FuzzyLogicEngine - Fuzzy Logic Inference Engine
 Supports Mamdani and Sugeno inference with triangular/trapezoidal membership functions.
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import logging
 from datetime import datetime

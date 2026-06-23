@@ -3,6 +3,10 @@ Node 11: GitHub - GitHub API 集成节点
 ======================================
 提供 GitHub REST API v3 集成：仓库、Issues、Pull Requests、提交记录等
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional

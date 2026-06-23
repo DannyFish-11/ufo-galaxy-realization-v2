@@ -6,6 +6,10 @@ Manages Galaxy system plugins: plugin registry, lifecycle management
 capability discovery.
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import json
 import logging

@@ -6,6 +6,10 @@ Node_72_KnowledgeBase: 知识库管理节点 (FastAPI)
 提供知识的存储、检索、管理和维护 REST API。
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import dataclasses
 import enum
 import json

@@ -4,6 +4,13 @@ Handles speech-to-text transcription, text-to-speech synthesis,
 speech translation and language detection via multiple providers.
 """
 
+import asyncio  # auto: missing import
+
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import json
 import logging

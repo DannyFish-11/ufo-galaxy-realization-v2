@@ -6,6 +6,10 @@ Supports batch embedding, cosine similarity, and semantic ranking.
 Optional Redis caching is available when REDIS_URL is configured.
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import json
 import hashlib

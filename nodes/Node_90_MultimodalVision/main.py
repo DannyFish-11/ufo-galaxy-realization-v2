@@ -14,6 +14,10 @@ Node 90: MultimodalVision - 多模态视觉理解
 作者：Manus AI
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import sys
 import base64

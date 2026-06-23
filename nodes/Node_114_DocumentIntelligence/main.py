@@ -6,6 +6,10 @@ extraction, document summarization, table extraction, Q&A over documents,
 and document classification using OpenAI.
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import asyncio
 import os
 import re

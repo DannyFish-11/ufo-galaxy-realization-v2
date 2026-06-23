@@ -11,6 +11,10 @@ Node 04: Global Router
 - 服务网格管理
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import json
 import asyncio

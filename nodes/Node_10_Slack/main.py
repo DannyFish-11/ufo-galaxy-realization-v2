@@ -3,6 +3,10 @@ Node 10: Slack - Slack 集成服务节点
 =====================================
 提供消息发送、频道管理、用户查询、表情反应等功能
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional

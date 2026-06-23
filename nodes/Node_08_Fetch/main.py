@@ -3,6 +3,10 @@ Node 08: Fetch - HTTP 请求服务节点
 ====================================
 提供同步/异步 HTTP 请求、批量请求、连通性检查等功能
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import asyncio
 from datetime import datetime

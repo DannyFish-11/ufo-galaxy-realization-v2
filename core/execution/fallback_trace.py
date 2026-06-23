@@ -41,6 +41,9 @@ See ``docs/FALLBACK_DECISION_TRACE.md`` for the full specification.
 
 from __future__ import annotations
 
+import logging  # auto: missing import
+
+
 import json
 import time
 import uuid

@@ -1,6 +1,10 @@
 """
 Node 47: Audio - Audio Recording and Playback
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import base64
 import io

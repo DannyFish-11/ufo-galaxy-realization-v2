@@ -2,6 +2,10 @@
 Node 75: DataPipeline - ETL Data Processing Pipeline
 Supports create, run, status, list, delete pipelines and data transformation.
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import asyncio
 import logging

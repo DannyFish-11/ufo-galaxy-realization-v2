@@ -12,6 +12,10 @@ core/policy_loader.py
     perms = get_agent_permissions("agent_001")
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import json
 import os
 from typing import Any, Dict, Optional

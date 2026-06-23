@@ -1,6 +1,10 @@
 """
 Node 35: AppleScript - macOS Automation
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import sys
 import subprocess

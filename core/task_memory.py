@@ -47,6 +47,9 @@ G6 增强: TTL / 冷热分层 / 漂移检测
         print(f"漂移! 相似度={result.similarity:.2f}, 动作={result.action}")
 """
 
+import re  # auto: missing import
+
+
 import json
 import logging
 import os

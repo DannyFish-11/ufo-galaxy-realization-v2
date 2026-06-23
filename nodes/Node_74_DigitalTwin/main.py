@@ -7,6 +7,10 @@ Node_74_DigitalTwin: 数字孪生节点 (FastAPI)
 提供状态查询、历史记录、模拟控制和多设备管理 API。
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import asyncio
 import logging
 import os

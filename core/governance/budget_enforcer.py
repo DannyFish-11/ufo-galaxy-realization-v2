@@ -50,6 +50,9 @@ Usage
 
 from __future__ import annotations
 
+from typing import List  # auto: missing import
+
+
 import asyncio
 import logging
 from datetime import date, datetime, timezone

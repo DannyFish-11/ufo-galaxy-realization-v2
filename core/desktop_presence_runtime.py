@@ -233,7 +233,6 @@ class RuntimeSession:
             except Exception as exc:
                 _emission_err = exc
                 if _attempt < 2:
-                    import time
                     time.sleep(0.05 * (2 ** _attempt))  # 50ms / 100ms backoff
         else:
             # all 3 attempts exhausted

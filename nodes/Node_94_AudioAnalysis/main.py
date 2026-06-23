@@ -8,6 +8,10 @@ Node 94: AudioAnalysis - 实时音频分析与语音转文字
 - 音频分类
 - 支持格式: mp3, mp4, mpeg, mpga, m4a, wav, webm
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import io
 import base64

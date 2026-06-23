@@ -1,6 +1,10 @@
 """
 Node 46: Camera - Computer Vision & Camera Control
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import base64
 import threading

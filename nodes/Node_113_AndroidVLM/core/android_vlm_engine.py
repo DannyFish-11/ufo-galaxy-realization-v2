@@ -19,6 +19,10 @@ Node 113: AndroidVLM - Android GUI 理解引擎
 日期：2026-03-07
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import sys
 import json

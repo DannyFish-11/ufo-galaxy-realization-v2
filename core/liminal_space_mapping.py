@@ -74,6 +74,10 @@ Public API
 
 from __future__ import annotations
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import dataclasses
 import time
 import uuid
