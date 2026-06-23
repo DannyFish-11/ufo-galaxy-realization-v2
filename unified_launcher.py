@@ -936,6 +936,24 @@ class GalaxyUnified:
             chosen = await _asyncio.to_thread(ms.resolve_main_brain, True)
             if chosen:
                 ms.background_pull(chosen)  # 本地缺失则后台 ollama pull
+                # 证据链：把主脑选型（最终模型 + 硬件 + 候选 + 推荐理由）落进启动会话，
+                # 以后能回答「这次为什么选了它、是按什么硬件推荐的」。best-effort。
+                try:
+                    from core.session_manager import get_session_manager
+                    _max_mb, _has_gpu, _hw = ms.get_compute_summary()
+                    _rec = ms.recommend(_max_mb, _has_gpu)
+                    sm = get_session_manager()
+                    await sm.ensure_session("session_system_boot", user_id="system")
+                    sm.record_model_selection(
+                        "session_system_boot", chosen,
+                        reason=("环境/已保存指定" if chosen != _rec
+                                else "按实际硬件推荐"),
+                        hardware=_hw,
+                        candidates=[t for t, _ in ms.list_models()],
+                        source="resolve_main_brain",
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
         except Exception as exc:  # noqa: BLE001
             logger.warning("主脑选择跳过(非致命): %s", exc)
         # 启动本地大脑（LocalBrainManager 读 OLLAMA_MODEL 作主脑）
