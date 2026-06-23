@@ -20,13 +20,67 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from core.agentic import workflow as wf
 
 logger = logging.getLogger("Galaxy.Agentic.Strategy")
 
-_TEAM_STRATEGIES = {"specialized", "swarm", "parallel"}
+
+# ─────────────────────────── 策略注册表（Phase C：收口去特判） ───────────────────────────
+# 「策略 → 如何构造 Workflow」收敛到一张注册表，而非 if/elif 特判链。新增一种 agent 策略
+# 只需 register_strategy(name, builder)，无需改动 build_strategy_workflow 或 _dispatch。
+# builder 签名：``(llm_router, factory) -> Workflow``。
+
+StrategyBuilder = Callable[[Any, Any], wf.Workflow]
+_STRATEGY_BUILDERS: Dict[str, StrategyBuilder] = {}
+_DEFAULT_STRATEGY = "single"
+
+
+def register_strategy(name: str, builder: StrategyBuilder) -> None:
+    """注册一种策略的 Workflow 构造器（覆盖同名）。"""
+    _STRATEGY_BUILDERS[name.lower()] = builder
+
+
+def available_strategies() -> List[str]:
+    return sorted(_STRATEGY_BUILDERS.keys())
+
+
+def _agent_factory(llm_router: Any, factory: Any) -> Any:
+    if factory is not None:
+        return factory
+    from core.agent_factory import get_agent_factory
+    return get_agent_factory(llm_router)
+
+
+def _build_fractal(llm_router: Any, factory: Any) -> wf.Workflow:
+    from core.fractal_agent import FractalExecutor
+    executor = FractalExecutor(
+        llm_router=llm_router, agent_factory=_agent_factory(llm_router, factory))
+    return wf.from_fractal_executor(executor, name="fractal")
+
+
+def _build_team(strategy: str) -> StrategyBuilder:
+    def _builder(llm_router: Any, factory: Any) -> wf.Workflow:
+        from core.agent_team import TeamManager
+        manager = TeamManager(agent_factory=_agent_factory(llm_router, factory))
+        return wf.from_team_manager(manager, strategy, name=f"team:{strategy}")
+    return _builder
+
+
+def _build_single(llm_router: Any, factory: Any) -> wf.Workflow:
+    # single：用单成员团队作最接近单 agent 的一站式入口。
+    from core.agent_team import TeamManager
+    manager = TeamManager(agent_factory=_agent_factory(llm_router, factory))
+    return wf.from_team_manager(manager, "specialized", member_count=1, name="single")
+
+
+# 内置策略注册（等价于此前的 if/elif 分支，但现在是数据驱动、可扩展）。
+register_strategy("fractal", _build_fractal)
+register_strategy("specialized", _build_team("specialized"))
+register_strategy("swarm", _build_team("swarm"))
+register_strategy("parallel", _build_team("parallel"))
+register_strategy("single", _build_single)
 
 
 def build_strategy_workflow(
@@ -35,29 +89,10 @@ def build_strategy_workflow(
     llm_router: Any = None,
     factory: Any = None,
 ) -> wf.Workflow:
-    """按策略构造一个真实接线的 Workflow（懒导入，缺依赖时由调用方兜底）。"""
-    strat = (strategy or "single").lower()
-
-    if strat == "fractal":
-        from core.fractal_agent import FractalExecutor
-        from core.agent_factory import get_agent_factory
-        fac = factory or get_agent_factory(llm_router)
-        executor = FractalExecutor(llm_router=llm_router, agent_factory=fac)
-        return wf.from_fractal_executor(executor, name="fractal")
-
-    if strat in _TEAM_STRATEGIES:
-        from core.agent_team import TeamManager
-        from core.agent_factory import get_agent_factory
-        fac = factory or get_agent_factory(llm_router)
-        manager = TeamManager(agent_factory=fac)
-        return wf.from_team_manager(manager, strat, name=f"team:{strat}")
-
-    # single（及未知策略）：用单成员团队作最接近单 agent 的一站式入口。
-    from core.agent_team import TeamManager
-    from core.agent_factory import get_agent_factory
-    fac = factory or get_agent_factory(llm_router)
-    manager = TeamManager(agent_factory=fac)
-    return wf.from_team_manager(manager, "specialized", member_count=1, name="single")
+    """按策略构造一个真实接线的 Workflow（查注册表，未知策略回退 single）。"""
+    strat = (strategy or _DEFAULT_STRATEGY).lower()
+    builder = _STRATEGY_BUILDERS.get(strat) or _STRATEGY_BUILDERS[_DEFAULT_STRATEGY]
+    return builder(llm_router, factory)
 
 
 def _result_to_planner_dict(session: Any, strategy: str) -> Dict[str, Any]:

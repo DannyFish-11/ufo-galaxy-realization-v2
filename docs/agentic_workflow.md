@@ -37,9 +37,27 @@ class Workflow(ABC):
 （`core.canonical_dispatch_slot_authority` / `openclawd` 执行路径决策）。两层不打架:前者是
 执行编排层,后者是控制平面。
 
-## 迁移分阶段
-- **A（本阶段,纯增量零风险）**:契约 + 适配器 + 组合子 + 自测。无任何现有调用方改动。
-- **B（灰度）**:`from_*` 接真实 agent,在一个调用点用开关 `GALAXY_UNIFIED_WORKFLOW=1` 接入,
-  旧路径默认/兜底。
-- **C（收口）**:`ExecutionPlanner` 三处形状特判改成「构造 Workflow → forward(session)」,
-  parity 稳后删特判。
+## 迁移分阶段（A/B/C 均已落地）
+- **A — 纯增量零风险** ✅:契约 + 适配器 + 组合子 + 自测。无任何现有调用方改动。
+- **B — 灰度接入** ✅:`from_fractal_executor` / `from_team_manager` 接真实一站式执行器;
+  `core/agentic/strategy.py` 的 `run_strategy_workflow` 经会话驱动并压回 ExecutionPlanner
+  可消费的 dict;`ExecutionPlanner._dispatch` 用开关 **`GALAXY_UNIFIED_WORKFLOW=1`** 接入,
+  **默认关闭**、legacy 为默认与异常兜底 → 零默认行为变化。
+- **C — 收口去特判** ✅:`strategy.py` 用**策略注册表**(`register_strategy` / 内置
+  fractal·specialized·swarm·parallel·single)取代 if/elif 特判;新增一种 agent 策略只需
+  `register_strategy(name, builder)`,无需改动 `build_strategy_workflow` 或 `_dispatch`,
+  未知策略回退 `single`。
+
+### 用法
+```python
+# 灰度开启统一 Workflow 执行路径
+import os; os.environ["GALAXY_UNIFIED_WORKFLOW"] = "1"
+
+# 扩展一种新策略（无需改任何 if 分支）
+from core.agentic.strategy import register_strategy
+from core.agentic.workflow import from_team_manager
+register_strategy("my_strategy", lambda llm, fac: from_team_manager(MyManager(), "specialized"))
+```
+
+> 把默认翻转成 Workflow 模式（删 legacy `_run_*`）需先在真机上做 parity 验证——legacy 路径
+> 携带 StepRecords/twin/SOUL/provider 等丰富元数据,沙箱无法等价复现,故当前保留为默认与兜底。
