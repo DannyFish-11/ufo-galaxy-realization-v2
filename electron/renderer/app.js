@@ -147,9 +147,14 @@ class GalaxyRenderer {
     // 先排下一帧，再做限帧早退 —— 保证循环不中断。
     requestAnimationFrame((t) => this._loop(t));
 
-    // 帧率上限 ~30fps。全屏片段着色器开销 ∝ 像素数；在无独显/软件渲染(SwiftShader)
-    // 的笔记本上，每帧跑全屏着色器会把 CPU 打满 → 整机卡死。限帧是第一道闸。
-    const minFrameMs = 1000 / 30;
+    // 自适应帧率（无独显/软件渲染 SwiftShader 笔记本的关键省电闸）：
+    //  - 静默第一态【休眠】（depth≈0.05、无过渡）只需慢呼吸 → 12fps，CPU 占用直降 ~60%；
+    //  - 过渡中 或 已进入二/三态(liminal/manifest) → 30fps，保证连贯流畅、绝不切割。
+    // 全屏片段着色器开销 ∝ 像素数 × 帧率；休眠期降帧是整机不卡死的第一道闸。
+    const transitioning = Math.abs(this.springV) > 0.0015
+        || Math.abs(this.currentDepth - this.depth) > 0.01;
+    const lively = this.currentDepth > 0.30 || transitioning;
+    const minFrameMs = 1000 / (lively ? 30 : 12);
     if (now - this.lastFrame < minFrameMs) return;
     const dt = Math.min((now - this.lastFrame) / 1000, 0.05);
     this.lastFrame = now;
