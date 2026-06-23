@@ -91,6 +91,20 @@ class ToolWrapperEngine:
             error="" if tool_name in self._tools else f"Tool '{tool_name}' not known",
         )
         self.execution_history.append(result)
+        # 证据链：调用方在 context 里带了 session_id 时，把这次工具调用落成 tool_call chunk
+        # （入参/结果/状态可回放）。best-effort，绝不因采集失败影响工具执行。
+        sid = (context or {}).get("session_id", "")
+        if sid:
+            try:
+                from core.session_manager import get_session_manager
+                get_session_manager().record_tool_call(
+                    sid, tool_name,
+                    arguments={"task": task_description},
+                    result=result.output, status="ok" if result.success else "error",
+                    error=result.error, trace_id=(context or {}).get("trace_id", ""),
+                )
+            except Exception:  # noqa: BLE001
+                pass
         return result
 
     def learn_tool(

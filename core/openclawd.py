@@ -4481,6 +4481,21 @@ class OpenClawd:
                     )
                     if _exec_path_k == "none":
                         _exec_result_k.setdefault("skipped_reason", "no_execution")
+                    # 证据链：把这次执行路径决策（哪条分支/入口模式/是否跨设备）落进会话，
+                    # 以后能回答「这个结论走的哪条分支」。best-effort，绝不影响主流程。
+                    try:
+                        from core.session_manager import (
+                            record_evidence as _rec_ev, EvidenceKind as _EK,
+                        )
+                        _rec_ev(
+                            session_id or "", _EK.DISPATCH, actor="openclawd",
+                            payload={"decision": _exec_path_k, "entry_mode": _entry_mode,
+                                     "cross_device": bool(_cross_device_k),
+                                     "device_id": device_id},
+                            trace_id=trace_id or "",
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
                     # PR-11: build canonical execution plan (additive, non-breaking)
                     _plan_k = self._build_execution_plan(
                         execution_path=_exec_path_k,
@@ -5011,6 +5026,20 @@ class OpenClawd:
             )
             if _exec_path2 == "none":
                 _exec_result2.setdefault("skipped_reason", "no_execution")
+            # 证据链：同上，落一条 dispatch 决策（另一执行分支）。best-effort。
+            try:
+                from core.session_manager import (
+                    record_evidence as _rec_ev, EvidenceKind as _EK,
+                )
+                _rec_ev(
+                    session_id or "", _EK.DISPATCH, actor="openclawd",
+                    payload={"decision": _exec_path2, "entry_mode": _entry_mode,
+                             "cross_device": bool(_cross_device2),
+                             "device_id": device_id},
+                    trace_id=trace_id or "",
+                )
+            except Exception:  # noqa: BLE001
+                pass
             # Attach cross-device summary when applicable.
             if _cross_device2:
                 _exec_result2["cross_device_summary"] = {

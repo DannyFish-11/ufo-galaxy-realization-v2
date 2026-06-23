@@ -21,6 +21,7 @@ import asyncio
 import json
 import logging
 import os
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -33,6 +34,72 @@ _SESSION_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "data", "sessions.json",
 )
+# 每个会话的证据链(evidence chain)以 append-only JSONL 落在此目录下，<session_id>.evidence.jsonl
+_EVIDENCE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data", "sessions",
+)
+
+
+# ─────────────────────────── 证据链 / 血缘 ───────────────────────────
+# 借鉴「把 Session 当证据载体」的思路：一次运行里真正有价值的不是最终答复，而是
+# 「工作如何一步步推进」的可回放证据——派发决策、主脑选型理由、工具调用入参/结果、
+# 否决与重试、分叉。这些都作为带 (id, parent_id, trace_id) 的 EvidenceChunk 落进 Session，
+# 串成一张 chunk 级的有向链；Session 之间又能 fork/detach 成会话级血缘图。
+
+class EvidenceKind:
+    """证据 chunk 的类别（字符串常量，便于过滤/检索）。"""
+    MESSAGE = "message"            # 一条对话消息
+    DISPATCH = "dispatch"          # 一次派发/路由决策（canonical dispatch slot 评估）
+    MODEL_SELECTION = "model_selection"  # 主脑选型（候选/硬件/最终理由）
+    TOOL_CALL = "tool_call"        # 一次工具调用（name/参数/结果/状态）
+    VERDICT = "verdict"            # 一次校验/审查（通过/否决+理由）
+    RETRY = "retry"                # 一条失败/重试路径
+    FORK = "fork"                  # 本会话被分叉出一个子会话
+    BRANCH_ROOT = "branch_root"    # 子会话的起点（指回父链）
+    NOTE = "note"                  # 自由注记
+
+
+@dataclass
+class EvidenceChunk:
+    """证据链上的一个节点。
+
+    chunk 级血缘：``parent_id`` 默认指向同会话上一条 chunk，形成一条链；fork 时可显式指定
+    父 chunk 以表达分叉。``trace_id`` 用于跨子系统(working_memory / ToolCallRecord 等)关联。
+    """
+    id: str
+    session_id: str
+    kind: str
+    actor: str = ""                       # 产生者：planner / coder / dispatch / selector / tool:<name> ...
+    parent_id: str = ""                   # 同会话上一 chunk（或显式分叉父）
+    trace_id: str = ""
+    payload: Dict[str, Any] = field(default_factory=dict)
+    timestamp: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict:
+        return {
+            "id": self.id,
+            "session_id": self.session_id,
+            "kind": self.kind,
+            "actor": self.actor,
+            "parent_id": self.parent_id,
+            "trace_id": self.trace_id,
+            "payload": self.payload,
+            "timestamp": self.timestamp,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "EvidenceChunk":
+        return cls(
+            id=d.get("id", ""),
+            session_id=d.get("session_id", ""),
+            kind=d.get("kind", EvidenceKind.NOTE),
+            actor=d.get("actor", ""),
+            parent_id=d.get("parent_id", ""),
+            trace_id=d.get("trace_id", ""),
+            payload=d.get("payload", {}),
+            timestamp=d.get("timestamp", time.time()),
+        )
 
 
 @dataclass
@@ -75,6 +142,16 @@ class Session:
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # ── 血缘 / 证据链 ──
+    parent_id: str = ""                   # 由哪个会话 fork 而来（detach 后清空）
+    root_id: str = ""                     # 血缘根会话（detach 会成为新根）
+    branch_label: str = ""                # 分支标签，便于人读
+    forked_from_chunk: str = ""           # fork 发生时父会话的 chunk id（分叉点）
+    evidence: List[EvidenceChunk] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.root_id:
+            self.root_id = self.id
 
     @property
     def conversation_session_id(self) -> str:
@@ -91,6 +168,11 @@ class Session:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "metadata": self.metadata,
+            "parent_id": self.parent_id,
+            "root_id": self.root_id,
+            "branch_label": self.branch_label,
+            "forked_from_chunk": self.forked_from_chunk,
+            "evidence": [c.to_dict() for c in self.evidence],
         }
 
     def to_summary(self) -> Dict:
@@ -101,6 +183,10 @@ class Session:
             "devices": self.devices,
             "active_device": self.active_device,
             "message_count": len(self.history),
+            "evidence_count": len(self.evidence),
+            "parent_id": self.parent_id,
+            "root_id": self.root_id,
+            "branch_label": self.branch_label,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -116,6 +202,11 @@ class Session:
             created_at=d.get("created_at", time.time()),
             updated_at=d.get("updated_at", time.time()),
             metadata=d.get("metadata", {}),
+            parent_id=d.get("parent_id", ""),
+            root_id=d.get("root_id", "") or d["id"],
+            branch_label=d.get("branch_label", ""),
+            forked_from_chunk=d.get("forked_from_chunk", ""),
+            evidence=[EvidenceChunk.from_dict(c) for c in d.get("evidence", [])],
         )
 
 
@@ -131,6 +222,7 @@ class SessionManager:
 
     MAX_HISTORY = 200       # 每个会话最大消息数
     MAX_SESSIONS = 100      # 最大会话数
+    MAX_EVIDENCE = 1000     # 每个会话最多在内存保留的证据 chunk 数（JSONL 文件不截断）
 
     def __init__(self):
         self._sessions: Dict[str, Session] = {}
@@ -139,6 +231,9 @@ class SessionManager:
         # 会话更新回调（用于 WebSocket 广播）
         self._on_update_callback = None
         self._lock = asyncio.Lock()
+        # 证据链是同步、可被任意(同步/异步)调用方写入的快路径，用独立的线程锁保护，
+        # 不与上面的 asyncio.Lock 纠缠（避免在同步上下文里 await）。
+        self._evidence_lock = threading.Lock()
         self._load_state()
         logger.info("SessionManager 已初始化")
 
@@ -299,7 +394,13 @@ class SessionManager:
                 except Exception as e:
                     logger.debug(f"会话更新回调失败: {e}")
 
-            return True
+        # 每条消息同时落一个 message 证据 chunk（在 asyncio 锁外，用证据自身的线程锁）。
+        self.record_evidence(
+            session_id, EvidenceKind.MESSAGE, actor=role,
+            payload={"role": role, "device_id": device_id, "content": content},
+            trace_id=(metadata or {}).get("trace_id", ""),
+        )
+        return True
 
     def get_history(
         self, session_id: str, max_turns: int = 20
@@ -317,6 +418,258 @@ class SessionManager:
         if not session:
             return []
         return [m.to_dict() for m in session.history]
+
+    # ═══════════════════ 证据链 / 血缘 ═══════════════════
+
+    @staticmethod
+    def _evidence_path(session_id: str) -> str:
+        return os.path.join(_EVIDENCE_DIR, f"{session_id}.evidence.jsonl")
+
+    def record_evidence(
+        self,
+        session_id: str,
+        kind: str,
+        actor: str = "",
+        payload: Optional[Dict[str, Any]] = None,
+        trace_id: str = "",
+        parent_id: Optional[str] = None,
+    ) -> str:
+        """追加一个证据 chunk，返回其 id（同步，可在任意上下文调用；best-effort 不抛错）。
+
+        ``parent_id`` 缺省时自动指向本会话上一条 chunk，形成一条链；fork 时可显式指定。
+        chunk 立即 append 到 <session_id>.evidence.jsonl（append-only、便宜、断电可回放）。
+        """
+        try:
+            with self._evidence_lock:
+                session = self._sessions.get(session_id)
+                if session is None:
+                    return ""
+                if parent_id is None:
+                    parent_id = session.evidence[-1].id if session.evidence else ""
+                chunk = EvidenceChunk(
+                    id=f"ev_{uuid.uuid4().hex[:12]}",
+                    session_id=session_id,
+                    kind=kind,
+                    actor=actor,
+                    parent_id=parent_id or "",
+                    trace_id=trace_id or "",
+                    payload=payload or {},
+                )
+                session.evidence.append(chunk)
+                # 内存截断（JSONL 文件保留全量，仍可回放）
+                if len(session.evidence) > self.MAX_EVIDENCE:
+                    session.evidence = session.evidence[-self.MAX_EVIDENCE:]
+                session.updated_at = chunk.timestamp
+                self._append_evidence_jsonl(chunk)
+            return chunk.id
+        except Exception as e:  # noqa: BLE001 —— 证据采集绝不能影响主流程
+            logger.debug("record_evidence 失败(已忽略): %s", e)
+            return ""
+
+    def _append_evidence_jsonl(self, chunk: EvidenceChunk) -> None:
+        try:
+            os.makedirs(_EVIDENCE_DIR, exist_ok=True)
+            with open(self._evidence_path(chunk.session_id), "a", encoding="utf-8") as f:
+                f.write(json.dumps(chunk.to_dict(), ensure_ascii=False) + "\n")
+        except Exception as e:  # noqa: BLE001
+            logger.debug("证据 JSONL 追加失败(已忽略): %s", e)
+
+    # ── 给三类关键来源的便捷记录器（薄封装，统一 actor/kind/payload 形状）──
+
+    def record_dispatch(
+        self, session_id: str, decision: str, *, reason: str = "",
+        target: str = "", legality: Optional[Dict[str, Any]] = None,
+        trace_id: str = "", actor: str = "dispatch",
+    ) -> str:
+        """记录一次派发/路由决策（canonical dispatch slot 评估的结论）。"""
+        return self.record_evidence(
+            session_id, EvidenceKind.DISPATCH, actor=actor,
+            payload={"decision": decision, "reason": reason, "target": target,
+                     "legality": legality or {}},
+            trace_id=trace_id,
+        )
+
+    def record_model_selection(
+        self, session_id: str, chosen: str, *, reason: str = "",
+        hardware: str = "", candidates: Optional[List[str]] = None,
+        source: str = "", trace_id: str = "", actor: str = "selector",
+    ) -> str:
+        """记录主脑选型（最终模型 + 候选 + 硬件 + 理由）。"""
+        return self.record_evidence(
+            session_id, EvidenceKind.MODEL_SELECTION, actor=actor,
+            payload={"chosen": chosen, "reason": reason, "hardware": hardware,
+                     "candidates": candidates or [], "source": source},
+            trace_id=trace_id,
+        )
+
+    def record_tool_call(
+        self, session_id: str, tool_name: str, *, arguments: Optional[Dict] = None,
+        result: Any = None, status: str = "ok", error: str = "",
+        latency_ms: Optional[float] = None, trace_id: str = "",
+    ) -> str:
+        """记录一次工具调用（入参 / 结果 / 状态 / 时延）。"""
+        return self.record_evidence(
+            session_id, EvidenceKind.TOOL_CALL, actor=f"tool:{tool_name}",
+            payload={"tool": tool_name, "arguments": arguments or {},
+                     "result": result, "status": status, "error": error,
+                     "latency_ms": latency_ms},
+            trace_id=trace_id,
+        )
+
+    def record_verdict(
+        self, session_id: str, approved: bool, *, reason: str = "",
+        reviewer: str = "reviewer", trace_id: str = "",
+    ) -> str:
+        """记录一次校验/审查（通过或否决 + 理由）。"""
+        return self.record_evidence(
+            session_id, EvidenceKind.VERDICT, actor=reviewer,
+            payload={"approved": bool(approved), "reason": reason},
+            trace_id=trace_id,
+        )
+
+    def get_evidence(
+        self, session_id: str, kind: Optional[str] = None, limit: int = 0
+    ) -> List[Dict]:
+        """读取会话证据链（可按 kind 过滤、limit 取最近 N 条）。"""
+        session = self._sessions.get(session_id)
+        if not session:
+            return []
+        chunks = session.evidence
+        if kind:
+            chunks = [c for c in chunks if c.kind == kind]
+        if limit and limit > 0:
+            chunks = chunks[-limit:]
+        return [c.to_dict() for c in chunks]
+
+    # ── 会话级血缘：fork / detach / lineage ──
+
+    async def fork_session(
+        self,
+        session_id: str,
+        branch_label: str = "",
+        *,
+        copy_history: bool = True,
+        detach: bool = False,
+    ) -> Optional[Session]:
+        """从一个会话分叉出子会话（用于「校验否决→换条路重来」「并行探索多分支」）。
+
+        - copy_history=True：子会话继承父会话当前历史快照（独立副本，互不影响）。
+        - detach=True：切断父链（parent_id 清空、自成血缘根），子会话完全独立。
+        返回新建的子会话；父会话不存在则返回 None。
+        """
+        async with self._lock:
+            parent = self._sessions.get(session_id)
+            if parent is None:
+                return None
+            new_id = f"session_{uuid.uuid4().hex[:12]}"
+            hist: List[SessionMessage] = (
+                [SessionMessage.from_dict(m.to_dict()) for m in parent.history]
+                if copy_history else []
+            )
+            fork_point = parent.evidence[-1].id if parent.evidence else ""
+            child = Session(
+                id=new_id,
+                user_id=parent.user_id,
+                devices=list(parent.devices),
+                active_device=parent.active_device,
+                history=hist,
+                metadata=dict(parent.metadata),
+                parent_id="" if detach else parent.id,
+                root_id=new_id if detach else (parent.root_id or parent.id),
+                branch_label=branch_label or f"fork-of-{parent.id[:8]}",
+                forked_from_chunk=fork_point,
+            )
+            self._sessions[new_id] = child
+            self._persist_state()
+        # 双向留痕：父会话记一条 fork，子会话记一条 branch_root（指回分叉点）。
+        self.record_evidence(
+            session_id, EvidenceKind.FORK, actor="lineage",
+            payload={"child_id": new_id, "branch_label": child.branch_label,
+                     "detached": bool(detach)},
+        )
+        self.record_evidence(
+            new_id, EvidenceKind.BRANCH_ROOT, actor="lineage",
+            payload={"parent_id": "" if detach else session_id,
+                     "forked_from_chunk": fork_point, "detached": bool(detach)},
+            parent_id="",
+        )
+        logger.info("会话已分叉: %s → %s (label=%s, detach=%s)",
+                    session_id, new_id, child.branch_label, detach)
+        return child
+
+    async def detach_session(self, session_id: str) -> bool:
+        """切断某会话与其父会话的血缘链（自成新根）。"""
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                return False
+            session.parent_id = ""
+            session.root_id = session_id
+            session.updated_at = time.time()
+            self._persist_state()
+        self.record_evidence(session_id, EvidenceKind.NOTE, actor="lineage",
+                             payload={"event": "detach"})
+        return True
+
+    def get_lineage(self, session_id: str) -> List[Dict]:
+        """返回从血缘根到本会话的路径（每项是一个 to_summary），便于追溯「哪条分支」。"""
+        chain: List[Dict] = []
+        seen = set()
+        cur = self._sessions.get(session_id)
+        while cur is not None and cur.id not in seen:
+            seen.add(cur.id)
+            chain.append(cur.to_summary())
+            if not cur.parent_id:
+                break
+            cur = self._sessions.get(cur.parent_id)
+        chain.reverse()  # 根 → 叶
+        return chain
+
+    def export_jsonl(
+        self,
+        session_id: str,
+        path: Optional[str] = None,
+        *,
+        include_lineage: bool = True,
+    ) -> str:
+        """把会话证据链导出成 JSONL（可回放的「证据档案」），返回写出的文件路径。
+
+        include_lineage=True 时把祖先会话的证据按时间合并进来，得到一条贯穿整个血缘的链。
+        每行一个 JSON 对象（_type=session_header / evidence）。
+        """
+        session = self._sessions.get(session_id)
+        if session is None:
+            return ""
+        # 收集本会话(+祖先)的所有 chunk
+        session_ids: List[str] = [session_id]
+        if include_lineage:
+            seen = set()
+            cur = session
+            while cur is not None and cur.id not in seen:
+                seen.add(cur.id)
+                if cur.id not in session_ids:
+                    session_ids.append(cur.id)
+                cur = self._sessions.get(cur.parent_id) if cur.parent_id else None
+        rows: List[Dict] = []
+        for sid in session_ids:
+            s = self._sessions.get(sid)
+            if not s:
+                continue
+            rows.append({"_type": "session_header", **s.to_summary()})
+            for c in s.evidence:
+                rows.append({"_type": "evidence", **c.to_dict()})
+        rows.sort(key=lambda r: (0 if r["_type"] == "session_header" else 1,
+                                 r.get("timestamp", r.get("created_at", 0))))
+        out_path = path or self._evidence_path(f"{session_id}.export")
+        try:
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            with open(out_path, "w", encoding="utf-8") as f:
+                for r in rows:
+                    f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("证据档案导出失败: %s", e)
+            return ""
+        return out_path
 
     # ═══════════════════ 持久化 ═══════════════════
 
@@ -360,3 +713,17 @@ def get_session_manager() -> SessionManager:
     if _session_manager is None:
         _session_manager = SessionManager()
     return _session_manager
+
+
+def record_evidence(session_id: str, kind: str, **kwargs) -> str:
+    """模块级便捷入口：任意子系统一行落证据，绝不因采集失败影响主流程。
+
+    用法： ``from core.session_manager import record_evidence, EvidenceKind``
+          ``record_evidence(sid, EvidenceKind.TOOL_CALL, actor="tool:shell", payload={...})``
+    """
+    if not session_id:
+        return ""
+    try:
+        return get_session_manager().record_evidence(session_id, kind, **kwargs)
+    except Exception:  # noqa: BLE001
+        return ""
