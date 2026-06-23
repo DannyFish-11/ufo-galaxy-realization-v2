@@ -54,6 +54,10 @@ The following representative real paths are seeded:
 
 from __future__ import annotations
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import dataclasses
 from typing import Any, Dict, List, Optional
 

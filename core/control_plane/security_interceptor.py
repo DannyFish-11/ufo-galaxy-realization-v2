@@ -58,6 +58,10 @@ Usage
 
 from __future__ import annotations
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import asyncio
 import secrets
 import uuid

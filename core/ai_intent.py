@@ -14,6 +14,11 @@ Galaxy - AI 意图理解引擎
   用户说"帮我整理任务" → 系统理解意图 → 自动执行 → 显示结果
 """
 
+import hashlib  # auto: missing import
+import json  # auto: missing import
+import os  # auto: missing import
+
+
 import asyncio  # noqa
 import logging
 import time  # noqa

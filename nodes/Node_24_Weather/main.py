@@ -3,6 +3,9 @@ Node 24: Weather - 天气查询节点
 =================================
 提供天气查询、天气预报、空气质量功能
 """
+
+from datetime import timedelta  # auto: missing import
+
 import os
 import requests
 from datetime import datetime

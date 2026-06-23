@@ -18,6 +18,9 @@ Author: Galaxy Team
 Version: 5.0.0
 """
 
+from collections import defaultdict  # auto: missing import
+
+
 import asyncio
 import subprocess
 import os

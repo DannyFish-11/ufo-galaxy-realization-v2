@@ -1345,7 +1345,6 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             from core.monitoring import get_monitoring_manager
                             from dataclasses import dataclass, field, asdict
                             import base64
-                            import json
                             import os
                             import time
                             mon = get_monitoring_manager()

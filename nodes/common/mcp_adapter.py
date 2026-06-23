@@ -11,6 +11,10 @@ MCP Adapter Base Class
 - 错误处理
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import json
 import subprocess

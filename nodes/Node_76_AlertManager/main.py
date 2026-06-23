@@ -2,6 +2,10 @@
 Node 76: AlertManager - Alert management with multi-channel notifications
 Supports email (SMTP), Slack webhooks, and generic webhooks.
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import uuid
 import smtplib

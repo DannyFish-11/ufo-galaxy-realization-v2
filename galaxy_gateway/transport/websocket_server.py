@@ -48,6 +48,11 @@ class DeviceConnection(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
+# M4: 把活跃的 WebSocket 对象与连接元数据(DeviceConnection)分开存放。此前该全局从未声明，
+# 连接建立时 `_websocket_sockets[device_id] = websocket` 直接 NameError，破坏 connect 路径。
+_websocket_sockets: Dict[str, WebSocket] = {}
+
+
 class WebSocketManager:
     """WebSocket 连接管理器"""
     

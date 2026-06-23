@@ -18,6 +18,10 @@ Node_102_DebugOptimize - 自主调试和优化系统
 日期：2026-01-22
 作者：Manus AI
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import asyncio
 
 

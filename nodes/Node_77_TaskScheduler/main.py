@@ -2,6 +2,10 @@
 Node 77: TaskScheduler - Cron-like task scheduling with asyncio execution
 Supports basic cron expressions: minute, hour, day-of-week fields.
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import uuid
 import asyncio

@@ -5,6 +5,10 @@ Features: route registration, node registry, rate limiting, request logging,
 health checking and metrics.
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import uuid
 import logging

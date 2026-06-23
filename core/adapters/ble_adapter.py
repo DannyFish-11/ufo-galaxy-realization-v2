@@ -16,6 +16,9 @@ UUID 定义 (Galaxy BLE Service):
 - CCCD:             00002902-0000-1000-8000-00805f9b34fb
 """
 
+from typing import List  # auto: missing import
+
+
 import asyncio
 import json
 import logging

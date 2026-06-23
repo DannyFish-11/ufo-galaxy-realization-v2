@@ -47,6 +47,9 @@ receive ``None``.
 """
 from __future__ import annotations
 
+from typing import Callable  # auto: missing import
+
+
 import asyncio
 import logging
 from typing import Optional

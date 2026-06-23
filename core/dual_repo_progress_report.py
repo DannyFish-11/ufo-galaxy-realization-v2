@@ -11,6 +11,10 @@ or evaluated, the report includes an explicit *_error field rather than raising.
 
 from __future__ import annotations
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import time
 from typing import Any, Dict, List, Optional
 

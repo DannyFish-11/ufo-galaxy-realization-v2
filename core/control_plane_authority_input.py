@@ -7,6 +7,10 @@ and does not depend on operator/projection route surfaces.
 
 from __future__ import annotations
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 from typing import Any, Dict
 
 

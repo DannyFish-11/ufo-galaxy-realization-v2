@@ -10,6 +10,13 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
+# 模块级可选导入：方法内用 mavutil.X 但此前未在模块级导入 → NameError。
+# guarded import：未安装 pymavlink 时为 None，由既有「未安装」分支处理。
+try:
+    from pymavlink import mavutil
+except Exception:  # noqa: BLE001
+    mavutil = None
+
 logger = logging.getLogger(__name__)
 
 

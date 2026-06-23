@@ -7,6 +7,10 @@ Node_66_ConfigManager: 配置管理服务 (FastAPI)
 提供动态加载、访问、修改和保存配置的 REST API。
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import json
 import logging
 import os

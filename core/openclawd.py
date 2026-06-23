@@ -81,6 +81,10 @@ surfaces it in the response so the runtime shell can log it against
                 execution_path / runtime_domain / runtime_session_id
 """
 
+import logging  # auto: ensure module logger is defined
+_logger = logging.getLogger(__name__)
+
+
 import asyncio as _asyncio_module
 import dataclasses
 import enum

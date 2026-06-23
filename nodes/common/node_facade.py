@@ -33,6 +33,9 @@ Usage (integrated)::
 """
 from __future__ import annotations
 
+from fastapi import FastAPI  # auto: missing import
+
+
 import asyncio
 import logging
 from typing import Any, Dict, Optional

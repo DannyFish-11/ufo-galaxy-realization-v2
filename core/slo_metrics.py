@@ -40,6 +40,10 @@ GALAXY_SLO_HEARTBEAT_WINDOW Max heartbeat results kept for loss-rate calc
 
 from __future__ import annotations
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import math
 import os
 import threading

@@ -1,6 +1,10 @@
 """
 Node 32: Reserved - Plugin Framework Service
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import sys
 import asyncio

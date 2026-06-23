@@ -1,6 +1,10 @@
 """
 Node 43: MAVLink - 无人机通信协议
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os, time
 from datetime import datetime
 from typing import Optional

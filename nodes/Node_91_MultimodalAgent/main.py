@@ -12,6 +12,10 @@ Node 91: MultimodalAgent - 多模态 Agent（推理和规划）
 作者：Manus AI
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import asyncio
 import httpx

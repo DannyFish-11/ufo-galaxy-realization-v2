@@ -1,6 +1,10 @@
 """
 Node 78: DataValidator - JSON Schema & Pydantic data validation service
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import logging
 from datetime import datetime

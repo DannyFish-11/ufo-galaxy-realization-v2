@@ -3,6 +3,10 @@ Node 02: Tasker - 任务调度器
 =============================
 提供任务队列管理、定时任务、任务状态跟踪功能
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import json
 import asyncio

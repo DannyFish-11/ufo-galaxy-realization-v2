@@ -1,6 +1,10 @@
 """
 Node 40: SFTP - Secure File Transfer Protocol
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional

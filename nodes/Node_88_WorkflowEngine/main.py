@@ -12,6 +12,10 @@ Step types:
   set        - set/update variables in the execution context
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import json
 import uuid

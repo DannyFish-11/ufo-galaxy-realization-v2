@@ -59,6 +59,9 @@ See ``docs/LIVE_MESH_RUNTIME_ENGINE.md`` for the full specification.
 
 from __future__ import annotations
 
+import asyncio  # auto: missing import
+
+
 import logging
 import time
 import uuid

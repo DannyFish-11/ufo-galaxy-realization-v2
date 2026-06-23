@@ -12,6 +12,9 @@ Node 45: DesktopAuto - 跨平台桌面自动化（增强版）
 作者：Manus AI
 """
 
+import numpy as np  # auto: missing import
+
+
 import os
 import sys
 import time
@@ -232,8 +235,6 @@ def find_template_advanced(template_path: str, confidence: float = 0.9) -> Optio
             return None
         
         # 多尺度模板匹配
-        import numpy as np
-        
         best_match = None
         best_val = 0
         

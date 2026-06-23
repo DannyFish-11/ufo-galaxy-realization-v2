@@ -3,6 +3,10 @@ Node 06: Filesystem - 文件系统操作
 ====================================
 提供文件读写、目录管理、文件搜索、压缩解压功能
 """
+
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
 import os
 import io
 import json

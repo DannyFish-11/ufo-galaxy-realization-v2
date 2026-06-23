@@ -7,6 +7,10 @@ Node 112 - SelfHealing (自愈节点)
 仅 LLM 驱动的智能诊断会回退到规则模式。
 健康端点始终返回 HTTP 200。
 """
+
+import logging  # auto: ensure module logger is defined
+_logger = logging.getLogger(__name__)
+
 # 确保项目根目录在 sys.path 最前面，避免本地 core/ 子目录遮蔽项目级 core 包
 import sys as _sys, os as _os
 _project_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))

@@ -56,6 +56,9 @@ Usage (legacy adapter path)::
 
 from __future__ import annotations
 
+from typing import List  # auto: missing import
+
+
 import logging
 import os
 import time

@@ -6,6 +6,10 @@ metrics (accuracy, F1, BLEU, ROUGE), compare model outputs, and generate
 evaluation reports.
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import os
 import json
 import math

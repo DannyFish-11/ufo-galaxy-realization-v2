@@ -20,6 +20,9 @@ start nodes.  Node starting is Stage 3 (launcher_adapter.py).
 """
 from __future__ import annotations
 
+import asyncio  # auto: missing import
+
+
 import logging
 import time
 from typing import Any, Dict, List, Optional

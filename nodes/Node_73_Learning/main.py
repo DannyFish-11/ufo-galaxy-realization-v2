@@ -6,6 +6,10 @@ Node_73_Learning: 机器学习服务节点 (FastAPI)
 支持模型注册、训练任务调度和推理。
 """
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 import asyncio
 import json
 import logging

@@ -67,19 +67,7 @@ class FeedbackRecord:
             'timestamp': self.timestamp.isoformat(),
             'context': self.context
         }
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            'feedback_id': self.feedback_id,
-            'feedback_type': self.feedback_type.name,
-            'source': self.source,
-            'target': self.target,
-            'content': self.content,
-            'confidence': self.confidence,
-            'timestamp': self.timestamp.isoformat(),
-            'metadata': self.metadata
-        }
-    
+
     @classmethod
     def from_record(cls, record: 'FeedbackRecord') -> 'FeedbackEntry':
         """Create FeedbackEntry from FeedbackRecord."""

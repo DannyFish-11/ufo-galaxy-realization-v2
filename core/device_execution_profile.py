@@ -48,6 +48,9 @@ Usage::
 
 from __future__ import annotations
 
+import logging  # auto: missing import
+
+
 from enum import Enum
 from typing import Any, Dict, List, Optional
 

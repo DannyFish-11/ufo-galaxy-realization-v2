@@ -13,6 +13,10 @@ attach to result payloads and canonical result surfaces.
 
 from __future__ import annotations
 
+import logging  # auto: ensure module logger is defined
+logger = logging.getLogger(__name__)
+
+
 from typing import Any, Dict, List, Optional
 
 MULTI_SUBJECT_TRUTH_CONVERGENCE_BRIDGE_AUTHORITY = (
