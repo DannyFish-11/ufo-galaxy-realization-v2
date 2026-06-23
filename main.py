@@ -698,6 +698,7 @@ def _resolve_main_brain_model(args) -> None:
     --select-model 强制重新选择。选定后若本地缺失则后台 ollama pull。非致命。
     """
     try:
+        import sys as _sys
         from core import model_selection as ms
         if getattr(args, "model", None):
             os.environ["OLLAMA_MODEL"] = args.model
@@ -707,13 +708,23 @@ def _resolve_main_brain_model(args) -> None:
             except Exception:
                 pass
             os.environ.pop("OLLAMA_MODEL", None)
+        # 记录"是否本来就有选择/是否能交互"，以便明确告知用户结果来源（避免"一闪而过、自己选了一个"）。
+        _had_choice = bool(ms.load_choice()) or bool(os.environ.get("OLLAMA_MODEL", "").strip())
+        _interactive = bool(getattr(_sys.stdin, "isatty", lambda: False)())
         chosen = ms.resolve_main_brain(interactive=True)
         if chosen:
             name = ms.MODELS.get(chosen, {}).get("name", chosen)
-            print_item(f"AI 主脑模型: {name} ({chosen})", "ok")
+            if _had_choice:
+                why = "（沿用上次/指定）"
+            elif _interactive:
+                why = "（你刚选择）"
+            else:
+                why = "（无交互终端，已自动选用硬件推荐）"
+            print_item(f"AI 主脑模型: {name} ({chosen}) {why}", "ok")
+            print_item("更换主脑：python main.py --select-model   或   --model <tag>", "info")
             _background_pull_model(chosen)
         else:
-            print_item("已跳过主脑模型选择（稍后: ollama pull <模型>）", "warn")
+            print_item("已跳过主脑模型选择（稍后: ollama pull <模型>，或 python main.py --select-model）", "warn")
     except Exception as exc:  # noqa: BLE001
         print_item(f"主脑模型选择跳过(非致命): {exc}", "warn")
 
