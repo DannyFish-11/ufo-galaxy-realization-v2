@@ -199,6 +199,34 @@ class LongTermMemory:
             entries = sorted(ns_store.values(), key=lambda e: e.timestamp)
         return [e.to_dict() for e in entries]
 
+    def search(
+        self, *, query: str, namespace: str = "global", top_k: int = 5
+    ) -> List[Dict[str, Any]]:
+        """按相关度检索条目（零依赖 BM25 词法检索，无需 embedding 服务）。
+
+        在 ``key + value`` 文本上做 BM25 排序，返回最相关的若干条目（每条附 ``_score``）。
+        BM25 不可用时优雅返回空表，绝不影响调用方。
+        """
+        if not self._enabled or not query:
+            return []
+        with self._lock:
+            entries = list(self._store.get(namespace, {}).values())
+        if not entries:
+            return []
+        try:
+            from core.cognitive.bm25_index import bm25_rank
+            docs = [(str(i), f"{e.key} {e.value}") for i, e in enumerate(entries)]
+            ranked = bm25_rank(query, docs, top_k=top_k)
+            out: List[Dict[str, Any]] = []
+            for idx_str, score in ranked:
+                d = entries[int(idx_str)].to_dict()
+                d["_score"] = round(score, 4)
+                out.append(d)
+            return out
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("LongTermMemory.search BM25 不可用: %s", exc)
+            return []
+
     def forget(self, *, key: str, namespace: str = "global") -> bool:
         """Remove a single entry. Returns *True* if the key was present."""
         with self._lock:
