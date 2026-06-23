@@ -69,28 +69,40 @@ def model_name(tag: str) -> str:
     return _LABELS.get(tag, (tag, ""))[0]
 
 
-def get_compute_summary() -> Tuple[int, str]:
-    """返回 (max_model_size_mb, 硬件摘要)。复用 core.hardware_compute_profiler。"""
+def get_compute_summary() -> Tuple[int, bool, str]:
+    """返回 (max_model_size_mb, has_gpu, 硬件摘要)。复用 core.hardware_compute_profiler。"""
     try:
         from core.hardware_compute_profiler import get_compute_profile_sync
         p = get_compute_profile_sync()
         max_mb = int(getattr(p, "max_model_size_mb", 0) or 0)
         gpus = getattr(p, "gpus", []) or []
-        if gpus:
+        has_gpu = bool(gpus)
+        if has_gpu:
             g = gpus[0]
             summary = (f"GPU {getattr(g, 'name', '?')} "
                        f"(显存 {getattr(g, 'total_vram_mb', 0)} MB) | 可加载 ≤ {max_mb} MB")
         else:
             summary = f"未检测到独立 GPU（CPU 模式）| 可加载 ≤ {max_mb} MB"
-        return max_mb, summary
+        return max_mb, has_gpu, summary
     except Exception as exc:  # noqa: BLE001
-        return 0, f"硬件探测不可用（{exc}）—— 按保守默认推荐"
+        return 0, False, f"硬件探测不可用（{exc}）—— 按保守默认推荐"
 
 
-def recommend(max_model_size_mb: Optional[int] = None) -> str:
-    """按可加载显存给推荐：推荐优先级里第一个"装得下"的；都装不下→最小；探测失败→全模态。"""
-    if max_model_size_mb is None:
-        max_model_size_mb, _ = get_compute_summary()
+def recommend(max_model_size_mb: Optional[int] = None, has_gpu: Optional[bool] = None) -> str:
+    """硬件感知推荐主脑模型。
+
+    - 无独显(纯 CPU)：大模型 CPU 推理极慢 → 直接推最轻的 ``gemma4:e2b``(带视觉、最快)。
+    - 有独显：推荐优先级里第一个"装得下"显存的；都装不下 → 最小；探测失败 → 全模态。
+    """
+    if max_model_size_mb is None or has_gpu is None:
+        _mb, _gpu, _ = get_compute_summary()
+        if max_model_size_mb is None:
+            max_model_size_mb = _mb
+        if has_gpu is None:
+            has_gpu = _gpu
+    # 纯 CPU：无论内存多大，都给轻量模型（大模型 CPU 推理体验极差）。
+    if not has_gpu:
+        return "gemma4:e2b"
     sizes = _brain_sizes()
     if not max_model_size_mb:
         return "openbmb/minicpm-o4.5"
@@ -121,13 +133,16 @@ def save_choice(tag: str) -> None:
 
 
 def interactive_select() -> str:
-    """显示硬件推荐 + 全部模型，让用户手动选主脑。返回 tag（"" = 跳过）。非 TTY 用推荐。"""
-    max_mb, hw = get_compute_summary()
-    rec = recommend(max_mb)
+    """显示硬件推荐 + 全部模型，让用户手动选主脑。返回 tag（"" = 跳过）。
+
+    非交互终端(无 TTY)时不阻塞、不"偷偷"选：返回推荐，由调用方明确打印"已自动选用"。
+    """
+    max_mb, has_gpu, hw = get_compute_summary()
+    rec = recommend(max_mb, has_gpu)
     models = list_models()
 
     if not (sys.stdin and sys.stdin.isatty()):
-        return rec
+        return rec  # 非交互：交给 main.py 明确说明"已自动选推荐"
 
     print()
     print("  ╔══════════════════════════════════════════════════════════╗")
@@ -141,22 +156,23 @@ def interactive_select() -> str:
         sz = f"建议显存 ≥ {info['size_mb']} MB" if info["size_mb"] else ""
         print(f"  [{i}] {info['name']}{mark}")
         print(f"      {info['desc']}    {sz}")
-    print("  [Enter] 用推荐    [s] 跳过（稍后手动 ollama pull）")
     print()
-    try:
-        choice = input("  请选择主脑 [1-%d / Enter / s]: " % len(models)).strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        return rec
-    if choice == "":
-        return rec
-    if choice == "s":
-        return ""
-    if choice.isdigit():
-        idx = int(choice) - 1
-        if 0 <= idx < len(models):
-            return models[idx][0]
-    print("  无效选择，使用推荐。")
-    return rec
+    print("  输入序号选择；直接回车=用推荐；s=跳过下载。（之后随时可用 --select-model 重选）")
+    # 循环直到拿到有效输入：避免"一闪而过"——只有明确回车/序号/s 才往下走。
+    while True:
+        try:
+            choice = input(f"  请选择主脑 [1-{len(models)} / 回车=推荐 / s=跳过]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            return rec
+        if choice == "":
+            return rec
+        if choice == "s":
+            return ""
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(models):
+                return models[idx][0]
+        print("  ⚠ 无效输入，请重新选择（或直接回车用推荐）。")
 
 
 def resolve_main_brain(interactive: bool = True) -> str:
