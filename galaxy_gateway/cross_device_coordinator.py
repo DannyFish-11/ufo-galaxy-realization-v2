@@ -380,8 +380,7 @@ class CrossDeviceCoordinator:
                 _rec = build_dispatch_authority_record(
                     task_id=_ctx.get("task_id", ""),
                     dispatch_path=DispatchPathKind.COORDINATOR_LEGACY,
-                    is_canonical=False,
-                    caller_module="unknown",
+                    dispatcher_module="unknown",
                 )
                 record_integrity_event(_rec)
             except Exception:
