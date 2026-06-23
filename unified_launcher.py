@@ -922,8 +922,23 @@ class GalaxyUnified:
     async def start_local_brain(self):
         """启动本地 Ollama 大脑。"""
         from core.local_brain_manager import LocalBrainManager
-        brain = LocalBrainManager()
-        await brain.ensure_running()
+        self._brain = LocalBrainManager()
+        await self._brain.ensure_running()
+
+    async def select_and_start_brain(self):
+        """Phase 5：先选主脑（硬件推荐 + 手动选，放第 5 步而非开头），再启动本地大脑。"""
+        import asyncio as _asyncio
+        # 选择主脑：交互 input 放线程，避免阻塞事件循环。env(OLLAMA_MODEL)/已保存优先，
+        # 否则按硬件推荐 + 让用户手动选（见 core.model_selection）。
+        try:
+            from core import model_selection as ms
+            chosen = await _asyncio.to_thread(ms.resolve_main_brain, True)
+            if chosen:
+                ms.background_pull(chosen)  # 本地缺失则后台 ollama pull
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("主脑选择跳过(非致命): %s", exc)
+        # 启动本地大脑（LocalBrainManager 读 OLLAMA_MODEL 作主脑）
+        await self.start_local_brain()
 
     async def launch_web_ui(self):
         """启动 Web UI / API 网关。"""
@@ -979,14 +994,25 @@ class GalaxyUnified:
         except Exception:
             print_status_row("Tailscale — 未安装 (LAN直连模式)", False)
 
-        # ── Phase 5: AI 大脑 ──
+        # ── Phase 5: AI 大脑（含主脑模型选择）──
         print_section_header("[Phase 5] AI 大脑")
         try:
-            await self.start_local_brain()
-            print_status_row("Ollama 服务", True)
-            print_status_row("本地模型 — gemma4:latest | phi4:latest", True)
-            print_status_row("GPU 加速 — NVIDIA RTX 4090 | VRAM: 2048/24576 MB", True)
-            print_status_row("MasterBrain — 高级推理模块已激活", True)
+            await self.select_and_start_brain()
+            brain = getattr(self, "_brain", None)
+            # 全部为真实运行时数据（非硬编码）：
+            healthy = bool(brain and getattr(brain, "_healthy", False))
+            print_status_row("Ollama 本地推理服务" + ("" if healthy else " — 未就绪(检查 ollama 是否运行)"), healthy)
+            bm = (getattr(brain, "brain_model", None) or os.environ.get("OLLAMA_MODEL", "") or "未选择")
+            print_status_row(f"AI 主脑模型 — {bm}", True)
+            avail = list(getattr(brain, "available_models", []) or [])
+            shown = (", ".join(avail[:6]) + (f" 等 {len(avail)} 个" if len(avail) > 6 else "")) if avail else "（无 / 后台下载中）"
+            print_status_row(f"已安装模型 — {shown}", bool(avail))
+            hp = getattr(brain, "_hardware_profile", None)
+            if hp and getattr(hp, "has_gpu", False):
+                hw = f"GPU {getattr(hp, 'gpu_name', '?') or '?'} | 显存 {getattr(hp, 'vram_mb', 0)} MB"
+            else:
+                hw = "CPU 模式（无独显，软件推理）"
+            print_status_row(f"硬件 — {hw}", True)
         except Exception as exc:
             print_status_row("AI 大脑启动失败", False)
             logger.error(f"Local brain: {exc}")
@@ -997,10 +1023,10 @@ class GalaxyUnified:
             from launcher.node_startup import NodeSystemLauncher
             nl = NodeSystemLauncher(self.service_manager, self.config)
             result = await nl.start_all()
-            core_count = len(result.get("core", []))
-            ext_count = len(result.get("extended", []))
-            print_status_row(f"核心节点 — {core_count}/13 全部启动", True)
-            print_status_row(f"扩展节点 — {ext_count}/117 全部启动", True)
+            # 真实计数：start_all 返回 {node_name: ok}。就绪数/尝试总数，不再写死 /13 /117。
+            total = len(result) if isinstance(result, dict) else 0
+            ready = sum(1 for v in result.values() if v) if isinstance(result, dict) else 0
+            print_status_row(f"节点 — {ready}/{total} 就绪", ready > 0 or total == 0)
         except Exception as exc:
             print_status_row("节点系统启动失败", False)
             logger.error(f"Node system: {exc}")
@@ -1040,10 +1066,9 @@ class GalaxyUnified:
         print_section_header("[Phase 9] 桌面前端")
         electron_ok = await self.start_electron()
         if electron_ok:
-            print_status_row("Electron — v28.2.0", True)
-            print_status_row("Three.js 3D 覆盖层 — 就绪", True)
-            print_status_row("三态 UI — Active / Standby / Dormant", True)
-            print_status_row("覆盖层 — 启动后自动显示「已就绪」提示，约 3.5s 回落静默（无需唤醒）", True)
+            print_status_row("Electron 桌面三态覆盖层 — 已启动", True)
+            print_status_row("第一态：暖金边缘氛围光（待机即显示）", True)
+            print_status_row("三态切换由 AI 实际活动驱动（silent → liminal → manifest）", True)
             print_status_row("快捷键 — Ctrl+Alt+Space 唤醒 / Ctrl+Alt+H 隐藏 (避开输入法占用的 Ctrl+Space)", True)
         else:
             print_status_row("桌面覆盖层未启动 — 后端/API 仍完全可用", False)

@@ -662,44 +662,10 @@ def _run_setup_wizard() -> int:
 # Main entry-point
 # ---------------------------------------------------------------------------
 
-def _background_pull_model(tag: str) -> None:
-    """若本地 Ollama 没有该主脑模型，则后台 ollama pull（不阻塞启动）。"""
-    import threading
-    import shutil as _shutil
-    if not tag or not _shutil.which("ollama"):
-        return
-
-    def _pull() -> None:
-        try:
-            import httpx
-            have = []
-            try:
-                r = httpx.get("http://localhost:11434/api/tags", timeout=3.0)
-                if r.status_code == 200:
-                    have = [m.get("name", "") for m in r.json().get("models", [])]
-            except Exception:
-                pass
-            base = tag.split(":")[0]
-            if any(h == tag or h.startswith(tag + ":") or h.split(":")[0] == base for h in have):
-                return  # 已安装
-            logger.info("[主脑] 后台下载模型 %s（首次较慢）...", tag)
-            subprocess.run(["ollama", "pull", tag], capture_output=True, text=True, timeout=3600)
-            logger.info("[主脑] 模型 %s 下载完成", tag)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[主脑] 模型下载跳过: %s", exc)
-
-    threading.Thread(target=_pull, name="GalaxyModelPull", daemon=True).start()
-
-
-def _resolve_main_brain_model(args) -> None:
-    """解析 AI 主脑模型：按硬件推荐 + 列出全部供手动选择，持久化并设 OLLAMA_MODEL。
-
-    优先级：--model 参数 > OLLAMA_MODEL 环境变量 > 已保存选择 > 交互选择(首次) > 硬件推荐。
-    --select-model 强制重新选择。选定后若本地缺失则后台 ollama pull。非致命。
-    """
+def _apply_model_cli_args(args) -> None:
+    """把 --model / --select-model 应用到环境变量；真正的主脑选择移到 Phase 5「AI 大脑」进行
+    （不在开头打断）。--select-model 清除已保存选择以触发重新选择。"""
     try:
-        import sys as _sys
-        from core import model_selection as ms
         if getattr(args, "model", None):
             os.environ["OLLAMA_MODEL"] = args.model
         if getattr(args, "select_model", False):
@@ -708,25 +674,8 @@ def _resolve_main_brain_model(args) -> None:
             except Exception:
                 pass
             os.environ.pop("OLLAMA_MODEL", None)
-        # 记录"是否本来就有选择/是否能交互"，以便明确告知用户结果来源（避免"一闪而过、自己选了一个"）。
-        _had_choice = bool(ms.load_choice()) or bool(os.environ.get("OLLAMA_MODEL", "").strip())
-        _interactive = bool(getattr(_sys.stdin, "isatty", lambda: False)())
-        chosen = ms.resolve_main_brain(interactive=True)
-        if chosen:
-            name = ms.MODELS.get(chosen, {}).get("name", chosen)
-            if _had_choice:
-                why = "（沿用上次/指定）"
-            elif _interactive:
-                why = "（你刚选择）"
-            else:
-                why = "（无交互终端，已自动选用硬件推荐）"
-            print_item(f"AI 主脑模型: {name} ({chosen}) {why}", "ok")
-            print_item("更换主脑：python main.py --select-model   或   --model <tag>", "info")
-            _background_pull_model(chosen)
-        else:
-            print_item("已跳过主脑模型选择（稍后: ollama pull <模型>，或 python main.py --select-model）", "warn")
-    except Exception as exc:  # noqa: BLE001
-        print_item(f"主脑模型选择跳过(非致命): {exc}", "warn")
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def main() -> int:
@@ -762,8 +711,9 @@ def main() -> int:
     # ── Phase 0: Galaxy Banner ───────────────────────────
     print_banner()
 
-    # ── Phase 0.5: AI 主脑模型（按 GPU/CPU 推荐 + 手动选择；首次运行）──
-    _resolve_main_brain_model(args)
+    # 仅应用 --model/--select-model 到环境；真正的主脑模型选择在 Phase 5「AI 大脑」进行
+    # （不在开头打断用户）。
+    _apply_model_cli_args(args)
 
     # ── Phase 0: Environment check ───────────────────────
     print_phase("[Phase 0] 环境检查")
