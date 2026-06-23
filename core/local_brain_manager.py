@@ -128,7 +128,9 @@ class LocalBrainManager:
         self._backend = None  # LocalModelBackend instance
         self.ollama_url = ollama_url or os.environ.get("OLLAMA_URL", self.OLLAMA_DEFAULT_URL)
         self.available_models: List[str] = []
-        self.brain_model: str = "gemma4:12b"  # 默认主脑 (Gemma 4 12B)
+        # 主脑模型：优先用启动时选定的 OLLAMA_MODEL（见 core.model_selection / Phase 5），
+        # 未选时回退 Gemma 4 12B —— 让"第 5 步选的主脑"真正驱动本地大脑加载。
+        self.brain_model: str = os.environ.get("OLLAMA_MODEL", "").strip() or "gemma4:12b"
         self._healthy = False
         self._status = LocalBrainStatus.STOPPED
         self._hardware_profile: Optional[HardwareProfile] = None

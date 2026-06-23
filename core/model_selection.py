@@ -175,6 +175,35 @@ def interactive_select() -> str:
         print("  ⚠ 无效输入，请重新选择（或直接回车用推荐）。")
 
 
+def background_pull(tag: str) -> None:
+    """若本地 Ollama 没有该主脑模型，则后台 ollama pull（不阻塞启动）。"""
+    import shutil
+    import subprocess
+    import threading
+    if not tag or not shutil.which("ollama"):
+        return
+
+    def _pull() -> None:
+        try:
+            import httpx
+            have: List[str] = []
+            try:
+                base = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+                r = httpx.get(f"{base}/api/tags", timeout=3.0)
+                if r.status_code == 200:
+                    have = [m.get("name", "") for m in r.json().get("models", [])]
+            except Exception:
+                pass
+            root = tag.split(":")[0]
+            if any(h == tag or h.startswith(tag + ":") or h.split(":")[0] == root for h in have):
+                return  # 已安装
+            subprocess.run(["ollama", "pull", tag], capture_output=True, text=True, timeout=3600)
+        except Exception:
+            pass
+
+    threading.Thread(target=_pull, name="GalaxyModelPull", daemon=True).start()
+
+
 def resolve_main_brain(interactive: bool = True) -> str:
     """解析并持久化最终主脑：环境 OLLAMA_MODEL > 已保存 > 交互选择 > 硬件推荐。"""
     env_model = os.environ.get("OLLAMA_MODEL", "").strip()
