@@ -395,7 +395,7 @@ class SwarmCoordinator:
             _participants = [
                 MeshSessionParticipant(
                     device_id=d.target_device_id,
-                    role="executor",
+                    roles=["executor"],
                 )
                 for d in orch_decisions
                 if d.target_device_id is not None
