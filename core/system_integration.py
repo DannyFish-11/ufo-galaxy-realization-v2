@@ -99,33 +99,27 @@ class SystemIntegration:
         return
     
     def _load_builtin_capabilities(self):
-        """加载内置能力"""
-        builtins = [
-            Capability(
-                id="builtin_chat",
-                name="chat",
-                type=CapabilityType.BUILTIN,
-                description="与 AI 进行对话",
-                priority=1,
-            ),
-            Capability(
-                id="builtin_device_control",
-                name="device_control",
-                type=CapabilityType.BUILTIN,
-                description="控制设备执行操作",
-                priority=8,
-            ),
-        ]
-        
-        for cap in builtins:
-            self.register_capability(
-                id=cap.id,
-                name=cap.name,
-                type=cap.type,
-                description=cap.description,
-                priority=cap.priority,
-            )
-    
+        """加载内置能力。
+
+        直接走 register_capability（它负责映射到 canonical CapabilityContract）。此前先构造
+        Capability(id=/type=/priority=) 再取字段转发 —— 但 id/type/priority 是 CapabilityContract
+        的只读 property、并非构造字段，直接构造即 TypeError。去掉无谓的中间构造。
+        """
+        self.register_capability(
+            id="builtin_chat",
+            name="chat",
+            type=CapabilityType.BUILTIN,
+            description="与 AI 进行对话",
+            priority=1,
+        )
+        self.register_capability(
+            id="builtin_device_control",
+            name="device_control",
+            type=CapabilityType.BUILTIN,
+            description="控制设备执行操作",
+            priority=8,
+        )
+
     # ========================================================================
     # 能力注册
     # ========================================================================

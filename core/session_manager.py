@@ -325,6 +325,67 @@ class SessionManager:
         """获取会话"""
         return self._sessions.get(session_id)
 
+    # ── 同步生命周期（供 sync 调用方使用，逻辑与上面 async 版一致）──
+    # 背景：异步版用 asyncio.Lock 串行化协程；但有些 sync 调用方（如
+    # core.session_identity.build_canonical_session_identity）无法 await。它们此前直接调
+    # 异步方法 → 协程被丢弃、会话其实从未创建/确保（甚至 .conversation_session_id 取在协程上
+    # 报 AttributeError）。这里提供等价的同步入口，用 _evidence_lock（线程锁）保护，与
+    # record_evidence 的同步写入路径一致。
+
+    def ensure_session_sync(
+        self, session_id: str, user_id: str = "", device_id: str = ""
+    ) -> Session:
+        """ensure_session 的同步版本（语义一致）。"""
+        with self._evidence_lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                owner = user_id or f"session::{session_id}"
+                session = Session(
+                    id=session_id,
+                    user_id=owner,
+                    devices=[device_id] if device_id else [],
+                    active_device=device_id,
+                )
+                self._sessions[session_id] = session
+                if owner:
+                    self._user_active_session[owner] = session_id
+                self._persist_state()
+                return session
+            if user_id:
+                self._user_active_session[user_id] = session_id
+            if device_id and device_id not in session.devices:
+                session.devices.append(device_id)
+            if device_id:
+                session.active_device = device_id
+            session.updated_at = time.time()
+            self._persist_state()
+            return session
+
+    def get_or_create_session_sync(
+        self, user_id: str, device_id: str = ""
+    ) -> Session:
+        """get_or_create_session 的同步版本（语义一致）。"""
+        with self._evidence_lock:
+            session_id = self._user_active_session.get(user_id)
+            if session_id and session_id in self._sessions:
+                session = self._sessions[session_id]
+                if device_id and device_id not in session.devices:
+                    session.devices.append(device_id)
+                if device_id:
+                    session.active_device = device_id
+                return session
+            new_id = f"session_{uuid.uuid4().hex[:12]}"
+            session = Session(
+                id=new_id,
+                user_id=user_id,
+                devices=[device_id] if device_id else [],
+                active_device=device_id,
+            )
+            self._sessions[new_id] = session
+            self._user_active_session[user_id] = new_id
+            self._persist_state()
+            return session
+
     async def join_session(self, session_id: str, device_id: str) -> bool:
         """设备加入已有会话"""
         async with self._lock:
