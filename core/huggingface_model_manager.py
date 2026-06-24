@@ -430,7 +430,7 @@ class HuggingFaceModelManager:
                 logger.info("[MODEL-DL] Background download completed: %s", model_id)
                 return result
             except Exception as exc:
-                _set_status(model_id, "failed", error=str(exc))
+                _set_status(model_id, "failed", err=str(exc))
                 logger.error("[MODEL-DL] Background download failed: %s — %s", model_id, exc)
 
         task = asyncio.create_task(_bg())

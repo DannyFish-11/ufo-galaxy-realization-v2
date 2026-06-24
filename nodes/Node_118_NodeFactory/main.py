@@ -156,14 +156,15 @@ class NodeFactory:
     def register_node(self, node_name: str, main_file: str, **kwargs) -> bool:
         """动态注册新节点（供 AutonomousCoder 自动扩展使用）"""
         template_id = node_name
+        # NodeTemplate 无 version/capabilities 字段（dataclass，传入即 TypeError）；
+        # 仅传真实字段。capabilities 等附加信息归入 default_config，避免丢失又不破坏构造。
         template = NodeTemplate(
             template_id=template_id,
             name=node_name,
             node_type=NodeType.SERVICE,
             description=kwargs.get("description", f"Auto-registered node: {node_name}"),
-            version="1.0.0",
             entry_point=main_file,
-            capabilities=kwargs.get("capabilities", []),
+            default_config={"capabilities": kwargs.get("capabilities", [])},
         )
         self.templates[template_id] = template
         logger.info(f"Dynamically registered node: {node_name} from {main_file}")

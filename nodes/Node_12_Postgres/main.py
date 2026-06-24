@@ -21,7 +21,6 @@ try:
 except ImportError:
     ASYNCPG_AVAILABLE = False
 
-from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def _lifespan(app):

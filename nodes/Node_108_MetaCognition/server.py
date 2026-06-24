@@ -20,7 +20,6 @@ from core.metacognition_engine import (
     ThoughtType,
     CognitiveBias
 )
-from nodes.common.cors_config import get_cors_origins
 
 # ========== 配置 ==========
 NODE_PORT = int(os.getenv("NODE_108_PORT", "9100"))

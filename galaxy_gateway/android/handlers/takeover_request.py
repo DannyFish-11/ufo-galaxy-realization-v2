@@ -217,15 +217,19 @@ async def handle_takeover_request(
 
     if is_valid and _get_lifecycle_coordinator is not None:
         try:
+            # on_takeover_requested 签名为 (session_id, takeover_id, device_id, task_id,
+            # trace_id, metadata)；requesting_device_id→device_id，其余附加信息归入 metadata。
             outcome = _get_lifecycle_coordinator().on_takeover_requested(
                 session_id=session_id,
                 takeover_id=takeover_id,
-                requesting_device_id=source_device_id,
-                target_device_id=target_device_id,
-                urgency=urgency,
-                constraints=list(constraints) if isinstance(constraints, list) else [],
-                task_context=task_context if isinstance(task_context, dict) else {},
+                device_id=source_device_id,
                 trace_id=trace_id,
+                metadata={
+                    "target_device_id": target_device_id,
+                    "urgency": urgency,
+                    "constraints": list(constraints) if isinstance(constraints, list) else [],
+                    "task_context": task_context if isinstance(task_context, dict) else {},
+                },
             )
             coordinator_accepted = getattr(outcome, "accepted", True)
             coordinator_reason = getattr(outcome, "reason", "")

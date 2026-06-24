@@ -87,6 +87,7 @@ from .formation_rebalance_engine import (
 from .formation_runtime_coordinator import (
     FormationRuntimeCoordinator,
     FormationRuntimeDecision,
+    FormationParticipantState,
     RecoveryActionType,
 )
 
@@ -378,7 +379,7 @@ def _on_runtime_event_inner(
     if evt == FormationRuntimeEventType.PARTICIPANT_READY:
         decision = coordinator.on_participant_readiness_changed(
             device_id=event.device_id,
-            is_ready=True,
+            new_state=FormationParticipantState.READY,
             reason=event.reason,
         )
 

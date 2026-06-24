@@ -1268,7 +1268,6 @@ class CommandRouter:
                 device_id=envelope.target or "",
                 entry_stage=MainlineChainStage.COMMAND_ROUTER_ORCHESTRATION,
                 authority_role=COMMAND_ROUTER_ORCHESTRATION_AUTHORITY,
-                source="command_router.route_envelope",
             )
             get_mainline_convergence_registry().record(_trace)
         except Exception as _mc_exc:
