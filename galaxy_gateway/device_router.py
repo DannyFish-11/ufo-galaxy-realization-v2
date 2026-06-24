@@ -1684,8 +1684,7 @@ class DeviceRouter:
                 _rec = build_dispatch_authority_record(
                     task_id=task.get("task_id", ""),
                     dispatch_path=DispatchPathKind.PARALLEL_LEGACY,
-                    is_canonical=False,
-                    caller_module="unknown",
+                    dispatcher_module="unknown",
                 )
                 record_integrity_event(_rec)
             except Exception:

@@ -68,11 +68,11 @@ class FeedbackRecord:
             'context': self.context
         }
 
-    @classmethod
-    def from_record(cls, record: 'FeedbackRecord') -> 'FeedbackEntry':
+    @staticmethod
+    def from_record(record: 'FeedbackRecord') -> 'FeedbackEntry':
         """Create FeedbackEntry from FeedbackRecord."""
         feedback_type = FeedbackType.POSITIVE if record.success else FeedbackType.NEGATIVE
-        return cls(
+        return FeedbackEntry(
             feedback_id=record.record_id,
             feedback_type=feedback_type,
             source='autonomous_learning',

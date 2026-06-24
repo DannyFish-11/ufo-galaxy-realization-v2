@@ -638,9 +638,9 @@ class DeviceCoordinator:
     ) -> bool:
         """Send message to specific device"""
         message = AIPMessage(
-            msg_type=msg_type,
+            type=msg_type,
             payload=payload,
-            source_device="coordinator"
+            device_id="coordinator"
         )
         
         result = await self.session_manager.send_to_device(
@@ -662,9 +662,9 @@ class DeviceCoordinator:
     ) -> Dict[str, bool]:
         """Broadcast message to all devices"""
         message = AIPMessage(
-            msg_type=msg_type,
+            type=msg_type,
             payload=payload,
-            source_device="coordinator"
+            device_id="coordinator"
         )
         
         results = await self.session_manager.broadcast(

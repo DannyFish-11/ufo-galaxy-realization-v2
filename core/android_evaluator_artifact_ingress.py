@@ -88,6 +88,10 @@ governance flow.  Companion Android repo: ``DannyFish-11/ufo-galaxy-android``.
 
 from __future__ import annotations
 
+import logging  # auto: ensure module _logger is defined
+_logger = logging.getLogger(__name__)
+
+
 import threading as _threading
 import time
 import uuid

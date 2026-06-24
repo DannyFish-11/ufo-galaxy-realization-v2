@@ -94,6 +94,10 @@ Design principles
 
 from __future__ import annotations
 
+import logging  # auto: ensure module _logger is defined
+_logger = logging.getLogger(__name__)
+
+
 import time
 import uuid
 from collections import OrderedDict
