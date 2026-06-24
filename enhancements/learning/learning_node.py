@@ -628,9 +628,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     })
                 
                 elif message.get('action') == 'get_patterns':
-                    patterns = state.engine.pattern_recognizer.get_patterns(
-                        limit=message.get('limit', 10)
-                    )
+                    # get_patterns(pattern_type=, min_confidence=) 无 limit 参数 → 返回后切片。
+                    _limit = int(message.get('limit', 10) or 10)
+                    patterns = state.engine.pattern_recognizer.get_patterns()[:_limit]
                     await websocket.send_json({
                         'type': 'patterns',
                         'data': [{

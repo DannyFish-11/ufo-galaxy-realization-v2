@@ -1686,7 +1686,7 @@ class DeviceRouter:
                     dispatch_path=DispatchPathKind.PARALLEL_LEGACY,
                     dispatcher_module="unknown",
                 )
-                record_integrity_event(_rec)
+                record_integrity_event(dispatch_record=_rec)
             except Exception:
                 pass  # integrity recording is advisory
 
