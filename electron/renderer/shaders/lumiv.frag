@@ -97,8 +97,8 @@ vec4 renderLiminal(vec2 pixel, float t, float weight, float expand) {
   #define PJY(y, z) (cy + ((y) - cy) * zNear / max((z), 0.3))
   #define PJX(x, z) (cx + ((x) - cx) * zNear / max((z), 0.3))
 
-  vec3 accumRGB = vec3(0);
-  float accumA = 0;
+  vec3 accumRGB = vec3(0.0);
+  float accumA = 0.0;
 
   // ── z 层墙面 ──
   for (int li = 0; li < NUM_Z_LAYERS - 1; li++) {

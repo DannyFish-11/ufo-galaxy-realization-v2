@@ -615,10 +615,21 @@ ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
             });
         }
     } catch (e) {
-        // 后端未就绪/网络抖动等非致命；丢弃本帧即可
-        console.debug('[Perception] forward failed:', e && e.message);
+        // 后端未就绪/网络抖动等非致命；丢弃本帧即可。
+        // 限流日志：每帧都打会把 electron.log 刷爆（摄像头每 2s 一帧）。只在【首次】和【每 30s】
+        // 各打一次，并带累计次数，既能看见问题又不淹没真正的报错。
+        _perceptionFailCount++;
+        const _now = Date.now();
+        if (_now - _perceptionFailLogAt > 30000) {
+            console.warn(`[Perception] forward 失败（已累计 ${_perceptionFailCount} 帧）：` +
+                `${e && e.message} — 目标 ${GATEWAY_BASE}/api/perception/desktop/*；` +
+                `请确认后端网关在 ${GATEWAY_BASE} 正常监听。`);
+            _perceptionFailLogAt = _now;
+        }
     }
 });
+let _perceptionFailCount = 0;
+let _perceptionFailLogAt = 0;
 
 // ═══════════════════════════════════════════
 // Configuration Management — Python Backend

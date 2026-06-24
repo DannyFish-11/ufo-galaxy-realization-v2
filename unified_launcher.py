@@ -777,6 +777,11 @@ class GalaxyUnified:
         try:
             env = os.environ.copy()
             env["PATH"] = str(Path(npm).parent) + os.pathsep + env.get("PATH", "")
+            # 显式把【真实的网关端口】告诉 Electron，避免它只能猜默认 9000：若后端实际监听端口
+            # 与 9000 不一致（config 覆盖等），main.js 的 GATEWAY_BASE 会指错口子 → 感知帧/配置
+            # 等 fetch 全部「fetch failed」。这里把 web_ui_port 同步给 Electron，从根上消除端口错配。
+            env["GALAXY_GATEWAY_PORT"] = str(self.config.web_ui_port)
+            env.setdefault("PORT", str(self.config.web_ui_port))
             # GPU 自适应：默认让 Electron 走硬件加速（有独显的机器更流畅）。若 watch_processes
             # 检测到 GPU 模式反复崩溃，会置 _electron_force_software=True，这里注入
             # GALAXY_ELECTRON_GPU=0 → main.js 据此 disableHardwareAcceleration（软件渲染兜底）。
