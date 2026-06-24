@@ -65,7 +65,9 @@ def build_canonical_session_identity(
         if create_session:
             sm = get_session_manager()
             owner = user_id or f"device::{device_id or 'default'}"
-            conversation_session_id = sm.get_or_create_session(
+            # 本函数是 sync，必须用同步入口；此前直接调异步 get_or_create_session →
+            # 在返回的协程上取 .conversation_session_id 会 AttributeError。
+            conversation_session_id = sm.get_or_create_session_sync(
                 owner,
                 device_id or "",
             ).conversation_session_id
@@ -73,7 +75,8 @@ def build_canonical_session_identity(
             conversation_session_id = f"session_{uuid.uuid4().hex[:12]}"
 
     if create_session:
-        get_session_manager().ensure_session(
+        # 同步 ensure（此前调异步 ensure_session → 协程被丢弃、会话其实从未确保）。
+        get_session_manager().ensure_session_sync(
             conversation_session_id,
             user_id=user_id or f"device::{device_id or 'default'}",
             device_id=device_id or "",

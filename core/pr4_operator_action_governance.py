@@ -1538,10 +1538,8 @@ def execute_governed_operator_action(
                     ContinuityReconnectClass,
                 )
                 result = classify_reconnect_event(
-                    prior_session_id=target_sid,
-                    new_session_id="",
-                    offline_queue_depth=0,
-                    session_age_seconds=0.0,
+                    device_id=device_id or None,
+                    runtime_session_id=target_sid or None,
                 )
                 downstream_effects.append(
                     f"reconnect_classified:{result.reconnect_class.value}"
