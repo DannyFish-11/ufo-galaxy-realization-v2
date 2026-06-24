@@ -180,7 +180,6 @@ def get_core_compat_device_ingress_policy(
     env: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Return the effective activation policy for the core-direct compat WS route."""
-    import os
     from core.system_mode import resolve_fabric_config
 
     effective_env = dict(os.environ if env is None else env)

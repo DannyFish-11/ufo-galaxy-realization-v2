@@ -380,7 +380,7 @@ class MCPDynamicGateway:
             import asyncio
 
             async def _load():
-                return await mcp_loader.load(server_id=name, command=command)
+                return await mcp_loader.load(name=name, command=command)
 
             try:
                 loop = asyncio.get_running_loop()

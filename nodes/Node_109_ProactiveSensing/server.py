@@ -22,7 +22,6 @@ from core.proactive_sensing_engine import (
     AnomalyType,
     EnvironmentState
 )
-from nodes.common.cors_config import get_cors_origins
 
 # ========== 配置 ==========
 NODE_PORT = int(os.getenv("NODE_109_PORT", "9101"))

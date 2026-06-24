@@ -45,7 +45,6 @@ from enhancements.multidevice.device_protocol import (
     AIPMessage, MessageType, DeviceInfo, DeviceStatus, ErrorCode,
     MessageBuilder, ProtocolValidator, ProtocolHandler, MessageRouter, ProtocolError
 )
-from nodes.common.cors_config import get_cors_origins
 
 # Configure logging
 logging.basicConfig(

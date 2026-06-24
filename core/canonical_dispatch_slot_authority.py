@@ -1096,7 +1096,6 @@ def _eval_continuity_legality(
         _continuity_epoch = int(extra_context.get("continuity_epoch") or 0)
 
         ctx = ContinuityLegalityContext(
-            path=path,
             device_id=device_id,
             durable_session_id=_durable_session_id,
             runtime_attachment_session_id=_attach_id,

@@ -250,7 +250,6 @@ class VoiceChannel:
         Returns:
             True if voice output should be produced.
         """
-        import os
         env = os.environ.get("GALAXY_VOICE", "1").strip().lower()
         if env in ("1", "true", "yes", "on"):
             return True

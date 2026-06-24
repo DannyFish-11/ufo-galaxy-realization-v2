@@ -1385,7 +1385,6 @@ class FlowContinuityCoordinator:
                 ContinuityDecision.require_review,
                 policy_reference="STALE_IDENTITY_REJECTION_IS_NON_DESTRUCTIVE_POLICY",
                 detail="cannot classify stale identity: no registry and no context identifiers",
-                session_id=ctx.session_id,
                 tracking_record_phase=tracking_phase,
                 flow_entity_phase=flow_phase,
             )

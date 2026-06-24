@@ -373,7 +373,6 @@ def absorb_nats_connectivity_event(
             is_connected=is_connected,
             host=host,
             port=port,
-            node_id=node_id,
         )
         logger.debug(
             "absorb_nats_connectivity_event: node=%s connected=%s",

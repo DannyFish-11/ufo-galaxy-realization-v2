@@ -703,7 +703,7 @@ def _check_attachment_validity(
         from core.attached_runtime_session_registry import (
             lookup_session_by_device,
         )
-        entry = lookup_session_by_device(device_id, active_only=False)
+        entry = lookup_session_by_device(device_id)
         if entry is None:
             # No registry entry — registry cannot assert non-active; pass through
             # (consistent with REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22_POLICY)

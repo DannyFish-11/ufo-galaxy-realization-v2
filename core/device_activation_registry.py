@@ -301,8 +301,7 @@ class DeviceActivationRegistry:
             decision=None,
             result=None,
             trace_id=trace_id,
-            source_event=source_event,
-            decision_reason=f"ERROR: {error}",
+            source_event=f"{source_event}:ERROR:{error}",
         )
         self._error_count += 1
 

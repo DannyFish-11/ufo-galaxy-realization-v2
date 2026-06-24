@@ -20,7 +20,6 @@ from core.tool_wrapper_engine import (
     ToolType,
     InstallMethod
 )
-from nodes.common.cors_config import get_cors_origins
 
 # ========== 配置 ==========
 NODE_PORT = int(os.getenv("NODE_113_PORT", "9102"))

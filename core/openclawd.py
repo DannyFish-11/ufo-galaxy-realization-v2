@@ -942,7 +942,6 @@ class OpenClawd:
             self._capability_dispatcher = None
 
         # PR-7: orchestration submodule composition
-        from core.orchestration.lifecycle import LifecycleManager
         from core.orchestration.state import SessionMemoryManager
 
         self._lifecycle_manager = LifecycleManager()

@@ -397,8 +397,7 @@ async def analyze_screen(request: AnalyzeScreenRequest) -> Dict[str, Any]:
             
             # 上传图片并获取 URL
             if request.image_path:
-                # 使用manus-upload-file 上传
-                import subprocess
+                # 使用manus-upload-file 上传（subprocess 已在模块级导入）
                 result = subprocess.run(
                     ["manus-upload-file", request.image_path],
                     capture_output=True,
