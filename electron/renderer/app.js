@@ -191,13 +191,27 @@ class GalaxyRenderer {
   // 唤醒(manifest)时屏幕中央一张「Galaxy 已就绪」提示卡。这样唤醒一定看得见。
 
   _buildFallback() {
+    // 暖香槟边缘氛围光（DOM 版第一态）：当 WebGL/着色器不可用（无独显、驱动不支持
+    // WebGL2、SwiftShader 失败、shader 加载失败）时，仍用纯 CSS 内阴影把屏幕四边柔和框起来，
+    // 保证「覆盖层确实打开了」一眼可见——而不是只剩一颗几乎看不见的小光点（用户「打不开」的根因）。
+    const glow = document.createElement('div');
+    glow.id = 'fallbackGlow';
+    glow.style.cssText = [
+      'position:fixed', 'inset:0', 'z-index:9998', 'pointer-events:none', 'opacity:0',
+      'box-shadow:inset 0 0 200px 56px rgba(255,209,153,0.34)',
+      'transition:opacity 0.6s ease',
+    ].join(';');
+    document.body.appendChild(glow);
+    this.fallbackGlow = glow;
+
     const orb = document.createElement('div');
     orb.id = 'fallbackOrb';
     orb.style.cssText = [
       'position:fixed', 'right:22px', 'bottom:54px', 'width:18px', 'height:18px',
       'border-radius:50%', 'z-index:10000', 'pointer-events:none', 'opacity:0',
-      'background:radial-gradient(circle, #29e1fd 0%, #6d5cff 55%, #ff2e93 100%)',
-      'box-shadow:0 0 16px 4px rgba(109,92,255,0.55)',
+      // 暖香槟金，与第一态主题一致（此前是冷色，跑题）
+      'background:radial-gradient(circle, #ffe7c2 0%, #ffd199 55%, #d8a766 100%)',
+      'box-shadow:0 0 16px 4px rgba(255,209,153,0.55)',
       'transition:opacity 0.4s ease',
     ].join(';');
     document.body.appendChild(orb);
@@ -226,9 +240,17 @@ class GalaxyRenderer {
     // WebGL 正常时，画面 100% 由着色器的完整三态负责。
     const d = this.currentDepth;
     if (this.webglOK) {
+      if (this.fallbackGlow) this.fallbackGlow.style.opacity = '0';
       if (this.fallbackOrb) this.fallbackOrb.style.opacity = '0';
       if (this.wakeHint) this.wakeHint.style.opacity = '0';
       return;
+    }
+    // 暖香槟边缘辉光：第一态(silent)即清晰可见、柔和呼吸；进入二/三态(depth 升高)时
+    // 渐隐让位给空间/提示卡。这就是「不靠 WebGL 也能看见第一态」的关键兜底。
+    if (this.fallbackGlow) {
+      const breathe = 0.84 + 0.16 * Math.sin(this.time * 1.4);
+      const base = d < 0.35 ? (0.6 + d * 0.6) : Math.max(0, 0.81 - (d - 0.35) * 1.4);
+      this.fallbackGlow.style.opacity = Math.max(0, Math.min(0.92, base * breathe)).toFixed(2);
     }
     if (this.fallbackOrb) {
       const breathe = 0.55 + 0.45 * Math.sin(this.time * 2.0);
