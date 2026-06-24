@@ -666,18 +666,18 @@ class GalaxyUnified:
 
         flag = os.environ.get("GALAXY_AUTO_DOCKER", "auto").strip().lower()
         if flag in ("0", "false", "no", "off"):
-            print_status_row("Docker 基础设施 — 已禁用 (GALAXY_AUTO_DOCKER=0)", False)
+            print_status_row("Docker 基础设施 — 已禁用 (GALAXY_AUTO_DOCKER=0)", status="warning")
             return False
 
         docker = shutil.which("docker")
         if not docker:
-            print_status_row("Docker 未安装 — 依赖基础设施的节点将跳过（不影响桌面功能）", False)
+            print_status_row("Docker 未安装 — 依赖基础设施的节点将跳过（不影响桌面功能）", status="warning")
             print_status("如需启用全部节点：安装 Docker 后重跑 — https://docs.docker.com/get-docker/", "info")
             return False
 
         compose_file = PROJECT_ROOT / "docker-compose.yml"
         if not compose_file.exists():
-            print_status_row("docker-compose.yml 不存在 — 跳过 Docker 基础设施", False)
+            print_status_row("docker-compose.yml 不存在 — 跳过 Docker 基础设施", status="warning")
             return False
 
         # 仅基础设施后端；排除 galaxy/galaxy-gateway(应用本身) 与 ollama(避免与本地 Ollama 冲突)。
@@ -730,19 +730,19 @@ class GalaxyUnified:
 
         status, rc = await asyncio.to_thread(_bring_up)
         if status == "up" and rc == 0:
-            print_status_row("Docker 基础设施 — nats/redis/qdrant/neo4j/mongodb 已就绪", True)
+            print_status_row("Docker 基础设施 — nats/redis/qdrant/neo4j/mongodb 已就绪", status="success")
             return True
         if status == "pulling":
-            print_status_row("Docker 基础设施 — 首次镜像下载中(后台)", True)
+            print_status_row("Docker 基础设施 — 首次镜像下载中(后台)", status="success")
             print_status("进度见 logs/docker.log；本轮先跳过依赖节点，下次启动即生效", "info")
             return False
         if status == "daemon_down":
-            print_status_row("Docker 守护未能自动启动 — 手动启动 Docker Desktop 后重跑", False)
+            print_status_row("Docker 守护未能自动启动 — 手动启动 Docker Desktop 后重跑", status="warning")
             return False
         if status == "no_compose":
-            print_status_row("未找到 docker compose 命令 — 跳过", False)
+            print_status_row("未找到 docker compose 命令 — 跳过", status="warning")
             return False
-        print_status_row(f"Docker 基础设施启动异常(rc={rc})，详情见 logs/docker.log", False)
+        print_status_row(f"Docker 基础设施启动异常(rc={rc})，详情见 logs/docker.log", status="warning")
         return False
 
     async def start_electron(self) -> bool:
@@ -760,7 +760,7 @@ class GalaxyUnified:
             return False
         # Ensure npm deps
         if not (electron_dir / "node_modules").exists():
-            print_status_row("首次启动：安装 Electron 桌面层依赖 (npm install，可能数分钟)…", True)
+            print_status_row("首次启动：安装 Electron 桌面层依赖 (npm install，可能数分钟)…", status="success")
             try:
                 _r = sp.run([npm, "install"], cwd=str(electron_dir),
                             capture_output=True, text=True, timeout=600)
@@ -983,11 +983,11 @@ class GalaxyUnified:
             results = await cs.start_all()
             _r = results if isinstance(results, dict) else {}
             # 真实逐组件结果，不再写死全绿。
-            print_status_row("Device Agent 管理器", bool(_r.get("device_agent_manager", False)))
-            print_status_row("设备状态 API (port: 8766)", bool(_r.get("device_status_api", False)))
-            print_status_row("Microsoft UFO 集成", bool(_r.get("microsoft_ufo_integration", False)))
+            print_status_row("Device Agent 管理器", status=("success" if _r.get("device_agent_manager", False) else "warning"))
+            print_status_row("设备状态 API (port: 8766)", status=("success" if _r.get("device_status_api", False) else "warning"))
+            print_status_row("Microsoft UFO 集成", status=("success" if _r.get("microsoft_ufo_integration", False) else "warning"))
         except Exception as exc:
-            print_status_row("核心服务启动失败", False)
+            print_status_row("核心服务启动失败", status="error")
             logger.error(f"Core services: {exc}")
 
         # ── Phase 3.5: 基础设施 (Docker，自动拉起) ──
@@ -997,7 +997,7 @@ class GalaxyUnified:
         try:
             await self.ensure_docker_infra()
         except Exception as exc:
-            print_status_row("Docker 基础设施(非致命)", False)
+            print_status_row("Docker 基础设施(非致命)", status="warning")
             logger.warning("ensure_docker_infra failed: %s", exc)
 
         # ── Phase 4: 消息总线 ──
@@ -1006,14 +1006,14 @@ class GalaxyUnified:
             await self.start_nats()
             nats_host = os.environ.get("GALAXY_NATS_HOST", "localhost")
             nats_port = os.environ.get("GALAXY_NATS_PORT", "4222")
-            print_status_row(f"NATS Bus (nats://{nats_host}:{nats_port})", True)
+            print_status_row(f"NATS Bus (nats://{nats_host}:{nats_port})", status="success")
         except Exception as exc:
-            print_status_row(f"NATS — {exc}", False)
+            print_status_row(f"NATS — {exc}", status="warning")
         try:
             ts_ip = await self.start_tailscale()
-            print_status_row(f"Tailscale — {ts_ip}" if ts_ip else "Tailscale", True)
+            print_status_row(f"Tailscale — {ts_ip}" if ts_ip else "Tailscale", status="success")
         except Exception:
-            print_status_row("Tailscale — 未安装 (LAN直连模式)", False)
+            print_status_row("Tailscale — 未安装 (LAN直连模式)", status="warning")
 
         # ── Phase 5: AI 大脑（含主脑模型选择）──
         print_section_header("[Phase 5] AI 大脑")
@@ -1022,20 +1022,20 @@ class GalaxyUnified:
             brain = getattr(self, "_brain", None)
             # 全部为真实运行时数据（非硬编码）：
             healthy = bool(brain and getattr(brain, "_healthy", False))
-            print_status_row("Ollama 本地推理服务" + ("" if healthy else " — 未就绪(检查 ollama 是否运行)"), healthy)
+            print_status_row("Ollama 本地推理服务" + ("" if healthy else " — 未就绪(检查 ollama 是否运行)"), status=("success" if healthy else "error"))
             bm = (getattr(brain, "brain_model", None) or os.environ.get("OLLAMA_MODEL", "") or "未选择")
-            print_status_row(f"AI 主脑模型 — {bm}", True)
+            print_status_row(f"AI 主脑模型 — {bm}", status="success")
             avail = list(getattr(brain, "available_models", []) or [])
             shown = (", ".join(avail[:6]) + (f" 等 {len(avail)} 个" if len(avail) > 6 else "")) if avail else "（无 / 后台下载中）"
-            print_status_row(f"已安装模型 — {shown}", bool(avail))
+            print_status_row(f"已安装模型 — {shown}", status=("success" if avail else "warning"))
             hp = getattr(brain, "_hardware_profile", None)
             if hp and getattr(hp, "has_gpu", False):
                 hw = f"GPU {getattr(hp, 'gpu_name', '?') or '?'} | 显存 {getattr(hp, 'vram_mb', 0)} MB"
             else:
                 hw = "CPU 模式（无独显，软件推理）"
-            print_status_row(f"硬件 — {hw}", True)
+            print_status_row(f"硬件 — {hw}", status="success")
         except Exception as exc:
-            print_status_row("AI 大脑启动失败", False)
+            print_status_row("AI 大脑启动失败", status="error")
             logger.error(f"Local brain: {exc}")
 
         # ── Phase 6: 节点系统 ──
@@ -1047,9 +1047,9 @@ class GalaxyUnified:
             # 真实计数：start_all 返回 {node_name: ok}。就绪数/尝试总数，不再写死 /13 /117。
             total = len(result) if isinstance(result, dict) else 0
             ready = sum(1 for v in result.values() if v) if isinstance(result, dict) else 0
-            print_status_row(f"节点 — {ready}/{total} 就绪", ready > 0 or total == 0)
+            print_status_row(f"节点 — {ready}/{total} 就绪", status=("success" if (ready > 0 or total == 0) else "warning"))
         except Exception as exc:
-            print_status_row("节点系统启动失败", False)
+            print_status_row("节点系统启动失败", status="error")
             logger.error(f"Node system: {exc}")
 
         # ── Phase 7: L4 增强模块 ──
@@ -1061,7 +1061,7 @@ class GalaxyUnified:
             if modules:
                 # 有逐模块明细 → 按真实结果显示
                 for name, ok in modules.items():
-                    print_status_row(name, bool(ok))
+                    print_status_row(name, status=("success" if ok else "warning"))
             else:
                 # 无逐模块明细时不假装 5 个全绿；按整体结果如实显示（L4 是后台增强层、可选）。
                 started = bool(result)
@@ -1070,32 +1070,32 @@ class GalaxyUnified:
                     started,
                 )
         except Exception as exc:
-            print_status_row("L4 模块启动失败", False)
+            print_status_row("L4 模块启动失败", status="error")
             logger.error(f"L4 modules: {exc}")
 
         # ── Phase 8: API 网关 ──
         print_section_header("[Phase 8] API 网关")
         try:
             await self.launch_web_ui()
-            print_status_row(f"FastAPI + Uvicorn — http://{self.config.host}:{self.config.web_ui_port}", True)
-            print_status_row(f"WebSocket 服务 — ws://localhost:{self.config.web_ui_port}/ws", True)
-            print_status_row(f"API 文档 — http://localhost:{self.config.web_ui_port}/docs", True)
-            print_status_row("健康检查 — /health", True)
-            print_status_row(f"状态面板 — http://localhost:{self.config.web_ui_port}/api/v1/projection/operability-contract", True)
+            print_status_row(f"FastAPI + Uvicorn — http://{self.config.host}:{self.config.web_ui_port}", status="success")
+            print_status_row(f"WebSocket 服务 — ws://localhost:{self.config.web_ui_port}/ws", status="success")
+            print_status_row(f"API 文档 — http://localhost:{self.config.web_ui_port}/docs", status="success")
+            print_status_row("健康检查 — /health", status="success")
+            print_status_row(f"状态面板 — http://localhost:{self.config.web_ui_port}/api/v1/projection/operability-contract", status="success")
         except Exception as exc:
-            print_status_row("API 网关启动失败", False)
+            print_status_row("API 网关启动失败", status="error")
             logger.error(f"API gateway: {exc}")
 
         # ── Phase 9: 桌面前端 (Electron) ──
         print_section_header("[Phase 9] 桌面前端")
         electron_ok = await self.start_electron()
         if electron_ok:
-            print_status_row("Electron 桌面三态覆盖层 — 已启动", True)
-            print_status_row("第一态：暖金边缘氛围光（待机即显示）", True)
-            print_status_row("三态切换由 AI 实际活动驱动（silent → liminal → manifest）", True)
-            print_status_row("快捷键 — Ctrl+Alt+Space 唤醒 / Ctrl+Alt+H 隐藏 (避开输入法占用的 Ctrl+Space)", True)
+            print_status_row("Electron 桌面三态覆盖层 — 已启动", status="success")
+            print_status_row("第一态：暖金边缘氛围光（待机即显示）", status="success")
+            print_status_row("三态切换由 AI 实际活动驱动（silent → liminal → manifest）", status="success")
+            print_status_row("快捷键 — Ctrl+Alt+Space 唤醒 / Ctrl+Alt+H 隐藏 (避开输入法占用的 Ctrl+Space)", status="success")
         else:
-            print_status_row("桌面覆盖层未启动 — 后端/API 仍完全可用", False)
+            print_status_row("桌面覆盖层未启动 — 后端/API 仍完全可用", status="warning")
             logger.warning(
                 "Electron 三态覆盖层未启动（缺 Node.js 或 electron 依赖安装失败）。"
                 "后端与 API 已就绪 http://localhost:%d ；"
@@ -1109,9 +1109,9 @@ class GalaxyUnified:
         # 解耦 —— 后端在，托盘就在。
         tray_ok = await self.start_system_tray()
         if tray_ok:
-            print_status_row("系统托盘 — 右下角常驻", True)
+            print_status_row("系统托盘 — 右下角常驻", status="success")
         else:
-            print_status_row("系统托盘 — 不可用 (pip install pystray Pillow)", False)
+            print_status_row("系统托盘 — 不可用 (pip install pystray Pillow)", status="warning")
 
         # ── Ready ──
         print()
