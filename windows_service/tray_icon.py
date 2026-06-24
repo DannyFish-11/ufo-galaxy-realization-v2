@@ -311,6 +311,37 @@ class GalaxyTray:
         else:
             webbrowser.open(f"file://{log_dir}")
 
+    def _open_overlay_log(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
+        """直接打开三态覆盖层(Electron)的日志文件 logs/electron.log。
+
+        覆盖层「打不开/三态不显示」的报错都写在这里（GPU 崩溃、WebGL 初始化失败、
+        did-fail-load、渲染层 console 等）。单独开一栏，方便用户一眼定位、排查。
+        日志不存在时（覆盖层还没跑过）先建一个带说明的占位文件，保证点开总有东西看。
+        """
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        log_path = os.path.join(project_root, "logs", "electron.log")
+        try:
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            if not os.path.exists(log_path):
+                with open(log_path, "w", encoding="utf-8") as f:
+                    f.write(
+                        "（暂无三态覆盖层日志）\n"
+                        "Electron 覆盖层尚未启动或还没产生输出。\n"
+                        "运行 `python main.py` 拉起桌面层后，覆盖层的崩溃/WebGL/加载报错会写到这里。\n"
+                    )
+            if sys.platform == "win32":
+                os.startfile(log_path)  # type: ignore[attr-defined]
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", log_path])
+            else:
+                subprocess.Popen(["xdg-open", log_path])
+            logger.info("Opened overlay log: %s", log_path)
+        except Exception as exc:
+            logger.error("Failed to open overlay log: %s", exc)
+            self._show_notification(
+                "三态动画日志", f"无法打开日志：{log_path}\n{exc}"
+            )
+
     def _restart_service(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         """重启 Galaxy 服务（或子进程）。"""
         logger.info("Restart requested via tray menu")
@@ -374,6 +405,7 @@ class GalaxyTray:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Show Panel (F12)", self._open_gui, default=True),
             pystray.MenuItem("Wake Overlay (Ctrl+Alt+Space)", self._wake_overlay),
+            pystray.MenuItem("三态动画日志 (Overlay Log)", self._open_overlay_log),
             pystray.MenuItem("Config Panel", self._open_config),
             pystray.MenuItem("View Logs", self._open_logs),
             pystray.Menu.SEPARATOR,
