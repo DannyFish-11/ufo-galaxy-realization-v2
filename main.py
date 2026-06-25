@@ -690,7 +690,13 @@ def main() -> int:
                         help="指定本地主脑模型 tag（跳过交互选择，如 gemma4:12b / openbmb/minicpm-o4.5）")
     parser.add_argument("--select-model", action="store_true",
                         help="强制重新选择 AI 主脑模型（清除已保存选择）")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="详细模式：展开每个启动阶段的逐项明细（默认折叠成一行）")
     args = parser.parse_args()
+
+    # -v 同时落到环境变量：子模块（unified_launcher 等）无需逐层透传即可读到。
+    if args.verbose:
+        os.environ["GALAXY_VERBOSE"] = "1"
 
     if args.setup:
         _run_setup_wizard()
@@ -737,6 +743,7 @@ def main() -> int:
     from unified_launcher import GalaxyUnified
 
     lumiv = GalaxyUnified()
+    lumiv._verbose = bool(args.verbose)
     # Apply optional CLI overrides for the API gateway bind address/port.
     if args.host:
         lumiv.config.host = args.host
