@@ -1,0 +1,37 @@
+[package]
+name = "galaxy-overlay"
+version = "2.0.0"
+description = "Galaxy 三态桌面覆盖层 — Tauri 壳（替代 Electron，系统 WebView、不背 Chromium）"
+authors = ["Galaxy"]
+edition = "2021"
+rust-version = "1.77"
+
+# 产物名固定为 galaxy-overlay（.exe）——unified_launcher.start_tauri 据此查找二进制。
+[[bin]]
+name = "galaxy-overlay"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# macos-private-api：让透明窗口在 macOS 上也可用（Windows 不需要该 feature，但带着无害）。
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# 仅访问本机网关(http)，用 rustls 避免依赖系统 OpenSSL/native-tls。
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# 复刻 Electron main.js 的 IPC HTTP 接收端（托盘/后端 POST /ipc/*）。
+tiny_http = "0.12"
+# 面板数据轮询用到的定时器（与 Tauri 内置 tokio 运行时兼容）。
+tokio = { version = "1", features = ["time"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

@@ -821,6 +821,69 @@ class GalaxyUnified:
             logger.error(f"Electron start failed: {exc}")
             return False
 
+    async def start_tauri(self) -> bool:
+        """优先启动 Tauri 桌面壳（系统 WebView，不背 Chromium，常驻内存/启动/体积都远小于 Electron）。
+
+        仅当 desktop-tauri 已构建出二进制时启用；未构建则返回 False，由 start_desktop_shell
+        回退到 Electron。首启不强行 cargo build（无工具链/编译太慢），交给用户显式构建一次：
+        ``cd desktop-tauri/src-tauri && cargo build --release``。env 与 Electron 完全一致。
+        """
+        import shutil  # noqa: F401  (对齐 start_electron 的导入风格，未来可能用到)
+        import subprocess as sp
+        if os.environ.get("GALAXY_DESKTOP_SHELL", "").strip().lower() == "electron":
+            return False  # 显式强制 Electron
+        tdir = Path("desktop-tauri")
+        if not tdir.exists():
+            return False
+        exe = "galaxy-overlay.exe" if os.name == "nt" else "galaxy-overlay"
+        candidates = [
+            tdir / "src-tauri" / "target" / "release" / exe,
+            tdir / "src-tauri" / "target" / "debug" / exe,
+        ]
+        binp = next((c for c in candidates if c.exists()), None)
+        if not binp:
+            logger.info(
+                "Tauri 壳未构建（desktop-tauri 无二进制），回退 Electron。"
+                "构建一次即自动优先用它：cd desktop-tauri/src-tauri && cargo build --release"
+            )
+            return False
+        try:
+            env = os.environ.copy()
+            # 与 start_electron 注入同一组 env：端口/IPC/GPU 自适应一致，托盘与 bridge 无需改动。
+            env["GALAXY_GATEWAY_PORT"] = str(self.config.web_ui_port)
+            env.setdefault("PORT", str(self.config.web_ui_port))
+            env.setdefault("GALAXY_IPC_PORT", "9231")
+            if getattr(self, "_electron_force_software", False):
+                env["GALAXY_ELECTRON_GPU"] = "0"
+            _log_dir = Path("logs")
+            _log_dir.mkdir(exist_ok=True)
+            # 复用同一份 logs/electron.log（托盘「三态动画日志」就打开它），便于一处看壳层日志。
+            _tlog = open(_log_dir / "electron.log", "ab")
+            _tlog.write(
+                f"\n===== tauri start {__import__('datetime').datetime.now().isoformat()} "
+                f"bin={binp} =====\n".encode("utf-8", "replace")
+            )
+            _tlog.flush()
+            # proc 仍存进 self.electron_proc，让既有的 watch_processes 保活逻辑直接复用。
+            self.electron_proc = sp.Popen(
+                [str(binp.resolve())],
+                cwd=str(tdir.resolve()),
+                stdout=_tlog, stderr=sp.STDOUT,
+                env=env,
+            )
+            self._desktop_shell = "tauri"
+            return True
+        except Exception as exc:
+            logger.error("Tauri 壳启动失败，回退 Electron: %s", exc)
+            return False
+
+    async def start_desktop_shell(self) -> bool:
+        """统一桌面壳入口：优先 Tauri（轻量），未构建/失败则回退 Electron。"""
+        if await self.start_tauri():
+            return True
+        self._desktop_shell = "electron"
+        return await self.start_electron()
+
     async def start_system_tray(self) -> bool:
         """启动系统托盘（右下角），与 Electron 解耦、常驻于本启动器进程。
 
@@ -875,7 +938,7 @@ class GalaxyUnified:
                     "（你的显卡/驱动可能不支持透明窗口 GPU 合成；详情见 logs/electron.log）…",
                     MAX_GPU,
                 )
-                await self.start_electron()
+                await self.start_desktop_shell()
                 continue
 
             # 软件渲染也反复崩溃 → 放弃
@@ -895,7 +958,7 @@ class GalaxyUnified:
                 "Electron 已退出，重启中（%s 模式，60s 内第 %d 次；详情见 logs/electron.log）…",
                 _mode, len(restarts),
             )
-            await self.start_electron()
+            await self.start_desktop_shell()
 
     async def setup(self):
         """加载配置并初始化服务管理器。"""
@@ -1124,10 +1187,13 @@ class GalaxyUnified:
             _emit("API 网关", "启动失败", "fail")
             logger.error(f"API gateway: {exc}")
 
-        # ── 桌面前端 (Electron 三态覆盖层) ──
-        electron_ok = await self.start_electron()
+        # ── 桌面前端 (三态覆盖层：优先 Tauri，未构建则回退 Electron) ──
+        electron_ok = await self.start_desktop_shell()
+        shell = getattr(self, "_desktop_shell", "electron")
+        shell_name = "Tauri（系统 WebView，轻量）" if shell == "tauri" else "Electron"
         if electron_ok:
-            _emit("桌面前端 · 三态覆盖层", "已启动（暖金边缘氛围光）", "ok", details=[
+            _emit("桌面前端 · 三态覆盖层", f"已启动（暖金边缘氛围光） · {shell_name}", "ok", details=[
+                ("壳层", shell_name, "ok"),
                 ("三态覆盖层", "已启动", "ok"),
                 ("第一态", "暖金边缘氛围光（待机即显示）", "ok"),
                 ("三态切换", "AI 实际活动驱动 silent → liminal → manifest", "ok"),

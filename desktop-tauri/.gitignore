@@ -1,0 +1,4 @@
+# Rust / Tauri 构建产物
+src-tauri/target/
+# Tauri 首次构建生成（schema/权限），不入库
+src-tauri/gen/
