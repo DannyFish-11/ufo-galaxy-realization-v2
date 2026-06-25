@@ -14,7 +14,6 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -87,7 +86,7 @@ fn build_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .focused(false)
         .visible(false)
         .inner_size(1920.0, 1080.0)
-        .initialization_script(&shim_script())
+        .initialization_script(shim_script())
         .build()?;
     Ok(win)
 }
@@ -104,7 +103,7 @@ fn build_panel(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .resizable(true)
         .focused(true)
         .visible(false)
-        .initialization_script(&shim_script())
+        .initialization_script(shim_script())
         .build()?;
     Ok(win)
 }
@@ -128,7 +127,6 @@ fn set_overlay_phase(app: &AppHandle, awake: bool) {
     let state = app.state::<AppState>();
     state.overlay_awake.store(awake, Ordering::Relaxed);
     let Some(win) = app.get_webview_window("overlay") else { return };
-    let _ = win.set_ignore_cursor_events(true);
     if awake {
         // 停第一态：不强制后续态（早期把唤醒强设 manifest/liminal 都错）。
         let _ = app.emit_to(
@@ -145,6 +143,9 @@ fn set_overlay_phase(app: &AppHandle, awake: bool) {
         position_overlay_to_primary(app, &win);
         let _ = win.show();
         let _ = win.set_always_on_top(true);
+        // 鼠标穿透必须在窗口【已显示/realize 之后】再设：Linux(GTK) 上过早调用会让
+        // tao 取 GDK window 时 unwrap None 而 panic；Windows 无此问题，但统一放在 show 后最稳。
+        let _ = win.set_ignore_cursor_events(true);
     } else {
         let _ = win.hide();
     }
@@ -270,13 +271,13 @@ fn start_ipc_http(app: AppHandle, port: u16) {
             let is_post = *req.method() == tiny_http::Method::Post;
             let url = req.url().to_string();
             let (code, body): (u32, String) = if is_post && url == "/ipc/toggle-panel" {
-                on_main(&app, |a| toggle_panel(a));
+                on_main(&app, toggle_panel);
                 (200, r#"{"success":true,"action":"toggle-panel"}"#.into())
             } else if is_post && url == "/ipc/wake" {
                 on_main(&app, |a| set_overlay_phase(a, true));
                 (200, r#"{"success":true,"action":"wake"}"#.into())
             } else if is_post && url == "/ipc/toggle-overlay" {
-                on_main(&app, |a| toggle_overlay_wake(a));
+                on_main(&app, toggle_overlay_wake);
                 (200, r#"{"success":true,"action":"toggle-overlay"}"#.into())
             } else if is_post && url == "/ipc/presence-state" {
                 let mut buf = String::new();
@@ -543,9 +544,10 @@ fn main() {
             match build_overlay(&handle) {
                 Ok(win) => {
                     position_overlay_to_primary(&handle, &win);
-                    let _ = win.set_ignore_cursor_events(true);
                     let _ = win.show();
                     let _ = win.set_always_on_top(true);
+                    // 鼠标穿透放在 show 之后（Linux/GTK 上过早调用会 panic；见 set_overlay_phase 注释）。
+                    let _ = win.set_ignore_cursor_events(true);
                     handle
                         .state::<AppState>()
                         .overlay_awake
