@@ -1092,7 +1092,8 @@ class GalaxyUnified:
         try:
             l4 = L4EnhancementLauncher(self.service_manager, self.config)
             result = await l4.start_all()
-            modules = result.get("modules", {}) if isinstance(result, dict) else {}
+            _mods = result.get("modules", {}) if isinstance(result, dict) else {}
+            modules = _mods if isinstance(_mods, dict) else {}
             if modules:
                 up = sum(1 for ok in modules.values() if ok)
                 st = "ok" if up == len(modules) else "warn"
