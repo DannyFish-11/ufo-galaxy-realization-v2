@@ -1,0 +1,13 @@
+{
+  "identifier": "default",
+  "description": "Galaxy 覆盖层与面板窗口的默认能力（事件/窗口/全局快捷键/对话框）。",
+  "windows": ["overlay", "panel"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:default",
+    "core:webview:default",
+    "global-shortcut:default",
+    "dialog:default"
+  ]
+}
