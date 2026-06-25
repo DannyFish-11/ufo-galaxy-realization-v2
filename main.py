@@ -300,7 +300,7 @@ def phase0_env_check() -> dict:
     import shutil
     import subprocess as sp
 
-    status = {"ready": True}
+    status: dict[str, object] = {"ready": True}
 
     # Python version
     py_ver = sys.version_info
@@ -583,15 +583,22 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                 models = [line.split()[0] for line in rc.stdout.strip().split("\n")[1:] if line.strip()]
                 print_item(f"Ollama 模型: {len(models)} 个", "ok", ", ".join(models[:3]))
             else:
-                print_item("未检测到本地模型，正在下载推荐模型...", "ok")
+                # 按【实际硬件】挑推荐模型再拉，而不是写死 12B：无独显的笔记本只会拉轻量的
+                # gemma4:e2b（不会白下 8GB 的大模型）。仅探测、不持久化，Phase 5 仍可改选。
+                try:
+                    from core import model_selection as _ms
+                    rec_model = _ms.recommend()
+                except Exception:
+                    rec_model = "gemma4:e2b"
+                print_item("未检测到本地模型，正在下载推荐模型...", "ok", rec_model)
                 rc2 = sp.run(
-                    ["ollama", "pull", "gemma4:12b"],
+                    ["ollama", "pull", rec_model],
                     capture_output=True, text=True, timeout=600,
                 ).returncode
                 if rc2 == 0:
-                    print_item("模型 gemma4:12b 下载完成", "ok")
+                    print_item(f"模型 {rec_model} 下载完成", "ok")
                 else:
-                    print_item("模型下载失败", "warn", "ollama pull gemma4:12b 手动重试")
+                    print_item("模型下载失败", "warn", f"ollama pull {rec_model} 手动重试")
         except Exception as exc:
             print_item(f"Ollama 模型检查失败: {exc}", "warn")
 

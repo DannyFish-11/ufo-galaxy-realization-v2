@@ -17,9 +17,8 @@ core/cli_render.py — 精炼 CLI 渲染原语（按 clig.dev「human-first」�
 from __future__ import annotations
 
 import re
-import sys
 import unicodedata
-from typing import List, Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 
 from core.ascii_art import Colors, ansi_supported
 
