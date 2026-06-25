@@ -136,7 +136,11 @@ def interactive_select() -> str:
     """显示硬件推荐 + 全部模型，让用户手动选主脑。返回 tag（"" = 跳过）。
 
     非交互终端(无 TTY)时不阻塞、不"偷偷"选：返回推荐，由调用方明确打印"已自动选用"。
+    渲染走 core.cli_render（与启动界面同一套：对齐、细线、不画歪掉的中文框）。
     """
+    from core import cli_render as r
+    from core.ascii_art import Colors
+
     max_mb, has_gpu, hw = get_compute_summary()
     rec = recommend(max_mb, has_gpu)
     models = list_models()
@@ -144,24 +148,33 @@ def interactive_select() -> str:
     if not (sys.stdin and sys.stdin.isatty()):
         return rec  # 非交互：交给 main.py 明确说明"已自动选推荐"
 
+    def _c(t, color):
+        return f"{color}{t}{Colors.ENDC}" if r._use_color() else t
+
     print()
-    print("  ╔══════════════════════════════════════════════════════════╗")
-    print("  ║   选择 AI 主脑模型（本地原生多模态）                      ║")
-    print("  ╚══════════════════════════════════════════════════════════╝")
-    print(f"  硬件：{hw}")
-    print(f"  推荐：{model_name(rec)}  ←（按你的实际硬件）")
+    print("  " + _c("选择 AI 主脑模型", Colors.BOLD + Colors.CYAN)
+          + _c("  (本地原生多模态)", Colors.DIM))
+    r.rule()
+    r.phase("硬件", hw, "info")
+    r.phase("推荐", f"{model_name(rec)}  ←（按你的实际硬件）", "ok")
     print()
+    # 列出全部可选模型：序号 + 名称(对齐) + 建议显存；推荐项加 ▸ 与「← 推荐」。
     for i, (tag, info) in enumerate(models, 1):
-        mark = "  ← 推荐" if tag == rec else ""
-        sz = f"建议显存 ≥ {info['size_mb']} MB" if info["size_mb"] else ""
-        print(f"  [{i}] {info['name']}{mark}")
-        print(f"      {info['desc']}    {sz}")
-    print()
-    print("  输入序号选择；直接回车=用推荐；s=跳过下载。（之后随时可用 --select-model 重选）")
+        is_rec = (tag == rec)
+        marker = _c("▸", Colors.GREEN) if is_rec else " "
+        num = _c(f"[{i}]", Colors.BOLD if is_rec else Colors.DIM)
+        name = r.pad_display(info["name"], 24)
+        sz = _c(f"显存 ≥ {info['size_mb']} MB", Colors.DIM) if info["size_mb"] else ""
+        tail = _c("  ← 推荐", Colors.GREEN) if is_rec else ""
+        print(f"  {marker} {num} {name}{sz}{tail}")
+        print(f"         {_c(info['desc'], Colors.DIM)}")
+    r.rule()
+    print("  " + _c("回车=用推荐 · 数字=手选 · s=跳过下载", Colors.DIM)
+          + _c("   (之后可用 --select-model 重选)", Colors.DIM))
     # 循环直到拿到有效输入：避免"一闪而过"——只有明确回车/序号/s 才往下走。
     while True:
         try:
-            choice = input(f"  请选择主脑 [1-{len(models)} / 回车=推荐 / s=跳过]: ").strip().lower()
+            choice = input(f"  请选择主脑 [1-{len(models)} / 回车 / s]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             return rec
         if choice == "":
@@ -172,7 +185,7 @@ def interactive_select() -> str:
             idx = int(choice) - 1
             if 0 <= idx < len(models):
                 return models[idx][0]
-        print("  ⚠ 无效输入，请重新选择（或直接回车用推荐）。")
+        print("  " + _c("⚠ 无效输入，请重新选择（或直接回车用推荐）。", Colors.YELLOW))
 
 
 def background_pull(tag: str) -> None:
