@@ -26,8 +26,12 @@ serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 # 复刻 Electron main.js 的 IPC HTTP 接收端（托盘/后端 POST /ipc/*）。
 tiny_http = "0.12"
-# 面板数据轮询用到的定时器（与 Tauri 内置 tokio 运行时兼容）。
+# 面板数据轮询 + 屏幕采集循环用到的定时器（与 Tauri 内置 tokio 运行时兼容）。
 tokio = { version = "1", features = ["time"] }
+# 第一态原生连续屏幕采集（跨平台截屏；Windows 走 Win32，免 getDisplayMedia 选择器）。
+# 用 xcap 自带 re-export 的 image（pub use image），避免 image 版本冲突；它默认带 JPEG 编码。
+xcap = "0.0"
+base64 = "0.22"
 
 [profile.release]
 panic = "abort"

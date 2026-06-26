@@ -3,13 +3,16 @@ core/perception/desktop_perception_store.py
 ============================================
 桌面端连续感知的「最新帧」存储（隐蔽上下文来源）。
 
-电脑端 Electron 壳通过 getUserMedia 持续采集摄像头/麦克风/屏幕，并以
-base64 帧 POST 到网关 /api/perception/desktop/*。本模块是这些帧的进程内
-最新值存储（单例），带 TTL 新鲜度判定：
+电脑端壳（Tauri / Electron）在【第一态】持续原生采集 **摄像头 / 屏幕 / 麦克风**，
+以 base64 帧 POST 到网关 /api/perception/desktop/*。本模块是这些帧的进程内最新值
+存储（单例），带 TTL 新鲜度判定，并把三路【一体化】合并成单个 MultiModalContext：
 
-- 当一次正常请求进入 OpenClawd.process() 且本身不带图像时，若存在「新鲜」
-  的桌面帧，则把它作为原生多模态上下文注入——于是模型「真的看到了摄像头」。
-- 不新鲜（超过 TTL）的帧不会被注入，避免把过期画面喂给模型。
+- 摄像头帧（source=desktop_camera）与屏幕帧（source=desktop_screen）分槽存放，互不覆盖；
+  屏幕帧还可附带结构化 screen 上下文（如前台窗口 UIA 树）。
+- 当一次正常请求进入 OpenClawd.process() 且本身不带图像时，把【新鲜】的摄像头帧 +
+  屏幕帧 + 屏幕结构 + 音频一起作为原生多模态上下文注入——模型同时「看到摄像头、看到
+  屏幕、听到麦克风」，即第一态的连续原生多模态一体化感知。
+- 不新鲜（超过 TTL）的项不会被注入，避免把过期画面/声音喂给模型。
 
 设计原则：轻量、线程安全（简单锁）、永不抛出影响主流程；不持久化、不落盘。
 默认 TTL 10s；GALAXY_DESKTOP_PERCEPTION_TTL 可调。
@@ -21,7 +24,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.DesktopPerceptionStore")
 
@@ -33,8 +36,12 @@ def _default_ttl() -> float:
         return 10.0
 
 
+def _is_screen_source(source: str) -> bool:
+    return "screen" in (source or "").lower()
+
+
 class DesktopPerceptionStore:
-    """进程内单例：保存桌面端最近一次的摄像头帧 / 屏幕帧 / 音频片段。"""
+    """进程内单例：保存桌面端最近一次的【摄像头帧 / 屏幕帧 / 音频片段】（分槽，不互相覆盖）。"""
 
     _instance: Optional["DesktopPerceptionStore"] = None
     _instance_lock = threading.Lock()
@@ -42,18 +49,22 @@ class DesktopPerceptionStore:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self.ttl_sec = _default_ttl()
-        # image (camera or screen)
-        self._image_b64: Optional[str] = None
-        self._image_mime: str = "image/jpeg"
-        self._image_source: str = "desktop_camera"
-        self._image_ts: float = 0.0
-        self._screen: Optional[Dict[str, Any]] = None
-        # audio (microphone)
+        # camera (摄像头：看物理环境)
+        self._cam_b64: Optional[str] = None
+        self._cam_mime: str = "image/jpeg"
+        self._cam_ts: float = 0.0
+        # screen (屏幕：看屏幕内容；可附带结构化 screen 上下文，如 UIA 树)
+        self._scr_b64: Optional[str] = None
+        self._scr_mime: str = "image/jpeg"
+        self._scr_ts: float = 0.0
+        self._screen_meta: Optional[Dict[str, Any]] = None
+        # audio (麦克风)
         self._audio_b64: Optional[str] = None
         self._audio_mime: str = "audio/webm"
         self._audio_ts: float = 0.0
         # counters (diagnostics)
-        self._frames_received: int = 0
+        self._cam_received: int = 0
+        self._scr_received: int = 0
         self._audio_received: int = 0
         # 自动注入去重：已被对话自动注入消费过的音频时间戳，避免同一片段反复转写
         self._audio_autoinject_consumed_ts: float = 0.0
@@ -76,15 +87,30 @@ class DesktopPerceptionStore:
         source: str = "desktop_camera",
         screen: Optional[Dict[str, Any]] = None,
     ) -> None:
+        """按 source 分槽存放：含 'screen' → 屏幕槽（含结构化 screen 上下文）；否则摄像头槽。"""
         if not image_b64:
+            # 即便没有像素帧，也允许只更新结构化屏幕上下文（如纯 UIA 树）。
+            if screen is not None:
+                with self._lock:
+                    self._screen_meta = screen
+                    self._scr_ts = time.time()
             return
         with self._lock:
-            self._image_b64 = image_b64
-            self._image_mime = mime or "image/jpeg"
-            self._image_source = source or "desktop_camera"
-            self._screen = screen
-            self._image_ts = time.time()
-            self._frames_received += 1
+            if _is_screen_source(source):
+                self._scr_b64 = image_b64
+                self._scr_mime = mime or "image/jpeg"
+                self._scr_ts = time.time()
+                self._scr_received += 1
+                if screen is not None:
+                    self._screen_meta = screen
+            else:
+                self._cam_b64 = image_b64
+                self._cam_mime = mime or "image/jpeg"
+                self._cam_ts = time.time()
+                self._cam_received += 1
+                # 旧链路偶尔把 screen 结构挂在摄像头帧上，也一并保留
+                if screen is not None:
+                    self._screen_meta = screen
 
     def update_audio(self, audio_b64: str, *, mime: str = "audio/webm") -> None:
         if not audio_b64:
@@ -101,14 +127,27 @@ class DesktopPerceptionStore:
         return ts > 0.0 and (time.time() - ts) <= self.ttl_sec
 
     def has_fresh_frame(self) -> bool:
+        """摄像头或屏幕任一有新鲜帧即为 True。"""
         with self._lock:
-            return bool(self._image_b64) and self._fresh(self._image_ts)
+            return (bool(self._cam_b64) and self._fresh(self._cam_ts)) or (
+                bool(self._scr_b64) and self._fresh(self._scr_ts)
+            )
+
+    def latest_frame_snapshot(self) -> Tuple[Optional[str], str, str]:
+        """返回最近一帧（摄像头或屏幕，取更新的那张）的 (b64, mime, source)，供「现在看一下」用。"""
+        with self._lock:
+            if self._scr_ts >= self._cam_ts and self._scr_b64:
+                return self._scr_b64, self._scr_mime, "desktop_screen"
+            if self._cam_b64:
+                return self._cam_b64, self._cam_mime, "desktop_camera"
+            if self._scr_b64:
+                return self._scr_b64, self._scr_mime, "desktop_screen"
+            return None, "image/jpeg", "desktop_camera"
 
     def take_fresh_audio_for_autoinject(self):
         """取一段「新鲜且未被自动注入消费过」的音频，用于对话自动注入。
 
         返回 ``(audio_b64, mime)``；没有可用音频则返回 ``(None, None)``。
-        通过记录已消费时间戳去重，避免同一片段在多轮对话里被反复转写。
         """
         with self._lock:
             if (
@@ -121,16 +160,20 @@ class DesktopPerceptionStore:
         return None, None
 
     def snapshot_media(self) -> Dict[str, Any]:
-        """返回当前最新帧/音频的快照（供统一记忆层等消费方读取）。
-
-        仅当对应媒体「新鲜」(TTL 内) 时返回其 base64；否则该项为 None。
-        """
+        """返回当前最新【摄像头/屏幕/音频】快照（仅新鲜项有值），供统一记忆层等消费。"""
         with self._lock:
-            img_fresh = bool(self._image_b64) and self._fresh(self._image_ts)
+            cam_fresh = bool(self._cam_b64) and self._fresh(self._cam_ts)
+            scr_fresh = bool(self._scr_b64) and self._fresh(self._scr_ts)
             aud_fresh = bool(self._audio_b64) and self._fresh(self._audio_ts)
             return {
-                "image_b64": self._image_b64 if img_fresh else None,
-                "image_mime": self._image_mime,
+                # 兼容旧字段名（image_* 指摄像头帧）+ 新增 screen_* 字段
+                "image_b64": self._cam_b64 if cam_fresh else None,
+                "image_mime": self._cam_mime,
+                "camera_b64": self._cam_b64 if cam_fresh else None,
+                "camera_mime": self._cam_mime,
+                "screen_b64": self._scr_b64 if scr_fresh else None,
+                "screen_mime": self._scr_mime,
+                "screen_meta": self._screen_meta if scr_fresh else None,
                 "audio_b64": self._audio_b64 if aud_fresh else None,
                 "audio_mime": self._audio_mime,
             }
@@ -140,17 +183,20 @@ class DesktopPerceptionStore:
             now = time.time()
             return {
                 "ttl_sec": self.ttl_sec,
-                "frames_received": self._frames_received,
+                "camera_received": self._cam_received,
+                "screen_received": self._scr_received,
                 "audio_received": self._audio_received,
-                "image_fresh": self._fresh(self._image_ts),
-                "image_age_sec": round(now - self._image_ts, 2) if self._image_ts else None,
-                "image_source": self._image_source if self._image_b64 else None,
+                "camera_fresh": self._fresh(self._cam_ts),
+                "camera_age_sec": round(now - self._cam_ts, 2) if self._cam_ts else None,
+                "screen_fresh": self._fresh(self._scr_ts),
+                "screen_age_sec": round(now - self._scr_ts, 2) if self._scr_ts else None,
+                "screen_meta_present": self._screen_meta is not None,
                 "audio_fresh": self._fresh(self._audio_ts),
                 "audio_age_sec": round(now - self._audio_ts, 2) if self._audio_ts else None,
             }
 
     def build_multimodal_context(self, existing: Optional[Any] = None) -> Optional[Any]:
-        """用最新「新鲜」帧/音频构建（或合并进）MultiModalContext。
+        """把【新鲜】的摄像头帧 + 屏幕帧 + 屏幕结构 + 音频【一体化】合并成 MultiModalContext。
 
         - 仅当确有新鲜帧/音频时返回非 None。
         - 若 ``existing`` 已带图像，则不覆盖（尊重显式请求），返回 None。
@@ -165,28 +211,37 @@ class DesktopPerceptionStore:
             return None
 
         with self._lock:
-            has_img = bool(self._image_b64) and self._fresh(self._image_ts)
-            has_aud = bool(self._audio_b64) and self._fresh(self._audio_ts)
-            if not has_img and not has_aud:
+            cam_fresh = bool(self._cam_b64) and self._fresh(self._cam_ts)
+            scr_fresh = bool(self._scr_b64) and self._fresh(self._scr_ts)
+            aud_fresh = bool(self._audio_b64) and self._fresh(self._audio_ts)
+            meta_fresh = self._screen_meta is not None and self._fresh(self._scr_ts)
+            if not (cam_fresh or scr_fresh or aud_fresh or meta_fresh):
                 return None
-            img_b64, img_mime, img_src, screen = (
-                self._image_b64, self._image_mime, self._image_source, self._screen,
-            )
-            aud_b64, aud_mime = self._audio_b64, self._audio_mime
+            cam = (self._cam_b64, self._cam_mime) if cam_fresh else (None, None)
+            scr = (self._scr_b64, self._scr_mime) if scr_fresh else (None, None)
+            screen_meta = self._screen_meta if meta_fresh else None
+            aud = (self._audio_b64, self._audio_mime) if aud_fresh else (None, None)
 
         # 若调用方已带图像，尊重之，不注入（避免覆盖显式上传）
         existing_images = list(getattr(existing, "images", []) or []) if existing is not None else []
         if existing_images:
             return None
 
+        # 一体化：摄像头 + 屏幕 两张图同时进 images（多模态模型一次同时看到两路）
         images = []
-        if has_img:
-            images.append(MultiModalImage(mime=img_mime, data=img_b64, source=img_src))
+        if cam[0]:
+            images.append(MultiModalImage(mime=cam[1], data=cam[0], source="desktop_camera"))
+        if scr[0]:
+            images.append(MultiModalImage(mime=scr[1], data=scr[0], source="desktop_screen"))
         audio = []
-        if has_aud:
-            audio.append(MultiModalAudio(mime=aud_mime, data=aud_b64, source="desktop_microphone"))
+        if aud[0]:
+            audio.append(MultiModalAudio(mime=aud[1], data=aud[0], source="desktop_microphone"))
 
-        metadata = {"injected_by": "desktop_perception_store", "ambient": True}
+        metadata = {"injected_by": "desktop_perception_store", "ambient": True,
+                    "modalities": [m for m, on in
+                                   (("camera", bool(cam[0])), ("screen", bool(scr[0])),
+                                    ("audio", bool(aud[0]))) if on]}
+        screen = screen_meta
         if existing is not None:
             try:
                 existing_audio = list(getattr(existing, "audio", []) or [])
