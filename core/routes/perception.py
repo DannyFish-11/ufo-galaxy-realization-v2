@@ -98,15 +98,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         image_b64 = req.image_base64
         mime = req.mime or "image/jpeg"
         source = req.source or "desktop_camera"
-        # 未带图则取存储里的最新帧
+        # 未带图则取存储里的最新帧（摄像头或屏幕，取更新的那张）
         if not image_b64:
             try:
                 from core.perception.desktop_perception_store import get_desktop_perception_store
-                _store = get_desktop_perception_store()
-                with _store._lock:  # noqa: SLF001 — 读快照
-                    image_b64 = _store._image_b64 or ""
-                    mime = _store._image_mime
-                    source = _store._image_source
+                _b64, _mime, _src = get_desktop_perception_store().latest_frame_snapshot()
+                if _b64:
+                    image_b64, mime, source = _b64, _mime, _src
             except Exception as exc:  # noqa: BLE001
                 logger.debug("store snapshot failed: %s", exc)
         if not image_b64:

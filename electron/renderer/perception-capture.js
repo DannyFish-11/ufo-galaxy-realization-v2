@@ -1,16 +1,25 @@
 /**
  * perception-capture.js
- * 电脑端连续感知采集：摄像头 / 麦克风 / 屏幕 → 周期性发往后端。
+ * 第一态（silent 待机）下的【连续原生多模态一体化采集】：摄像头 + 麦克风 + 屏幕。
  *
- * 默认关闭（隐私优先）。仅当 main.js 通过 GALAXY_DESKTOP_PERCEPTION=1 启用时才采集。
- * - 摄像头：getUserMedia({video}) → 每 intervalMs 抓一帧 → JPEG base64 → 后端
- * - 麦克风：getUserMedia({audio}) → MediaRecorder 周期切片 → base64 → 后端
- * 这些帧只更新后端的「最新帧」存储；模型在下一次普通请求时按 TTL 取用（原生看到）。
+ * 默认关闭（隐私优先）。仅当壳层通过 GALAXY_DESKTOP_PERCEPTION=1 启用时才采集。
+ * 采集生命周期【贴合第一态】：覆盖层进入第一态(silent)即开启三路连续采集，作为环境
+ * 基线常驻感知（一旦开启便持续，进入二/三态也不中断，保证 AI 始终“在场感知”）。
  *
- * 全程容错：拿不到权限/设备就降级关闭对应模态，绝不影响主覆盖层渲染。
+ * - 摄像头：getUserMedia({video}) → 每 intervalMs 抓一帧 JPEG → 后端(source=desktop_camera)
+ * - 麦克风：getUserMedia({audio}) → MediaRecorder 周期切片 → 后端
+ * - 屏幕：  getDisplayMedia({video}) → 每 intervalMs 抓一帧 JPEG → 后端(source=desktop_screen)
+ *           ★ 仅在 Electron 走此路；Tauri 下屏幕由 Rust 壳【原生截屏】采集（更稳、免选择器），
+ *             故 Tauri 时此处跳过 getDisplayMedia，避免重复抓屏。
+ *
+ * 三路最终在后端 DesktopPerceptionStore 合并为单个 MultiModalContext（摄像头+屏幕+音频
+ * 一体化），由 OpenClawd 在下一次请求时按 TTL 一并注入——模型同时看到摄像头、看到屏幕、
+ * 听到麦克风。全程容错：任一模态拿不到权限/设备就降级关闭该路，绝不影响主覆盖层渲染。
  */
 (function () {
   'use strict';
+
+  const isTauri = () => !!(window.__TAURI__);
 
   async function getConfig() {
     try {
@@ -29,7 +38,27 @@
     } catch (e) { /* non-fatal */ }
   }
 
-  async function startVideo(intervalMs) {
+  // 通用：把一个 MediaStream 的视频轨周期性抓帧成 JPEG 发往后端（摄像头/屏幕共用）。
+  async function pumpVideoFrames(stream, intervalMs, source, label) {
+    const video = document.createElement('video');
+    video.srcObject = stream;
+    video.muted = true;
+    await video.play().catch(() => {});
+    const canvas = document.createElement('canvas');
+    setInterval(() => {
+      try {
+        const w = video.videoWidth, h = video.videoHeight;
+        if (!w || !h) return;
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+        const b64 = (canvas.toDataURL('image/jpeg', 0.6).split(',')[1]) || '';
+        if (b64) send({ type: 'frame', image_base64: b64, mime: 'image/jpeg', source });
+      } catch (e) { /* skip this frame */ }
+    }, Math.max(500, intervalMs));
+    console.log(`[Perception] ${label} capture started`);
+  }
+
+  async function startCamera(intervalMs) {
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
@@ -37,26 +66,28 @@
       console.warn('[Perception] camera unavailable:', e && e.message);
       return;
     }
-    const video = document.createElement('video');
-    video.srcObject = stream;
-    video.muted = true;
-    await video.play().catch(() => {});
-    const canvas = document.createElement('canvas');
+    await pumpVideoFrames(stream, intervalMs, 'desktop_camera', 'camera');
+  }
 
-    setInterval(() => {
-      try {
-        const w = video.videoWidth, h = video.videoHeight;
-        if (!w || !h) return;
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, w, h);
-        // JPEG ~0.6 质量，控制体积
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-        const b64 = dataUrl.split(',')[1] || '';
-        if (b64) send({ type: 'frame', image_base64: b64, mime: 'image/jpeg', source: 'desktop_camera' });
-      } catch (e) { /* skip this frame */ }
-    }, Math.max(500, intervalMs));
-    console.log('[Perception] camera capture started');
+  async function startScreen(intervalMs) {
+    // Tauri：屏幕由 Rust 原生截屏负责，前端不再 getDisplayMedia（免选择器、免重复）。
+    if (isTauri()) {
+      console.log('[Perception] screen capture handled natively by Tauri shell; skipping getDisplayMedia');
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      console.warn('[Perception] getDisplayMedia unavailable; screen capture skipped');
+      return;
+    }
+    let stream;
+    try {
+      // Electron 侧需 main.js 的 setDisplayMediaRequestHandler 自动提供主屏（无选择器弹窗）。
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 1 }, audio: false });
+    } catch (e) {
+      console.warn('[Perception] screen unavailable:', e && e.message);
+      return;
+    }
+    await pumpVideoFrames(stream, intervalMs, 'desktop_screen', 'screen');
   }
 
   async function startAudio(intervalMs) {
@@ -82,7 +113,6 @@
         };
         reader.readAsDataURL(ev.data);
       };
-      // 每 intervalMs 产出一个切片
       rec.start();
       setInterval(() => {
         try { if (rec.state === 'recording') rec.requestData(); } catch (e) { /* ignore */ }
@@ -93,15 +123,34 @@
     }
   }
 
+  // 一体化启动：三路一起拉起（幂等，只启动一次）。
+  let _started = false;
+  function startAll(cfg) {
+    if (_started) return;
+    _started = true;
+    const interval = cfg.intervalMs || 2000;
+    if (cfg.video !== false) startCamera(interval);
+    if (cfg.video !== false) startScreen(interval);   // 屏幕（Tauri 下内部自动跳过）
+    if (cfg.audio !== false) startAudio(interval);
+    console.log('[Perception] 第一态连续原生多模态一体化采集已开启（摄像头+屏幕+麦克风）');
+  }
+
   async function init() {
     const cfg = await getConfig();
     if (!cfg || !cfg.enabled) {
       console.log('[Perception] disabled (set GALAXY_DESKTOP_PERCEPTION=1 to enable)');
       return;
     }
-    const interval = cfg.intervalMs || 2000;
-    if (cfg.video !== false) startVideo(interval);
-    if (cfg.audio !== false) startAudio(interval);
+    // 【贴合第一态】：进入第一态(silent) 即开启采集。覆盖层默认就启动在第一态，
+    // 故这里既订阅状态事件（首次 silent 触发），也在 init 时直接拉起一次（默认即第一态）。
+    try {
+      if (window.galaxyAPI && window.galaxyAPI.onBackendState) {
+        window.galaxyAPI.onBackendState((payload) => {
+          if (payload && (payload.phase === 'silent' || payload.phase === undefined)) startAll(cfg);
+        });
+      }
+    } catch (e) { /* ignore */ }
+    startAll(cfg);   // 默认启动态即第一态 → 立即开启
   }
 
   if (document.readyState === 'loading') {

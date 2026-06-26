@@ -238,9 +238,10 @@ fn resolve_perception_consent(app: &AppHandle) -> bool {
     let granted = app
         .dialog()
         .message(
-            "允许 Galaxy 使用摄像头与麦克风？\n\n\
-             授权后，Galaxy 能「看到/听到」你的桌面环境，由本地多模态模型(Gemma4 / MiniCPM-o)\
-             原生理解，提供更自然的助理体验。采集仅在本机处理；可随时在设置中关闭。",
+            "允许 Galaxy 使用摄像头、麦克风与屏幕画面？\n\n\
+             授权后，Galaxy 在第一态(待机)会连续原生采集【摄像头+麦克风+屏幕】，由本地多模态\
+             模型(Gemma4 / MiniCPM-o)一体化理解，提供更自然的在场助理体验。\
+             采集仅在本机处理；可随时在设置中关闭。",
         )
         .title("Galaxy 多模态感知授权")
         .buttons(MessageDialogButtons::OkCancelCustom(
@@ -301,6 +302,70 @@ fn start_ipc_http(app: AppHandle, port: u16) {
                 .with_status_code(code)
                 .with_header(header);
             let _ = req.respond(resp);
+        }
+    });
+}
+
+// ─────────────────────────────── 第一态原生连续屏幕采集 ───────────────────────────────
+// Tauri 下屏幕由本进程【原生截屏】采集（Win32/X11，免 getDisplayMedia 选择器、更稳），
+// 与渲染层的摄像头/麦克风一起，构成第一态的连续原生多模态一体化感知。
+// 仅当感知启用时运行；每 interval 截一次主屏 → JPEG → POST 后端(source=desktop_screen)。
+
+fn capture_primary_jpeg() -> Option<Vec<u8>> {
+    // 用 xcap re-export 的 image（与 xcap 同版本 0.24，避免版本冲突）。
+    use xcap::image::{codecs::jpeg::JpegEncoder, ColorType, DynamicImage};
+    use xcap::Monitor;
+
+    let monitors = Monitor::all().ok()?;
+    // 优先主屏；取不到就退而取第一个。is_primary() 返回 bool。
+    let monitor = monitors
+        .iter()
+        .find(|m| m.is_primary())
+        .or_else(|| monitors.first())?;
+    let img = monitor.capture_image().ok()?; // xcap::image::RgbaImage
+    let (w, h) = (img.width(), img.height());
+    // JPEG 无 alpha：转 RGB8 再编码，质量 60 控体积。
+    let rgb = DynamicImage::ImageRgba8(img).to_rgb8();
+    let mut out: Vec<u8> = Vec::new();
+    // image 0.24 的 encode 签名用 ColorType（非 ExtendedColorType）。
+    JpegEncoder::new_with_quality(&mut out, 60)
+        .encode(rgb.as_raw(), w, h, ColorType::Rgb8)
+        .ok()?;
+    Some(out)
+}
+
+fn start_native_screen_capture(app: AppHandle) {
+    let st = app.state::<AppState>();
+    if !st.perception_enabled.load(Ordering::Relaxed) {
+        return; // 感知未启用：不抓屏
+    }
+    let base = st.gateway_base.clone();
+    let interval_ms = st.perception_interval_ms.max(500);
+    let client = st.http.clone();
+    println!("[Perception] 原生屏幕采集已开启（每 {interval_ms}ms 一帧 → desktop_screen）");
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_millis(interval_ms)).await;
+            // 截屏是阻塞 CPU 活，放 blocking 线程，避免卡住异步运行时。
+            let jpeg = tauri::async_runtime::spawn_blocking(capture_primary_jpeg)
+                .await
+                .ok()
+                .flatten();
+            if let Some(bytes) = jpeg {
+                use base64::Engine;
+                let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                let body = json!({
+                    "image_base64": b64,
+                    "mime": "image/jpeg",
+                    "source": "desktop_screen"
+                });
+                // 失败非致命（后端未就绪/网络抖动），丢弃本帧即可。
+                let _ = client
+                    .post(format!("{base}/api/perception/desktop/frame"))
+                    .json(&body)
+                    .send()
+                    .await;
+            }
         }
     });
 }
@@ -588,6 +653,8 @@ fn main() {
             let ipc_port = handle.state::<AppState>().ipc_port;
             start_ipc_http(handle.clone(), ipc_port);
             start_panel_feed_poll(handle.clone());
+            // 第一态原生连续屏幕采集（与渲染层摄像头/麦克风共同构成一体化感知）。
+            start_native_screen_capture(handle.clone());
 
             Ok(())
         })

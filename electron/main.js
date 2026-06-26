@@ -121,9 +121,9 @@ async function resolvePerceptionConsent() {
             defaultId: 0,
             cancelId: 1,
             title: 'Galaxy 多模态感知授权',
-            message: '允许 Galaxy 使用摄像头与麦克风？',
-            detail: '授权后，Galaxy 能"看到/听到"你的桌面环境，由本地多模态模型(Gemma4 / MiniCPM-o)原生理解，' +
-                '提供更自然的助理体验。\n采集仅在本机处理；可随时在设置中关闭。\n（系统稍后还会再弹一次摄像头/麦克风权限，请一并允许。）',
+            message: '允许 Galaxy 使用摄像头、麦克风与屏幕画面？',
+            detail: '授权后，Galaxy 在第一态(待机)会连续原生采集【摄像头+麦克风+屏幕】，由本地多模态模型(Gemma4 / MiniCPM-o)一体化理解，' +
+                '提供更自然的在场助理体验。\n采集仅在本机处理；可随时在设置中关闭。\n（系统稍后还会再弹一次摄像头/麦克风权限，请一并允许。）',
         });
         perceptionEnabled = (response === 0);
         _writePerceptionConsent(perceptionEnabled);
@@ -247,6 +247,24 @@ app.whenReady().then(async () => {
         });
     } catch (e) {
         console.warn('[Main] 设置媒体权限处理器失败:', e && e.message);
+    }
+
+    // 屏幕采集：让渲染层 perception-capture.js 的 getDisplayMedia 自动拿到【主屏】，
+    // 不弹来源选择器（第一态连续屏幕采集要无人值守、免交互）。仅在授权时放行。
+    try {
+        const { session, desktopCapturer } = require('electron');
+        session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+            if (!perceptionEnabled) { return callback(); }   // 未授权：取消
+            desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
+                if (sources && sources.length) {
+                    callback({ video: sources[0] });          // 自动选第一个屏幕，无 UI
+                } else {
+                    callback();
+                }
+            }).catch(() => callback());
+        }, { useSystemPicker: false });
+    } catch (e) {
+        console.warn('[Main] 设置屏幕采集处理器失败（旧版 Electron 可忽略）:', e && e.message);
     }
 
     createWindow();
