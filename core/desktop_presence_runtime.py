@@ -1076,7 +1076,6 @@ class DesktopPresenceRuntime:
             from core.unified_action_lifecycle_surface import (
                 ActionOrigin,
                 UnifiedActionLifecycleSurface,
-                build_from_dispatch,
                 derive_visible_action,
             )
 
@@ -2064,7 +2063,6 @@ class DesktopPresenceRuntime:
         try:
             from core.decision_timeline import (  # noqa: PLC0415
                 build_explainability_snapshot,
-                ExplainabilitySnapshot,
             )
 
             snap_dict: Optional[Dict[str, Any]] = None
@@ -2178,7 +2176,6 @@ class DesktopPresenceRuntime:
         try:
             from contracts.desktop_status_projection import (
                 build_desktop_status_projection as _build_dsp,
-                desktop_status_projection_summary as _dsp_summary,
             )
 
             # Extract unified control plan from result metadata.

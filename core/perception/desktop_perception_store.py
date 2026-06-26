@@ -230,12 +230,12 @@ class DesktopPerceptionStore:
         # 一体化：摄像头 + 屏幕 两张图同时进 images（多模态模型一次同时看到两路）
         images = []
         if cam[0]:
-            images.append(MultiModalImage(mime=cam[1], data=cam[0], source="desktop_camera"))
+            images.append(MultiModalImage(mime=cam[1] or "image/jpeg", data=cam[0], source="desktop_camera"))
         if scr[0]:
-            images.append(MultiModalImage(mime=scr[1], data=scr[0], source="desktop_screen"))
+            images.append(MultiModalImage(mime=scr[1] or "image/jpeg", data=scr[0], source="desktop_screen"))
         audio = []
         if aud[0]:
-            audio.append(MultiModalAudio(mime=aud[1], data=aud[0], source="desktop_microphone"))
+            audio.append(MultiModalAudio(mime=aud[1] or "audio/webm", data=aud[0], source="desktop_microphone"))
 
         metadata = {"injected_by": "desktop_perception_store", "ambient": True,
                     "modalities": [m for m, on in
