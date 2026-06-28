@@ -54,7 +54,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .audio_features import AudioState
 from .video_features import VideoState
-from .perception_frame import PerceptionFrame, SystemSignals
+from .perception_frame import PerceptionFrame, ScreenState, SystemSignals
 from .signal_quality import SignalQuality, QualityFlag
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,10 @@ class MultimodalIngressBus:
         self._video: Optional[VideoState] = None
         self._video_quality: SignalQuality = SignalQuality.missing("No video source")
         self._video_ts: Optional[float] = None
+
+        self._screen: Optional[ScreenState] = None
+        self._screen_quality: SignalQuality = SignalQuality.missing("No screen source")
+        self._screen_ts: Optional[float] = None
 
         self._system: Optional[SystemSignals] = None
         self._system_quality: SignalQuality = SignalQuality.missing("No system source")
@@ -126,6 +130,14 @@ class MultimodalIngressBus:
         self._video = state
         self._video_quality = quality
         self._video_ts = time.monotonic()
+
+    def update_screen(
+        self, state: ScreenState, quality: SignalQuality
+    ) -> None:
+        """Ingest a new ScreenState snapshot（连续屏幕感知）。"""
+        self._screen = state
+        self._screen_quality = quality
+        self._screen_ts = time.monotonic()
 
     def update_system(
         self,
@@ -217,6 +229,7 @@ class MultimodalIngressBus:
         """Compose a PerceptionFrame from the current snapshots."""
         aq = self._apply_staleness(self._audio_ts, self._audio_quality)
         vq = self._apply_staleness(self._video_ts, self._video_quality)
+        scq = self._apply_staleness(self._screen_ts, self._screen_quality)
         sq = self._apply_staleness(self._system_ts, self._system_quality)
 
         # PR-ACTIVE-PERCEPTION: inject cached toolchain into system signals
@@ -233,6 +246,8 @@ class MultimodalIngressBus:
             audio_quality=aq,
             video=self._video if vq.is_usable else None,
             video_quality=vq,
+            screen=self._screen if scq.is_usable else None,
+            screen_quality=scq,
             system=system,
             system_quality=sq,
         )
@@ -271,12 +286,19 @@ class MultimodalIngressBus:
         This is a **thin hook** — heavy logic lives in the cognitive layers
         (memory_bias_layer, task_memory, etc.).  Here we only detect
         high-confidence triggers that warrant interrupting the silent state.
+
+        屏幕触发（screen）默认关闭、由 ``GALAXY_PROACTIVE_SCREEN=1`` 开启：屏幕一直在变
+        很容易误触发，所以保守 opt-in；开启后，屏幕有显著变化即主动“看一眼并问需不需要帮忙”。
+        无论触发与否，屏幕帧都已进入连续 PerceptionFrame 流、并在任意自发目标执行时由
+        OpenClawd 注入为原生上下文（模型真正看到屏幕）。
         """
+        # Trigger 0 (opt-in): 屏幕显著变化 → 主动询问。即便 system 模态缺失也可触发。
+        if os.getenv("GALAXY_PROACTIVE_SCREEN", "").strip().lower() in ("1", "true", "yes", "on"):
+            if frame.screen is not None and frame.screen.has_image and frame.screen.change_score >= 0.5:
+                return "我注意到你屏幕上的内容变化挺大，需要我帮你处理当前界面上的事情吗？"
+
         if frame.system is None:
             return None
-
-        tc = frame.system.toolchain
-        extra = frame.system.extra
 
         # Trigger 1: high CPU for extended period → suggest diagnostics
         cpu = frame.system.cpu_load

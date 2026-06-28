@@ -117,16 +117,18 @@ def start_ingest_bus(
     global _ingest_bus, _ingest_task  # noqa: PLW0603
 
     # Check config flag —— import lazily to avoid circular imports at module load.
+    # 默认 True：与 MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH 一致——连续宿主感知是
+    # 规范默认路径；显式置 false 才走 SAFE_DEFAULT（text-only / 受限部署）opt-out。
     try:
         from core.unified_config import config as _cfg
-        if not _cfg.get("enable_multimodal_ingest", False):
+        if not _cfg.get("enable_multimodal_ingest", True):
             logger.debug(
                 "enable_multimodal_ingest=false — skipping ingest bus startup"
             )
             return False
     except Exception as _cfg_err:
-        logger.debug("Could not read unified_config: %s — skipping ingest bus", _cfg_err)
-        return False
+        # 读不到配置时不再静默放弃：连续感知是规范默认，缺配置按默认开（仍会优雅降级）。
+        logger.debug("unified_config unavailable (%s) — proceeding with canonical default ON", _cfg_err)
 
     # Idempotent: a bus instance already exists. (Its run() task may not
     # have started ticking yet — checking ``_running`` here would race and
@@ -169,6 +171,11 @@ def start_ingest_bus(
             "VideoIngestPipeline unavailable (non-fatal): %s", _video_err
         )
 
+    # ── Wire desktop perception bridge（覆盖层三路 → 主动感知 bus）─────────────
+    # 这是【屏幕】进入连续感知的唯一通路，也让摄像头/麦克风按覆盖层实际采集如实反映到
+    # bus（避免与本地 cv2/sounddevice 抢设备）。store 为空时各模态保持 missing → 优雅降级。
+    desktop_bridge = _start_desktop_perception_bridge(bus, tick_ms)
+
     # PR-ACTIVE-PERCEPTION: wire autonomous goal submitter (shell-owned)
     if goal_submitter is not None:
         bus._goal_submitter = goal_submitter
@@ -205,9 +212,12 @@ def start_ingest_bus(
     )
 
     logger.info(
-        "MultimodalIngressBus started — audio=%s video=%s runtime_session_id=%s",
+        "MultimodalIngressBus started — audio=%s video=%s desktop_bridge=%s(screen+cam+mic) "
+        "goal_submitter=%s runtime_session_id=%s",
         audio_available,
         video_available,
+        desktop_bridge,
+        goal_submitter is not None,
         runtime_session_id or "n/a",
     )
     return True
@@ -257,6 +267,74 @@ def stop_ingest_bus() -> list:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
+    """周期把【桌面覆盖层】采集的屏幕/摄像头/麦克风帧从 DesktopPerceptionStore
+    推进 MultimodalIngressBus —— 让主动持续感知 bus 真正“看到屏幕、看到摄像头、听到麦克风”。
+
+    - 屏幕：唯一进入连续感知的通路；带便宜的帧间变化分数（按 base64 长度变化估算，免解码）。
+    - 摄像头/麦克风：以“在场”特征态如实反映（具体特征仍由本地 cv2/sounddevice 管道补充）。
+    store 为空（未启用覆盖层感知）时各模态保持 missing，bus 自然降级，绝不抛错。
+    """
+    import asyncio as _asyncio
+    try:
+        from core.perception.desktop_perception_store import get_desktop_perception_store
+        from core.multimodal.audio_features import AudioState
+        from core.multimodal.video_features import VideoState
+        from core.multimodal.perception_frame import ScreenState
+        from core.multimodal.signal_quality import SignalQuality
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("desktop perception bridge deps unavailable: %s", exc)
+        return
+    store = get_desktop_perception_store()
+    prev_screen_len: Optional[int] = None
+    while True:
+        try:
+            snap = store.snapshot_media()
+            scr = snap.get("screen_b64")
+            if scr:
+                cur = len(scr)
+                if prev_screen_len is None:
+                    change = 1.0
+                else:
+                    change = min(1.0, abs(cur - prev_screen_len) / max(1, prev_screen_len))
+                prev_screen_len = cur
+                bus.update_screen(
+                    ScreenState(
+                        image_b64=scr,
+                        mime=snap.get("screen_mime", "image/jpeg"),
+                        change_score=change,
+                        meta=snap.get("screen_meta"),
+                        has_image=True,
+                    ),
+                    SignalQuality.ok(),
+                )
+            if snap.get("camera_b64"):
+                bus.update_video(VideoState(), SignalQuality.ok())
+            if snap.get("audio_b64"):
+                bus.update_audio(AudioState(), SignalQuality.ok())
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("desktop perception bridge tick error: %s", exc)
+        await _asyncio.sleep(period_s)
+
+
+def _start_desktop_perception_bridge(bus, tick_ms: int) -> bool:
+    """把桌面感知桥接循环调度为后台任务。无运行中的事件循环时跳过（返回 False）。"""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        logger.debug("No running event loop — desktop perception bridge not scheduled")
+        return False
+    period_s = max(0.5, tick_ms / 1000.0)
+    coro = _desktop_perception_bridge_loop(bus, period_s)
+    try:
+        _pipeline_tasks.append(loop.create_task(coro))
+        logger.debug("Scheduled desktop perception bridge (period=%.2fs)", period_s)
+        return True
+    except RuntimeError:
+        coro.close()
+        return False
 
 
 def _schedule_pipeline(pipeline, name: str) -> None:
