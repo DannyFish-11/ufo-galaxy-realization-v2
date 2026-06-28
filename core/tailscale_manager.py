@@ -12,7 +12,6 @@ import logging
 import os
 import shutil
 import subprocess
-import time
 from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.Tailscale")
@@ -40,6 +39,13 @@ class TailscaleManager:
     _CHECK_INTERVAL_SECONDS = float(os.environ.get("GALAXY_TAILSCALE_CHECK_INTERVAL", "30.0"))
     # PR-HEADSCALE: Support custom control server (Headscale)
     _HEADSCALE_URL = os.environ.get("GALAXY_HEADSCALE_URL", "")
+    # PR-PEER-RELAY: 让常驻网关节点充当 Tailscale 对等中继——手机/手表弱网(对称NAT)直连
+    # 失败时,流量经"家里桌面"中转而非绕海外 DERP,延迟从几百 ms 降到个位数,零成本私有中继。
+    # 跑本启动器的桌面网关默认开;GALAXY_TS_ADVERTISE_RELAY=0 显式关闭。需控制端(官方/较新
+    # Headscale)与各端较新 Tailscale 客户端支持 Peer Relay;不支持时静默降级,绝不影响联网。
+    _ADVERTISE_RELAY = os.environ.get(
+        "GALAXY_TS_ADVERTISE_RELAY", "1"
+    ).strip().lower() not in ("0", "false", "no", "off")
     _instance = None
 
     def __new__(cls):
@@ -67,7 +73,65 @@ class TailscaleManager:
         ip = await self._check_tailscale()
         if ip:
             self._start_monitoring()
+            # PR-PEER-RELAY: 已连上则尝试宣告本机为对等中继（best-effort，不影响返回）。
+            await self.ensure_relay_advertised()
         return ip
+
+    async def ensure_relay_advertised(self) -> bool:
+        """向 Tailscale 宣告本机为【对等中继】(best-effort)。
+
+        已登录设备用 ``tailscale set --advertise-relay``（无需重新登录）。仅在本机已连上
+        Tailscale 且开关开启时尝试；旧版客户端/控制端不支持时静默降级（返回 False），
+        绝不抛出影响联网。返回是否成功宣告。
+        """
+        if not self._ADVERTISE_RELAY or not self._available:
+            return False
+        if not shutil.which("tailscale"):
+            return False
+        try:
+            r = await asyncio.to_thread(
+                subprocess.run,
+                ["tailscale", "set", "--advertise-relay"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if r.returncode == 0:
+                logger.info("Tailscale 对等中继已宣告（本机充当私有 relay，手机/手表弱网经此中转）")
+                return True
+            logger.info(
+                "宣告对等中继未成功（客户端/控制端可能不支持 Peer Relay，已降级）：%s",
+                (r.stderr or r.stdout or "").strip()[:160],
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("ensure_relay_advertised 跳过（非致命）：%s", exc)
+        return False
+
+    def get_relay_status(self) -> Dict[str, Any]:
+        """汇总中继态：本机是否宣告中继 / 各 peer 当前经哪条中继（DERP 区域 或 peer relay）。"""
+        out: Dict[str, Any] = {
+            "advertise_relay_enabled": self._ADVERTISE_RELAY,
+            "self_relay": None,
+            "peers_via_relay": [],
+        }
+        if not self._available or not shutil.which("tailscale"):
+            return out
+        try:
+            result = subprocess.run(
+                ["tailscale", "status", "--json"], capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                status = json.loads(result.stdout)
+                out["self_relay"] = status.get("Self", {}).get("Relay", "") or None
+                for _k, peer in (status.get("Peer", {}) or {}).items():
+                    rel = peer.get("Relay", "")
+                    if rel:
+                        out["peers_via_relay"].append({
+                            "hostname": peer.get("HostName", ""),
+                            "relay": rel,
+                            "online": peer.get("Online", False),
+                        })
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("get_relay_status failed: %s", exc)
+        return out
 
     async def _check_tailscale(self) -> Optional[str]:
         """单次Tailscale检测。"""
@@ -255,11 +319,15 @@ class TailscaleManager:
         """Get the control server URL (Headscale or Tailscale official)."""
         return self._HEADSCALE_URL if self._HEADSCALE_URL else None
 
-    def get_device_setup_command(self, hostname: str, ephemeral: bool = True) -> str:
+    def get_device_setup_command(
+        self, hostname: str, ephemeral: bool = True, advertise_relay: bool = False
+    ) -> str:
         """Generate tailscale up command for a new device.
 
         Usage for Wear OS watch via adb:
             adb shell <command>
+
+        ``advertise_relay=True`` 用于常驻优质节点（网关/软路由/NAS），让其充当对等中继。
         """
         cmd_parts = ["tailscale up"]
 
@@ -268,6 +336,10 @@ class TailscaleManager:
 
         cmd_parts.append(f"--hostname={hostname}")
         cmd_parts.append("--accept-routes")
+
+        # PR-PEER-RELAY: 常驻优质节点宣告对等中继能力。
+        if advertise_relay:
+            cmd_parts.append("--advertise-relay")
 
         if ephemeral:
             cmd_parts.append("--ephemeral")
