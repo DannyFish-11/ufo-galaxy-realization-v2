@@ -35,4 +35,15 @@
       "users": ["galaxy"]
     }
   ]
+
+  // ── PR-PEER-RELAY: 对等中继限流（默认注释，避免旧版 Headscale 不识别 relays 键而拒整份 ACL）──
+  // 当你的控制端（官方 Tailscale，或较新支持 Peer Relay 的 Headscale）就绪后，取消下面注释并把
+  // 上一行 "ssh": [...] 后补一个逗号即可启用：只许你自己的手表/手机借道网关中继，防别人占带宽。
+  //
+  // "relays": [
+  //   {
+  //     "relay": "gateway",
+  //     "accept": ["tag:watch", "tag:phone", "tag:desktop"]
+  //   }
+  // ]
 }

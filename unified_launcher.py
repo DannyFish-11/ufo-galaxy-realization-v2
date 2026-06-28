@@ -1105,6 +1105,19 @@ class GalaxyUnified:
         try:
             ts_ip = await self.start_tailscale()
             bus_details.append(("Tailscale", ts_ip or "已连接", "ok"))
+            # PR-PEER-RELAY: 显示对等中继态（本机已宣告 / 各 peer 经哪条中继）。
+            try:
+                from core.tailscale_manager import TailscaleManager
+                _rs = TailscaleManager().get_relay_status()
+                if _rs.get("advertise_relay_enabled"):
+                    _via = _rs.get("self_relay")
+                    bus_details.append((
+                        "对等中继",
+                        ("已宣告（本机充当私有中继）" if not _via else f"经 {_via}"),
+                        "ok",
+                    ))
+            except Exception:
+                pass
         except Exception:
             bus_details.append(("Tailscale", "未安装 (LAN 直连模式)", "warn"))
         _emit("消息总线", bus_value, "ok" if nats_ok else "warn", details=bus_details)
