@@ -95,8 +95,11 @@ def _restart_galaxy():
     env["PYTHONPATH"] = str(project_root)
     env["USE_LOCAL_BRAIN_FIRST"] = "true"
 
+    # 用与开机自启一致的干净调用：直接跑 main.py。此前的 `-m main --gpu-opt
+    # --persistent-models all` 会被 main.py 的 argparse 当未知参数拒绝(SystemExit 2)，
+    # 导致每次看门狗重启都失败 —— 自动保活形同虚设。
     proc = subprocess.Popen(
-        [sys.executable, "-m", "main", "--gpu-opt", "--persistent-models", "all"],
+        [sys.executable, str(main_script)],
         cwd=project_root,
         env=env,
         stdout=subprocess.DEVNULL,

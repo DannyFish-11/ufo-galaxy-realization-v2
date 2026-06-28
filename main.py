@@ -77,7 +77,7 @@ import logging
 import argparse
 from pathlib import Path
 
-from core.ascii_art import Colors, print_banner, print_section_header, print_status_row
+from core.ascii_art import Colors, print_banner, print_section_header
 
 # ── Phase output helpers ──────────────────────────────────
 _PHASE_WIDTH = 60
@@ -699,11 +699,30 @@ def main() -> int:
                         help="强制重新选择 AI 主脑模型（清除已保存选择）")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="详细模式：展开每个启动阶段的逐项明细（默认折叠成一行）")
+    parser.add_argument("--autostart", action="store_true",
+                        help="(Windows) 注册开机自启：开机/被 WOL 盒子唤醒后自动拉起 Galaxy + 托盘")
+    parser.add_argument("--autostart-remove", action="store_true",
+                        help="(Windows) 取消开机自启")
     args = parser.parse_args()
 
     # -v 同时落到环境变量：子模块（unified_launcher 等）无需逐层透传即可读到。
     if args.verbose:
         os.environ["GALAXY_VERBOSE"] = "1"
+
+    # 开机自启一键设置：让电脑(被 WOL 盒子)开机进系统后自动拉起整套 Galaxy + 托盘，
+    # 配合 entrypoint.json 写出的 Tailscale/LAN 地址，三端无需手填 IP 即可发现网关秒连。
+    if args.autostart or args.autostart_remove:
+        try:
+            from windows_service import autostart as _as
+            if args.autostart_remove:
+                print_item(f"取消开机自启: {_as.unregister_all()}", "ok")
+            else:
+                print_item(f"已注册开机自启: {_as.register_all(tray_mode=True)}", "ok")
+                print_item("下次开机（或被 WOL 盒子唤醒）将自动启动 Galaxy", "info")
+        except Exception as _exc:  # noqa: BLE001
+            print_item(f"开机自启设置失败: {_exc}", "error")
+            return 1
+        return 0
 
     if args.setup:
         _run_setup_wizard()

@@ -17,7 +17,7 @@ import subprocess
 import logging
 from pathlib import Path
 from typing import Dict, Optional, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 from datetime import datetime, timezone
 
@@ -95,10 +95,71 @@ def _write_entrypoint(host: str, port: int) -> None:
     effective_host = "localhost" if host in ("0.0.0.0", "") else host
     payload = {
         "api_base": f"http://{effective_host}:{port}",
+        "ws": f"ws://{effective_host}:{port}/ws",
         "written_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
+    # 三端(手机/手表/桌面)发现网关的关键：除 localhost 外，写出【局域网 IP】与
+    # 【Tailscale IP】的完整地址。手机/手表读本文件后:本地走 lan,异地走 tailscale,
+    # 立刻连上,无需手填 IP。地址探测全 best-effort,失败不影响其余字段。
+    lan_ip = _detect_lan_ip()
+    if lan_ip:
+        payload["lan"] = f"http://{lan_ip}:{port}"
+        payload["lan_ws"] = f"ws://{lan_ip}:{port}/ws"
+    ts_ip = _detect_tailscale_ip()
+    if ts_ip:
+        payload["tailscale"] = f"http://{ts_ip}:{port}"
+        payload["tailscale_ws"] = f"ws://{ts_ip}:{port}/ws"
+        # 异地优先走 Tailscale(加密 mesh + 对等中继加速)。
+        payload["preferred"] = f"http://{ts_ip}:{port}"
     entrypoint_file = runtime_dir / "entrypoint.json"
     entrypoint_file.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def _detect_lan_ip() -> str:
+    """探测本机【局域网】IP(best-effort)。用 UDP connect 技巧，不实际发包。"""
+    import socket
+    s = None
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.5)
+        s.connect(("223.5.5.5", 80))  # 阿里 DNS，仅用于让 OS 选出出口网卡 IP
+        ip = s.getsockname()[0]
+        # 排除回环 / Tailscale 段(100.64/10)，只要真实 LAN
+        if ip and not ip.startswith("127.") and not ip.startswith("100."):
+            return ip
+    except Exception:
+        pass
+    finally:
+        try:
+            if s is not None:
+                s.close()
+        except Exception:
+            pass
+    return ""
+
+
+def _detect_tailscale_ip() -> str:
+    """探测本机 Tailscale IP(best-effort)。优先用已初始化的 TailscaleManager 单例，
+    否则回退 ``tailscale ip -4``。拿不到返回空串。"""
+    try:
+        from core.tailscale_manager import TailscaleManager
+        ip = TailscaleManager().get_tailscale_ip()
+        if ip:
+            return ip
+    except Exception:
+        pass
+    try:
+        import shutil
+        import subprocess
+        if shutil.which("tailscale"):
+            r = subprocess.run(
+                ["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=5,
+            )
+            if r.returncode == 0 and r.stdout.strip():
+                return r.stdout.strip().splitlines()[0].strip()
+    except Exception:
+        pass
+    return ""
 
 
 # ---------------------------------------------------------------------------
