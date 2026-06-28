@@ -1604,11 +1604,57 @@ class DesktopPresenceRuntime:
         try:
             from core.multimodal.ingest_runtime import start_ingest_bus
 
-            started = start_ingest_bus(runtime_session_id=None)
+            # 传入自发目标提交器 → 闭环终点：主动感知触发的目标真正进入 handle_request 执行。
+            started = start_ingest_bus(
+                runtime_session_id=None,
+                goal_submitter=self._submit_autonomous_goal,
+            )
             if started:
                 logger.info("DesktopPresenceRuntime: multimodal ingest bus started")
         except Exception as _err:
             logger.debug("DesktopPresenceRuntime: ingest bus startup skipped (%s)", _err)
+
+    def _submit_autonomous_goal(self, goal: str) -> None:
+        """主动持续感知触发的【自发目标】提交（持续感知闭环的终点）。
+
+        把 MultimodalIngressBus._analyze_opportunity 产出的目标调度进 handle_request 真正执行；
+        执行时 OpenClawd 会按 TTL 注入覆盖层的【摄像头+屏幕+麦克风】为原生多模态上下文，
+        于是“AI 自己看屏幕→自己判断→主动做事”形成闭环。
+
+        安全默认：默认仅记录、不自动执行；``GALAXY_ACTIVE_PERCEPTION=1`` 才真正自主行动
+        （避免未经预期的自动操作）。无运行事件循环时安全丢弃。
+        """
+        import os
+        if os.getenv("GALAXY_ACTIVE_PERCEPTION", "").strip().lower() not in ("1", "true", "yes", "on"):
+            logger.info(
+                "主动感知目标（已就绪，未自动执行；设 GALAXY_ACTIVE_PERCEPTION=1 开启自主行动）：%s",
+                goal,
+            )
+            return
+        try:
+            import asyncio as _a
+            loop = _a.get_running_loop()
+        except RuntimeError:
+            logger.debug("主动感知目标丢弃（无事件循环）：%s", goal)
+            return
+
+        async def _run() -> None:
+            try:
+                await self.handle_request(
+                    message=goal,
+                    source="active_perception",
+                    session_id="active_perception",
+                    user_id="system",
+                    entry_mode="local",
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("主动感知目标执行失败（非致命）：%s", exc)
+
+        try:
+            loop.create_task(_run())
+            logger.info("主动感知目标已派发执行：%s", goal)
+        except RuntimeError:
+            pass
 
     def _try_init_webrtc_session_manager(self) -> None:
         """Initialize WebRTC session manager when the runtime switch is enabled."""
