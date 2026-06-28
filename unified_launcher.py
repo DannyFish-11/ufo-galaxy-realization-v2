@@ -980,6 +980,13 @@ class GalaxyUnified:
         """启动 Tailscale 网络。返回真实 Tailscale IP（供显示）。"""
         from core.tailscale_manager import TailscaleManager
         ts = TailscaleManager()
+        # 冷启动时网关常先于 Tailscale 就绪 → 首次 entrypoint.json 里没有 tailscale 地址。
+        # 注册回调：Tailscale IP 出现/变化时重写 entrypoint.json，把 mesh 地址补进去，
+        # 让手机/手表尽快发现网关、异地秒连（不必等下次启动）。
+        try:
+            ts.on_state_change(lambda _action, _details: self._write_entrypoint_json())
+        except Exception:  # noqa: BLE001
+            pass
         ts_ip = await ts.initialize()
         if not ts_ip:
             raise RuntimeError("Tailscale not installed")
