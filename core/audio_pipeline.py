@@ -103,8 +103,9 @@ class AudioPipeline:
         self.openai_audio_model = self.config.get(
             "openai_audio_model", os.getenv("OPENAI_AUDIO_MODEL", "gpt-4o-audio-preview")
         )
-        # 本地 Ollama 音频（MiniCPM-o 4.5 原生支持音频；经 Ollama 的 OpenAI 兼容端点
-        # /v1/chat/completions 复用 input_audio content block，纯本地、无需云端 key）。
+        # 本地 Ollama 音频（MiniCPM-o 4.5 全模态、或最新 Gemma 4 原生音频输入；经 Ollama 的
+        # OpenAI 兼容端点 /v1/chat/completions 复用 input_audio content block，纯本地、无需云端
+        # key。注意：Ollama 原生 /api/chat 的 audios 字段会被静默忽略，必须走 /v1 这条）。
         self.ollama_base = self.config.get(
             "ollama_base", os.getenv("OLLAMA_URL", "http://localhost:11434")
         ).rstrip("/")
@@ -136,11 +137,12 @@ class AudioPipeline:
             return {"success": False, "error": "no_audio", "text": ""}
         prompt = prompt or _DEFAULT_PROMPT
 
-        # 本地优先：MiniCPM-o 4.5（Ollama）纯本地听懂，无需云端 key。
+        # 本地优先：Ollama 本地音频模型（MiniCPM-o / Gemma 4）纯本地听懂，无需云端 key。
         if self.local_audio_enabled:
             out = await self._call_ollama_audio(audio_base64, mime, prompt)
             if out is not None:
-                return {"success": True, "text": out, "engine": "ollama-minicpm-o"}
+                return {"success": True, "text": out,
+                        "engine": f"ollama-{self._ollama_audio_model or 'local'}"}
         # 回退：Gemini（inline_data 原生音频），再 OpenAI input_audio
         if self.gemini_api_key:
             out = await self._call_gemini(audio_base64, mime, prompt)
@@ -153,16 +155,31 @@ class AudioPipeline:
         return {"success": False, "error": "no_audio_capable_provider_configured", "text": ""}
 
     async def _detect_ollama_audio_model(self) -> Optional[str]:
-        """从 Ollama /api/tags 找一个支持音频的本地模型（MiniCPM-o）。"""
+        """从 Ollama /api/tags 找一个【支持原生音频输入】的本地模型。
+
+        优先 MiniCPM-o（全模态：看+听+说，需 GPU）；否则 Gemma 4（e2b/e4b/12b 均带
+        原生音频输入：语音识别/翻译——连无独显笔记本上的 e2b 也能"听"）。两者都经 Ollama
+        的 OpenAI 兼容端点 /v1/chat/completions 的 input_audio 通路（原生 /api/chat 的
+        audios 字段会被静默忽略，故必须走这条）。
+        """
         try:
             client = await self._get_client()
             r = await client.get(f"{self.ollama_base}/api/tags", timeout=3.0)
             if r.status_code != 200:
                 return None
-            for m in r.json().get("models", []):
-                name = m.get("name", "")
-                low = name.lower().replace("_", "-").replace(" ", "")
-                if "minicpm-o" in low or "minicpmo" in low:
+            names = [m.get("name", "") for m in r.json().get("models", [])]
+
+            def _norm(s: str) -> str:
+                return (s or "").lower().replace("_", "-").replace(" ", "")
+
+            # 优先全模态 MiniCPM-o（还能"说"）
+            for name in names:
+                if "minicpm-o" in _norm(name) or "minicpmo" in _norm(name):
+                    return name
+            # 其次 Gemma 4（最新版原生支持音频输入；e2b 轻量、无卡可跑）
+            for name in names:
+                n = _norm(name)
+                if "gemma4" in n or "gemma-4" in n:
                     return name
         except Exception:  # noqa: BLE001
             return None

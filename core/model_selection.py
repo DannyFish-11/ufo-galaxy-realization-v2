@@ -27,10 +27,10 @@ _CHOICE_FILE = PROJECT_ROOT / ".galaxy_model"
 # 这里只放"展示用"的人类可读标签/模态说明，体积/尺寸一律向 LocalBrainManager 取。
 _CHOICE_ORDER: List[str] = ["gemma4:12b", "openbmb/minicpm-o4.5", "gemma4:e4b", "gemma4:e2b"]
 _LABELS: Dict[str, Tuple[str, str]] = {
-    "gemma4:12b":            ("Google Gemma 4 12B", "文本 + 视觉 + 原生工具调用，128K 上下文"),
-    "openbmb/minicpm-o4.5":  ("MiniCPM-o 4.5 (9B)", "全模态：看 + 听 + 说，全双工实时交互"),
-    "gemma4:e4b":            ("Google Gemma 4 E4B", "文本 + 视觉，中等显存"),
-    "gemma4:e2b":            ("Google Gemma 4 E2B", "文本 + 视觉，小显存/轻量"),
+    "gemma4:12b":            ("Google Gemma 4 12B", "文本 + 视觉 + 原生音频(听) + 工具调用，128K"),
+    "openbmb/minicpm-o4.5":  ("MiniCPM-o 4.5 (9B)", "全模态：看 + 听 + 说，全双工(需显卡)"),
+    "gemma4:e4b":            ("Google Gemma 4 E4B", "文本 + 视觉 + 原生音频(听)，中等显存"),
+    "gemma4:e2b":            ("Google Gemma 4 E2B", "文本 + 视觉 + 原生音频(听)，小显存/轻量"),
 }
 _SMALLEST_FALLBACK = "gemma4:e2b"
 
