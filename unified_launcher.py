@@ -1030,6 +1030,7 @@ class GalaxyUnified:
             self._voice_loop = VoiceLoop(
                 _VoiceGalaxyAdapter(),
                 model_size=os.environ.get("GALAXY_WHISPER_MODEL", "base"),
+                speak_responses=False,  # 朗读由 handle_request 经 speech_output 集中处理,避免双声
             )
             await self._voice_loop.start()
             return True

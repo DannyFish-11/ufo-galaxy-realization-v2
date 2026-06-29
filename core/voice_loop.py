@@ -54,6 +54,7 @@ class VoiceLoop:
         language: str = "zh",
         sample_rate: int = 16000,
         chunk_duration_ms: int = 100,
+        speak_responses: bool = True,
     ) -> None:
         """初始化语音闭环。
 
@@ -64,6 +65,8 @@ class VoiceLoop:
             language: ASR 语言代码 (默认 "zh" 中文)。
             sample_rate: 音频采样率 (Hz)。
             chunk_duration_ms: 音频块时长 (毫秒)。
+            speak_responses: 是否由本回路自行 TTS 朗读回复。集成进 Galaxy 时设 False——
+                朗读已由 handle_request 经 core.speech_output 集中处理，避免一句念两遍。
         """
         self.galaxy = galaxy_client
         self.model_size = model_size
@@ -71,6 +74,7 @@ class VoiceLoop:
         self.language = language
         self.sample_rate = sample_rate
         self.chunk_duration_ms = chunk_duration_ms
+        self.speak_responses = speak_responses
 
         self.asr: Optional[Any] = None
         self.tts: Optional[Any] = None
@@ -163,8 +167,9 @@ class VoiceLoop:
 
             logger.info("Galaxy response: %s", response[:100])
 
-            # 2. TTS 合成并播放
-            if self.tts is not None:
+            # 2. TTS 合成并播放(仅当本回路负责朗读;集成进 Galaxy 时由 handle_request 集中朗读,
+            #    此处 speak_responses=False,避免同一句念两遍)。
+            if self.tts is not None and self.speak_responses:
                 await self.tts.synthesize_and_play(response)
                 logger.info("TTS playback completed")
 
