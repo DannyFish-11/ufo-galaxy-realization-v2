@@ -77,15 +77,23 @@ import logging
 import argparse
 from pathlib import Path
 
-from core.ascii_art import Colors, print_banner, print_section_header
+from core.ascii_art import print_banner, print_section_header
 
 # ── Phase output helpers ──────────────────────────────────
 _PHASE_WIDTH = 60
 
 
 def print_phase(title: str) -> None:
-    """Print a Phase section title with separators."""
-    print_section_header(title)
+    """打印阶段小标题。
+
+    统一走 core.cli_render（与启动后半段同一套 clig.dev 风格：细线 + 干净标题，
+    而非旧的 ═══×60 大框）——让【整个克隆界面】前后一致。cli_render 不可用时兜底回旧风格。
+    """
+    try:
+        from core import cli_render as r
+        r.section(title)
+    except Exception:
+        print_section_header(title)  # 极端环境兜底
     # PR-WIN-ENCODING: logger may still use cp1252 even after SafeStreamHandler
     try:
         logger.info("[Phase] %s", title)
@@ -94,32 +102,35 @@ def print_phase(title: str) -> None:
 
 
 def print_item(name: str, status: str = "ok", detail: str = "") -> None:
-    """Print a status item within a Phase.
+    """打印阶段内的状态项。
+
+    统一走 core.cli_render 的子项行（✓/⚠/✗/· + 按显示宽度对齐 + 颜色可降级），
+    与启动后半段完全一致。cli_render 不可用时兜底回旧的 [OK]/[WARN] ASCII。
 
     Args:
         name: Item description.
         status: "ok" | "warn" | "error" | "info".
         detail: Optional detail text shown dimmed.
     """
-    icon_map = {
-        "ok": ("[OK]", Colors.GREEN),
-        "warn": ("[WARN]", Colors.YELLOW),
-        "error": ("[ERR]", Colors.RED),
-        "info": ("[INFO]", Colors.BLUE),
-    }
-    icon, color = icon_map.get(status, ("[*]", Colors.CYAN))
-    detail_str = f"  ({Colors.DIM}{detail}{Colors.ENDC})" if detail else ""
-    msg = f"  {color}{icon}{Colors.ENDC} {name}{detail_str}"
-    # PR-WIN-SAFE-PRINT: Safe print for Windows cp1252 console
+    _status_map = {"ok": "ok", "warn": "warn", "error": "fail", "info": "info"}
+    printed = False
     try:
-        print(msg)
-    except UnicodeEncodeError:
-        # Fallback: strip ANSI codes and encode with replace
-        clean = msg.replace(Colors.GREEN, "").replace(Colors.YELLOW, "").replace(Colors.RED, "").replace(Colors.BLUE, "").replace(Colors.CYAN, "").replace(Colors.DIM, "").replace(Colors.ENDC, "")
+        from core import cli_render as r
+        r.detail(name, detail, _status_map.get(status, "info"))
+        printed = True
+    except Exception:
+        printed = False
+    if not printed:
+        # 兜底：旧风格 ASCII（cli_render 不可用时），Windows cp1252 安全打印
+        icon = {"ok": "[OK]", "warn": "[WARN]", "error": "[ERR]", "info": "[INFO]"}.get(status, "[*]")
+        line = f"  {icon} {name}" + (f"  ({detail})" if detail else "")
         try:
-            print(clean.encode("cp1252", errors="replace").decode("cp1252"))
-        except Exception:
-            pass
+            print(line)
+        except UnicodeEncodeError:
+            try:
+                print(line.encode("cp1252", errors="replace").decode("cp1252"))
+            except Exception:
+                pass
     # PR-WIN-ENCODING: wrap logger to suppress cp1252 UnicodeEncodeError
     try:
         logger.info("[%s] %s %s", status.upper(), name, detail)
