@@ -891,6 +891,13 @@ class DesktopPresenceRuntime:
         result.setdefault("trace_id", rsession.runtime_session_id)
         result["tristate"] = rsession.tristate.value
         result["entrypoint_source"] = source
+        # PR-SPEAK: "说"默认启用——任何渠道(语音/面板/自发)产出回复都在此集中朗读一次。
+        # 非阻塞、去重、缺 edge-tts 优雅降级;GALAXY_SPEAK=0 可关。语音回路不再各自 TTS(避免双声)。
+        try:
+            from core.speech_output import speak_response
+            speak_response(result.get("response", ""), source=source)
+        except Exception:  # noqa: BLE001
+            pass
         result["conversation_session_id"] = conversation_session_id
         result["control_session_id"] = control_session_id
         if runtime_attachment_session_id:
