@@ -998,6 +998,48 @@ class GalaxyUnified:
         self._brain = LocalBrainManager()
         await self._brain.ensure_running()
 
+    async def start_voice_interaction(self) -> bool:
+        """启动语音交互闭环：听麦克风 → ASR → 主回路(驱动三态 + 出回复) → TTS 朗读。
+
+        这是"对它说话它会回应、且三态随对话变化"的关键——此前 VoiceLoop 从未被拉起,
+        所以唤醒后说话毫无反应。现在把它接到 DesktopPresenceRuntime.handle_request:
+        说话 → LIMINAL(思考动画) → 出回复 → MANIFEST(表达动画) → 朗读 → SILENT。
+
+        缺语音依赖(faster-whisper / edge-tts / sounddevice)时优雅降级,不影响其余启动。
+        GALAXY_VOICE=0 可关闭。
+        """
+        if os.environ.get("GALAXY_VOICE", "1").strip().lower() in ("0", "false", "no", "off"):
+            return False
+        try:
+            from core.voice_loop import VoiceLoop
+
+            class _VoiceGalaxyAdapter:
+                """把 ASR 文本接进主回路:process(text) → handle_request(驱动三态 + 返回回复)。"""
+                async def process(self, text: str, source: str = "voice"):
+                    try:
+                        from core.desktop_presence_runtime import get_desktop_presence_runtime
+                        rt = get_desktop_presence_runtime()
+                        return await rt.handle_request(
+                            message=text, source=source,
+                            session_id="voice", user_id="voice", entry_mode="local",
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("语音→主回路处理失败: %s", exc)
+                        return {"response": ""}
+
+            self._voice_loop = VoiceLoop(
+                _VoiceGalaxyAdapter(),
+                model_size=os.environ.get("GALAXY_WHISPER_MODEL", "base"),
+            )
+            await self._voice_loop.start()
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "语音交互未启动(缺依赖? 装一下: pip install faster-whisper edge-tts sounddevice): %s",
+                exc,
+            )
+            return False
+
     async def select_and_start_brain(self):
         """Phase 5：先选主脑（硬件推荐 + 手动选，放第 5 步而非开头），再启动本地大脑。"""
         import asyncio as _asyncio
@@ -1242,6 +1284,16 @@ class GalaxyUnified:
             _rd_autostart()
         except Exception as _exc:  # noqa: BLE001
             logger.debug("远程桌面兜底自动开启跳过(非致命): %s", _exc)
+
+        # ── 语音交互闭环：听 → 识别 → 主回路(驱动三态 + 回复) → 朗读 ──
+        # 这是"对它说话它会回应、三态随对话变化"的关键(此前 VoiceLoop 从未启动)。
+        voice_ok = await self.start_voice_interaction()
+        _emit(
+            "语音交互",
+            ("已开启 · 直接对它说话即可（三态随对话变化）" if voice_ok
+             else "未启用 — pip install faster-whisper edge-tts sounddevice 后重启"),
+            "ok" if voice_ok else "warn",
+        )
 
         # ── 总结卡：状态 + 关键入口 + 降级项 + 下一步 ──
         ok_n = sum(1 for _, s in phases_state if s == "ok")
