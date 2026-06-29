@@ -342,6 +342,30 @@ class GalaxyTray:
                 "三态动画日志", f"无法打开日志：{log_path}\n{exc}"
             )
 
+    def _toggle_remote_desktop(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
+        """开/关【兜底远程桌面(VNC)】——人类手动接管通道,仅 Tailscale 私网内、默认关。
+
+        AI 自动操控为主;这是你想亲自看/控那台电脑时的兜底。点一下切换开关,并弹出
+        连接地址(vnc://<tailscale_ip>:5900)。需先连上 Tailscale + 装好 VNC 服务端
+        (或设 GALAXY_VNC_CMD)。
+        """
+        try:
+            from core.remote_desktop import get_remote_desktop_manager
+            mgr = get_remote_desktop_manager()
+            if mgr.is_running():
+                mgr.disable()
+                self._show_notification("远程桌面(兜底)", "已关闭。")
+            else:
+                res = mgr.enable()
+                if res.get("success"):
+                    addr = res.get("address") or "(地址未知)"
+                    self._show_notification("远程桌面(兜底)已开启", f"在 Tailscale 内用 VNC 连:\n{addr}")
+                else:
+                    self._show_notification("远程桌面(兜底)开启失败", str(res.get("error", "未知错误")))
+        except Exception as exc:
+            logger.error("Toggle remote desktop failed: %s", exc)
+            self._show_notification("远程桌面(兜底)", f"操作失败：{exc}")
+
     def _restart_service(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         """重启 Galaxy 服务（或子进程）。"""
         logger.info("Restart requested via tray menu")
@@ -409,6 +433,7 @@ class GalaxyTray:
             pystray.MenuItem("Config Panel", self._open_config),
             pystray.MenuItem("View Logs", self._open_logs),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem("远程桌面接管 (VNC 兜底, 开/关)", self._toggle_remote_desktop),
             pystray.MenuItem("Restart Service", self._restart_service),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Exit", self._exit_tray),
