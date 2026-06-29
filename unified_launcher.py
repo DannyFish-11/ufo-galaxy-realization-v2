@@ -1236,6 +1236,13 @@ class GalaxyUnified:
         _emit("系统托盘", "右下角常驻" if tray_ok else "不可用 (pip install pystray Pillow)",
               "ok" if tray_ok else "warn")
 
+        # ── 远程桌面兜底(VNC)：默认关；GALAXY_REMOTE_DESKTOP=1 才自动开（仅 Tailscale 私网内）──
+        try:
+            from core.remote_desktop import maybe_autostart as _rd_autostart
+            _rd_autostart()
+        except Exception as _exc:  # noqa: BLE001
+            logger.debug("远程桌面兜底自动开启跳过(非致命): %s", _exc)
+
         # ── 总结卡：状态 + 关键入口 + 降级项 + 下一步 ──
         ok_n = sum(1 for _, s in phases_state if s == "ok")
         degraded_names = [n for n, s in phases_state if s in ("warn", "fail")]

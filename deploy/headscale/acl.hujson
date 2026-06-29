@@ -46,4 +46,14 @@
   //     "accept": ["tag:watch", "tag:phone", "tag:desktop"]
   //   }
   // ]
+
+  // ── 远程桌面(VNC)兜底接管：只许白名单设备访问网关的 5900 端口 ──
+  // 上面 "acls" 是开放策略(* → *);若要收紧成"只有我的手机/桌面能 VNC 进网关",把下面
+  // 这条加进 "acls" 数组(并确保数组各项间有逗号)。这样兜底接管口被 ACL 锁死、绝不外泄。
+  //
+  // {
+  //   "action": "accept",
+  //   "src": ["tag:phone", "tag:desktop"],
+  //   "dst": ["tag:gateway:5900"]
+  // }
 }

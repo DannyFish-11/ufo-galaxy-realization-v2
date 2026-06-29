@@ -300,6 +300,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     from core.routes import chat, ai, monitoring, relay, hybrid, vault, cost, channels, federation
     from core.routes import compat, twin, sessions, config as config_route
     from core.routes import perception as perception_routes
+    from core.routes import remote_desktop as remote_desktop_routes
     # Batch PR-4: dedicated health and diagnostics domain modules
     from core.routes import health as health_routes
     from core.routes import diagnostics as diagnostics_routes
@@ -342,6 +343,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(relay.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
     router.include_router(vault.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
     router.include_router(federation.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
+    # 远程桌面兜底接管(VNC):接管能力,需鉴权
+    router.include_router(remote_desktop_routes.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
 
     # Exempt routes: no auth required (health, docs, observability, device registration)
     router.include_router(devices.create_router(service_manager=service_manager, config=config))
