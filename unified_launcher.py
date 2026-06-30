@@ -1034,11 +1034,17 @@ class GalaxyUnified:
             )
             await self._voice_loop.start()
             return True
-        except Exception as exc:  # noqa: BLE001
+        except ImportError as exc:  # noqa: BLE001
             logger.warning(
-                "语音交互未启动(缺依赖? 装一下: pip install faster-whisper edge-tts sounddevice): %s",
-                exc,
+                "语音交互未启动(缺依赖: pip install faster-whisper edge-tts sounddevice): %s", exc
             )
+            return False
+        except Exception as exc:  # noqa: BLE001
+            _exc_s = str(exc)
+            if any(k in _exc_s for k in ("Hub", "locate the files", "snapshot folder", "internet")):
+                logger.warning("语音交互未启动(Whisper 模型下载失败，检查网络或设置代理): %s", exc)
+            else:
+                logger.warning("语音交互未启动(运行时错误，GALAXY_VOICE=0 可关闭): %s", exc)
             return False
 
     async def select_and_start_brain(self):
@@ -1292,7 +1298,7 @@ class GalaxyUnified:
         _emit(
             "语音交互",
             ("已开启 · 直接对它说话即可（三态随对话变化）" if voice_ok
-             else "未启用 — pip install faster-whisper edge-tts sounddevice 后重启"),
+             else "未启用（详见上方日志；GALAXY_VOICE=0 永久关闭）"),
             "ok" if voice_ok else "warn",
         )
 
