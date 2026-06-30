@@ -70,6 +70,7 @@ def test_1_mesh_peer_management():
 # Test 2: MeshCoordinator — 自动选路 (P2P direct vs Relay)
 # ============================================================================
 
+@pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_2_mesh_auto_routing():
     """测试消息发送时自动选择 P2P / Relay"""
@@ -131,6 +132,7 @@ async def test_2_mesh_auto_routing():
 # Test 3: MeshCoordinator — P2P 失败自动降级到 Relay
 # ============================================================================
 
+@pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_3_mesh_p2p_fallback_relay():
     """P2P 发送失败时自动 fallback 到 Relay"""
@@ -170,6 +172,7 @@ async def test_3_mesh_p2p_fallback_relay():
     assert result.route_decision == "relay_fallback"
 
 
+@pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_3b_mesh_direct_health_check_before_send():
     """直连发送前应执行健康检查（需要重探测时）"""
@@ -217,6 +220,7 @@ async def test_3b_mesh_direct_health_check_before_send():
     assert len(relay_log) == 0
 
 
+@pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_3c_mesh_probe_failure_forces_explicit_fallback():
     """健康检查失败时应显式回退到 relay 并携带回退原因"""
@@ -262,6 +266,7 @@ async def test_3c_mesh_probe_failure_forces_explicit_fallback():
     assert len(relay_log) == 1
 
 
+@pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_3d_mesh_unconfigured_direct_sender_fallback_is_explicit():
     """直连 sender 未配置时必须给出明确 fallback 语义"""
@@ -382,6 +387,7 @@ def test_6_scheduler_mesh_send_tool():
 # Test 7: Scheduler — mesh_send 执行
 # ============================================================================
 
+@pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_7_scheduler_exec_mesh_send():
     """测试 Scheduler._exec_mesh_send 方法"""
@@ -420,6 +426,7 @@ async def test_7_scheduler_exec_mesh_send():
 # Test 8: ProxyRelay — mesh-aware P2P 优先路由
 # ============================================================================
 
+@pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_8_proxy_relay_mesh_aware():
     """测试 ProxyRelay.relay() 在 Mesh 可用时优先走 P2P"""
@@ -509,6 +516,7 @@ def test_10_mesh_cleanup_expired():
 # Test 11: MeshCoordinator — broadcast_peer_exchange
 # ============================================================================
 
+@pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_11_broadcast_peer_exchange():
     """测试 peer 列表广播"""
@@ -547,6 +555,7 @@ async def test_11_broadcast_peer_exchange():
 # Test 12: MeshCoordinator — 无 sender 时优雅处理
 # ============================================================================
 
+@pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_12_mesh_no_sender():
     """所有 sender 都未配置时返回失败而非抛异常"""

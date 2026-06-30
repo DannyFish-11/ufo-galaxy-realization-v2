@@ -21,6 +21,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import importlib.util as _ilu
+
+# Android VLM 路由依赖可选模块 lumiv_gateway；缺失时该路由按设计不注册。
+_LUMIV_GATEWAY_MISSING = _ilu.find_spec("lumiv_gateway") is None
+
 
 # ===========================================================================
 # Fixtures
@@ -409,6 +414,10 @@ class TestAndroidVLMServicePlanValidation:
 
 
 class TestAndroidVLMCanonicalApiRoutes:
+    @pytest.mark.skipif(
+        _LUMIV_GATEWAY_MISSING,
+        reason="可选依赖 lumiv_gateway 缺失 → Android VLM 路由按设计不注册（非产品缺陷）",
+    )
     def test_create_api_routes_registers_android_vlm_status_path(self):
         from core.api_routes import create_api_routes
 

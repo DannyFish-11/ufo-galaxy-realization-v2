@@ -695,13 +695,12 @@ class AgentFactory:
         - 协调者 → 多个执行者
         - 执行者 → 按能力分割
         """
-        # PR-V6: Agent 分裂属于 ORCHESTRATION_TRUTH 域，需经编排权威边界检查
+        # PR-V6: Agent 分裂属于 ORCHESTRATION_TRUTH 域，需经编排权威边界检查。
+        # assert_center_authority_intact() 是 0 参数全域检查（含 ORCHESTRATION_TRUTH），
+        # 之前误传 AuthorityDomain 参数导致每次 TypeError → 分裂恒被误判为安全违规。
         try:
-            from core.center_authority_boundary import (
-                assert_center_authority_intact,
-                AuthorityDomain,
-            )
-            assert_center_authority_intact(AuthorityDomain.ORCHESTRATION_TRUTH)
+            from core.center_authority_boundary import assert_center_authority_intact
+            assert_center_authority_intact()
         except Exception as exc:
             logger.error("Security policy check failed", exc_info=True)
             raise SecurityPolicyViolation("编排边界安全检查失败") from exc

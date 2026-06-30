@@ -126,6 +126,8 @@ APPROVED_IMPORT_FALLBACK_FILES = {
     "galaxy_gateway/routes/chat.py",
     # PR-3 convergence — unified_governance_semantics has a guarded optional dependency
     "core/unified_governance_semantics.py",               # PR-3: guarded optional dependency
+    # projection 路由桥接为合法可选依赖兜底（projection_surface_bridge 不可用时降级 sentinel）
+    "core/routes/projection.py",
 }
 
 # YAML size limit (bytes) — informational warning only
