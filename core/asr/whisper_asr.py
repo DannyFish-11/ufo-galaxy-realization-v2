@@ -86,6 +86,20 @@ class WhisperASR:
         if not self.model_size:
             self.model_size = self._auto_select_model()
 
+        # 国内镜像：HF_ENDPOINT 未设时默认用 hf-mirror.com（无需科学上网）
+        # 用户可在 .env 中覆盖: HF_ENDPOINT=https://huggingface.co
+        if not os.environ.get("HF_ENDPOINT"):
+            os.environ["HF_ENDPOINT"] = os.environ.get(
+                "GALAXY_HF_ENDPOINT", "https://hf-mirror.com"
+            )
+
+        # 固定缓存到项目 runtime/whisper_models/，避免重复下载
+        if not self.model_dir:
+            import pathlib
+            _proj = pathlib.Path(__file__).parent.parent.parent
+            self.model_dir = str(_proj / "runtime" / "whisper_models")
+            pathlib.Path(self.model_dir).mkdir(parents=True, exist_ok=True)
+
         # compute_type: float16 (GPU) / int8 (CPU/低VRAM)
         device = self._device_override
         compute_type = self._compute_type_override
