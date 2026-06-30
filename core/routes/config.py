@@ -174,7 +174,17 @@ async def update_config(req: ConfigUpdateRequest):
 
     # 同步写入 .env 文件
     _write_env_file()
-    return {"success": True, "updated": list(req.config.keys())}
+
+    # 若改动涉及模型 API（llm 类），热刷新 LLM 路由器，让新填的 key 即时生效（无需重启）。
+    refreshed = None
+    if any(CONFIG_SCHEMA.get(k, {}).get("category") == "llm" for k in req.config):
+        try:
+            from core.multi_llm_router import refresh_llm_router
+            refreshed = await refresh_llm_router()
+        except Exception:
+            refreshed = None
+
+    return {"success": True, "updated": list(req.config.keys()), "router_refreshed": refreshed}
 
 
 @router.post("/save")
