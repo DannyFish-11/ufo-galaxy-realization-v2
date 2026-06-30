@@ -102,7 +102,7 @@ except ImportError:
         return ["http://localhost:3000", "http://localhost:8080"]
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,  # console只显示警告/错误；INFO详情写 logs/lumiv.log
     format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
     datefmt='%H:%M:%S'
 )
@@ -686,7 +686,7 @@ class GalaxyUnified:
         services = ["nats", "redis", "qdrant", "neo4j", "mongodb"]
 
         def _run(cmd, timeout=None):
-            return sp.run(cmd, capture_output=True, text=True, timeout=timeout)
+            return sp.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
 
         def _daemon_up() -> bool:
             try:
@@ -760,7 +760,7 @@ class GalaxyUnified:
             print_status_row("首次启动：安装 Electron 桌面层依赖 (npm install，可能数分钟)…", status="success")
             try:
                 _r = sp.run([npm, "install"], cwd=str(electron_dir),
-                            capture_output=True, text=True, timeout=600)
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
                 if _r.returncode != 0:
                     logger.error(
                         "Electron npm install 失败 (rc=%s):\n%s",
@@ -1635,7 +1635,7 @@ def main():
         try:
             _result = subprocess.run(
                 ["docker", "compose", "version"],
-                capture_output=True, text=True
+                capture_output=True, text=True, encoding="utf-8", errors="replace"
             )
             _docker_available = _result.returncode == 0
         except FileNotFoundError:

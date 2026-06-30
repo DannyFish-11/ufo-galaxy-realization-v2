@@ -214,11 +214,13 @@ if not logging.getLogger().handlers:
         str(log_dir / "lumiv.log"), maxBytes=10 * 1024 * 1024, backupCount=5,
         encoding="utf-8",
     )
+    _console = SafeStreamHandler()
+    _console.setLevel(logging.WARNING)  # console只显示警告/错误；详情在 logs/lumiv.log
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(message)s",
         datefmt="%H:%M:%S",
-        handlers=[handler, SafeStreamHandler()],
+        handlers=[handler, _console],
     )
 logger = logging.getLogger("Galaxy")
 
@@ -359,7 +361,7 @@ def phase0_env_check() -> dict:
     npm_ok = shutil.which("npm") is not None
     if npm_ok:
         try:
-            rc = sp.run(["npm", "--version"], capture_output=True, text=True, timeout=5)
+            rc = sp.run(["npm", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
             npm_ver = rc.stdout.strip() if rc.returncode == 0 else "?"
             print_item("npm", "ok", npm_ver)
         except Exception:
@@ -373,7 +375,7 @@ def phase0_env_check() -> dict:
     node_ok = shutil.which("node") is not None
     if node_ok:
         try:
-            rc = sp.run(["node", "--version"], capture_output=True, text=True, timeout=5)
+            rc = sp.run(["node", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
             node_ver = rc.stdout.strip() if rc.returncode == 0 else "?"
             print_item("Node.js", "ok", node_ver)
         except Exception:
@@ -427,7 +429,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         try:
             rc = sp.run(
                 [sys.executable, "-m", "ensurepip", "--upgrade"],
-                capture_output=True, text=True, timeout=60,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
             ).returncode
             if rc == 0:
                 pip_fixed = True
@@ -443,11 +445,11 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                     sys.executable, "-c",
                     f"import urllib.request; "
                     f"urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', r'{get_pip_tmp}')",
-                ], capture_output=True, text=True, timeout=30).returncode
+                ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30).returncode
                 if rc == 0:
                     rc2 = sp.run(
                         [sys.executable, get_pip_tmp],
-                        capture_output=True, text=True, timeout=60,
+                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
                     ).returncode
                     if rc2 == 0:
                         pip_fixed = True
@@ -485,7 +487,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         try:
             rc = sp.run(
                 [sys.executable, "-m", "pip", "install", "--quiet"] + core_deps_missing,
-                capture_output=True, text=True, timeout=300,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300,
             ).returncode
             if rc == 0:
                 print_item(f"已安装 {len(core_deps_missing)} 个 Python 包", "ok")
@@ -510,7 +512,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     if not env_status.get("npm_installed"):
         # 若用户已手动安装 Node.js（如 v24 等任意版本），直接复用
         if shutil.which("node") and shutil.which("npm"):
-            node_ver = sp.run(["node", "--version"], capture_output=True, text=True, timeout=10).stdout.strip()
+            node_ver = sp.run(["node", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10).stdout.strip()
             print_item(f"检测到 Node.js {node_ver}，跳过自动安装", "ok")
             env_status["npm_installed"] = True
         else:
@@ -537,13 +539,13 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                     print_item(f"正在下载 Node.js {node_ver}...", "ok")
                     rc = sp.run(
                         ["curl", "-fsSL", "-o", str(node_tmp), node_url],
-                        capture_output=True, text=True, timeout=120,
+                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
                     ).returncode
                     if rc == 0:
                         node_dest.parent.mkdir(parents=True, exist_ok=True)
                         rc2 = sp.run(
                             ["tar", "-xf", str(node_tmp), "-C", str(node_dest.parent), "--strip-components=1"],
-                            capture_output=True, text=True, timeout=30,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
                         ).returncode
                         if rc2 == 0 or (node_dest.parent / "bin" / "node").exists():
                             bin_dir = node_dest.parent / "bin"
@@ -570,7 +572,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             rc = sp.run(
                 [npm_cmd, "install"],
                 cwd=str(ELECTRON_DIR),
-                capture_output=True, text=True, timeout=180,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
             ).returncode
             if rc == 0:
                 print_item("Electron 依赖安装完成", "ok")
@@ -588,7 +590,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         try:
             rc = sp.run(
                 ["ollama", "list"],
-                capture_output=True, text=True, timeout=15,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
             )
             if rc.returncode == 0 and rc.stdout.strip():
                 models = [line.split()[0] for line in rc.stdout.strip().split("\n")[1:] if line.strip()]
@@ -604,7 +606,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                 print_item("未检测到本地模型，正在下载推荐模型...", "ok", rec_model)
                 rc2 = sp.run(
                     ["ollama", "pull", rec_model],
-                    capture_output=True, text=True, timeout=600,
+                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600,
                 ).returncode
                 if rc2 == 0:
                     print_item(f"模型 {rec_model} 下载完成", "ok")
@@ -635,7 +637,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         try:
             rc = sp.run(
                 [sys.executable, "-m", "pip", "install", "--quiet"] + voice_missing,
-                capture_output=True, text=True, timeout=300,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300,
             ).returncode
             if rc == 0:
                 print_item("语音依赖安装完成", "ok")
@@ -654,7 +656,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         try:
             rc = sp.run(
                 [sys.executable, "-m", "pip", "install", "--quiet", "pyaudio"],
-                capture_output=True, text=True, timeout=300,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300,
             ).returncode
             if rc == 0:
                 print_item("PyAudio 安装完成", "ok")
