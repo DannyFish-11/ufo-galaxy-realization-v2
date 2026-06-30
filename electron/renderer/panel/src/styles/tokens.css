@@ -16,17 +16,17 @@
   --text-secondary: #a9b1be;
   --text-muted: #717885;
 
-  /* 单一强调：香槟暖金 */
-  --accent: #e6c07b;
-  --accent-hover: #f0cf95;
-  --accent-press: #c9a45e;
-  --accent-dim: #8c7a4e;
-  --on-accent: #1a1407;
+  /* 单一强调：蜜黄琥珀金 (#FFEB97 → #583714) */
+  --accent: #ffeb97;
+  --accent-hover: #fff5c5;
+  --accent-press: #e8c840;
+  --accent-dim: #8b6820;
+  --on-accent: #1f0e00;
 
   /* 三态 */
-  --phase-silent: #8c7a4e;
-  --phase-liminal: #e6c07b;
-  --phase-manifest: #f6dca6;
+  --phase-silent: #7a5820;
+  --phase-liminal: #ffeb97;
+  --phase-manifest: #fff5c8;
 
   /* 语义(柔和) */
   --success: #74b79a;
@@ -41,7 +41,7 @@
   --glass-saturate: 1.4;
   --glass-border: rgba(255, 255, 255, 0.1);
   --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --glass-specular: rgba(230, 192, 123, 0.06);
+  --glass-specular: rgba(255, 235, 151, 0.06);
 
   /* 间距 */
   --xs: 4px;
@@ -63,7 +63,7 @@
   --e1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --e2: 0 16px 48px rgba(0, 0, 0, 0.55);
   --glass-e: 0 8px 32px rgba(0, 0, 0, 0.45);
-  --glow-accent: 0 0 24px rgba(230, 192, 123, 0.35);
+  --glow-accent: 0 0 28px rgba(255, 235, 151, 0.4);
 
   /* 动效 */
   --fast: 150ms;

@@ -32,7 +32,9 @@ export default function CapabilitiesView({ data }: { data: PanelData }) {
 
         <div className="section-header">MCP 服务 ({mcpServers.length})</div>
         <div className="card-list">
-          {mcpServers.map((s) => (
+          {mcpServers.length === 0
+            ? <div className="empty-hint">未检测到 MCP 服务 · 配置后自动显示</div>
+            : mcpServers.map((s) => (
             <div key={s.name} className="row-card">
               <span className={`dot tone-${MCP_TONE[s.status] || 'info'}`} />
               <div className="row-main">
@@ -46,7 +48,9 @@ export default function CapabilitiesView({ data }: { data: PanelData }) {
 
         <div className="section-header">技能 ({skills.length})</div>
         <div className="card-list">
-          {skills.map((s) => (
+          {skills.length === 0
+            ? <div className="empty-hint">暂无已加载技能</div>
+            : skills.map((s) => (
             <div key={s.name} className="row-card">
               <span className={`dot tone-${SKILL_TONE[s.status] || 'info'}`} />
               <div className="row-main">

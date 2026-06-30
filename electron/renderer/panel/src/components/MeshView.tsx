@@ -41,7 +41,9 @@ export default function MeshView({ data }: { data: PanelData }) {
 
         <div className="section-header">连接的设备</div>
         <div className="card-list">
-          {topologyNodes.map((n) => (
+          {topologyNodes.length === 0
+            ? <div className="empty-hint">暂无连接设备 · 手机/手表接入后自动出现</div>
+            : topologyNodes.map((n) => (
             <div key={n.id} className="row-card">
               <span className={`dot tone-${STATUS_TONE[n.status] || 'info'}`} />
               <div className="row-main">
@@ -55,7 +57,11 @@ export default function MeshView({ data }: { data: PanelData }) {
 
         <div className="section-header">Mesh 会话</div>
         <div className="card-list">
-          {meshSession.participants.map((p) => (
+          {meshSession.participants.length === 0
+            ? <div className="empty-hint">
+                {meshSession.status === 'closed' ? 'Mesh 未启用（单机模式）' : '等待设备加入…'}
+              </div>
+            : meshSession.participants.map((p) => (
             <div key={p.nodeId} className="row-card">
               <span className={`dot tone-${STATUS_TONE[p.status] || 'info'}`} />
               <div className="row-main">
