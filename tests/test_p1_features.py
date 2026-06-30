@@ -34,6 +34,10 @@ def _patch_data_files(monkeypatch, tmp_path):
 # Permissions policy tests
 # ---------------------------------------------------------------------------
 
+# 这些 HTTP 端点（/api/v1/permissions/policy）随 dashboard 降级为遗留薄壳时已被移除
+# （dashboard/backend/main.py 现仅 create_app() 不挂端点）。底层 policy_loader 能力仍由
+# TestPolicyLoader 覆盖。端点契约已不存在 → 跳过这些陈旧端点测试。
+@pytest.mark.skip(reason="dashboard 已降级为遗留薄壳，permissions HTTP 端点已移除；能力由 TestPolicyLoader 覆盖")
 class TestPermissionsPolicyEndpoints:
 
     def test_get_default_policy(self, monkeypatch, tmp_path):
@@ -96,6 +100,7 @@ class TestPermissionsPolicyEndpoints:
 # Integrations config tests
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(reason="dashboard 已降级为遗留薄壳，integrations HTTP 端点已移除（/api/v1/integrations/config）")
 class TestIntegrationsConfigEndpoints:
 
     def test_get_default_integrations(self, monkeypatch, tmp_path):
