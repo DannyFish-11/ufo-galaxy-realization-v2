@@ -199,6 +199,37 @@ ROLE_BRAIN_HINTS: Dict[str, Dict[str, Any]] = {
     "writer":      {"prefer_local": True,  "task_type": TaskType.CREATIVE,      "min_complexity": 0.0},
 }
 
+# ───────────────────────────────────────────────────────────────────────────
+# 做任务的"按实际情况选模型"——能力质量分层（粗粒度，可经 env 覆盖）
+# ───────────────────────────────────────────────────────────────────────────
+# 用户规则：做任务时【能力最强优先】，适度看 token，按需看延迟。
+# 这里给每个提供商一个粗略"能力档"（3=前沿/最强, 2=强, 1=本地轻量）。
+# 注意：这是质量导向，区别于 TASK_ROUTING_PREFERENCES（那是交流基座的本地/开源优先）。
+# DeepSeek/Qwen/GLM 等强开源模型同列 tier 3，确保"以开源为主"也能拿到最强档。
+PROVIDER_QUALITY_TIER: Dict[str, int] = {
+    # tier 3 —— 前沿能力（含强开源大模型）
+    "anthropic": 3, "openai": 3, "google": 3, "xai": 3,
+    "deepseek": 3, "qwen": 3, "zhipu": 3,
+    # tier 2 —— 强
+    "minimax": 2, "step": 2, "moonshot": 2, "mistral": 2,
+    "groq": 2, "mimo": 2, "perplexity": 2, "oneapi": 2,
+    # tier 1 —— 本地轻量（无 GPU 笔电主脑）
+    "ollama": 1, "hf_local": 1,
+}
+
+
+def _provider_quality_tier(name: str) -> int:
+    """读提供商能力档；支持 env 覆盖 GALAXY_QUALITY_TIER_<PROVIDER>=N。"""
+    import os as _os
+    ov = _os.environ.get(f"GALAXY_QUALITY_TIER_{name.upper()}")
+    if ov:
+        try:
+            return int(ov)
+        except ValueError:
+            pass
+    return PROVIDER_QUALITY_TIER.get(name, 2)
+
+
 # 提供商 → 推荐模型 (2026-05-29 全面更新)
 PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     "openai": {
@@ -1527,6 +1558,99 @@ class MultiLLMRouter:
             reason="无可用提供商，请在 Dashboard 配置 API Key",
         )
 
+    # ───────── 做任务：按实际情况选模型（fit-based） ─────────
+
+    def select_brain_for_task(
+        self,
+        task_type: TaskType,
+        complexity_score: float = 0.5,
+        *,
+        has_multimodal: bool = False,
+        needs_timely: bool = False,
+        prefer_local: bool = False,
+    ) -> RoutingDecision:
+        """做任务时的"按实际情况"选模型（区别于交流基座的开源/本地优先）。
+
+        用户规则（优先级）：
+          1. 主    — 完成质量/能力最强优先（quality tier × 复杂度）
+          2. 次    — 适度看 token 成本（同档次内便宜优先）
+          3. 条件  — 仅当任务需要及时响应(needs_timely)才把延迟纳入
+        硬约束：
+          - 只在【已填 key 且健康】的提供商里选（没填的不在 self.providers）
+          - 有多模态输入 → 只在多模态可用的提供商里选
+          - 同档次平局：开源/本地优先（平局打破，而非无脑前移）
+
+        Returns:
+            RoutingDecision(provider, model, reason)；无候选时 provider="none"。
+        """
+        import os as _os
+
+        # ── 候选 = 已填 key + 健康 + 有 adapter（没填的天然不在 providers）──
+        candidates = [
+            name for name, cfg in self.providers.items()
+            if cfg.status != ProviderStatus.DOWN and self.adapters.get(name) is not None
+        ]
+        # ── 模态硬过滤 ──
+        if has_multimodal:
+            mm = [n for n in candidates if getattr(self.providers[n], "multimodal", False)]
+            if mm:
+                candidates = mm
+        if not candidates:
+            return RoutingDecision(provider="none", model="none", reason="无已配置可用提供商")
+
+        # 权重（可经 env 微调）
+        try:
+            token_weight = float(_os.environ.get("GALAXY_ROUTE_TOKEN_WEIGHT", "0.6"))
+        except ValueError:
+            token_weight = 0.6
+        try:
+            latency_weight = float(_os.environ.get("GALAXY_ROUTE_LATENCY_WEIGHT", "0.5"))
+        except ValueError:
+            latency_weight = 0.5
+
+        task_pref = TASK_ROUTING_PREFERENCES.get(task_type, [])
+        # 成本/延迟归一化基准（避免量纲压过质量）
+        max_cost = max(
+            (self.providers[n].cost_per_1k_output for n in candidates), default=0.0
+        ) or 1.0
+        max_lat = max(
+            (self.providers[n].latency_avg_ms for n in candidates), default=0.0
+        ) or 1.0
+
+        def _score(name: str) -> float:
+            cfg = self.providers[name]
+            quality = _provider_quality_tier(name)             # 1..3
+            # 任务相关度：在该任务偏好表里 = 更贴合
+            task_fit = 1.0 if name in task_pref else 0.6
+            # 主：质量 × (0.5+复杂度) —— 越难越看重质量
+            score = quality * (0.5 + complexity_score) * task_fit
+            # 次：适度 token（同档次便宜优先）
+            score -= token_weight * (cfg.cost_per_1k_output / max_cost)
+            # 条件：仅任务需要及时响应时计入延迟
+            if needs_timely:
+                score -= latency_weight * (cfg.latency_avg_ms / max_lat)
+            # 平局打破：开源/本地 + 显式本地偏好
+            if name in OPEN_SOURCE_PROVIDERS:
+                score += 0.15
+            if prefer_local and name in ("ollama", "hf_local"):
+                score += 0.5
+            return score
+
+        best = max(candidates, key=_score)
+        model = self.select_model_by_complexity(best, task_type, complexity_score)
+        if best == "hf_local" and (not model or model not in self.providers[best].models):
+            model = self.providers[best].default_model or (
+                self.providers[best].models[0] if self.providers[best].models else model
+            )
+        return RoutingDecision(
+            provider=best, model=model,
+            reason=(
+                f"fit-based: {best}:{model} quality={_provider_quality_tier(best)} "
+                f"task={task_type.value} complexity={complexity_score:.2f} "
+                f"mm={has_multimodal} timely={needs_timely}"
+            ),
+        )
+
     # ───────── 角色 → 脑 绑定（大小模型配合） ─────────
 
     def select_brain_for_role(
@@ -1556,6 +1680,10 @@ class MultiLLMRouter:
         # 重角色用 max(任务复杂度, 角色最低复杂度) 确保选到足够强的模型
         eff_complexity = max(complexity_score, hint.get("min_complexity", 0.0))
 
+        # 大小模型配合：
+        #   - 轻角色(executor/worker...) → 本地小模型【硬】优先（这是设计意图：本地做，
+        #     云端审；不让云端强模型抢走 executor），无本地时才 fit-based。
+        #   - 重角色(critic/reviewer...) → fit-based 质量优先。
         def _avail(name: str) -> bool:
             return (
                 name in self.providers
@@ -1563,43 +1691,26 @@ class MultiLLMRouter:
                 and self.adapters.get(name) is not None
             )
 
-        local_providers = ["ollama", "hf_local"]
-        # 重角色的云端开源大模型偏好顺序
-        cloud_open_providers = [
-            p for p in TASK_ROUTING_PREFERENCES.get(eff_task, [])
-            if p in OPEN_SOURCE_PROVIDERS and p not in local_providers
-        ]
-        # 专有兜底（仅在没有任何开源云端可用时）
-        proprietary = [
-            p for p in TASK_ROUTING_PREFERENCES.get(eff_task, [])
-            if p in PROPRIETARY_PROVIDERS
-        ]
-
         if hint["prefer_local"]:
-            search_order = local_providers + cloud_open_providers + proprietary
-            role_kind = "轻角色(本地优先)"
-        else:
-            # 重角色：云端开源大模型优先，本地兜底，专有最后
-            search_order = cloud_open_providers + local_providers + proprietary
-            role_kind = "重角色(开源大模型优先)"
+            for local in ("ollama", "hf_local"):
+                if _avail(local):
+                    model = self.select_model_by_complexity(local, eff_task, eff_complexity)
+                    if local == "hf_local" and (not model or model not in self.providers[local].models):
+                        model = self.providers[local].default_model or (
+                            self.providers[local].models[0] if self.providers[local].models else model
+                        )
+                    return RoutingDecision(
+                        provider=local, model=model,
+                        reason=f"角色[{role}] 轻角色(本地小模型优先): {local}:{model} task={eff_task.value}",
+                    )
 
-        for name in search_order:
-            if not _avail(name):
-                continue
-            model = self.select_model_by_complexity(name, eff_task, eff_complexity)
-            if name in ("hf_local",) and (not model or model not in self.providers[name].models):
-                model = self.providers[name].default_model or (
-                    self.providers[name].models[0] if self.providers[name].models else model
-                )
-            return RoutingDecision(
-                provider=name, model=model,
-                reason=(
-                    f"角色[{role}] {role_kind}: {name}:{model} "
-                    f"task={eff_task.value} complexity={eff_complexity:.2f}"
-                ),
-            )
+        decision = self.select_brain_for_task(eff_task, complexity_score=eff_complexity)
+        if decision.provider != "none":
+            role_kind = "轻角色(无本地→fit)" if hint["prefer_local"] else "重角色(质量优先)"
+            decision.reason = f"角色[{role}] {role_kind} → {decision.reason}"
+            return decision
 
-        # 全部不可用 → 退回通用 route()
+        # 无候选 → 退回通用 route()
         return self.route(eff_task, complexity_score=eff_complexity)
 
     # ───────── 本地主脑优先路由 ─────────

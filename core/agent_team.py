@@ -486,21 +486,36 @@ class AgentTeam:
             task_type = self._router.classify_task(
                 [{"role": "user", "content": st["description"]}]
             )
-            # 选最优提供商
-            try:
-                decision = self._router.route(task_type)
-            except RuntimeError:
-                decision = None
+            # 特种部队核心：按"实际情况"给每个子任务配最优模型（质量优先+适度token，
+            # 只在已填key里选）。fit-based 选不出时退回通用 route()。
+            decision = None
+            if hasattr(self._router, "select_brain_for_task"):
+                try:
+                    from core.multi_llm_router import TaskType as _TT
+                    _tt = task_type if isinstance(task_type, _TT) else _TT.GENERAL
+                    decision = self._router.select_brain_for_task(_tt, complexity_score=0.6)
+                    if decision.provider == "none":
+                        decision = None
+                except Exception as exc:
+                    logger.debug("select_brain_for_task 失败，退回 route(): %s", exc)
+            if decision is None:
+                try:
+                    decision = self._router.route(task_type)
+                except RuntimeError:
+                    decision = None
 
-            # 匹配成员
+            # 匹配成员：优先用现有成员，但把该子任务的最优 provider:model 绑上去
+            # （真正的"系统组合搭配"——不同子任务配不同最优模型）
             member = None
-            if decision:
+            if available_members:
+                member = available_members[0]
                 for m in available_members:
-                    if m.provider == decision.provider:
+                    if decision and m.provider == decision.provider:
                         member = m
                         break
-            if member is None and available_members:
-                member = available_members[0]
+                if decision and decision.provider != "none":
+                    # 用副本绑定最优 provider:model，不污染原成员
+                    member = _dc_replace(member, provider=decision.provider, model=decision.model)
 
             if member:
                 assignments.append((st, member))

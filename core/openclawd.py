@@ -8366,6 +8366,25 @@ class OpenClawd:
             # 解散团队释放资源
             manager.disband_team(team.team_id)
 
+            # 记忆回流：把团队/特种部队完成后的核心成果存入 TaskMemory
+            try:
+                from core.openclawd_memory_backflow import store_task_result
+                await store_task_result(
+                    task_id=team_result.team_id,
+                    device_id="openclawd",
+                    route_mode=f"team_{team_result.strategy}",
+                    result={
+                        "status": "completed" if team_result.synthesized else "error",
+                        "task_type": "team_task",
+                        "collaboration_mode": strategy,
+                        "task_description": message[:200],
+                        "result_summary": (team_result.synthesized or "")[:500],
+                    },
+                    session_id=None,
+                )
+            except Exception as _bf_err:
+                logger.debug("团队记忆回流跳过(非致命): %s", _bf_err)
+
             return {
                 "success": True,
                 "response": team_result.synthesized,

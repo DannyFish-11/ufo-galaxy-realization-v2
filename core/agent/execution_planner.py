@@ -168,8 +168,10 @@ def _collect_team_providers(team_result: Any) -> Optional[List[str]]:
     try:
         providers: List[str] = []
         for member_res in (team_result.member_results or []):
-            prov = getattr(member_res, "provider", None)
-            mdl = getattr(member_res, "model", None)
+            # MemberResult.provider/model 实际挂在 .member 上；两处都兼容读取
+            _m = getattr(member_res, "member", None)
+            prov = getattr(member_res, "provider", None) or getattr(_m, "provider", None)
+            mdl = getattr(member_res, "model", None) or getattr(_m, "model", None)
             if prov or mdl:
                 entry = f"{prov or ''}:{mdl or ''}".strip(":")
                 if entry and entry not in providers:
@@ -482,6 +484,24 @@ class ExecutionPlanner:
         # 经验学习闭环(上层)：根据历史经验里"策略→成败"记录,若当前策略在相似任务上
         # 反复失败、而另一策略明显更优,则自动改用更优策略。失败即沿用原策略。
         strategy = self._experience_strategy_adjust(plan.message, strategy)
+
+        # 协作模式细化(Octo 六模式)：当本就要组队(specialized/parallel/swarm)时，
+        # 用 collaboration_mode_policy 进一步判断是否该用 critic(做/审分离) / pipeline
+        # (流水线) 等更合适的模式。single / fractal 不动（前者无需组队，后者递归分解）。
+        if strategy in ("specialized", "parallel", "swarm"):
+            try:
+                from core.collaboration_mode_policy import select_collaboration_mode
+                _collab = select_collaboration_mode(
+                    plan.message, complexity_score=complexity, intent=plan.intent,
+                )
+                if _collab["mode"] != strategy:
+                    logger.info(
+                        "协作模式细化: %s → %s (%s)",
+                        strategy, _collab["mode"], _collab["reason"],
+                    )
+                    strategy = _collab["mode"]
+            except Exception as _collab_err:
+                logger.debug("协作模式细化跳过(非致命): %s", _collab_err)
 
         logger.info(
             "ExecutionPlanner: 开始执行 | strategy=%s complexity=%.2f intent=%s "
@@ -906,7 +926,7 @@ class ExecutionPlanner:
 
         if strategy == "fractal":
             return await self._run_fractal(plan, steps, tool_calls)
-        if strategy in ("specialized", "parallel", "swarm"):
+        if strategy in ("specialized", "parallel", "swarm", "critic", "pipeline"):
             return await self._run_team(plan, strategy, steps, tool_calls)
         return await self._run_single_agent(plan, steps, tool_calls)
 
@@ -1101,8 +1121,10 @@ class ExecutionPlanner:
                 except Exception as _dec_err:
                     logger.debug("TaskDecomposer decomposition skipped: %s", _dec_err)
 
-            # Map strategy: swarm → swarm, parallel → parallel, specialized → specialized
-            team_strategy = strategy if strategy in ("swarm", "parallel", "specialized") else "specialized"
+            # Map strategy: swarm/parallel/specialized + critic(做审分离)/pipeline(流水线)
+            team_strategy = strategy if strategy in (
+                "swarm", "parallel", "specialized", "critic", "pipeline"
+            ) else "specialized"
             complexity = _estimate_complexity(plan.message)
             team = await manager.create_team(
                 strategy=team_strategy,
@@ -1128,9 +1150,9 @@ class ExecutionPlanner:
             exec_step.output = team_result.to_dict()
             steps.append(exec_step)
 
-            # 收集 member 结果中的工具调用
+            # 收集 member 结果中的工具调用（MemberResult 不一定带 tool_calls，安全读取）
             for member_res in (team_result.member_results or []):
-                for tc in member_res.tool_calls or []:
+                for tc in (getattr(member_res, "tool_calls", None) or []):
                     tool_calls.append(ToolCallRecord(
                         tool=tc if isinstance(tc, str) else tc.get("tool", ""),
                         result={},
@@ -1140,7 +1162,10 @@ class ExecutionPlanner:
             return ExecutionResult(
                 success=team_result.success,
                 mode=f"team_{team_strategy}",
-                reply=team_result.final_answer or "Team 任务已完成",
+                # TeamResult 的最终产出字段是 synthesized（兼容旧 final_answer 命名）
+                reply=getattr(team_result, "synthesized", None)
+                or getattr(team_result, "final_answer", None)
+                or "Team 任务已完成",
                 task_result=team_result.to_dict(),
                 chosen_strategy=f"team_{team_strategy}",
                 chosen_providers=_collect_team_providers(team_result),
