@@ -1124,6 +1124,13 @@ class OpenClawd:
                 self._ha_router = _get_ha()
             except Exception:
                 self._ha_router = None
+        # 级联路由策略（懒加载，大小模型协作）
+        if not hasattr(self, '_cascade_policy'):
+            try:
+                from core.cascade_routing_policy import get_cascade_policy as _get_cascade
+                self._cascade_policy = _get_cascade()
+            except Exception:
+                self._cascade_policy = None
         return self._router
 
     def _get_kernel(self):
@@ -8019,8 +8026,29 @@ class OpenClawd:
             elif hasattr(router, "_compute_complexity_vector"):
                 cv = router._compute_complexity_vector(messages, tools if tools else None)
 
-            # 使用 ReAct 循环
-            result = await self._react_loop(messages, tools)
+            # ── 级联路由：大小模型协作 ──────────────────────────────────────
+            # 根据任务复杂度映射 task_type，让 MultiLLMRouter 在本地模型不可用时
+            # 按复杂度选择合适的 API 层：
+            #   SIMPLE  → fast_response → deepseek/groq/gemini-flash（小模型）
+            #   MEDIUM  → general       → openai/anthropic/deepseek（中模型）
+            #   COMPLEX → reasoning     → anthropic/openai/deepseek-r1（大模型）
+            _cascade_task_type: Optional[str] = None
+            _cascade_hint: Dict[str, Any] = {}
+            _cascade = getattr(self, '_cascade_policy', None)
+            if _cascade is not None:
+                try:
+                    _cascade_hint = _cascade.get_routing_hint(
+                        message,
+                        has_tools=bool(tools),
+                        is_agent_task=False,
+                        history_len=max(0, len(messages) - 2),
+                    )
+                    _cascade_task_type = _cascade_hint.get("task_type")
+                except Exception as _ce:
+                    logger.debug("Cascade policy (non-fatal): %s", _ce)
+
+            # 使用 ReAct 循环（传入级联路由决策的 task_type）
+            result = await self._react_loop(messages, tools, task_type=_cascade_task_type)
 
             # 构建层级使用统计
             tool_records = result.get("tool_records", [])
@@ -8041,6 +8069,10 @@ class OpenClawd:
                     "complexity_vector": cv.model_dump() if cv else {},
                     "layers_used": layers_used,
                     "hit_max_iterations": result.get("hit_max_iterations", False),
+                    # 级联路由信息（大小模型协作）
+                    "cascade_complexity": _cascade_hint.get("complexity", "unknown"),
+                    "cascade_task_type": _cascade_hint.get("task_type", "general"),
+                    "cascade_model_tier": _cascade_hint.get("model_tier_label", ""),
                 },
             }
 
@@ -8190,27 +8222,54 @@ class OpenClawd:
             except Exception as _env_err:
                 logger.debug("handle_agent_task: TaskEnvelope construction skipped — %s", _env_err)
 
-            # 判断是否需要团队协作 (复杂度驱动)
+            # 判断是否需要团队协作 (复杂度驱动 + 级联路由策略)
             tools = self._collect_tools()
             cv = router._compute_complexity_vector(
                 [{"role": "user", "content": message}],
                 tools if tools else None,
             )
             targets = intent.targets if intent else []
+
+            # 级联路由：Agent 任务天然是复杂任务，cascade 给出 task_type 和模型层级
+            _agent_cascade_hint: Dict[str, Any] = {}
+            _agent_cascade = getattr(self, '_cascade_policy', None)
+            if _agent_cascade is not None:
+                try:
+                    _agent_cascade_hint = _agent_cascade.get_routing_hint(
+                        message,
+                        has_tools=bool(tools),
+                        is_agent_task=True,
+                        history_len=0,
+                        task_type_hint=intent.intent if intent else None,
+                    )
+                    logger.debug(
+                        "Agent cascade: complexity=%s task_type=%s",
+                        _agent_cascade_hint.get("complexity"),
+                        _agent_cascade_hint.get("task_type"),
+                    )
+                except Exception as _ace:
+                    logger.debug("Agent cascade policy (non-fatal): %s", _ace)
+
             is_complex = (
                 cv.weighted_score >= 0.6
                 or len(targets) > 2
                 or (intent and intent.intent in ("workflow", "batch_task", "multi_device"))
+                # Agent tasks classified as COMPLEX by cascade also trigger team mode
+                or _agent_cascade_hint.get("complexity") == "complex"
             )
 
             if is_complex:
-                # 复杂任务 -> 团队协作
+                # 复杂任务 -> 团队协作（大模型主导）
                 team_result = await self._execute_team_task(message, intent, factory, router)
                 # PR154: 将 task_id / trace_id 注入团队协作结果 metadata
                 meta = team_result.get("metadata", {})
                 meta.setdefault("task_id", task_id)
                 meta.setdefault("trace_id", _envelope_trace_id)
                 meta.setdefault("device_id", device_id or "")
+                if _agent_cascade_hint:
+                    meta.setdefault("cascade_complexity", _agent_cascade_hint.get("complexity"))
+                    meta.setdefault("cascade_task_type", _agent_cascade_hint.get("task_type"))
+                    meta.setdefault("cascade_model_tier", _agent_cascade_hint.get("model_tier_label"))
                 team_result["metadata"] = meta
                 return team_result
 
