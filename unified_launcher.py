@@ -230,7 +230,7 @@ class L4EnhancementLauncher:
         results = {}
         
         # 感知模块
-        print_status("初始化感知模块...", "step")
+        logger.debug("初始化感知模块...")
         try:
             from enhancements.perception.environment_scanner import EnvironmentScanner
             self.l4_modules["environment_scanner"] = EnvironmentScanner()
@@ -238,9 +238,9 @@ class L4EnhancementLauncher:
         except Exception as e:
             logger.error(f"感知模块初始化失败: {e}")
             results["perception"] = False
-            
+
         # 推理模块
-        print_status("初始化推理模块...", "step")
+        logger.debug("初始化推理模块...")
         try:
             from enhancements.reasoning.goal_decomposer import GoalDecomposer
             from enhancements.reasoning.autonomous_planner import AutonomousPlanner
@@ -252,9 +252,9 @@ class L4EnhancementLauncher:
         except Exception as e:
             logger.error(f"推理模块初始化失败: {e}")
             results["reasoning"] = False
-            
+
         # 学习模块
-        print_status("初始化学习模块...", "step")
+        logger.debug("初始化学习模块...")
         try:
             from enhancements.learning.autonomous_learning_engine import AutonomousLearningEngine
             self.l4_modules["learning_engine"] = AutonomousLearningEngine()
@@ -262,9 +262,9 @@ class L4EnhancementLauncher:
         except Exception as e:
             logger.error(f"学习模块初始化失败: {e}")
             results["learning"] = False
-            
+
         # 执行模块
-        print_status("初始化执行模块...", "step")
+        logger.debug("初始化执行模块...")
         try:
             from enhancements.execution.action_executor import ActionExecutor
             self.l4_modules["action_executor"] = ActionExecutor()
@@ -272,9 +272,9 @@ class L4EnhancementLauncher:
         except Exception as e:
             logger.error(f"执行模块初始化失败: {e}")
             results["execution"] = False
-            
+
         # 安全模块
-        print_status("初始化安全模块...", "step")
+        logger.debug("初始化安全模块...")
         try:
             from enhancements.safety.safety_manager import SafetyManager
             self.l4_modules["safety_manager"] = SafetyManager()
@@ -486,7 +486,7 @@ class UnifiedWebUI:
                 # serve() exited during startup — re-raise the real error so the
                 # caller logs an accurate "API 网关启动失败" cause.
                 self._serve_task.result()
-            print_section("启动后健康检查")
+            logger.debug("启动后健康检查")
             await run_startup_health_check(self.config.web_ui_port)
 
         except ImportError as e:
