@@ -95,6 +95,12 @@ export const ICONS = {
       <path d="m9 12 2 2 4-4" />
     </svg>
   ),
+  models: (
+    <svg {...S}>
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+      <path d="M9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3" />
+    </svg>
+  ),
   settings: (
     <svg {...S}>
       <circle cx="12" cy="12" r="3" />

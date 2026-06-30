@@ -9,6 +9,7 @@ import PresencePanel from '@/components/PresencePanel';
 import MeshView from '@/components/MeshView';
 import CapabilitiesView from '@/components/CapabilitiesView';
 import SettingsTab from '@/components/SettingsTab';
+import ModelsTab from '@/components/ModelsTab';
 import DiagnosticsDrawer from '@/components/DiagnosticsDrawer';
 import './App.css';
 
@@ -16,6 +17,7 @@ const TABS: TabDef[] = [
   { key: 'chat', label: '对话', icon: ICONS.chat },
   { key: 'mesh', label: '维态', icon: ICONS.mesh },
   { key: 'capability', label: '能力', icon: ICONS.capability },
+  { key: 'models', label: '模型', icon: ICONS.models },
   { key: 'settings', label: '设置', icon: ICONS.settings },
 ];
 
@@ -57,6 +59,11 @@ function App() {
         {activeTab === 1 && <MeshView data={panelData} />}
         {activeTab === 2 && <CapabilitiesView data={panelData} />}
         {activeTab === 3 && (
+          <div className="view-slot">
+            <ModelsTab />
+          </div>
+        )}
+        {activeTab === 4 && (
           <div className="view-slot">
             <SettingsTab />
           </div>

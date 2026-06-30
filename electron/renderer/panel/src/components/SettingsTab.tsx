@@ -34,8 +34,8 @@ interface CategoryDef {
   count: number;
 }
 
+// 注：模型 API（llm 类）已迁到专门的「模型」tab（ModelsTab），此处不再重复。
 const CATEGORIES: CategoryDef[] = [
-  { key: 'llm', label: 'LLM Keys', icon: '🔑', count: 20 },
   { key: 'ports', label: 'Ports', icon: '🔌', count: 16 },
   { key: 'auth', label: 'Auth', icon: '🔒', count: 12 },
   { key: 'mesh', label: 'Mesh', icon: '🕸️', count: 11 },
@@ -49,13 +49,6 @@ const CATEGORIES: CategoryDef[] = [
 // ── Config Key Registry (105 items) ─────────────────────────────────
 
 const CONFIG_KEYS: Record<string, string[]> = {
-  llm: [
-    'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'DEEPSEEK_API_KEY', 'GOOGLE_API_KEY',
-    'GEMINI_API_KEY', 'XAI_API_KEY', 'MISTRAL_API_KEY', 'QWEN_API_KEY',
-    'DASHSCOPE_API_KEY', 'ZHIPU_API_KEY', 'GROQ_API_KEY', 'HF_API_TOKEN',
-    'MOONSHOT_API_KEY', 'MIMO_API_KEY', 'MINIMAX_API_KEY', 'PERPLEXITY_API_KEY',
-    'STEP_API_KEY', 'ONEAPI_URL', 'ONEAPI_API_KEY', 'LOCAL_VLLM_URL',
-  ],
   ports: [
     'GATEWAY_PORT', 'UFO_NODE_HOST', 'NODE_92_URL', 'NODE_45_URL', 'NODE_33_URL',
     'NODE_71_URL', 'NODE_71_HOST', 'NODE_95_URL', 'NODE_97_URL', 'NODE09_SANDBOX_URL',
@@ -233,7 +226,7 @@ function LoadingSpinner() {
 export default function SettingsTab() {
   const [config, setConfig] = useState<Record<string, ConfigItem>>({});
   const [changed, setChanged] = useState<Record<string, string>>({});
-  const [activeCategory, setActiveCategory] = useState<string>('llm');
+  const [activeCategory, setActiveCategory] = useState<string>('ports');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
