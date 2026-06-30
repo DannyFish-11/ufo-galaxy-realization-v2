@@ -8312,20 +8312,35 @@ class OpenClawd:
             else:
                 cv = None
 
-            # 复杂度驱动策略选择
+            # 协作模式选择（Octo 六模式自动选 + 可手动覆盖）
             _cv_score = getattr(cv, "weighted_score", 0.5) if cv is not None else 0.5
-            if _cv_score >= 0.7:
-                strategy = "specialized"
-            elif _cv_score >= 0.4:
-                strategy = "parallel"
-            else:
-                strategy = "parallel"
-
-            # 意图覆写
-            if intent and intent.intent == "workflow":
-                strategy = "specialized"
-            elif intent and hasattr(intent, "targets") and len(intent.targets) > 5:
-                strategy = "swarm"
+            strategy = "specialized"  # 安全默认
+            _mode_reason = ""
+            try:
+                from core.collaboration_mode_policy import select_collaboration_mode
+                _mode = select_collaboration_mode(
+                    message,
+                    complexity_score=_cv_score,
+                    intent=intent,
+                    has_tools=bool(tools),
+                    context=None,
+                )
+                strategy = _mode["mode"]
+                _mode_reason = _mode["reason"]
+                logger.info("协作模式选择: %s (%s)", strategy, _mode_reason)
+            except Exception as _mode_err:
+                logger.debug("协作模式策略失败，用复杂度兜底: %s", _mode_err)
+                # 兜底：复杂度驱动
+                if _cv_score >= 0.7:
+                    strategy = "critic"
+                elif _cv_score >= 0.4:
+                    strategy = "specialized"
+                else:
+                    strategy = "parallel"
+                if intent and intent.intent == "workflow":
+                    strategy = "pipeline"
+                elif intent and hasattr(intent, "targets") and len(intent.targets) > 5:
+                    strategy = "swarm"
 
             # 创建团队 (传复杂度)
             team = await manager.create_team(
@@ -8363,6 +8378,8 @@ class OpenClawd:
                     "manifest": manifest.model_dump(),
                     "complexity_vector": cv.model_dump(),
                     "model_tier": cv.tier.value,
+                    "collaboration_mode": strategy,
+                    "collaboration_reason": _mode_reason,
                 },
             }
 
