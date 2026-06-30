@@ -59,11 +59,13 @@ Routes:
   POST /api/v1/chat  - 兼容性适配器表面 (delegates to DesktopPresenceRuntime)
 """
 
+import asyncio
+import json
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any, AsyncIterator, Dict, List, Tuple
 
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from core.android_boundary_visibility_router import (
     apply_dual_repo_boundary_to_visible_action,
@@ -532,5 +534,113 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 session_id=req.session_id or "",
             )
             return JSONResponse(resp.to_json_response())
+
+    # ── SSE streaming surface (panel A 方案: 逐字流式) ──────────────────────
+    # POST /api/v1/chat/stream — same compatibility-adapter role as /api/v1/chat,
+    # but emits the result as a Server-Sent Events stream so the desktop panel can
+    # render a token-by-token "实时生成" effect with a streaming caret.
+    #
+    # Contract (each line is an SSE frame, JSON payload after ``data: ``):
+    #   data: {"type":"meta",  "session_id","model","runtime_session_id"}
+    #   data: {"type":"phase", "phase":"liminal"}        # presence hint
+    #   data: {"type":"delta", "text":"片段"}            # repeated
+    #   data: {"type":"done",  "response","intent","success","suggestions",
+    #          "visible_action_surface","session_id","model"}
+    #   data: {"type":"error", "error":"..."}
+    #
+    # NOTE: the underlying runtime (DesktopPresenceRuntime → OpenClawd) currently
+    # computes the full answer atomically; this surface chunks that answer for a
+    # progressive feel. The SSE contract is stable, so when the runtime gains real
+    # incremental generation it can stream deltas here without a client change.
+    _STREAM_CHUNK_CHARS = 2      # 每帧推送的字符数(中文逐字观感)
+    _STREAM_CHUNK_DELAY = 0.012  # 帧间隔(秒);流畅且不过量
+
+    def _sse(payload: Dict[str, Any]) -> str:
+        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    @router.post("/api/v1/chat/stream")
+    async def chat_stream(req: ChatRequest):
+        """SSE 流式对话 — 兼容适配器表面,委派 DesktopPresenceRuntime → OpenClawd。"""
+
+        async def _gen() -> AsyncIterator[str]:
+            # 收到即进入"思考"态提示(前端在场带据此脉动)。
+            yield _sse({"type": "phase", "phase": "liminal"})
+            try:
+                from core.desktop_presence_runtime import get_desktop_presence_runtime
+                runtime = get_desktop_presence_runtime()
+                result = await runtime.handle_request(
+                    message=req.message,
+                    source="chat",
+                    device_id=req.device_id,
+                    session_id=req.session_id,
+                    user_id=req.user_id,
+                    context=req.context,
+                    required_capabilities=req.required_capabilities,
+                    multimodal_context=req.multimodal_context,
+                    entry_mode="local",
+                )
+                metadata = result.get("metadata", {})
+                if not isinstance(metadata, dict):
+                    metadata = {}
+                is_operator = _is_operator_request(req)
+                (
+                    metadata,
+                    visible_action_surface,
+                    foreground_response,
+                    _demoted,
+                ) = _apply_hidden_visible_boundary(
+                    result=result,
+                    metadata=metadata,
+                    is_operator_request=is_operator,
+                )
+                session_id = metadata.get(
+                    "conversation_session_id",
+                    metadata.get("session_id", req.session_id or ""),
+                )
+                model = metadata.get("model", "")
+                runtime_session_id = result.get("runtime_session_id", "")
+
+                # meta 帧:会话/模型先到,前端可立即落位。
+                yield _sse({
+                    "type": "meta",
+                    "session_id": session_id,
+                    "model": model,
+                    "runtime_session_id": runtime_session_id,
+                })
+                # 输出态:开始吐字。
+                yield _sse({"type": "phase", "phase": "manifest"})
+
+                text = foreground_response or ""
+                for i in range(0, len(text), _STREAM_CHUNK_CHARS):
+                    yield _sse({"type": "delta", "text": text[i:i + _STREAM_CHUNK_CHARS]})
+                    await asyncio.sleep(_STREAM_CHUNK_DELAY)
+
+                yield _sse({
+                    "type": "done",
+                    "success": result.get("success", False),
+                    "response": text,
+                    "intent": result.get("intent", "chat"),
+                    "suggestions": metadata.get("suggestions", []) or [],
+                    "session_id": session_id,
+                    "model": model,
+                    "runtime_session_id": runtime_session_id,
+                    "visible_action_surface": visible_action_surface,
+                })
+                # 回到待机态。
+                yield _sse({"type": "phase", "phase": "silent"})
+            except Exception as exc:  # noqa: BLE001 — surface any failure to the client
+                logger.error("chat_stream 处理异常: %s", exc, exc_info=True)
+                yield _sse({"type": "error", "error": str(exc)})
+                yield _sse({"type": "phase", "phase": "silent"})
+
+        return StreamingResponse(
+            _gen(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # 关掉反代缓冲,保证逐帧到达
+            },
+        )
 
     return router

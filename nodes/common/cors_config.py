@@ -25,6 +25,17 @@ _DEFAULT_METHODS = "GET,POST,PUT,DELETE"
 # 安全默认：仅允许必要的请求头
 _DEFAULT_HEADERS = "Authorization,Content-Type,X-Request-ID"
 
+# 桌面壳来源：覆盖层/控制面板由本机桌面壳加载,不是网络页面。
+#   - Electron 经 file:// 加载 → 浏览器发送 `Origin: null`
+#   - Tauri(WebView2/WebKitGTK) → tauri://localhost(mac/linux) / https://tauri.localhost(win)
+# 这些都指向同机壳层自身,不引入任何新的网络暴露;始终放行,确保面板直连本机网关
+# (/api/v1/chat/stream 等)可用,且不依赖用户手动配置 CORS_ALLOWED_ORIGINS。
+_DESKTOP_SHELL_ORIGINS = (
+    "null",
+    "tauri://localhost",
+    "https://tauri.localhost",
+)
+
 
 def _default_origins() -> str:
     """延迟初始化：从 port_config 动态获取服务端口，避免模块级 ImportError."""
@@ -50,7 +61,12 @@ def get_cors_origins() -> List[str]:
         # 延迟初始化：仅在首次调用时访问 port_config
         raw = _default_origins()
     origins = [o.strip() for o in raw.split(",") if o.strip()]
-    return origins or ["http://localhost:8765"]
+    origins = origins or ["http://localhost:8765"]
+    # 始终追加桌面壳来源(去重),保证本机面板直连可用。
+    for shell_origin in _DESKTOP_SHELL_ORIGINS:
+        if shell_origin not in origins:
+            origins.append(shell_origin)
+    return origins
 
 
 def get_cors_methods() -> List[str]:

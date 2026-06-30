@@ -7,12 +7,8 @@
   <!-- Vite 入口必须指向源码入口 src/main.tsx，构建时由 Vite 编译并注入
        带哈希的产物。此前误指向已构建的 assets/*.js，导致每次构建只是复制
        旧产物、源码改动永远不生效（面板长期停留在过期版本）。 -->
-  <!-- 注意：不能带 crossorigin 属性。Electron 通过 file://(origin=null) 加载本页，
-       带 crossorigin 的 module/样式会触发 CORS 检查 → file:// 无 CORS 头 → 资源被拦截，
-       React 永不挂载 → 透明面板窗口一片空白（表现为「F12 打不开」）。
-       vite.config.ts 的 strip-crossorigin 插件会在构建时自动去除该属性。 -->
-  <script type="module" src="./assets/main-CjbCsA5M.js"></script>
-  <link rel="stylesheet" href="./assets/main-CcMW9FbO.css">
+  <script type="module" src="./assets/main-B7aAXhMm.js"></script>
+  <link rel="stylesheet" href="./assets/main-aby101S-.css">
 </head>
 <body>
   <div id="root"></div>

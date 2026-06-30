@@ -1,0 +1,169 @@
+/* Galaxy Control Panel — design tokens (from DESIGN.md)
+ * 单一真相：所有颜色/间距/材质都走这里的 CSS 变量。
+ * 玻璃只用于导航/外壳层；内容(气泡/正文)一律实底，保可读。 */
+
+:root {
+  /* 画布与表面 */
+  --canvas: #0c0d11;
+  --surface: #14151b;
+  --surface-raised: #1c1e26;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  /* 文字 */
+  --text-primary: #eceff4;
+  --text-secondary: #a9b1be;
+  --text-muted: #717885;
+
+  /* 单一强调：香槟暖金 */
+  --accent: #e6c07b;
+  --accent-hover: #f0cf95;
+  --accent-press: #c9a45e;
+  --accent-dim: #8c7a4e;
+  --on-accent: #1a1407;
+
+  /* 三态 */
+  --phase-silent: #8c7a4e;
+  --phase-liminal: #e6c07b;
+  --phase-manifest: #f6dca6;
+
+  /* 语义(柔和) */
+  --success: #74b79a;
+  --warning: #e0b24e;
+  --danger: #d47a7a;
+  --info: #7c97d6;
+
+  /* 液态玻璃材质(克制版) */
+  --glass-bg: rgba(22, 24, 32, 0.62);
+  --glass-bg-strong: rgba(18, 20, 27, 0.78);
+  --glass-blur: 20px;
+  --glass-saturate: 1.4;
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-specular: rgba(230, 192, 123, 0.06);
+
+  /* 间距 */
+  --xs: 4px;
+  --sm: 8px;
+  --md: 12px;
+  --lg: 16px;
+  --xl: 24px;
+  --xxl: 32px;
+  --xxxl: 48px;
+
+  /* 圆角 */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  /* 层级 */
+  --e1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --e2: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --glass-e: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --glow-accent: 0 0 24px rgba(230, 192, 123, 0.35);
+
+  /* 动效 */
+  --fast: 150ms;
+  --base: 250ms;
+  --slow: 400ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* 布局 */
+  --rail-w: 64px;
+  --presence-w: 300px;
+  --chat-max: 760px;
+
+  /* 字体 */
+  --font-sans: 'Inter', 'SF Pro Display', 'Segoe UI Variable Text', 'Segoe UI',
+    system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC',
+    sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', 'Cascadia Code', ui-monospace,
+    Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── 玻璃工具类：只贴到导航/外壳层 ───────────────────────────── */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-e), var(--glass-highlight);
+}
+
+.glass-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--e2), var(--glass-highlight);
+}
+
+/* 无 backdrop-filter(软件渲染/旧 WebView)时回退实色，不破版 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: var(--glass-bg-strong);
+  }
+  .glass-strong {
+    background: #14161d;
+  }
+}
+
+/* ── 滚动条：细、低调 ─────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--r-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* ── 分区小标题 ───────────────────────────────────────────── */
+.section-header {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-bottom: var(--sm);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--md);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
