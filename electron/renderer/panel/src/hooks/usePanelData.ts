@@ -193,16 +193,16 @@ export function usePanelData(): UsePanelDataReturn {
           phase: mappedPhase,
           phaseLabel: mappedPhase.toUpperCase(),
           presenceIntensity: intensity,
-          coherence: payload.coherence || 0.95,
-          collapseTendency: payload.collapse_tendency || 0,
+          coherence: payload.coherence ?? 0,
+          collapseTendency: payload.collapse_tendency ?? 0,
           llmRouting: {
-            activeProviders: payload.llm_routing?.active_providers || ['anthropic', 'openai', 'deepseek'],
-            lastModelUsed: payload.llm_routing?.last_model_used || 'unknown',
+            activeProviders: payload.llm_routing?.active_providers || [],
+            lastModelUsed: payload.llm_routing?.last_model_used || '',
           },
           nodeTopology: {
-            totalNodes: payload.node_topology?.total_nodes || 120,
-            healthyNodes: payload.node_topology?.healthy_nodes || 118,
-            degradedNodes: payload.node_topology?.degraded_nodes || 2,
+            totalNodes: payload.node_topology?.total_nodes ?? 0,
+            healthyNodes: payload.node_topology?.healthy_nodes ?? 0,
+            degradedNodes: payload.node_topology?.degraded_nodes ?? 0,
           },
           costSummary: {
             totalUsd: payload.cost_summary?.total_usd || 0,
