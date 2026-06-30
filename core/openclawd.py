@@ -1117,6 +1117,13 @@ class OpenClawd:
                     self._router = get_llm_router()
                 except Exception as e2:
                     logger.warning(f"LLM 路由器加载失败: {e2}")
+        # 硬件感知多模态路由器（懒加载，失败不阻塞主路由）
+        if not hasattr(self, '_ha_router'):
+            try:
+                from core.hardware_aware_multimodal_router import get_ha_router as _get_ha
+                self._ha_router = _get_ha()
+            except Exception:
+                self._ha_router = None
         return self._router
 
     def _get_kernel(self):
@@ -2819,6 +2826,55 @@ class OpenClawd:
                 }
             )
             return result
+
+        # ── 硬件感知多模态优先路由（HA 层）──────────────────────────────────
+        # 在 MultiLLMRouter 之前查询 HardwareAwareMultimodalRouter：
+        # 若本地（Ollama/HF VLM）有可用模型，直接返回本地路由决策，跳过远程 API。
+        # 无本地资源时返回 None，透明 fallthrough 到 MultiLLMRouter。
+        _ha_router = getattr(self, '_ha_router', None)
+        if _ha_router is None:
+            try:
+                from core.hardware_aware_multimodal_router import get_ha_router as _get_ha
+                self._ha_router = _get_ha()
+                _ha_router = self._ha_router
+            except Exception:
+                pass
+        if _ha_router is not None and (active_modalities or requires_native_mm):
+            try:
+                _ha_task = (
+                    "vision" if "image" in active_modalities
+                    else "asr" if "audio" in active_modalities
+                    else (task_type or "general")
+                )
+                _ha_hint = _ha_router.route_hint_sync(
+                    task_type=_ha_task,
+                    has_multimodal_input=bool(active_modalities),
+                )
+                if _ha_hint is not None:
+                    _ha_result = _with_ingress_strategy({
+                        "route_type": (
+                            "native_multimodal"
+                            if _ha_hint.source_type.value == "local_multimodal"
+                            else "partial_multimodal"
+                        ),
+                        "is_native_multimodal": _ha_hint.source_type.value == "local_multimodal",
+                        "provider": _ha_hint.provider,
+                        "model": _ha_hint.model,
+                        "route_reason": f"hardware_aware_local: {_ha_hint.reason}",
+                        "fallback_reason": "",
+                        "active_modalities": active_modalities,
+                        "ha_source_type": _ha_hint.source_type.value,
+                        "ha_tier": _ha_hint.tier,
+                    })
+                    if _readiness is not None:
+                        _ha_result["perception_routing_readiness"] = _readiness
+                    logger.debug(
+                        "HA router: local route selected provider=%s model=%s",
+                        _ha_hint.provider, _ha_hint.model,
+                    )
+                    return _ha_result
+            except Exception as _ha_exc:
+                logger.debug("HA router hint failed (non-fatal): %s", _ha_exc)
 
         # ── Multimodal routing hierarchy ─────────────────────────────────────
         router = self._get_router()
