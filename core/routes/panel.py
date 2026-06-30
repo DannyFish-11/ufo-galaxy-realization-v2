@@ -220,24 +220,104 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception:  # noqa: BLE001
             pass
 
-        # 节点/设备拓扑(真实设备数:在线 / 降级)
+        # 节点/设备拓扑（真实设备列表 + 边）
         try:
             from core.routes._shared import registered_devices
+            import time as _time
             devs = dict(registered_devices)
-            if devs:
-                healthy = sum(1 for d in devs.values()
-                              if str((d or {}).get("status", "online")).lower() in ("online", "healthy", "connected"))
-                feed["node_topology"] = {
-                    "total_nodes": len(devs),
-                    "healthy_nodes": healthy,
-                    "degraded_nodes": len(devs) - healthy,
-                }
+            topo_nodes = []
+            topo_edges = []
+            healthy_cnt = 0
+            for did, d in devs.items():
+                d = d or {}
+                status_raw = str(d.get("status", "online")).lower()
+                status = "online" if status_raw in ("online", "healthy", "connected") else \
+                         "degraded" if status_raw in ("degraded", "slow") else "offline"
+                if status == "online":
+                    healthy_cnt += 1
+                role_raw = str(d.get("role", d.get("type", "participant"))).lower()
+                role = "controller" if "controller" in role_raw or "desktop" in role_raw else \
+                       "gateway" if "gateway" in role_raw else \
+                       "wearable" if "wear" in role_raw or "watch" in role_raw else "participant"
+                topo_nodes.append({
+                    "id": did,
+                    "label": d.get("name") or d.get("label") or did[:12],
+                    "role": role,
+                    "status": status,
+                    "x": d.get("x", 0.5),
+                    "y": d.get("y", 0.5),
+                    "lastSeen": d.get("last_seen", int(_time.time() * 1000)),
+                    "messageCount": d.get("message_count", 0),
+                })
+                # 每个设备都通过本机（"desktop_local"）连接
+                topo_edges.append({
+                    "from": "desktop_local",
+                    "to": did,
+                    "label": role_raw,
+                    "active": status == "online",
+                    "messageRate": d.get("message_rate", 0),
+                })
+            # 本机节点始终存在
+            topo_nodes.insert(0, {
+                "id": "desktop_local",
+                "label": "本机 Desktop",
+                "role": "controller",
+                "status": "online",
+                "x": 0.5,
+                "y": 0.15,
+                "lastSeen": int(_time.time() * 1000),
+                "messageCount": 0,
+            })
+            feed["node_topology"] = {
+                "total_nodes": len(devs),
+                "healthy_nodes": healthy_cnt,
+                "degraded_nodes": len(devs) - healthy_cnt,
+            }
+            feed["topology_nodes"] = topo_nodes
+            feed["topology_edges"] = topo_edges
         except Exception:  # noqa: BLE001
             pass
 
-        # 注: mesh_session / nats_messages / topology_nodes(图) 依赖活跃的跨设备
-        # fabric(NATS),desktop-local 默认为空;fabric 启用后由对应运行时填充,
-        # 此处不伪造,前端保留其默认占位。
+        # Mesh 会话（NATS bus 真实状态）
+        try:
+            from core.nats_bus import get_nats_bus
+            import time as _time
+            bus = get_nats_bus()
+            stats = bus.get_stats()
+            noop = bool(stats.get("noop_mode"))
+            connected = bool(stats.get("connected"))
+            feed["mesh_session"] = {
+                "sessionId": "local" if noop else "nats-mesh",
+                "status": "closed" if noop else ("active" if connected else "pending"),
+                "barrierStatus": "n/a" if noop else "open",
+                "tickSequence": stats.get("messages_received", 0),
+                "participants": [],
+                "createdAt": int(_time.time() * 1000),
+            }
+            # NATS 订阅主题作为消息日志条目
+            subjects = stats.get("active_subjects", [])
+            feed["nats_messages"] = [
+                {
+                    "id": f"sub-{i}",
+                    "timestamp": int(_time.time() * 1000),
+                    "topic": s,
+                    "direction": "in",
+                    "payload": "",
+                    "msgType": s.split(".")[0] if s else "sub",
+                }
+                for i, s in enumerate(subjects[:20])
+            ]
+        except Exception:  # noqa: BLE001
+            # 无 NATS 时返回空列表，不伪造
+            feed.setdefault("mesh_session", {
+                "sessionId": "local",
+                "status": "closed",
+                "barrierStatus": "n/a",
+                "tickSequence": 0,
+                "participants": [],
+                "createdAt": 0,
+            })
+            feed.setdefault("nats_messages", [])
 
         return JSONResponse(content={"success": True, "feed": feed})
 

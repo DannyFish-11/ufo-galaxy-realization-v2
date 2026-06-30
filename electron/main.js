@@ -681,7 +681,8 @@ ipcMain.handle('galaxy:set-config', async (_, config) => {
         const response = await fetch(`${GATEWAY_BASE}/api/config`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(config),
+            // 后端 ConfigUpdateRequest 要求 {config: {...}} 形状，不能直接发裸对象
+            body: JSON.stringify({ config }),
         });
         if (response.ok) {
             configCache = { ...configCache, ...config };

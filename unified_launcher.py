@@ -102,7 +102,7 @@ except ImportError:
         return ["http://localhost:3000", "http://localhost:8080"]
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,  # console只显示警告/错误；INFO详情写 logs/lumiv.log
     format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
     datefmt='%H:%M:%S'
 )
@@ -230,7 +230,7 @@ class L4EnhancementLauncher:
         results = {}
         
         # 感知模块
-        print_status("初始化感知模块...", "step")
+        logger.debug("初始化感知模块...")
         try:
             from enhancements.perception.environment_scanner import EnvironmentScanner
             self.l4_modules["environment_scanner"] = EnvironmentScanner()
@@ -238,9 +238,9 @@ class L4EnhancementLauncher:
         except Exception as e:
             logger.error(f"感知模块初始化失败: {e}")
             results["perception"] = False
-            
+
         # 推理模块
-        print_status("初始化推理模块...", "step")
+        logger.debug("初始化推理模块...")
         try:
             from enhancements.reasoning.goal_decomposer import GoalDecomposer
             from enhancements.reasoning.autonomous_planner import AutonomousPlanner
@@ -252,9 +252,9 @@ class L4EnhancementLauncher:
         except Exception as e:
             logger.error(f"推理模块初始化失败: {e}")
             results["reasoning"] = False
-            
+
         # 学习模块
-        print_status("初始化学习模块...", "step")
+        logger.debug("初始化学习模块...")
         try:
             from enhancements.learning.autonomous_learning_engine import AutonomousLearningEngine
             self.l4_modules["learning_engine"] = AutonomousLearningEngine()
@@ -262,9 +262,9 @@ class L4EnhancementLauncher:
         except Exception as e:
             logger.error(f"学习模块初始化失败: {e}")
             results["learning"] = False
-            
+
         # 执行模块
-        print_status("初始化执行模块...", "step")
+        logger.debug("初始化执行模块...")
         try:
             from enhancements.execution.action_executor import ActionExecutor
             self.l4_modules["action_executor"] = ActionExecutor()
@@ -272,9 +272,9 @@ class L4EnhancementLauncher:
         except Exception as e:
             logger.error(f"执行模块初始化失败: {e}")
             results["execution"] = False
-            
+
         # 安全模块
-        print_status("初始化安全模块...", "step")
+        logger.debug("初始化安全模块...")
         try:
             from enhancements.safety.safety_manager import SafetyManager
             self.l4_modules["safety_manager"] = SafetyManager()
@@ -486,7 +486,7 @@ class UnifiedWebUI:
                 # serve() exited during startup — re-raise the real error so the
                 # caller logs an accurate "API 网关启动失败" cause.
                 self._serve_task.result()
-            print_section("启动后健康检查")
+            logger.debug("启动后健康检查")
             await run_startup_health_check(self.config.web_ui_port)
 
         except ImportError as e:
@@ -686,7 +686,7 @@ class GalaxyUnified:
         services = ["nats", "redis", "qdrant", "neo4j", "mongodb"]
 
         def _run(cmd, timeout=None):
-            return sp.run(cmd, capture_output=True, text=True, timeout=timeout)
+            return sp.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
 
         def _daemon_up() -> bool:
             try:
@@ -760,7 +760,7 @@ class GalaxyUnified:
             print_status_row("首次启动：安装 Electron 桌面层依赖 (npm install，可能数分钟)…", status="success")
             try:
                 _r = sp.run([npm, "install"], cwd=str(electron_dir),
-                            capture_output=True, text=True, timeout=600)
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
                 if _r.returncode != 0:
                     logger.error(
                         "Electron npm install 失败 (rc=%s):\n%s",
@@ -1034,11 +1034,17 @@ class GalaxyUnified:
             )
             await self._voice_loop.start()
             return True
-        except Exception as exc:  # noqa: BLE001
+        except ImportError as exc:  # noqa: BLE001
             logger.warning(
-                "语音交互未启动(缺依赖? 装一下: pip install faster-whisper edge-tts sounddevice): %s",
-                exc,
+                "语音交互未启动(缺依赖: pip install faster-whisper edge-tts sounddevice): %s", exc
             )
+            return False
+        except Exception as exc:  # noqa: BLE001
+            _exc_s = str(exc)
+            if any(k in _exc_s for k in ("Hub", "locate the files", "snapshot folder", "internet")):
+                logger.warning("语音交互未启动(Whisper 模型下载失败，检查网络或设置代理): %s", exc)
+            else:
+                logger.warning("语音交互未启动(运行时错误，GALAXY_VOICE=0 可关闭): %s", exc)
             return False
 
     async def select_and_start_brain(self):
@@ -1292,7 +1298,7 @@ class GalaxyUnified:
         _emit(
             "语音交互",
             ("已开启 · 直接对它说话即可（三态随对话变化）" if voice_ok
-             else "未启用 — pip install faster-whisper edge-tts sounddevice 后重启"),
+             else "未启用（详见上方日志；GALAXY_VOICE=0 永久关闭）"),
             "ok" if voice_ok else "warn",
         )
 
@@ -1635,7 +1641,7 @@ def main():
         try:
             _result = subprocess.run(
                 ["docker", "compose", "version"],
-                capture_output=True, text=True
+                capture_output=True, text=True, encoding="utf-8", errors="replace"
             )
             _docker_available = _result.returncode == 0
         except FileNotFoundError:

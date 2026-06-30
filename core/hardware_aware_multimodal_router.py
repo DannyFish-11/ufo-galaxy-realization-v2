@@ -401,6 +401,114 @@ class HardwareAwareMultimodalRouter:
                 result.append((st, provs))
         return result
 
+    # ── 同步接口（供 OpenClawd._select_multimodal_route 调用）──
+
+    def _scan_local_models_sync(self) -> Dict[str, List[Dict]]:
+        """同步扫描本地模型，优先使用缓存（60s TTL）。"""
+        now = time.time()
+        if now - self._last_refresh < 60 and self._local_models:
+            return self._local_models
+
+        models: Dict[str, List[Dict]] = {"llm": [], "vlm": [], "asr": [], "embedding": []}
+
+        if self._ollama_available:
+            try:
+                import httpx
+                resp = httpx.get("http://localhost:11434/api/tags", timeout=3.0)
+                if resp.status_code == 200:
+                    for m in resp.json().get("models", []):
+                        models["llm"].append({
+                            "name": m["name"],
+                            "source": "ollama",
+                            "size_mb": m.get("size", 0) // (1024 * 1024),
+                        })
+            except Exception:
+                pass
+
+        try:
+            from core.huggingface_model_manager import get_hf_model_manager
+            hf_mgr = get_hf_model_manager()
+            for entry in hf_mgr.list_local_models():
+                models.setdefault(entry.family.value, []).append({
+                    "name": entry.model_id,
+                    "source": "huggingface",
+                    "size_mb": entry.size_mb,
+                    "quantization": entry.quantization,
+                })
+        except Exception:
+            pass
+
+        self._local_models = models
+        self._last_refresh = now
+        return models
+
+    def _try_source_sync(
+        self,
+        source_type: SourceType,
+        providers: List[str],
+        task_type: str,
+        profile: Optional[Any],
+        local_models: Dict[str, Any],
+        has_multimodal: bool,
+    ) -> Optional[HARoutingDecision]:
+        """同步版来源尝试（仅本地，不含 I/O）。"""
+        if source_type == SourceType.LOCAL_MULTIMODAL:
+            vlm_list = local_models.get("vlm", [])
+            if vlm_list:
+                m = vlm_list[0]
+                return HARoutingDecision(
+                    provider="local_vlm",
+                    model=m["name"],
+                    source_type=SourceType.LOCAL_MULTIMODAL,
+                    reason="local VLM available (hardware-aware)",
+                    tier="local",
+                    quantization="none",
+                )
+        elif source_type == SourceType.LOCAL_LLM:
+            if self._ollama_available and local_models.get("llm"):
+                model_name = self._select_ollama_model(task_type, profile)
+                return HARoutingDecision(
+                    provider="ollama",
+                    model=model_name,
+                    source_type=SourceType.LOCAL_LLM,
+                    reason=f"Ollama local: {model_name} (hardware-aware)",
+                    tier="local",
+                    quantization="none",
+                )
+        return None
+
+    def route_hint_sync(
+        self,
+        task_type: str = "general",
+        has_multimodal_input: bool = False,
+    ) -> Optional[HARoutingDecision]:
+        """同步路由提示 — 供 OpenClawd._select_multimodal_route() 调用。
+
+        若本地（Ollama/HF VLM）有可用资源，返回本地路由决策；
+        否则返回 None，让 MultiLLMRouter 继续完成 API 路由。
+        """
+        try:
+            from core.hardware_compute_profiler import get_compute_profile_sync
+            profile = get_compute_profile_sync()
+        except Exception:
+            profile = None
+
+        local_models = self._scan_local_models_sync()
+        preferences = MULTIMODAL_LOCAL_FIRST_PREFERENCES.get(
+            task_type, MULTIMODAL_LOCAL_FIRST_PREFERENCES["general"]
+        )
+
+        for source_type, providers in preferences:
+            if source_type in (SourceType.API_LLM, SourceType.API_MULTIMODAL, SourceType.ONEAPI_AGGREGATOR):
+                break  # 本地资源耗尽，交还给 MultiLLMRouter
+            decision = self._try_source_sync(
+                source_type, providers, task_type, profile, local_models, has_multimodal_input
+            )
+            if decision is not None:
+                return decision
+
+        return None
+
     # ── 快捷方法 ──
 
     async def route_vision(self, messages: List[Dict]) -> HARoutingDecision:

@@ -210,7 +210,8 @@ def background_pull(tag: str) -> None:
             root = tag.split(":")[0]
             if any(h == tag or h.startswith(tag + ":") or h.split(":")[0] == root for h in have):
                 return  # 已安装
-            subprocess.run(["ollama", "pull", tag], capture_output=True, text=True, timeout=3600)
+            subprocess.run(["ollama", "pull", tag], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=3600)
         except Exception:
             pass
 

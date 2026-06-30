@@ -1117,6 +1117,13 @@ class OpenClawd:
                     self._router = get_llm_router()
                 except Exception as e2:
                     logger.warning(f"LLM 路由器加载失败: {e2}")
+        # 硬件感知多模态路由器（懒加载，失败不阻塞主路由）
+        if not hasattr(self, '_ha_router'):
+            try:
+                from core.hardware_aware_multimodal_router import get_ha_router as _get_ha
+                self._ha_router = _get_ha()
+            except Exception:
+                self._ha_router = None
         return self._router
 
     def _get_kernel(self):
@@ -2819,6 +2826,55 @@ class OpenClawd:
                 }
             )
             return result
+
+        # ── 硬件感知多模态优先路由（HA 层）──────────────────────────────────
+        # 在 MultiLLMRouter 之前查询 HardwareAwareMultimodalRouter：
+        # 若本地（Ollama/HF VLM）有可用模型，直接返回本地路由决策，跳过远程 API。
+        # 无本地资源时返回 None，透明 fallthrough 到 MultiLLMRouter。
+        _ha_router = getattr(self, '_ha_router', None)
+        if _ha_router is None:
+            try:
+                from core.hardware_aware_multimodal_router import get_ha_router as _get_ha
+                self._ha_router = _get_ha()
+                _ha_router = self._ha_router
+            except Exception:
+                pass
+        if _ha_router is not None and (active_modalities or requires_native_mm):
+            try:
+                _ha_task = (
+                    "vision" if "image" in active_modalities
+                    else "asr" if "audio" in active_modalities
+                    else (task_type or "general")
+                )
+                _ha_hint = _ha_router.route_hint_sync(
+                    task_type=_ha_task,
+                    has_multimodal_input=bool(active_modalities),
+                )
+                if _ha_hint is not None:
+                    _ha_result = _with_ingress_strategy({
+                        "route_type": (
+                            "native_multimodal"
+                            if _ha_hint.source_type.value == "local_multimodal"
+                            else "partial_multimodal"
+                        ),
+                        "is_native_multimodal": _ha_hint.source_type.value == "local_multimodal",
+                        "provider": _ha_hint.provider,
+                        "model": _ha_hint.model,
+                        "route_reason": f"hardware_aware_local: {_ha_hint.reason}",
+                        "fallback_reason": "",
+                        "active_modalities": active_modalities,
+                        "ha_source_type": _ha_hint.source_type.value,
+                        "ha_tier": _ha_hint.tier,
+                    })
+                    if _readiness is not None:
+                        _ha_result["perception_routing_readiness"] = _readiness
+                    logger.debug(
+                        "HA router: local route selected provider=%s model=%s",
+                        _ha_hint.provider, _ha_hint.model,
+                    )
+                    return _ha_result
+            except Exception as _ha_exc:
+                logger.debug("HA router hint failed (non-fatal): %s", _ha_exc)
 
         # ── Multimodal routing hierarchy ─────────────────────────────────────
         router = self._get_router()
@@ -8256,20 +8312,35 @@ class OpenClawd:
             else:
                 cv = None
 
-            # 复杂度驱动策略选择
+            # 协作模式选择（Octo 六模式自动选 + 可手动覆盖）
             _cv_score = getattr(cv, "weighted_score", 0.5) if cv is not None else 0.5
-            if _cv_score >= 0.7:
-                strategy = "specialized"
-            elif _cv_score >= 0.4:
-                strategy = "parallel"
-            else:
-                strategy = "parallel"
-
-            # 意图覆写
-            if intent and intent.intent == "workflow":
-                strategy = "specialized"
-            elif intent and hasattr(intent, "targets") and len(intent.targets) > 5:
-                strategy = "swarm"
+            strategy = "specialized"  # 安全默认
+            _mode_reason = ""
+            try:
+                from core.collaboration_mode_policy import select_collaboration_mode
+                _mode = select_collaboration_mode(
+                    message,
+                    complexity_score=_cv_score,
+                    intent=intent,
+                    has_tools=bool(tools),
+                    context=None,
+                )
+                strategy = _mode["mode"]
+                _mode_reason = _mode["reason"]
+                logger.info("协作模式选择: %s (%s)", strategy, _mode_reason)
+            except Exception as _mode_err:
+                logger.debug("协作模式策略失败，用复杂度兜底: %s", _mode_err)
+                # 兜底：复杂度驱动
+                if _cv_score >= 0.7:
+                    strategy = "critic"
+                elif _cv_score >= 0.4:
+                    strategy = "specialized"
+                else:
+                    strategy = "parallel"
+                if intent and intent.intent == "workflow":
+                    strategy = "pipeline"
+                elif intent and hasattr(intent, "targets") and len(intent.targets) > 5:
+                    strategy = "swarm"
 
             # 创建团队 (传复杂度)
             team = await manager.create_team(
@@ -8295,6 +8366,25 @@ class OpenClawd:
             # 解散团队释放资源
             manager.disband_team(team.team_id)
 
+            # 记忆回流：把团队/特种部队完成后的核心成果存入 TaskMemory
+            try:
+                from core.openclawd_memory_backflow import store_task_result
+                await store_task_result(
+                    task_id=team_result.team_id,
+                    device_id="openclawd",
+                    route_mode=f"team_{team_result.strategy}",
+                    result={
+                        "status": "completed" if team_result.synthesized else "error",
+                        "task_type": "team_task",
+                        "collaboration_mode": strategy,
+                        "task_description": message[:200],
+                        "result_summary": (team_result.synthesized or "")[:500],
+                    },
+                    session_id=None,
+                )
+            except Exception as _bf_err:
+                logger.debug("团队记忆回流跳过(非致命): %s", _bf_err)
+
             return {
                 "success": True,
                 "response": team_result.synthesized,
@@ -8307,6 +8397,8 @@ class OpenClawd:
                     "manifest": manifest.model_dump(),
                     "complexity_vector": cv.model_dump(),
                     "model_tier": cv.tier.value,
+                    "collaboration_mode": strategy,
+                    "collaboration_reason": _mode_reason,
                 },
             }
 

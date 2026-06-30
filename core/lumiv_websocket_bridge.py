@@ -141,37 +141,39 @@ class GalaxyPresenceBridge:
 
     # ── StateEventBus 回调 ──
 
-    def _on_phase_silent(self, payload: Dict[str, Any]) -> None:
+    def _on_phase_silent(self, event) -> None:
         self._current_mode = "static"
         self._current_depth = MODE_DEPTH_MAP["static"]
         self._intent = 0.0
         self._speaking = False
         self._schedule_broadcast()
 
-    def _on_phase_liminal(self, payload: Dict[str, Any]) -> None:
+    def _on_phase_liminal(self, event) -> None:
         self._current_mode = "liminal"
         self._current_depth = MODE_DEPTH_MAP["liminal"]
-        # intent 从 payload 中提取，如果没有则默认 0.5
-        self._intent = payload.get("intent_strength", 0.5)
-        self._speaking = payload.get("speaking", False)
+        # StateEventBus delivers a StateEvent object; extract the inner payload dict.
+        p: Dict[str, Any] = event.payload if hasattr(event, "payload") else (event if isinstance(event, dict) else {})
+        self._intent = p.get("intent_strength", 0.5)
+        self._speaking = p.get("speaking", False)
         self._schedule_broadcast()
 
-    def _on_phase_manifest(self, payload: Dict[str, Any]) -> None:
+    def _on_phase_manifest(self, event) -> None:
         self._current_mode = "manifest"
         self._current_depth = MODE_DEPTH_MAP["manifest"]
         self._intent = 1.0
         self._speaking = False
         self._schedule_broadcast()
 
-    def _on_intent_update(self, payload: Dict[str, Any]) -> None:
+    def _on_intent_update(self, event) -> None:
         """意图强度持续更新 — Liminal 态下微调 depth。"""
         if self._current_mode != "liminal":
             return
-        intent = payload.get("intent_strength", 0.5)
+        p: Dict[str, Any] = event.payload if hasattr(event, "payload") else (event if isinstance(event, dict) else {})
+        intent = p.get("intent_strength", 0.5)
         self._intent = intent
         # depth 在 0.15-0.85 之间随 intent 线性映射
         self._current_depth = 0.15 + intent * 0.70
-        self._speaking = payload.get("speaking", False)
+        self._speaking = p.get("speaking", False)
         self._schedule_broadcast()
 
     # ── WebSocket 客户端管理 ──

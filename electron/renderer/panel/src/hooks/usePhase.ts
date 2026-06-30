@@ -61,9 +61,12 @@ export function usePhase(): UsePhaseReturn {
     }
   }, [setPhase]);
 
-  // 键盘快捷键（开发调试：1/2/3）
+  // 键盘快捷键（开发调试：1/2/3）。输入框聚焦时不拦截，避免打字误触。
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable) return;
       if (e.key === '1') setPhase('silent');
       if (e.key === '2') setPhase('liminal');
       if (e.key === '3') setPhase('manifest');

@@ -38,6 +38,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "ONEAPI_URL": {"default": "", "type": "url", "category": "llm", "description": "OneAPI Base URL"},
     "ONEAPI_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "OneAPI Key"},
     "LOCAL_VLLM_URL": {"default": "", "type": "url", "category": "llm", "description": "Local vLLM URL"},
+    "OLLAMA_MODEL": {"default": "", "type": "select", "category": "llm", "description": "本地主脑模型（原生多模态）", "options": ["gemma4:12b", "openbmb/minicpm-o4.5", "gemma4:e4b", "gemma4:e2b"]},
 
     # --- Service Ports & Nodes ---
     "GATEWAY_PORT": {"default": "9000", "type": "number", "category": "ports", "description": "Galaxy Gateway Port"},
@@ -173,7 +174,17 @@ async def update_config(req: ConfigUpdateRequest):
 
     # 同步写入 .env 文件
     _write_env_file()
-    return {"success": True, "updated": list(req.config.keys())}
+
+    # 若改动涉及模型 API（llm 类），热刷新 LLM 路由器，让新填的 key 即时生效（无需重启）。
+    refreshed = None
+    if any(CONFIG_SCHEMA.get(k, {}).get("category") == "llm" for k in req.config):
+        try:
+            from core.multi_llm_router import refresh_llm_router
+            refreshed = await refresh_llm_router()
+        except Exception:
+            refreshed = None
+
+    return {"success": True, "updated": list(req.config.keys()), "router_refreshed": refreshed}
 
 
 @router.post("/save")

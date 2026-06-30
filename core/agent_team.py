@@ -2,10 +2,13 @@
 Agent Team 协作引擎
 ===================
 
-三种团队策略:
+团队协作策略（借鉴 Octo 六模式）:
 1. PARALLEL (Perplexity 风格) — 同一任务分发给 N 个不同 LLM，综合回答
 2. SPECIALIZED (特种部队分工) — LLM 分解子任务，每个匹配最优 Agent+LLM
 3. SWARM (群体智能) — 批量同类 Agent 并行执行，投票/合并
+4. CRITIC (做/审分离) — executor(本地小模型)产出 → critic(开源大模型)审核，
+   不通过则打回重做，最多 N 轮。"大小模型配合"的核心落地。
+5. PIPELINE (流水线) — A→B→C 顺序交接，前一步产出为后一步输入，各步绑定合适的脑。
 
 孪生模型集成:
 - 每个 Team 成员自动创建数字孪生（默认 LOOSE 耦合）
@@ -24,7 +27,7 @@ import logging
 import time
 import uuid
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as _dc_replace
 from enum import Enum
 
 logger = logging.getLogger("Galaxy.AgentTeam")
@@ -54,6 +57,8 @@ class TeamStrategy(Enum):
     PARALLEL = "parallel"
     SPECIALIZED = "specialized"
     SWARM = "swarm"
+    CRITIC = "critic"        # 做/审分离
+    PIPELINE = "pipeline"    # 流水线交接
 
 
 class TeamStatus(Enum):
@@ -291,6 +296,10 @@ class AgentTeam:
                 result = await self._execute_specialized(task, context)
             elif self.strategy == TeamStrategy.SWARM:
                 result = await self._execute_swarm(task, context)
+            elif self.strategy == TeamStrategy.CRITIC:
+                result = await self._execute_critic(task, context)
+            elif self.strategy == TeamStrategy.PIPELINE:
+                result = await self._execute_pipeline(task, context)
             else:
                 raise ValueError(f"未知策略: {self.strategy}")
 
@@ -477,21 +486,36 @@ class AgentTeam:
             task_type = self._router.classify_task(
                 [{"role": "user", "content": st["description"]}]
             )
-            # 选最优提供商
-            try:
-                decision = self._router.route(task_type)
-            except RuntimeError:
-                decision = None
+            # 特种部队核心：按"实际情况"给每个子任务配最优模型（质量优先+适度token，
+            # 只在已填key里选）。fit-based 选不出时退回通用 route()。
+            decision = None
+            if hasattr(self._router, "select_brain_for_task"):
+                try:
+                    from core.multi_llm_router import TaskType as _TT
+                    _tt = task_type if isinstance(task_type, _TT) else _TT.GENERAL
+                    decision = self._router.select_brain_for_task(_tt, complexity_score=0.6)
+                    if decision.provider == "none":
+                        decision = None
+                except Exception as exc:
+                    logger.debug("select_brain_for_task 失败，退回 route(): %s", exc)
+            if decision is None:
+                try:
+                    decision = self._router.route(task_type)
+                except RuntimeError:
+                    decision = None
 
-            # 匹配成员
+            # 匹配成员：优先用现有成员，但把该子任务的最优 provider:model 绑上去
+            # （真正的"系统组合搭配"——不同子任务配不同最优模型）
             member = None
-            if decision:
+            if available_members:
+                member = available_members[0]
                 for m in available_members:
-                    if m.provider == decision.provider:
+                    if decision and m.provider == decision.provider:
                         member = m
                         break
-            if member is None and available_members:
-                member = available_members[0]
+                if decision and decision.provider != "none":
+                    # 用副本绑定最优 provider:model，不污染原成员
+                    member = _dc_replace(member, provider=decision.provider, model=decision.model)
 
             if member:
                 assignments.append((st, member))
@@ -557,6 +581,184 @@ class AgentTeam:
             member_results=member_results,
             synthesized=synthesized,
         )
+
+    # ─────── 策略 4: CRITIC (做/审分离) ───────
+
+    async def _execute_critic(self, task: str, context: Optional[Dict]) -> TeamResult:
+        """做/审分离：executor(本地小模型)产出 → critic(开源大模型)审核 → 不通过则打回重做。
+
+        这是"大小模型配合"的核心落地：用一个独立的、更强的审核者(而非小模型自评)
+        来把关质量，最多 GALAXY_CRITIC_MAX_ROUNDS 轮。
+        """
+        import os as _os
+        soul_pfx = _soul_prefix((context or {}).get("soul", ""))
+        max_rounds = max(1, int(_os.environ.get("GALAXY_CRITIC_MAX_ROUNDS", "2")))
+
+        executor = self._member_by_role("executor") or (self.members[0] if self.members else None)
+        critic = self._member_by_role("critic")
+        if critic is None:
+            # 没有独立审核者 → 退回 parallel，避免自审失真
+            logger.debug("CRITIC: 无独立 critic 成员，退回 parallel")
+            return await self._execute_parallel(task, context)
+        if executor is None:
+            return TeamResult(team_id=self.team_id, strategy="critic", task=task,
+                              member_results=[], synthesized="无可用 executor 成员")
+
+        member_results: List[MemberResult] = []
+        draft = ""
+        feedback = ""
+        passed = False
+        rounds_used = 0
+
+        for rnd in range(max_rounds):
+            rounds_used = rnd + 1
+            # ── 执行者产出 / 修订 ──
+            if rnd == 0:
+                exec_user = task
+                exec_sys = soul_pfx + f"你是 {executor.agent_name}（执行者）。请完成以下任务，给出完整、可直接交付的产出。"
+            else:
+                exec_user = (
+                    f"原始任务:\n{task}\n\n你上一版产出:\n{draft}\n\n"
+                    f"审核者的修改意见:\n{feedback}\n\n请据此修订，给出改进后的完整产出。"
+                )
+                exec_sys = soul_pfx + f"你是 {executor.agent_name}（执行者）。请根据审核意见修订你的产出。"
+            exec_msgs = [
+                {"role": "system", "content": exec_sys},
+                {"role": "user", "content": exec_user},
+            ]
+            exec_res = await self._call_member_with_tools(executor, exec_msgs)
+            # 用副本标注轮次，避免就地改写共享的 TeamMember（多轮会互相覆盖）
+            exec_res.member = _dc_replace(executor, role_in_team=f"executor(r{rounds_used})")
+            member_results.append(exec_res)
+            if not exec_res.success or not exec_res.result:
+                break
+            draft = exec_res.result
+
+            # ── 审核者评审 ──
+            review_sys = soul_pfx + (
+                f"你是 {critic.agent_name}（独立审核者）。严格审核执行者的产出质量、"
+                f"正确性、完整性与是否满足任务要求。"
+            )
+            review_user = (
+                f"任务:\n{task}\n\n待审产出:\n{draft}\n\n"
+                "请只返回 JSON：{\"verdict\": \"pass\"或\"revise\", \"feedback\": \"具体问题与改进建议；pass 时可为空\"}。"
+            )
+            review_msgs = [
+                {"role": "system", "content": review_sys},
+                {"role": "user", "content": review_user},
+            ]
+            review_res = await self._call_member_with_tools(critic, review_msgs)
+            review_res.member = _dc_replace(critic, role_in_team=f"critic(r{rounds_used})")
+            member_results.append(review_res)
+
+            verdict, feedback = self._parse_critic_verdict(review_res.result)
+            logger.info("CRITIC 第 %d 轮: verdict=%s", rounds_used, verdict)
+            if verdict == "pass":
+                passed = True
+                break
+
+        synthesized = draft or "执行失败，无产出。"
+        if not passed and feedback:
+            synthesized += f"\n\n[审核备注｜已达最大 {max_rounds} 轮仍有改进点]\n{feedback}"
+
+        return TeamResult(
+            team_id=self.team_id,
+            strategy="critic",
+            task=task,
+            member_results=member_results,
+            synthesized=synthesized,
+        )
+
+    @staticmethod
+    def _parse_critic_verdict(text: str) -> tuple:
+        """解析审核者返回 → (verdict, feedback)。JSON 优先，失败用关键词启发式。"""
+        if not text:
+            return "revise", ""
+        raw = text.strip()
+        # 尝试 JSON（含 markdown 代码块）
+        try:
+            t = raw
+            if "```" in t:
+                import re as _re
+                m = _re.search(r'```(?:json)?\s*([\s\S]*?)```', t)
+                if m:
+                    t = m.group(1).strip()
+            # 截取第一个 {...}
+            start, end = t.find("{"), t.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                data = json.loads(t[start:end + 1])
+                verdict = str(data.get("verdict", "")).strip().lower()
+                feedback = str(data.get("feedback", "")).strip()
+                if verdict in ("pass", "revise"):
+                    return verdict, feedback
+        except Exception as exc:
+            logger.debug("CRITIC verdict JSON 解析失败，转启发式: %s", exc)
+        # 启发式
+        low = raw.lower()
+        pass_kw = ("pass", "通过", "合格", "无需修改", "approved", "lgtm")
+        revise_kw = ("revise", "打回", "不通过", "需要修改", "问题", "reject", "issue")
+        if any(k in low for k in pass_kw) and not any(k in low for k in revise_kw):
+            return "pass", ""
+        return "revise", raw
+
+    # ─────── 策略 5: PIPELINE (流水线交接) ───────
+
+    async def _execute_pipeline(self, task: str, context: Optional[Dict]) -> TeamResult:
+        """流水线：成员按顺序交接，前一步产出为后一步输入，最后一步即最终交付。
+
+        成员顺序即流水线阶段顺序（由 _create_members 按角色绑定合适的脑）。
+        """
+        soul_pfx = _soul_prefix((context or {}).get("soul", ""))
+        if not self.members:
+            return TeamResult(team_id=self.team_id, strategy="pipeline", task=task,
+                              member_results=[], synthesized="无可用成员")
+
+        member_results: List[MemberResult] = []
+        prev_output = ""
+        for i, member in enumerate(self.members):
+            stage_no = i + 1
+            is_last = (i == len(self.members) - 1)
+            if i == 0:
+                stage_sys = soul_pfx + (
+                    f"你是流水线第 {stage_no} 站 {member.agent_name}（{member.role_in_team}）。"
+                    f"这是多步协作的第一步，请完成你这一环节并产出供下一站继续。"
+                )
+                stage_user = task
+            else:
+                stage_sys = soul_pfx + (
+                    f"你是流水线第 {stage_no} 站 {member.agent_name}（{member.role_in_team}）。"
+                    + ("这是最后一站，请产出最终可交付结果。" if is_last
+                       else "请在上一站产出的基础上继续推进你这一环节。")
+                )
+                stage_user = f"原始任务:\n{task}\n\n上一站产出:\n{prev_output}\n\n请完成你这一站的工作。"
+            msgs = [
+                {"role": "system", "content": stage_sys},
+                {"role": "user", "content": stage_user},
+            ]
+            res = await self._call_member_with_tools(member, msgs)
+            res.member = _dc_replace(member, role_in_team=f"stage{stage_no}:{member.role_in_team}")
+            member_results.append(res)
+            if res.success and res.result:
+                prev_output = res.result
+            # 某一站失败：保留已有产出，停止流水线
+            elif not res.success:
+                logger.warning("PIPELINE 第 %d 站失败，停止流水线", stage_no)
+                break
+
+        return TeamResult(
+            team_id=self.team_id,
+            strategy="pipeline",
+            task=task,
+            member_results=member_results,
+            synthesized=prev_output or "流水线未产出结果。",
+        )
+
+    def _member_by_role(self, role: str) -> Optional[TeamMember]:
+        """按角色名（前缀匹配）取成员。"""
+        for m in self.members:
+            if m.role_in_team == role or m.role_in_team.startswith(role):
+                return m
+        return None
 
     # ─────── 辅助方法 ───────
 
@@ -792,7 +994,70 @@ class TeamManager:
                     template="research",
                 ))
 
+        elif strategy == TeamStrategy.CRITIC:
+            # 做/审分离：executor(本地小模型) + critic(开源大模型)
+            critic_roles = [
+                ("executor", "code_executor", "执行者"),
+                ("critic", "coordinator", "审核者"),
+            ]
+            for role, template, name in critic_roles:
+                members.append(self._make_role_member(
+                    role, template, name, complexity_score, _task_type, providers,
+                ))
+
+        elif strategy == TeamStrategy.PIPELINE:
+            # 流水线：研究 → 分析 → 写作 → 审核，各环节绑定合适的脑
+            pipeline_roles = [
+                ("researcher", "research", "调研站"),
+                ("analyst", "data_analyst", "分析站"),
+                ("writer", "research", "写作站"),
+                ("reviewer", "coordinator", "审核站"),
+            ]
+            for role, template, name in pipeline_roles:
+                members.append(self._make_role_member(
+                    role, template, name, complexity_score, _task_type, providers,
+                ))
+
         return members
+
+    def _make_role_member(
+        self, role: str, template: str, name: str,
+        complexity_score: float, task_type, providers: list,
+    ) -> "TeamMember":
+        """按"角色→脑"绑定创建一个成员（大小模型配合的执行层）。
+
+        优先用 router.select_brain_for_role() 选最便宜够用的脑；
+        不可用时退回 providers 列表轮询，保证始终能建出成员。
+        """
+        agent_id = f"agent_{uuid.uuid4().hex[:8]}"
+        if self._factory:
+            try:
+                agent = self._factory.create_from_template(template)
+                agent_id = agent.id
+            except Exception as exc:
+                logger.warning("Exception suppressed: %s", exc)
+
+        provider, model = "none", "none"
+        if hasattr(self._router, "select_brain_for_role"):
+            try:
+                decision = self._router.select_brain_for_role(
+                    role, complexity_score=complexity_score, task_type=task_type,
+                )
+                provider, model = decision.provider, decision.model
+            except Exception as exc:
+                logger.warning("select_brain_for_role 失败，退回轮询: %s", exc)
+        if provider == "none" and providers:
+            prov_name, prov_cfg = providers[0]
+            provider, model = prov_name, prov_cfg.default_model
+
+        return TeamMember(
+            agent_id=agent_id,
+            agent_name=name,
+            provider=provider,
+            model=model,
+            role_in_team=role,
+            template=template,
+        )
 
     async def execute_team(self, team_id: str, task: str,
                            context: Optional[Dict] = None) -> TeamResult:
