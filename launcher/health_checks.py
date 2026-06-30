@@ -81,7 +81,7 @@ async def run_startup_health_check(web_ui_port: int) -> None:
     # 1) Gateway / core health
     try:
         code = await asyncio.to_thread(_http_code, f"{base_url}/health", 5)
-        print_status(f"Launcher /health: HTTP {code}", "success")
+        logger.debug("Launcher /health: HTTP %d", code)
     except Exception as exc:
         print_status(f"Launcher /health: 失败 — {exc}", "error")
         all_ok = False
@@ -89,34 +89,31 @@ async def run_startup_health_check(web_ui_port: int) -> None:
     # 2) system info
     try:
         code = await asyncio.to_thread(_http_code, f"{base_url}/api/v1/system/status", 5)
-        print_status(f"system/status: HTTP {code}", "success")
+        logger.debug("system/status: HTTP %d", code)
     except Exception as exc:
-        print_status(f"system/status: 失败 — {exc}", "warning")
+        logger.debug("system/status: 失败 — %s", exc)
 
     # 3) Node_71 health
     try:
         code = await asyncio.to_thread(_http_code, f"{node71_url}/health", 3)
-        print_status(f"Node_71 /health: HTTP {code}", "success")
+        logger.debug("Node_71 /health: HTTP %d", code)
     except Exception as exc:
-        print_status(f"Node_71 /health: 不可达 — {exc}", "warning")
+        logger.debug("Node_71 /health: 不可达 — %s", exc)
 
     # 4) NATS port check (optional for single-machine / noop bus)
     try:
         await asyncio.to_thread(
             lambda: socket.create_connection((nats_host, nats_port), timeout=3).close()
         )
-        print_status(f"NATS port {nats_port}: 已监听", "success")
+        logger.debug("NATS port %d: 已监听", nats_port)
     except Exception as exc:
         if _nats_tcp_failure_is_critical():
             print_status(f"NATS port {nats_port}: 未监听 — {exc}", "error")
             all_ok = False
         else:
-            print_status(
-                f"NATS port {nats_port}: 未监听（单机/no-op 模式可忽略）— {exc}",
-                "warning",
-            )
+            logger.debug("NATS port %d: 未监听（单机/no-op 模式可忽略）— %s", nats_port, exc)
 
-    # 5) Docker container status (best-effort)
+    # 5) Docker container status (best-effort, log only)
     try:
         result = await asyncio.to_thread(
             subprocess.run,
@@ -132,16 +129,13 @@ async def run_startup_health_check(web_ui_port: int) -> None:
             timeout=5,
         )
         if result.returncode == 0 and result.stdout.strip():
-            print_status("Docker 容器状态:", "info")
-            for line in result.stdout.strip().splitlines():
-                print(f"    {line}")
+            logger.debug("Docker 容器状态:\n%s", result.stdout.strip())
     except Exception:
         pass  # Docker not available or not used
 
     if not all_ok:
-        print_section("健康检查诊断")
         _is_win = sys.platform.startswith("win")
-        print_status("部分检查项失败，请检查以下内容:", "error")
+        print_status("健康检查失败，请检查以下内容:", "error")
         print_status("  1. NATS 服务: nats-server -p 4222", "error")
         if _is_win:
             print_status(f"  2. 端口冲突: netstat -ano | findstr :{nats_port}", "error")
@@ -150,5 +144,3 @@ async def run_startup_health_check(web_ui_port: int) -> None:
         else:
             print_status(f"  2. 端口冲突: lsof -i :{nats_port} / lsof -i :{web_ui_port}", "error")
             print_status("  3. 运行完整诊断: bash scripts/health_check.sh", "error")
-    else:
-        print_status("所有健康检查通过 ✅", "success")
