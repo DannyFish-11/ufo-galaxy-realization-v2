@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { usePanelData } from '@/hooks/usePanelData';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { useConversation } from '@/hooks/useConversation';
 import { usePhase } from '@/hooks/usePhase';
 import type { Phase } from '@/types/phase';
 import IconRail, { ICONS, type TabDef } from '@/components/IconRail';
@@ -24,6 +25,7 @@ const TABS: TabDef[] = [
 function App() {
   const { panelData } = usePanelData();
   const { connected, lastMessage } = useWebSocket();
+  const { turns: convTurns, speaking: convSpeaking } = useConversation(lastMessage);
   const { phase: wsPhase, handleMessage } = usePhase();
 
   const [activeTab, setActiveTab] = useState(0);
@@ -70,7 +72,13 @@ function App() {
         )}
       </main>
 
-      <PresencePanel phase={effectivePhase} streaming={streaming} data={panelData} />
+      <PresencePanel
+        phase={effectivePhase}
+        streaming={streaming}
+        data={panelData}
+        turns={convTurns}
+        speaking={convSpeaking}
+      />
 
       <DiagnosticsDrawer
         open={drawerOpen}

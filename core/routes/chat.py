@@ -565,6 +565,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         async def _gen() -> AsyncIterator[str]:
             # 收到即进入"思考"态提示(前端在场带据此脉动)。
             yield _sse({"type": "phase", "phase": "liminal"})
+            # 一体化：把用户输入实时推给面板的"实时上下文"视图（与在场共用 WS 通道）。
+            _turn_id = req.session_id or ""
+            try:
+                from core.lumiv_websocket_bridge import emit_conversation as _emit_conv
+                _emit_conv("user", req.message or "", source="text", turn_id=_turn_id)
+            except Exception:
+                _emit_conv = None  # type: ignore
             try:
                 from core.desktop_presence_runtime import get_desktop_presence_runtime
                 runtime = get_desktop_presence_runtime()
@@ -611,6 +618,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 yield _sse({"type": "phase", "phase": "manifest"})
 
                 text = foreground_response or ""
+                # 一体化：AI 回应实时推给面板"实时上下文"视图。
+                if _emit_conv is not None:
+                    _emit_conv("ai", text, source="text", turn_id=_turn_id)
                 for i in range(0, len(text), _STREAM_CHUNK_CHARS):
                     yield _sse({"type": "delta", "text": text[i:i + _STREAM_CHUNK_CHARS]})
                     await asyncio.sleep(_STREAM_CHUNK_DELAY)

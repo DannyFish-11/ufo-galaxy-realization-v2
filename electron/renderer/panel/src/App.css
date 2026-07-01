@@ -405,6 +405,57 @@
   border-color: transparent;
 }
 
+/* ── 实时上下文(语音/打字对话内容实时同步) ───────────────── */
+.ctx-stream {
+  max-height: 168px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sm);
+  padding-right: 2px;
+}
+.ctx-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  padding: var(--xs) 0;
+}
+.ctx-turn {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ctx-who {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+}
+.ctx-ai .ctx-who {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+.ctx-src {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: var(--accent-dim);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-pill);
+  padding: 0 4px;
+}
+.ctx-text {
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+.ctx-ai .ctx-text {
+  color: var(--text-primary);
+}
+
 /* ── 通用内容视图(维态/能力) ─────────────────────────────── */
 .view-scroll {
   flex: 1;
