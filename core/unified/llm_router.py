@@ -650,7 +650,7 @@ class UnifiedLLMRouter:
     # 公开接口
     # ------------------------------------------------------------------
 
-    async def chat(self, request: LLMRequest) -> LLMResponse:
+    async def chat(self, request=None, *args, **kwargs) -> LLMResponse:
         """
         使用统一 LLMRequest 模型发起 LLM 对话请求（策略驱动 + 遥测 + 预算执行）。
 
@@ -659,15 +659,40 @@ class UnifiedLLMRouter:
         所有权威调用均为非破坏性：若不可用或抛出异常，则静默降级为既有策略路径。
 
         Args:
-            request: LLMRequest Pydantic 模型实例。
+            request: LLMRequest Pydantic 模型实例；或（向后兼容）messages 列表。
+
+        向后兼容适配：大量调用方按 MultiLLMRouter 签名调用
+        ``chat(messages, temperature=, max_tokens=, task_type=, provider=, model=, tools=)``。
+        由于 _get_router() 默认返回 UnifiedLLMRouter，若不适配这些调用会因
+        "unexpected keyword argument 'temperature'" 而在对话/任务全路径崩溃。
+        这里做无损适配：仅当 request 非 LLMRequest 时才转换；带 tools 时委派给
+        messages 兼容的 chat_with_tools()。原 LLMRequest 调用方完全不受影响。
 
         Returns:
             LLMResponse Pydantic 模型实例。
-
-        Raises:
-            NoAvailableProviderError: 没有可用的 LLM 提供商。
-            LLMProviderError: 提供商调用失败。
         """
+        if not isinstance(request, LLMRequest):
+            _messages = request if isinstance(request, list) else kwargs.pop("messages", None)
+            if _messages is None:
+                raise TypeError("chat() requires an LLMRequest or a messages list")
+            _tools = kwargs.pop("tools", None)
+            if _tools:
+                # 带 tools → 委派到 messages 兼容的 chat_with_tools（provider/model/
+                # task_type/temperature/max_tokens 仍在 kwargs 中透传）。
+                return await self.chat_with_tools(messages=list(_messages), tools=_tools, **kwargs)
+            _task_type = kwargs.pop("task_type", None) or "general"
+            if not isinstance(_task_type, str):
+                _task_type = getattr(_task_type, "value", str(_task_type))
+            request = LLMRequest(
+                messages=list(_messages),
+                task_type=_task_type,
+                preferred_provider=(kwargs.pop("provider", None)
+                                    or kwargs.pop("preferred_provider", None)),
+                temperature=float(kwargs.pop("temperature", 0.7)),
+                max_tokens=int(kwargs.pop("max_tokens", 2048)),
+            )
+            kwargs.pop("model", None)  # LLMRequest 无显式 model 字段，由 provider/策略决定
+
         if self._backend is None:
             raise NoAvailableProviderError(task_type=request.task_type)
 

@@ -47,6 +47,32 @@ class TestCommandRouterCapabilityGraphSentinel:
 class TestCommandRouterCapabilityGraphEnforcement:
     """route_envelope() enforces capability graph selection when caps provided."""
 
+    @pytest.fixture(autouse=True)
+    def _approve_v3_slots(self):
+        """隔离被测层：route_envelope 在能力图之后还有一道 V3 规范派发槽位权威门
+        （get_canonical_dispatch_slots），它会拦截"未在 UDM 注册"的设备。本类只验证
+        能力图选择层，故把正交的 V3 槽位门 stub 为全部放行（与已 stub 的
+        query_routable_executors 同理），避免 UDM 注册这一无关维度干扰断言。"""
+        from types import SimpleNamespace
+
+        def _approve_all(device_ids, **kwargs):
+            ids = list(device_ids)
+            return SimpleNamespace(
+                approved_device_ids=ids,
+                blocked_device_ids=[],
+                block_reason="",
+                blocked_slots=[],
+                approved_slots=[
+                    SimpleNamespace(device_id=d, slot_approved=True) for d in ids
+                ],
+            )
+
+        with patch(
+            "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+            side_effect=_approve_all,
+        ):
+            yield
+
     @pytest.mark.asyncio
     async def test_confirmed_target_proceeds_unchanged(self):
         """When the capability graph confirms the target, routing proceeds unchanged."""
@@ -186,8 +212,13 @@ class TestCommandRouterCapabilityGraphEnforcement:
         assert result.get("device_id") == "any_device"
 
     @pytest.mark.asyncio
-    async def test_no_confirmed_target_proceeds_with_original(self):
-        """When no target is confirmed in graph, routing proceeds with original targets."""
+    async def test_no_confirmed_target_falls_back_to_capable_alternative(self):
+        """当目标不在能力图、但存在具备所需能力的替代设备时，路由重定向到该替代设备。
+
+        PR-1 P0 能力感知调度闭环（command_router.py 1922-1945）：显式 target 无法服务
+        所需能力时，不静默放行到不具能力的原始目标，而是回退到能力图中的可用替代
+        （有替代→重定向；无替代→CAPABILITY_MISMATCH 拒绝）。此前"proceed with original"
+        的契约已被该更安全的重定向语义取代。"""
         from core.command_router import CommandRouter
         from core.schemas.task_envelope import TaskEnvelope
         from core.capability_network_runtime_policy import RoutableExecutor
@@ -197,7 +228,7 @@ class TestCommandRouterCapabilityGraphEnforcement:
 
         router = CommandRouter(executor=fake_exec)
 
-        # Target is not in the capability graph but a *different* device is.
+        # Target is not in the capability graph but a *different* capable device is.
         envelope = TaskEnvelope(
             targets=["target_not_in_graph"],
             tool_name="screenshot",
@@ -219,9 +250,9 @@ class TestCommandRouterCapabilityGraphEnforcement:
         ):
             result = await router.route_envelope(envelope)
 
-        # Routing must proceed to the original target (fail-open; device may not
-        # be assimilated yet but is still reachable).
-        assert result.get("device_id") == "target_not_in_graph"
+        # 能力不匹配 → 重定向到具备能力的替代设备（而非派发给不具能力的原始目标）。
+        assert result.get("success") is True
+        assert result.get("device_id") == "some_other_device"
 
 
 # ===========================================================================

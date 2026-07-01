@@ -4,10 +4,9 @@ tests/test_url_config_and_android_vlm.py
 Tests for:
 1. URL configuration in config_schema, config_service, config_control
 2. Android inference mode configuration
-3. AndroidVLMService (center-side VLM inference)
-4. URLConfigSurface rendering
-5. ManagementConsole rendering
-6. StatusBoardV2App --management / --set-url / --set-api-key / --set-android-inference-mode
+3. URLConfigSurface rendering
+4. ManagementConsole rendering
+5. StatusBoardV2App --management / --set-url / --set-api-key / --set-android-inference-mode
 """
 
 from __future__ import annotations
@@ -17,14 +16,9 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-
-import importlib.util as _ilu
-
-# Android VLM 路由依赖可选模块 lumiv_gateway；缺失时该路由按设计不注册。
-_LUMIV_GATEWAY_MISSING = _ilu.find_spec("lumiv_gateway") is None
 
 
 # ===========================================================================
@@ -284,173 +278,6 @@ class TestConfigControlSurfaceDispatcher:
         from windows_client.status_board_v2.config_control import ControlOperation
         result = control_surface.apply("bogus_op")  # type: ignore
         assert result.succeeded is False
-
-
-# ===========================================================================
-# 4. AndroidVLMService
-# ===========================================================================
-
-class TestAndroidVLMServiceInit:
-    def test_singleton(self):
-        from galaxy_gateway.android_vlm_service import (
-            get_android_vlm_service,
-            reset_android_vlm_service,
-        )
-        reset_android_vlm_service()
-        s1 = get_android_vlm_service()
-        s2 = get_android_vlm_service()
-        assert s1 is s2
-        reset_android_vlm_service()
-
-    def test_reset_creates_new_instance(self):
-        from galaxy_gateway.android_vlm_service import (
-            get_android_vlm_service,
-            reset_android_vlm_service,
-        )
-        reset_android_vlm_service()
-        s1 = get_android_vlm_service()
-        reset_android_vlm_service()
-        s2 = get_android_vlm_service()
-        assert s1 is not s2
-        reset_android_vlm_service()
-
-
-class TestAndroidVLMServiceModelChecksums:
-    def test_checksum_registry_has_three_models(self):
-        from galaxy_gateway.android_vlm_service import ANDROID_MODEL_CHECKSUMS
-        assert len(ANDROID_MODEL_CHECKSUMS) == 3
-
-    def test_checksum_registry_has_mobilevlm(self):
-        from galaxy_gateway.android_vlm_service import ANDROID_MODEL_CHECKSUMS
-        assert "mobilevlm_v2_1_7b_gguf" in ANDROID_MODEL_CHECKSUMS
-
-    def test_checksum_registry_has_seeclick_params(self):
-        from galaxy_gateway.android_vlm_service import ANDROID_MODEL_CHECKSUMS
-        assert "seeclick_params" in ANDROID_MODEL_CHECKSUMS
-
-    def test_checksum_registry_has_seeclick_bin(self):
-        from galaxy_gateway.android_vlm_service import ANDROID_MODEL_CHECKSUMS
-        assert "seeclick_bin" in ANDROID_MODEL_CHECKSUMS
-
-    def test_each_model_has_sha256_field(self):
-        from galaxy_gateway.android_vlm_service import ANDROID_MODEL_CHECKSUMS
-        for model_id, meta in ANDROID_MODEL_CHECKSUMS.items():
-            assert "sha256" in meta, f"Model {model_id} missing sha256 field"
-
-    def test_each_model_has_file_field(self):
-        from galaxy_gateway.android_vlm_service import ANDROID_MODEL_CHECKSUMS
-        for model_id, meta in ANDROID_MODEL_CHECKSUMS.items():
-            assert "file" in meta, f"Model {model_id} missing file field"
-
-    def test_each_model_has_runtime_field(self):
-        from galaxy_gateway.android_vlm_service import ANDROID_MODEL_CHECKSUMS
-        for model_id, meta in ANDROID_MODEL_CHECKSUMS.items():
-            assert "runtime" in meta, f"Model {model_id} missing runtime field"
-
-    def test_mobilevlm_runtime_is_llamacpp(self):
-        from galaxy_gateway.android_vlm_service import ANDROID_MODEL_CHECKSUMS
-        assert "llama" in ANDROID_MODEL_CHECKSUMS["mobilevlm_v2_1_7b_gguf"]["runtime"].lower()
-
-    def test_seeclick_runtime_is_ncnn(self):
-        from galaxy_gateway.android_vlm_service import ANDROID_MODEL_CHECKSUMS
-        assert "NCNN" in ANDROID_MODEL_CHECKSUMS["seeclick_params"]["runtime"].upper()
-
-
-class TestAndroidVLMServicePlanValidation:
-    @pytest.mark.asyncio
-    async def test_plan_with_empty_image_returns_failure(self):
-        from galaxy_gateway.android_vlm_service import AndroidVLMService
-        svc = AndroidVLMService(router=None)
-        result = await svc.plan(image_base64="", task="tap the button")
-        assert result["success"] is False
-        assert "image_base64" in result["error"]
-
-    @pytest.mark.asyncio
-    async def test_ground_with_empty_image_returns_failure(self):
-        from galaxy_gateway.android_vlm_service import AndroidVLMService
-        svc = AndroidVLMService(router=None)
-        result = await svc.ground(image_base64="", query="find the submit button")
-        assert result["success"] is False
-        assert "image_base64" in result["error"]
-
-    @pytest.mark.asyncio
-    async def test_plan_no_router_returns_failure(self):
-        from galaxy_gateway.android_vlm_service import AndroidVLMService
-        svc = AndroidVLMService(router=None)
-        with patch.object(svc, "_get_router", return_value=None):
-            result = await svc.plan(image_base64="aW1hZ2U=", task="open camera")
-        assert result["success"] is False
-        assert "router" in result["error"].lower() or "unavailable" in result["error"].lower()
-
-    @pytest.mark.asyncio
-    async def test_ground_no_router_returns_failure(self):
-        from galaxy_gateway.android_vlm_service import AndroidVLMService
-        svc = AndroidVLMService(router=None)
-        with patch.object(svc, "_get_router", return_value=None):
-            result = await svc.ground(image_base64="aW1hZ2U=", query="find button")
-        assert result["success"] is False
-
-    @pytest.mark.asyncio
-    async def test_ground_null_confidence_returns_zero_not_raises(self):
-        """LLM JSON often omits or nulls confidence; must not crash the handler."""
-        from galaxy_gateway.android_vlm_service import AndroidVLMService
-
-        svc = AndroidVLMService(router=None)
-        mock_router = MagicMock()
-        mock_router.route_multimodal_first.return_value = MagicMock(provider_id="test")
-
-        async def _fake_vision(*_a, **_kw):
-            return '{"bbox": [1, 2, 3, 4], "label": "btn", "confidence": null}'
-
-        with patch.object(svc, "_get_router", return_value=mock_router):
-            with patch(
-                "galaxy_gateway.android_vlm_service._chat_with_vision",
-                new_callable=AsyncMock,
-                side_effect=_fake_vision,
-            ):
-                result = await svc.ground(image_base64="aW1hZ2U=", query="submit")
-        assert result["success"] is True
-        assert result["confidence"] == 0.0
-
-
-class TestAndroidVLMCanonicalApiRoutes:
-    @pytest.mark.skipif(
-        _LUMIV_GATEWAY_MISSING,
-        reason="可选依赖 lumiv_gateway 缺失 → Android VLM 路由按设计不注册（非产品缺陷）",
-    )
-    def test_create_api_routes_registers_android_vlm_status_path(self):
-        from core.api_routes import create_api_routes
-
-        api = create_api_routes()
-        paths = [getattr(r, "path", "") for r in api.routes]
-        assert "/api/v1/android/vlm/status" in paths
-
-
-class TestSafeParseJson:
-    def test_parse_plain_json(self):
-        from galaxy_gateway.android_vlm_service import _safe_parse_json
-        result = _safe_parse_json('{"action": "tap", "coordinates": [100, 200]}')
-        assert result["action"] == "tap"
-        assert result["coordinates"] == [100, 200]
-
-    def test_parse_fenced_json(self):
-        from galaxy_gateway.android_vlm_service import _safe_parse_json
-        result = _safe_parse_json('```json\n{"action": "swipe"}\n```')
-        assert result["action"] == "swipe"
-
-    def test_parse_empty_string_returns_empty(self):
-        from galaxy_gateway.android_vlm_service import _safe_parse_json
-        assert _safe_parse_json("") == {}
-
-    def test_parse_invalid_json_returns_empty(self):
-        from galaxy_gateway.android_vlm_service import _safe_parse_json
-        assert _safe_parse_json("not json at all") == {}
-
-    def test_parse_json_embedded_in_prose(self):
-        from galaxy_gateway.android_vlm_service import _safe_parse_json
-        text = 'I will tap the button. {"action": "tap", "coordinates": [50, 60]}'
-        result = _safe_parse_json(text)
-        assert result.get("action") == "tap"
 
 
 # ===========================================================================

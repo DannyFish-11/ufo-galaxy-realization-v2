@@ -109,7 +109,6 @@ CONFIG_KEYS: FrozenSet[str] = frozenset(
         "network.webrtc_stun_url",
         # Android integration settings
         "android.inference_mode",        # "center" | "local" | "hybrid"
-        "android.vlm_service_enabled",
     }
 )
 
@@ -157,7 +156,6 @@ class ConfigDefaults:
 
     ANDROID: Dict[str, Any] = {
         "inference_mode": "center",
-        "vlm_service_enabled": True,
     }
 
     @classmethod

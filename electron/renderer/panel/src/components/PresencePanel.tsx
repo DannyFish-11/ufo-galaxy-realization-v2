@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Phase } from '@/types/phase';
 import type { PanelData } from '@/hooks/usePanelData';
+import type { ConversationTurn } from '@/hooks/useConversation';
 import { getBackendUrl } from '@/lib/api';
 
 interface PresencePanelProps {
   phase: Phase;
   streaming: boolean;
   data: PanelData;
+  turns?: ConversationTurn[];
+  speaking?: boolean;
 }
 
 const PHASE_LABEL: Record<Phase, string> = {
@@ -70,11 +73,17 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function PresencePanel({ phase, streaming, data }: PresencePanelProps) {
+export default function PresencePanel({ phase, streaming, data, turns = [], speaking = false }: PresencePanelProps) {
   const perc = usePerception();
   const intensity = Math.round((data.presenceIntensity || 0) * 100);
   const coherence = Math.round((data.coherence || 0) * 100);
   const model = data.llmRouting?.lastModelUsed || perc.model || '—';
+
+  // 实时上下文自动滚到底
+  const ctxRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (ctxRef.current) ctxRef.current.scrollTop = ctxRef.current.scrollHeight;
+  }, [turns]);
 
   return (
     <aside className="presence glass">
@@ -82,7 +91,27 @@ export default function PresencePanel({ phase, streaming, data }: PresencePanelP
         <div className={`orb phase-${phase}`} />
         <div className="presence-title">
           <div className="presence-state">{PHASE_LABEL[phase]}</div>
-          <div className="presence-sub">{streaming ? '正在实时生成…' : '在场'}</div>
+          <div className="presence-sub">
+            {speaking ? '正在朗读…' : streaming ? '正在实时生成…' : '在场'}
+          </div>
+        </div>
+      </div>
+
+      {/* 实时上下文：语音/打字对话内容实时同步（与在场共用 WS 通道） */}
+      <div className="presence-section">
+        <div className="section-header">实时上下文 · CONTEXT</div>
+        <div className="ctx-stream" ref={ctxRef}>
+          {turns.length === 0 ? (
+            <div className="ctx-empty">对话开始后，这里实时显示听到的与 AI 的回应</div>
+          ) : (
+            turns.map((t) => (
+              <div key={t.id} className={`ctx-turn ctx-${t.role}`}>
+                <span className="ctx-who">{t.role === 'ai' ? 'AI' : '你'}</span>
+                {t.source === 'voice' && <span className="ctx-src">语音</span>}
+                <span className="ctx-text">{t.text}</span>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

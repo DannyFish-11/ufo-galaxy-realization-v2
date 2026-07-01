@@ -114,6 +114,15 @@ class GalaxyPresenceBridge:
         except Exception as exc:
             logger.warning("StateEventBus subscription failed (non-fatal): %s", exc)
 
+        # 实时语音对话闭环（gated by GALAXY_VOICE_LOOP=1；无麦克风/依赖时安全跳过）。
+        # 与面板"实时上下文"共用本桥的 WS 通道，语音与打字对话一体。
+        try:
+            from core.voice_conversation_bridge import start_voice_loop, voice_loop_enabled
+            if voice_loop_enabled():
+                start_voice_loop()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("voice loop start skipped (non-fatal): %s", exc)
+
     # ── 安全调度 ──
 
     def _schedule_broadcast(self) -> None:
@@ -261,6 +270,82 @@ class GalaxyPresenceBridge:
                 "source": "DesktopPresenceRuntime",
             },
         }
+
+    # ── 实时对话流（一体化：语音/打字对话内容实时推给面板）──────────────
+    # 与三态在场共用同一条 WS 通道（/ws/desktop-presence），面板据此显示
+    # "听到的/AI 说的"实时上下文，无论是否打开对话 tab 都是活的。
+
+    def push_conversation(
+        self,
+        role: str,
+        text: str,
+        *,
+        final: bool = True,
+        speaking: bool = False,
+        source: str = "text",
+        turn_id: str = "",
+    ) -> None:
+        """把一条对话内容（user 转写 / ai 回应）实时广播到面板。
+
+        跨线程/同步上下文安全（复用 _schedule 的调度语义）；永不抛出。
+
+        Args:
+            role:     "user"（听到的/输入）| "ai"（AI 回应）
+            text:     内容文本（final=False 时为增量/进行中片段）
+            final:    是否为该轮的最终文本（False=流式进行中）
+            speaking: AI 是否正在朗读（TTS）
+            source:   "voice"（语音）| "text"（打字）
+            turn_id:  同一轮对话的关联 id（增量拼接用）
+        """
+        msg = {
+            "type": "conversation",
+            "event_category": "conversation_turn",
+            "payload": {
+                "role": role,
+                "text": text,
+                "final": bool(final),
+                "speaking": bool(speaking),
+                "source": source,
+                "turn_id": turn_id,
+            },
+        }
+        self._schedule_msg(msg)
+
+    def _schedule_msg(self, msg: Dict[str, Any]) -> None:
+        """跨线程安全地把任意消息广播到已注册 WS 客户端（不走 IPC）。"""
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._ws_broadcast(msg))
+            return
+        except RuntimeError:
+            pass
+        loop = self._loop
+        if loop is not None and not loop.is_closed():
+            try:
+                asyncio.run_coroutine_threadsafe(self._ws_broadcast(msg), loop)
+                return
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("conversation broadcast scheduling failed: %s", exc)
+        logger.debug("conversation broadcast skipped — no usable event loop")
+
+
+# ── 模块级便捷函数：任意后端路径 emit 一条对话到面板 ────────────────────
+def emit_conversation(
+    role: str,
+    text: str,
+    *,
+    final: bool = True,
+    speaking: bool = False,
+    source: str = "text",
+    turn_id: str = "",
+) -> None:
+    """供 chat/ASR/TTS 等路径一行调用，把对话内容实时推给面板。容错、永不抛出。"""
+    try:
+        GalaxyPresenceBridge.get_instance().push_conversation(
+            role, text, final=final, speaking=speaking, source=source, turn_id=turn_id
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("emit_conversation failed (non-fatal): %s", exc)
 
 
 # 兼容旧类名

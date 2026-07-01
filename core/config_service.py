@@ -369,8 +369,7 @@ class ConfigService:
         Set the Android inference mode in ``runtime/config.json``.
 
         This controls whether planning/grounding inference is performed on the
-        Android device (requires llama.cpp/NCNN) or delegated to the V2 center
-        via the gateway VLM service.
+        Android device (requires llama.cpp/NCNN) or delegated to the V2 center.
 
         Parameters
         ----------
