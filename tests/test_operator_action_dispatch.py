@@ -706,16 +706,30 @@ class TestUnifiedPanelPayloadIntegration:
         reset_last_operator_action_result()
 
     def test_build_payload_last_operator_action_empty_without_prior_action(self):
+        import os
+        import tempfile
+        import core.unified_panel_aggregation as upa
         from core.unified_panel_aggregation import (
             UnifiedPanelAggregationService,
             reset_last_operator_action_result,
         )
-        reset_last_operator_action_result()
-        svc = UnifiedPanelAggregationService()
-        payload = svc.build_payload()
-        d = payload.to_dict()
-        assert "last_operator_action" in d
-        assert d["last_operator_action"] == {}
+        # 隔离持久化路径:get_last_operator_action_result() 在内存为 None 时会从
+        # 磁盘 _load;若指向默认路径,其它测试/进程遗留的 runtime/panel_last_
+        # operator_action.json 会被恢复,导致"无前置动作应为空"拿到脏数据。
+        # 指向一个唯一且不存在的临时路径,确保恢复不到任何东西。
+        original_path = upa._LAST_OPERATOR_ACTION_STATE_PATH
+        upa._LAST_OPERATOR_ACTION_STATE_PATH = os.path.join(
+            tempfile.gettempdir(), f"panel_empty_{id(self)}_{os.getpid()}.json"
+        )
+        try:
+            reset_last_operator_action_result()
+            svc = UnifiedPanelAggregationService()
+            payload = svc.build_payload()
+            d = payload.to_dict()
+            assert "last_operator_action" in d
+            assert d["last_operator_action"] == {}
+        finally:
+            upa._LAST_OPERATOR_ACTION_STATE_PATH = original_path
 
 
 # ===========================================================================

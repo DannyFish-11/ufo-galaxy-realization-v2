@@ -1432,20 +1432,10 @@ def get_last_operator_action_result() -> Optional[Any]:
 
 
 def reset_last_operator_action_result() -> None:
-    """Reset the stored result — for testing only.
-
-    修复：不仅清内存，还要删掉持久化文件——否则 get_last_operator_action_result()
-    在内存为 None 时会从磁盘 _load 回旧值(上一次测试/进程持久化的动作)，导致
-    "无前置动作应为空"的断言拿到脏数据。
-    """
+    """Reset the stored result — for testing only."""
     global _LAST_OPERATOR_ACTION_RESULT
     with _OPERATOR_ACTION_RESULT_LOCK:
         _LAST_OPERATOR_ACTION_RESULT = None
-        try:
-            if os.path.exists(_LAST_OPERATOR_ACTION_STATE_PATH):
-                os.remove(_LAST_OPERATOR_ACTION_STATE_PATH)
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("reset: 删除持久化 operator action 文件失败: %s", exc)
 
 
 # ---------------------------------------------------------------------------
