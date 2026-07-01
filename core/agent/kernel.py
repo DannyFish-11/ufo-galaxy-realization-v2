@@ -739,8 +739,24 @@ class AgentKernel:
                     task_hint,
                 )
 
-            if hasattr(self._llm_router, "chat"):
+            # 修复：UnifiedLLMRouter.chat() 只接收单个 LLMRequest（不接受 messages/
+            # temperature 关键字），而 _get_router() 默认返回的正是 UnifiedLLMRouter，
+            # 导致这里的 chat(messages, temperature=...) 抛 TypeError → 面板对话恒失败。
+            # chat_with_tools(messages, ...) 在 Unified 与 Multi 两种 router 上都是
+            # messages 兼容签名（handle_chat 已复用），改用它作为主路径。
+            if hasattr(self._llm_router, "chat_with_tools"):
+                raw = await self._llm_router.chat_with_tools(messages=messages, **_chat_kwargs)
+            elif hasattr(self._llm_router, "chat_completion"):
+                raw = await self._llm_router.chat_completion(messages=messages, **_chat_kwargs)
+            elif hasattr(self._llm_router, "chat"):
                 raw = await self._llm_router.chat(messages, **_chat_kwargs)
+            else:
+                raw = None
+
+            if raw is None:
+                reply = "LLM Router 接口不兼容。"
+                model = ""
+            else:
                 if hasattr(raw, "content"):
                     reply = raw.content
                 elif isinstance(raw, dict):
@@ -748,9 +764,6 @@ class AgentKernel:
                 else:
                     reply = str(raw)
                 model = getattr(raw, "model", "") or (raw.get("model", "") if isinstance(raw, dict) else "")
-            else:
-                reply = "LLM Router 接口不兼容。"
-                model = ""
 
             return KernelResponse(
                 success=True,
