@@ -1440,6 +1440,14 @@ class MultiLLMRouter:
         provider_models = PROVIDER_MODEL_MAP.get(provider_name, {})
         default = self.providers[provider_name].default_model
 
+        # 本地单主脑(ollama/hf_local):用户启动时只选/只拉了一个模型
+        # (OLLAMA_MODEL → default_model)。静态 per-task 映射假设装了 12b/e4b 全家桶,
+        # 但本地通常只装了所选那一个 → 若按映射去调用未安装的 tag 会 404
+        # (实测:选了 e2b,却按映射调 gemma4:12b → 404 全部失败)。
+        # 故本地主脑一律用所选模型,不按复杂度在不存在的 tag 间换挡。
+        if provider_name in ("ollama", "hf_local") and default:
+            return default
+
         if complexity < 0.3:
             # LIGHT — 优先选快速/轻量模型
             return provider_models.get(TaskType.FAST_RESPONSE, default)

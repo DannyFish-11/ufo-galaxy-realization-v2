@@ -210,10 +210,20 @@ def background_pull(tag: str) -> None:
             root = tag.split(":")[0]
             if any(h == tag or h.startswith(tag + ":") or h.split(":")[0] == root for h in have):
                 return  # 已安装
-            subprocess.run(["ollama", "pull", tag], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=3600)
-        except Exception:
-            pass
+            print(f"  ▶  正在后台拉取本地主脑模型 ollama pull {tag} …(不阻塞启动)")
+            proc = subprocess.run(["ollama", "pull", tag], capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", timeout=3600)
+            if proc.returncode == 0:
+                print(f"  ✓ 本地主脑模型已就绪:{tag}")
+            else:
+                # 关键:不要静默吞掉失败——最常见原因是模型 tag 不存在于 Ollama 库
+                # (例如 gemma4 尚未在 Ollama 官方库,应改用 gemma3/gemma2 等真实 tag)。
+                _err = (proc.stderr or proc.stdout or "").strip()[:300]
+                print(f"  ⚠ 本地主脑模型拉取失败:{tag} — {_err}")
+                print(f"     可先在「模型」tab 填一个云端 API Key(DeepSeek/通义/Claude…)作为主力,")
+                print(f"     或用 `ollama list` 确认可用 tag、`ollama pull <正确tag>` 手动拉取。")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  ⚠ 本地主脑模型拉取异常:{tag} — {exc}")
 
     threading.Thread(target=_pull, name="GalaxyModelPull", daemon=True).start()
 

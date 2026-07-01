@@ -29,6 +29,23 @@ if sys.platform == "win32":
     except Exception:
         pass
 
+# ── HuggingFace 下载:必须在任何 HF 库(transformers/sentence_transformers/
+#    huggingface_hub/faster_whisper)被 import 之前设置,否则 HF_ENDPOINT 被库缓存,
+#    镜像不生效 → 退回 huggingface.co,在国内被墙 → 每个文件 5 次重试 ×指数退避 →
+#    嵌入器/Whisper 加载能卡 4 分钟,把 /chat/stream 拖到 270s(实测)。
+# 这里在进程最早期把端点指向国内镜像并把超时/重试压到最小,让"连不上"秒失败降级,
+# 而不是卡几分钟。可用 GALAXY_HF_MIRROR=0 关闭镜像。
+try:
+    os.environ.setdefault("HF_ENDPOINT", os.environ.get("GALAXY_HF_ENDPOINT", "https://hf-mirror.com"))
+    if os.environ.get("GALAXY_HF_MIRROR", "1").strip().lower() in ("0", "false", "no", "off"):
+        os.environ.pop("HF_ENDPOINT", None)
+    # 快速失败:单次 etag/连接超时压到 3s,避免默认 10s×5 次重试的长时间阻塞。
+    os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "3")
+    os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "10")
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+except Exception:
+    pass
+
 """
 Galaxy-Nexus 星枢 — System Orchestrator
 ========================================
