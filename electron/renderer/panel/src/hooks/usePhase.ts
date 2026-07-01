@@ -29,8 +29,10 @@ function extractPhase(msg: WebSocketMessage): Phase | null {
   if (type.includes('liminal') || type.includes('processing')) return 'liminal';
   if (type.includes('manifest') || type.includes('completed')) return 'manifest';
 
-  // transition 消息中的 target_phase
-  const target = msg.target_phase || msg.phase;
+  // 关键修复：ambient state_event 的相位在 payload.phase 里（桥广播的结构），
+  // 之前只看 msg.phase/target_phase → WS 环境三态永远取不到 → 面板三态不变。
+  const payload = (msg.payload as { phase?: string } | undefined) || undefined;
+  const target = msg.target_phase || msg.phase || payload?.phase;
   if (target && typeof target === 'string') {
     const t = target.toLowerCase();
     if (t.includes('silent')) return 'silent';
