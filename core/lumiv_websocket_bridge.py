@@ -114,6 +114,15 @@ class GalaxyPresenceBridge:
         except Exception as exc:
             logger.warning("StateEventBus subscription failed (non-fatal): %s", exc)
 
+        # 实时语音对话闭环（gated by GALAXY_VOICE_LOOP=1；无麦克风/依赖时安全跳过）。
+        # 与面板"实时上下文"共用本桥的 WS 通道，语音与打字对话一体。
+        try:
+            from core.voice_conversation_bridge import start_voice_loop, voice_loop_enabled
+            if voice_loop_enabled():
+                start_voice_loop()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("voice loop start skipped (non-fatal): %s", exc)
+
     # ── 安全调度 ──
 
     def _schedule_broadcast(self) -> None:
