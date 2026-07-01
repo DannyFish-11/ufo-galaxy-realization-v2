@@ -62,6 +62,7 @@ Routes:
 import asyncio
 import json
 import logging
+import os
 from typing import Any, AsyncIterator, Dict, List, Tuple
 
 from fastapi import APIRouter
@@ -575,16 +576,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             try:
                 from core.desktop_presence_runtime import get_desktop_presence_runtime
                 runtime = get_desktop_presence_runtime()
-                result = await runtime.handle_request(
-                    message=req.message,
-                    source="chat",
-                    device_id=req.device_id,
-                    session_id=req.session_id,
-                    user_id=req.user_id,
-                    context=req.context,
-                    required_capabilities=req.required_capabilities,
-                    multimodal_context=req.multimodal_context,
-                    entry_mode="local",
+                # 硬超时:无论"没配模型/模型不可达/首调初始化慢/提供商挂起",
+                # 都必须在有限时间内给前端一个 error 帧并收流,绝不让面板"一直转圈圈"。
+                # 可用 GALAXY_CHAT_TIMEOUT_S 调整(默认 90s)。
+                try:
+                    _chat_timeout = float(os.environ.get("GALAXY_CHAT_TIMEOUT_S", "90") or "90")
+                except (TypeError, ValueError):
+                    _chat_timeout = 90.0
+                result = await asyncio.wait_for(
+                    runtime.handle_request(
+                        message=req.message,
+                        source="chat",
+                        device_id=req.device_id,
+                        session_id=req.session_id,
+                        user_id=req.user_id,
+                        context=req.context,
+                        required_capabilities=req.required_capabilities,
+                        multimodal_context=req.multimodal_context,
+                        entry_mode="local",
+                    ),
+                    timeout=_chat_timeout,
                 )
                 metadata = result.get("metadata", {})
                 if not isinstance(metadata, dict):
@@ -637,6 +648,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "visible_action_surface": visible_action_surface,
                 })
                 # 回到待机态。
+                yield _sse({"type": "phase", "phase": "silent"})
+            except asyncio.TimeoutError:
+                logger.error("chat_stream 超时(%.0fs)——终止本轮并收流", _chat_timeout)
+                yield _sse({
+                    "type": "error",
+                    "error": (
+                        f"响应超时（{int(_chat_timeout)}s 未返回）。"
+                        "请在「模型」tab 配置可用的 API Key 或本地 Ollama 后重试。"
+                    ),
+                })
                 yield _sse({"type": "phase", "phase": "silent"})
             except Exception as exc:  # noqa: BLE001 — surface any failure to the client
                 logger.error("chat_stream 处理异常: %s", exc, exc_info=True)
