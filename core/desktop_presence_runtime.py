@@ -764,7 +764,7 @@ class DesktopPresenceRuntime:
             task_active=True,
             sensing_active=bool(multimodal_context) or stream_sensing_active,
             execution_active=False,
-            user_interaction=source in {"chat", "operator"},
+            user_interaction=source in {"chat", "voice", "operator"},
         )
         self._log_request_start(
             rsession,
@@ -799,7 +799,7 @@ class DesktopPresenceRuntime:
                     task_active=True,
                     sensing_active=bool(multimodal_context) or stream_sensing_active,
                     execution_active=True,
-                    user_interaction=source in {"chat", "operator"},
+                    user_interaction=source in {"chat", "voice", "operator"},
                 )
                 _dispatch_presence_runtime_hint = self._current_presence_runtime_hint()
                 _presence_mode = _dispatch_presence_runtime_hint["presence_mode"]
@@ -859,7 +859,7 @@ class DesktopPresenceRuntime:
                 task_active=False,
                 sensing_active=self._has_active_stream_source(),
                 execution_active=False,
-                user_interaction=source in {"chat", "operator"},
+                user_interaction=source in {"chat", "voice", "operator"},
                 result_committed=True,
             )
             self._log_request_end(rsession)
@@ -1320,7 +1320,7 @@ class DesktopPresenceRuntime:
         Unknown sources fall back to OpenClawd with a warning so requests are
         never silently dropped.
         """
-        if source in ("chat", "openclawd", "android_vision", "vision_sampler", "operator",
+        if source in ("chat", "voice", "openclawd", "android_vision", "vision_sampler", "operator",
                       "android_goal_execution"):
             return await self._handle_via_openclawd(
                 rsession=rsession,
@@ -2466,8 +2466,13 @@ class DesktopPresenceRuntime:
         result_committed: bool = False,
     ) -> Dict[str, Any]:
         transition: Optional[Dict[str, Any]] = None
+        # 防御：__init__ 会初始化状态机；但经 __new__ 绕过 __init__ 构造的实例
+        # (部分测试轻量 stub)可能未设置 → getattr 兜底 None,整段按 "non-fatal" 降级。
+        state_machine = getattr(self, "_presence_state_machine", None)
         try:
-            transition = self._presence_state_machine.update(
+            if state_machine is None:
+                raise AttributeError("_presence_state_machine not initialized")
+            transition = state_machine.update(
                 tri_state=tri_state,
                 task_active=task_active,
                 sensing_active=sensing_active,
@@ -2488,11 +2493,18 @@ class DesktopPresenceRuntime:
                 result_committed,
                 exc,
             )
+        # 状态机缺失/异常时回退到静态相位,保证 hint 始终可构造。
+        mode_value = "static"
+        if state_machine is not None:
+            try:
+                mode_value = state_machine.mode.value
+            except Exception:
+                mode_value = "static"
         self._latest_presence_runtime_hint = {
-            "presence_mode": self._presence_state_machine.mode.value,
+            "presence_mode": mode_value,
             "previous_presence_mode": (
                 (transition or {}).get("from_mode")
-                or self._presence_state_machine.mode.value
+                or mode_value
             ),
             "presence_mode_changed": bool(transition),
             "presence_transition_reason": self._derive_presence_transition_reason(transition),
@@ -2519,7 +2531,9 @@ class DesktopPresenceRuntime:
         return "presence_transition_applied"
 
     def _current_presence_runtime_hint(self) -> Dict[str, Any]:
-        return dict(self._latest_presence_runtime_hint)
+        # 防御：__init__ 会初始化此字段；但经 __new__ 绕过 __init__ 构造的实例
+        # (部分测试的轻量 stub)可能未设置 → getattr 兜底空 dict，避免 AttributeError。
+        return dict(getattr(self, "_latest_presence_runtime_hint", {}) or {})
 
     # ------------------------------------------------------------------
     # PR-8 V2: Compact presence summary for operator surfaces

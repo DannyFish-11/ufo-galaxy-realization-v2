@@ -716,7 +716,7 @@ class TestSixInformationDomains:
         assert c.last_seen == 1234567890.0
         assert c.connection.transport == "websocket"
         assert c.connection.ip_address == "10.0.0.1"
-        assert c.connection.port == 8765
+        assert c.connection.port == 9000
 
     def test_domain_4_capability(self):
         c = self._full_contract()

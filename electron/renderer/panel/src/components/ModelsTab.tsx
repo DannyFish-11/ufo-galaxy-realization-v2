@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ConfigItem } from './SettingsTab';
 import './ModelsTab.css';
 
 /**
@@ -61,13 +60,26 @@ function isSet(v?: string): boolean {
   return t.length > 0 && !t.startsWith('your-');
 }
 
-// ── 浏览器预览兜底：无 galaxyAPI 时直接打 /api/config ──────────────────
-async function fetchConfig(): Promise<Record<string, ConfigItem>> {
-  if (window.galaxyAPI?.getConfig) return window.galaxyAPI.getConfig();
+// 后端 GET /api/config 返回形状(system.py 增量字段):
+//   configured: {ENV_KEY: bool}  — 密钥是否已配置(不下发密钥值本身)
+//   values:     {ENV_KEY: str}   — 非敏感项(地址/模型名)明文回填
+interface FrontendConfig {
+  configured?: Record<string, boolean>;
+  values?: Record<string, string>;
+  status?: Record<string, boolean>;
+}
+
+// ── 读取配置(Electron IPC 优先,浏览器预览兜底直连 /api/config)──────────
+async function fetchConfig(): Promise<FrontendConfig> {
+  if (window.galaxyAPI?.getConfig) {
+    return (await window.galaxyAPI.getConfig()) as unknown as FrontendConfig;
+  }
   const r = await fetch('/api/config');
   if (!r.ok) throw new Error(`/api/config ${r.status}`);
   return r.json();
 }
+// ── 保存配置:POST /api/config {config:{KEY:VALUE}} → config.py 持久化到 .env
+//    并热刷新 LLM 路由(新填的 key 即时生效,无需重启)。──────────────────
 async function saveConfig(changed: Record<string, string>): Promise<boolean> {
   if (window.galaxyAPI?.setConfig) return (await window.galaxyAPI.setConfig(changed)).success;
   const r = await fetch('/api/config', {
@@ -79,17 +91,20 @@ async function saveConfig(changed: Record<string, string>): Promise<boolean> {
 }
 
 // ── 密钥输入（带显隐）──────────────────────────────────────────────────
+// 密钥值从不由后端下发;configured=true 时输入框留空并以占位提示"已配置",
+// 用户输入新值即覆盖。
 function SecretField({
-  value, placeholder, onChange,
-}: { value: string; placeholder?: string; onChange: (v: string) => void }) {
+  value, configured, onChange,
+}: { value: string; configured: boolean; onChange: (v: string) => void }) {
   const [show, setShow] = useState(false);
+  const placeholder = configured ? '已配置 · 如需更换请输入新密钥' : '粘贴密钥…';
   return (
     <div className="mt-secret">
       <input
         type={show ? 'text' : 'password'}
         className="mt-input"
         value={value}
-        placeholder={placeholder || '粘贴密钥…'}
+        placeholder={placeholder}
         spellCheck={false}
         autoComplete="off"
         onChange={(e) => onChange(e.target.value)}
@@ -104,9 +119,14 @@ function SecretField({
 
 // ── 单个提供商行 ──────────────────────────────────────────────────────
 function ProviderRow({
-  p, get, onChange,
-}: { p: Provider; get: (k: string) => string; onChange: (k: string, v: string) => void }) {
-  const configured = isSet(get(p.key)) && (!p.extraKey || isSet(get(p.extraKey)) || true);
+  p, get, isConfigured, onChange,
+}: {
+  p: Provider;
+  get: (k: string) => string;
+  isConfigured: (k: string) => boolean;
+  onChange: (k: string, v: string) => void;
+}) {
+  const configured = isConfigured(p.key);
   return (
     <div className={`mt-row ${configured ? 'is-on' : ''}`}>
       <div className="mt-row-id">
@@ -130,14 +150,15 @@ function ProviderRow({
             onChange={(e) => onChange(p.extraKey!, e.target.value)}
           />
         )}
-        <SecretField value={get(p.key)} onChange={(v) => onChange(p.key, v)} />
+        <SecretField value={get(p.key)} configured={configured} onChange={(v) => onChange(p.key, v)} />
       </div>
     </div>
   );
 }
 
 export default function ModelsTab() {
-  const [config, setConfig] = useState<Record<string, ConfigItem>>({});
+  const [configured, setConfigured] = useState<Record<string, boolean>>({});
+  const [values, setValues] = useState<Record<string, string>>({});
   const [changed, setChanged] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -147,7 +168,9 @@ export default function ModelsTab() {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      setConfig(await fetchConfig());
+      const cfg = await fetchConfig();
+      setConfigured(cfg.configured ?? {});
+      setValues(cfg.values ?? {});
       setChanged({});
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载配置失败');
@@ -158,9 +181,20 @@ export default function ModelsTab() {
 
   useEffect(() => { load(); }, [load]);
 
+  // 输入框显示值:用户改过取改动值,否则取后端回填的非敏感值(密钥无回填→空)
   const get = useCallback(
-    (k: string) => (changed[k] !== undefined ? changed[k] : config[k]?.value ?? ''),
-    [changed, config],
+    (k: string) => (changed[k] !== undefined ? changed[k] : values[k] ?? ''),
+    [changed, values],
+  );
+  // 是否已配置:用户改过看改动值是否非空;否则看后端 configured 布尔(密钥),
+  // 或非敏感值是否已填(地址/模型)。
+  const isConfigured = useCallback(
+    (k: string) => {
+      if (changed[k] !== undefined) return isSet(changed[k]);
+      if (k in configured) return configured[k];
+      return isSet(values[k]);
+    },
+    [changed, configured, values],
   );
   const set = useCallback((k: string, v: string) => {
     setChanged((prev) => ({ ...prev, [k]: v }));
@@ -178,14 +212,8 @@ export default function ModelsTab() {
     try {
       const ok = await saveConfig(changed);
       if (ok) {
-        setConfig((prev) => {
-          const next = { ...prev };
-          Object.entries(changed).forEach(([k, v]) => {
-            next[k] = { ...(next[k] ?? { value: '', default: '', type: 'string', category: 'llm', description: '' }), value: v };
-          });
-          return next;
-        });
-        setChanged({});
+        // 保存成功后回读服务端真值(configured/values 刷新),而非本地臆测。
+        await load();
         flash('已保存并即时生效');
       } else {
         flash('保存失败');
@@ -193,12 +221,12 @@ export default function ModelsTab() {
     } catch (e) {
       flash(`保存出错：${e instanceof Error ? e.message : ''}`);
     }
-  }, [changed, flash]);
+  }, [changed, flash, load]);
 
   // 状态统计
   const allProviders = [...OPEN_CLOUD, ...PROPRIETARY, ...AGGREGATE];
-  const connectedCount = allProviders.filter((p) => isSet(get(p.key))).length;
-  const localOn = isSet(get('OLLAMA_URL')) || isSet(get('OLLAMA_MODEL'));
+  const connectedCount = allProviders.filter((p) => isConfigured(p.key)).length;
+  const localOn = isConfigured('OLLAMA_URL') || isSet(get('OLLAMA_MODEL'));
   const currentBrain = get('OLLAMA_MODEL') || 'gemma4:e2b';
 
   if (loading) {
@@ -270,7 +298,7 @@ export default function ModelsTab() {
           </div>
           <div className="mt-rows">
             {OPEN_CLOUD.map((p) => (
-              <ProviderRow key={p.key} p={p} get={get} onChange={set} />
+              <ProviderRow key={p.key} p={p} get={get} isConfigured={isConfigured} onChange={set} />
             ))}
           </div>
         </section>
@@ -283,7 +311,7 @@ export default function ModelsTab() {
           </div>
           <div className="mt-rows">
             {PROPRIETARY.map((p) => (
-              <ProviderRow key={p.key} p={p} get={get} onChange={set} />
+              <ProviderRow key={p.key} p={p} get={get} isConfigured={isConfigured} onChange={set} />
             ))}
           </div>
         </section>
@@ -296,7 +324,7 @@ export default function ModelsTab() {
           </div>
           <div className="mt-rows">
             {AGGREGATE.map((p) => (
-              <ProviderRow key={p.key} p={p} get={get} onChange={set} />
+              <ProviderRow key={p.key} p={p} get={get} isConfigured={isConfigured} onChange={set} />
             ))}
           </div>
         </section>

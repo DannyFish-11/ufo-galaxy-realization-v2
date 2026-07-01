@@ -928,13 +928,52 @@ class TestLifecycleSummaryFailureDomain:
 # ===========================================================================
 
 
+def _run_route_envelope_with_execute_result(envelope, execute_result):
+    """Drive ``route_envelope`` so ``_execute_command`` returns ``execute_result``.
+
+    route_envelope now enforces the V3 canonical dispatch-slot gate before
+    dispatch, which blocks unregistered devices *before* ``_execute_command`` is
+    ever reached.  To exercise the failure_domain-stamping logic on an execution
+    result we approve the target at the slot gate and stub ``_execute_command``.
+    """
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, patch
+    from core.command_router import CommandRouter
+
+    approved = list(envelope.targets)
+    slot_result = SimpleNamespace(
+        approved_device_ids=approved,
+        blocked_device_ids=[],
+        block_reason="",
+        blocked_slots=[],
+        approved_slots=[],
+    )
+
+    def _mock_get_slots(*args, **kwargs):
+        return slot_result
+
+    async def run():
+        router = CommandRouter()
+        with patch(
+            "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+            side_effect=_mock_get_slots,
+        ):
+            with patch.object(
+                router, "_execute_command",
+                new_callable=AsyncMock, return_value=execute_result,
+            ):
+                return await router.route_envelope(envelope)
+
+    return asyncio.new_event_loop().run_until_complete(run())
+
+
 class TestCommandRouterFailureDomainStamp:
     """Smoke tests to verify route_envelope stamps failure_domain on failed results."""
 
     def test_failure_result_gets_failure_domain(self):
         """A failed route_envelope result should carry failure_domain."""
         import asyncio
-        from unittest.mock import AsyncMock, patch
         from core.schemas.task_envelope import TaskEnvelope
 
         envelope = TaskEnvelope(
@@ -960,17 +999,7 @@ class TestCommandRouterFailureDomainStamp:
             "latency_ms": 10.0,
         }
 
-        async def run():
-            with patch(
-                "core.command_router.CommandRouter._execute_command",
-                new_callable=AsyncMock,
-                return_value=failed_result,
-            ):
-                from core.command_router import CommandRouter
-                router = CommandRouter()
-                return await router.route_envelope(envelope)
-
-        result = asyncio.get_running_loop().run_until_complete(run())
+        result = _run_route_envelope_with_execute_result(envelope, failed_result)
 
         assert "failure_domain" in result
         assert result["failure_domain"] == "remote_device_unavailable"
@@ -1003,17 +1032,7 @@ class TestCommandRouterFailureDomainStamp:
             "latency_ms": 5.0,
         }
 
-        async def run():
-            with patch(
-                "core.command_router.CommandRouter._execute_command",
-                new_callable=AsyncMock,
-                return_value=success_result,
-            ):
-                from core.command_router import CommandRouter
-                router = CommandRouter()
-                return await router.route_envelope(envelope)
-
-        result = asyncio.get_running_loop().run_until_complete(run())
+        result = _run_route_envelope_with_execute_result(envelope, success_result)
 
         assert result.get("failure_domain") is None
 
@@ -1038,17 +1057,7 @@ class TestCommandRouterFailureDomainStamp:
             "latency_ms": 30000.0,
         }
 
-        async def run():
-            with patch(
-                "core.command_router.CommandRouter._execute_command",
-                new_callable=AsyncMock,
-                return_value=failed_result,
-            ):
-                from core.command_router import CommandRouter
-                router = CommandRouter()
-                return await router.route_envelope(envelope)
-
-        result = asyncio.get_running_loop().run_until_complete(run())
+        result = _run_route_envelope_with_execute_result(envelope, failed_result)
 
         assert result.get("failure_is_retryable") is True
 
@@ -1085,7 +1094,7 @@ class TestSwarmCoordinatorFailureDomain:
             ):
                 return await coord._dispatch_one(manifest)
 
-        result = asyncio.get_running_loop().run_until_complete(run())
+        result = asyncio.new_event_loop().run_until_complete(run())
 
         assert result["success"] is False
         assert result.get("failure_domain") == "remote_device_unavailable"
@@ -1117,7 +1126,7 @@ class TestSwarmCoordinatorFailureDomain:
                  patch.object(coord, "_get_ledger", return_value=mock_ledger):
                 return await coord._dispatch_one(manifest)
 
-        result = asyncio.get_running_loop().run_until_complete(run())
+        result = asyncio.new_event_loop().run_until_complete(run())
 
         assert result["success"] is False
         assert result.get("failure_domain") == "substrate_dispatch_failure"
@@ -1155,7 +1164,7 @@ class TestSwarmCoordinatorFailureDomain:
                  patch.object(coord, "_get_ledger", return_value=mock_ledger):
                 return await coord._dispatch_one(manifest)
 
-        result = asyncio.get_running_loop().run_until_complete(run())
+        result = asyncio.new_event_loop().run_until_complete(run())
 
         assert result["success"] is False
         assert result.get("failure_domain") == "gateway_transport_failure"

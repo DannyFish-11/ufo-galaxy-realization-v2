@@ -183,7 +183,7 @@ class TestOperatorSurfaceIsActionCapable:
         from core.operator_surface import OperatorSurface
         surface = OperatorSurface()
         req = OperatorActionRequest(action_kind="__nonexistent__", message="x")
-        result = asyncio.get_running_loop().run_until_complete(
+        result = asyncio.new_event_loop().run_until_complete(
             surface.execute_operator_action(req)
         )
         assert isinstance(result, OperatorActionResult)
@@ -197,7 +197,7 @@ class TestOperatorSurfaceIsActionCapable:
             action_kind=OperatorActionKind.flow_cancel.value,
             flow_id="",
         )
-        result = asyncio.get_running_loop().run_until_complete(
+        result = asyncio.new_event_loop().run_until_complete(
             surface.execute_operator_action(req)
         )
         assert result.accepted is False
@@ -210,7 +210,7 @@ class TestOperatorSurfaceIsActionCapable:
             action_kind=OperatorActionKind.flow_cancel.value,
             flow_id="nonexistent_flow_999",
         )
-        result = asyncio.get_running_loop().run_until_complete(
+        result = asyncio.new_event_loop().run_until_complete(
             surface.execute_operator_action(req)
         )
         assert result.accepted is False
@@ -355,7 +355,7 @@ class TestOperatorActionEndpoint:
             "get_operator_action_availability",
             return_value=mock_availability,
         ):
-            result = asyncio.get_running_loop().run_until_complete(
+            result = asyncio.new_event_loop().run_until_complete(
                 surface.execute_operator_action(req)
             )
         assert result.accepted is True
@@ -390,10 +390,10 @@ class TestOperatorActionEndpoint:
             "get_operator_action_availability",
             return_value=mock_availability,
         ):
-            first = asyncio.get_running_loop().run_until_complete(
+            first = asyncio.new_event_loop().run_until_complete(
                 surface.execute_operator_action(req)
             )
-            duplicate = asyncio.get_running_loop().run_until_complete(
+            duplicate = asyncio.new_event_loop().run_until_complete(
                 surface.execute_operator_action(req)
             )
         assert first.runtime_result.get("continuity_adjudication_classification") == "current-accepted"
@@ -558,7 +558,7 @@ class TestNoParallelActionPath:
             "core.desktop_presence_runtime.get_desktop_presence_runtime",
             return_value=fake_runtime,
         ):
-            result = asyncio.get_running_loop().run_until_complete(
+            result = asyncio.new_event_loop().run_until_complete(
                 surface.execute_operator_action(req)
             )
 
@@ -598,7 +598,7 @@ class TestNoParallelActionPath:
             "core.desktop_presence_runtime.get_desktop_presence_runtime",
             return_value=fake_runtime,
         ):
-            result = asyncio.get_running_loop().run_until_complete(
+            result = asyncio.new_event_loop().run_until_complete(
                 surface.execute_operator_action(req)
             )
 
@@ -628,7 +628,7 @@ class TestNoParallelActionPath:
             action_kind=OperatorActionKind.flow_cancel.value,
             flow_id="nonexistent_flow_for_test",
         )
-        result = asyncio.get_running_loop().run_until_complete(
+        result = asyncio.new_event_loop().run_until_complete(
             surface.execute_operator_action(req)
         )
         # Must fail because flow does not exist — but must NOT involve DPR
@@ -706,16 +706,30 @@ class TestUnifiedPanelPayloadIntegration:
         reset_last_operator_action_result()
 
     def test_build_payload_last_operator_action_empty_without_prior_action(self):
+        import os
+        import tempfile
+        import core.unified_panel_aggregation as upa
         from core.unified_panel_aggregation import (
             UnifiedPanelAggregationService,
             reset_last_operator_action_result,
         )
-        reset_last_operator_action_result()
-        svc = UnifiedPanelAggregationService()
-        payload = svc.build_payload()
-        d = payload.to_dict()
-        assert "last_operator_action" in d
-        assert d["last_operator_action"] == {}
+        # 隔离持久化路径:get_last_operator_action_result() 在内存为 None 时会从
+        # 磁盘 _load;若指向默认路径,其它测试/进程遗留的 runtime/panel_last_
+        # operator_action.json 会被恢复,导致"无前置动作应为空"拿到脏数据。
+        # 指向一个唯一且不存在的临时路径,确保恢复不到任何东西。
+        original_path = upa._LAST_OPERATOR_ACTION_STATE_PATH
+        upa._LAST_OPERATOR_ACTION_STATE_PATH = os.path.join(
+            tempfile.gettempdir(), f"panel_empty_{id(self)}_{os.getpid()}.json"
+        )
+        try:
+            reset_last_operator_action_result()
+            svc = UnifiedPanelAggregationService()
+            payload = svc.build_payload()
+            d = payload.to_dict()
+            assert "last_operator_action" in d
+            assert d["last_operator_action"] == {}
+        finally:
+            upa._LAST_OPERATOR_ACTION_STATE_PATH = original_path
 
 
 # ===========================================================================
@@ -762,7 +776,7 @@ class TestAndroidCompatibleDispatch:
             "core.desktop_presence_runtime.get_desktop_presence_runtime",
             return_value=fake_runtime,
         ):
-            asyncio.get_running_loop().run_until_complete(
+            asyncio.new_event_loop().run_until_complete(
                 surface.execute_operator_action(req)
             )
 

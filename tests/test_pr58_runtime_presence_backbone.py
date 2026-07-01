@@ -445,25 +445,33 @@ class TestUCMGetPresenceView:
 # ---------------------------------------------------------------------------
 
 class TestGatewayWSManagerPresenceDelegation:
-    def test_33_disconnect_calls_ucm_mark_offline(self):
-        """disconnect() must call UCM mark_offline (sync) when no event loop running."""
+    @pytest.mark.asyncio
+    async def test_33_disconnect_calls_ucm_mark_offline(self):
+        """disconnect() must unregister the disconnected device from UCM presence backbone.
+
+        ``disconnect`` is an async coroutine; under a running loop it schedules
+        ``ucm.unregister_connection`` via ``create_task`` (the sync
+        ``mark_offline`` branch is only a no-loop fallback that cannot be reached
+        while the coroutine itself is being awaited).
+        """
         import galaxy_gateway.websocket_handler  # noqa: F401
         from galaxy_gateway.websocket_handler import GatewayWSManager
 
         mock_ucm = MagicMock()
+        mock_ucm.unregister_connection = AsyncMock()
         with (
             patch("galaxy_gateway.websocket_handler.udm_write_unregister", return_value=True),
             patch("galaxy_gateway.websocket_handler.device_router"),
             patch.object(GatewayWSManager, "_ucm", return_value=mock_ucm),
         ):
-            # Simulate no running loop by making get_running_loop raise
-            with patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
-                mgr = GatewayWSManager()
-                mgr.active_connections["conn1"] = MagicMock()
-                mgr.device_connections["d_gw"] = "conn1"
-                mgr.disconnect("conn1")
+            mgr = GatewayWSManager()
+            mgr.active_connections["conn1"] = MagicMock()
+            mgr.device_connections["d_gw"] = "conn1"
+            await mgr.disconnect("conn1")
+            # Let the scheduled unregister task run.
+            await asyncio.sleep(0)
 
-        mock_ucm.mark_offline.assert_called_once_with("d_gw")
+        mock_ucm.unregister_connection.assert_called_once_with("d_gw")
 
     @pytest.mark.asyncio
     async def test_34_send_to_device_delegates_to_ucm_on_miss(self):
@@ -478,7 +486,8 @@ class TestGatewayWSManagerPresenceDelegation:
 
         mock_ucm.send_to_device.assert_called_once_with("unknown_dev", {"msg": "hello"})
 
-    def test_35_is_device_connected_checks_ucm(self):
+    @pytest.mark.asyncio
+    async def test_35_is_device_connected_checks_ucm(self):
         """is_device_connected returns True when device is in UCM."""
         from galaxy_gateway.websocket_handler import GatewayWSManager
 
@@ -486,7 +495,7 @@ class TestGatewayWSManagerPresenceDelegation:
         mock_ucm.is_device_connected.return_value = True
         with patch.object(GatewayWSManager, "_ucm", return_value=mock_ucm):
             mgr = GatewayWSManager()
-            assert mgr.is_device_connected("ucm_only_dev") is True
+            assert await mgr.is_device_connected("ucm_only_dev") is True
 
 
 # ---------------------------------------------------------------------------

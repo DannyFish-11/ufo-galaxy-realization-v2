@@ -359,6 +359,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             val = os.getenv(key_name, "")
             return bool(val and not val.startswith("your-") and not val.startswith("sk-YOUR"))
 
+        # 模型 tab / 设置 tab 需要"每个 env key 是否已配置"来渲染状态,以及少量
+        # 非敏感值(地址/模型名)用于回填。密钥值一律不下发(只给布尔),地址与
+        # 模型名等非敏感项回填明文。以下均为对既有响应的"增量"字段,不改动
+        # api_base_url / ws_url / status(test_routes_import.test_api_config 依赖之)。
+        _SECRET_MODEL_KEYS = [
+            "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY",
+            "GEMINI_API_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY",
+            "OPENROUTER_API_KEY", "PERPLEXITY_API_KEY", "SONAR_API_KEY",
+            "XAI_API_KEY", "ZHIPU_API_KEY", "QWEN_API_KEY", "DASHSCOPE_API_KEY",
+            "MOONSHOT_API_KEY", "MINIMAX_API_KEY", "STEP_API_KEY", "MIMO_API_KEY",
+            "MISTRAL_API_KEY", "HF_API_TOKEN", "ONEAPI_API_KEY",
+            "DEEPSEEK_OCR2_API_KEY",
+        ]
+        _NON_SECRET_MODEL_KEYS = [
+            "OLLAMA_URL", "OLLAMA_MODEL", "ONEAPI_URL",
+            "LOCAL_VLLM_URL", "VLLM_URL", "OPENAI_API_BASE",
+        ]
         config_data = {
             "api_base_url": f"http://{host}:{port}",
             "ws_url": f"ws://{host}:{port}/ws",
@@ -373,7 +390,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "oneapi": _is_configured("ONEAPI_API_KEY"),
                 "ocr": _is_configured("DEEPSEEK_OCR2_API_KEY"),
                 "ollama": bool(os.getenv("OLLAMA_URL")),
-            }
+            },
+            # 每个密钥 env key 是否已配置(不下发密钥值本身)
+            "configured": {k: _is_configured(k) for k in _SECRET_MODEL_KEYS},
+            # 非敏感项(地址/模型名)明文回填
+            "values": {k: os.getenv(k, "") for k in _NON_SECRET_MODEL_KEYS},
         }
         return JSONResponse(config_data)
 
