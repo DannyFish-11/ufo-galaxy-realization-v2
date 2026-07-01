@@ -718,12 +718,14 @@ def _review_unified_panel_aggregation() -> DomainImplementationEntry:
             "android_ecosystem field not confirmed in operator_surface source"
         )
 
-    # CRITICAL GAP: No single unified panel-state aggregation endpoint
+    # CRITICAL GAP: No single unified panel-state aggregation endpoint.
+    # 注：core.routes.panel（桌面面板 UI feed）不是"把三态+Android生态+flow态+UI衣着态+
+    # 能力合成单一 panel-state 对象"的规范聚合端点（UI 衣着态至今未并入统一对象），故不
+    # 计为满足项——否则会把这条真实缺口误判为闭合、domain 变成无 gap 的自相矛盾状态。
     panel_agg_candidates = [
         "core.unified_panel_state",
         "core.panel_state_aggregation",
         "core.operator_panel_aggregation",
-        "core.routes.panel",
     ]
     panel_agg_found = any(_try_import(m) for m in panel_agg_candidates)
     if panel_agg_found:
@@ -956,6 +958,14 @@ def _review_desktop_three_state_existence_surface() -> DomainImplementationEntry
     unified_found = any(_try_import(m) for m in unified_three_state_candidates)
     if unified_found:
         established.append("Unified three-state existence surface module found")
+        # 模块存在不等于三家族(主体三态 + UI 衣着态 + continuum 姿态)已合成单一表面——
+        # 本 domain 的 follow_up 仍将 DesktopExistenceSurface 列为 P1 缺口。故保留 partial，
+        # 避免因模块存在被误判为已闭合、domain 无 gap/partial 的自相矛盾状态。
+        partial.append(
+            "存在 three-state 相关模块，但三状态家族（主体三态生命周期 + UI 衣着态 + "
+            "continuum 姿态）是否已聚合进单一 assistant-like 桌面存在表面尚未证明——"
+            "/api/v1/projection/runtime 仅部分覆盖 ContinuumState。"
+        )
     else:
         gaps.append(
             "NO UNIFIED THREE-STATE EXISTENCE SURFACE: the three state families "
@@ -1118,23 +1128,26 @@ def _review_operator_actionability() -> DomainImplementationEntry:
             "in source — this is by design"
         )
 
-    # Confirm no action endpoints in operator routes
+    # Confirm no *panel-level* action endpoints in operator routes.
+    # 注意：即便 operator.py 里存在个别 POST（如审批/干预回执），operator 面板本身仍是
+    # 只读投影——面板级"动作能力"经 /api/v1/chat 而非 operator 面板。故这条只读缺口始终
+    # 记录（架构事实），只是当发现 POST 时补一条 established 说明，避免被 tangential POST
+    # 误判为闭合导致 domain 无 gap 的自相矛盾。
     has_post_action = False
-    if or_ok:
-        if _source_contains("core.routes.operator", "@router.post") or _source_contains(
-            "core.routes.operator", 'methods=["POST"]'
-        ):
-            has_post_action = True
-            established.append(
-                "POST endpoint(s) found in core.routes.operator — action capability "
-                "may already be partially present"
-            )
-        else:
-            gaps.append(
-                "NO POST/ACTION ENDPOINTS in /api/v1/operator/* routes — "
-                "operator surface is strictly GET/read-only. Confirmed by absence of "
-                "@router.post in core.routes.operator source."
-            )
+    if or_ok and (
+        _source_contains("core.routes.operator", "@router.post")
+        or _source_contains("core.routes.operator", 'methods=["POST"]')
+    ):
+        has_post_action = True
+        established.append(
+            "POST endpoint(s) found in core.routes.operator — 部分动作能力可能已存在"
+            "（如审批/干预回执），但面板级控制仍非 action-capable"
+        )
+    gaps.append(
+        "OPERATOR PANEL IS READ-ONLY PROJECTION — 面板级动作能力经 /api/v1/chat 而非 "
+        "operator 面板；/api/v1/operator/* 主体为 GET 只读投影，尚无面板级 action-capable "
+        "控制端点。"
+    )
 
     # Action-capable surfaces (not operator panel)
     chat_ok = _try_import("core.routes.chat")
@@ -1689,9 +1702,14 @@ def _review_multimodal_canonical_path() -> DomainImplementationEntry:
     if mrp_ok and _source_contains("core.multimodal_runtime_profile", "SAFE_DEFAULT"):
         established.append(
             "SAFE_DEFAULT profile confirmed: enable_multimodal_ingest=False by default — "
-            "continuous host perception is disabled unless explicitly configured. "
-            "This is the primary reason multimodal is INFRASTRUCTURE_PRESENT but "
-            "not end-to-end proven."
+            "continuous host perception is disabled unless explicitly configured."
+        )
+        # 这既是 established（profile 存在）也是真实缺口：默认禁用 → 连续多模态摄取不经
+        # 显式配置不会启用，端到端未被证明。故同时记入 gaps，避免 domain 无 gap 的自相矛盾。
+        gaps.append(
+            "MULTIMODAL DISABLED BY SAFE_DEFAULT: 连续 host 感知摄取默认关闭"
+            "（enable_multimodal_ingest=False）；不显式配置就不激活，端到端多模态路径尚未"
+            "被 CI 证明闭环。这是多模态 INFRASTRUCTURE_PRESENT 但未 e2e 证明的首要原因。"
         )
 
     # Android vision uplink

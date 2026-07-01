@@ -624,12 +624,15 @@ def _review_unified_panel_aggregation() -> AreaReviewEntry:
             "at snapshot level"
         )
 
-    # Check for unified panel state aggregation module (the gap)
+    # Check for a *canonical unified operator panel-state* aggregation module (the gap).
+    # NOTE: core.routes.panel(桌面面板 UI feed)与 core.unified_panel_aggregation(chat
+    # 侧聚合)都不是"把主体三态 + Android 生态 + 委派 flow 态 + UI 衣着态 + 能力 + 健康
+    # 合成单一 panel-state 对象"的规范聚合层——UI 衣着态至今没有并入任一统一对象。故不把
+    # 它们计为满足项(否则会把这条真实缺口误判为已闭合、area 变成无 gap 的自相矛盾状态)。
     panel_agg_candidates = [
         "core.unified_panel_state",
         "core.panel_state_aggregation",
         "core.operator_panel_aggregation",
-        "core.routes.panel",
     ]
     panel_agg_found = any(_try_import(m) for m in panel_agg_candidates)
     if panel_agg_found:
