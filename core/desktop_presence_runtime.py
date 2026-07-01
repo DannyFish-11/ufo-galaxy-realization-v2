@@ -764,7 +764,7 @@ class DesktopPresenceRuntime:
             task_active=True,
             sensing_active=bool(multimodal_context) or stream_sensing_active,
             execution_active=False,
-            user_interaction=source in {"chat", "operator"},
+            user_interaction=source in {"chat", "voice", "operator"},
         )
         self._log_request_start(
             rsession,
@@ -799,7 +799,7 @@ class DesktopPresenceRuntime:
                     task_active=True,
                     sensing_active=bool(multimodal_context) or stream_sensing_active,
                     execution_active=True,
-                    user_interaction=source in {"chat", "operator"},
+                    user_interaction=source in {"chat", "voice", "operator"},
                 )
                 _dispatch_presence_runtime_hint = self._current_presence_runtime_hint()
                 _presence_mode = _dispatch_presence_runtime_hint["presence_mode"]
@@ -859,7 +859,7 @@ class DesktopPresenceRuntime:
                 task_active=False,
                 sensing_active=self._has_active_stream_source(),
                 execution_active=False,
-                user_interaction=source in {"chat", "operator"},
+                user_interaction=source in {"chat", "voice", "operator"},
                 result_committed=True,
             )
             self._log_request_end(rsession)
@@ -1320,7 +1320,7 @@ class DesktopPresenceRuntime:
         Unknown sources fall back to OpenClawd with a warning so requests are
         never silently dropped.
         """
-        if source in ("chat", "openclawd", "android_vision", "vision_sampler", "operator",
+        if source in ("chat", "voice", "openclawd", "android_vision", "vision_sampler", "operator",
                       "android_goal_execution"):
             return await self._handle_via_openclawd(
                 rsession=rsession,
