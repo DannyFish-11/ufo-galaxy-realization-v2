@@ -319,6 +319,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             })
             feed.setdefault("nats_messages", [])
 
+        # 成本汇总（真实累计：来自 CostTracker，取代面板里写死的 0）
+        try:
+            from core.cost_tracker import get_cost_tracker
+            cs = get_cost_tracker().get_summary()
+            feed["cost_summary"] = {
+                "total_usd": round(float(cs.get("total_cost_usd", 0.0)), 6),
+                "tokens_input": int(cs.get("total_input_tokens", 0)),
+                "tokens_output": int(cs.get("total_output_tokens", 0)),
+            }
+        except Exception:  # noqa: BLE001
+            pass
+
         return JSONResponse(content={"success": True, "feed": feed})
 
     return router
