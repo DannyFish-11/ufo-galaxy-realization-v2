@@ -20,11 +20,10 @@ did NOT explicitly address:
 1. OpenClawd four-stage process flow existence
 2. DesktopPresenceRuntime tri-state lifecycle ownership
 3. Native multimodal route-selection path
-4. Android VLM center inference service
-5. PendingDeliveryBuffer durability guarantees
-6. ConfigService network URL read/write surface
-7. NATS no-op graceful degradation
-8. HandoffEnvelopeV2 Android wire format
+4. PendingDeliveryBuffer durability guarantees
+5. ConfigService network URL read/write surface
+6. NATS no-op graceful degradation
+7. HandoffEnvelopeV2 Android wire format
 
 Methodology
 -----------
@@ -469,91 +468,6 @@ def check_multimodal_ingress_bus_existence() -> CognitionCheckResult:
             check_name=check,
             passed=False,
             evidence="core.multimodal.ingress_bus / core.multimodal.perception_frame",
-            failure_detail=str(exc),
-        )
-
-
-def check_android_vlm_service_existence() -> CognitionCheckResult:
-    """Verify AndroidVLMService and its plan/ground methods exist.
-
-    Evidence: galaxy_gateway/android_vlm_service.py
-    """
-    check = "android_vlm_service_existence"
-    try:
-        from galaxy_gateway.android_vlm_service import (
-            AndroidVLMService,
-            ANDROID_VLM_SERVICE_AUTHORITY,
-            ANDROID_MODEL_CHECKSUMS,
-        )
-
-        assert hasattr(AndroidVLMService, "plan"), "AndroidVLMService.plan() missing"
-        assert hasattr(AndroidVLMService, "ground"), "AndroidVLMService.ground() missing"
-        assert isinstance(ANDROID_MODEL_CHECKSUMS, dict)
-        assert "mobilevlm_v2_1_7b_gguf" in ANDROID_MODEL_CHECKSUMS
-        assert "seeclick_params" in ANDROID_MODEL_CHECKSUMS
-        assert "seeclick_bin" in ANDROID_MODEL_CHECKSUMS
-        return CognitionCheckResult(
-            check_name=check,
-            passed=True,
-            evidence=(
-                "galaxy_gateway.android_vlm_service.AndroidVLMService defines "
-                "plan(), ground(); ANDROID_MODEL_CHECKSUMS contains 3 model entries — "
-                "confirming center-side VLM inference service for Android."
-            ),
-        )
-    except Exception as exc:
-        return CognitionCheckResult(
-            check_name=check,
-            passed=False,
-            evidence="galaxy_gateway.android_vlm_service",
-            failure_detail=str(exc),
-        )
-
-
-def check_android_model_checksums_populated() -> CognitionCheckResult:
-    """Check whether Android model SHA-256 checksums are populated.
-
-    Evidence: galaxy_gateway/android_vlm_service.py — ANDROID_MODEL_CHECKSUMS.
-
-    NOTE: This check PASSES only when all three checksums are non-empty.
-    Currently expected to FAIL because checksums are empty strings — this is
-    an honest gap recorded in the audit artifact, not a code deficiency.
-    """
-    check = "android_model_checksums_populated"
-    try:
-        from galaxy_gateway.android_vlm_service import ANDROID_MODEL_CHECKSUMS
-
-        empty_checksums = [
-            key
-            for key, info in ANDROID_MODEL_CHECKSUMS.items()
-            if not info.get("sha256", "").strip()
-        ]
-        if empty_checksums:
-            return CognitionCheckResult(
-                check_name=check,
-                passed=False,
-                evidence=(
-                    "galaxy_gateway.android_vlm_service.ANDROID_MODEL_CHECKSUMS "
-                    "— checksums registry exists and is importable."
-                ),
-                failure_detail=(
-                    f"Models with empty SHA-256: {empty_checksums}. "
-                    "Fill in real Hugging Face file hashes before production deployment."
-                ),
-            )
-        return CognitionCheckResult(
-            check_name=check,
-            passed=True,
-            evidence=(
-                "galaxy_gateway.android_vlm_service.ANDROID_MODEL_CHECKSUMS "
-                "— all model SHA-256 values are populated."
-            ),
-        )
-    except Exception as exc:
-        return CognitionCheckResult(
-            check_name=check,
-            passed=False,
-            evidence="galaxy_gateway.android_vlm_service.ANDROID_MODEL_CHECKSUMS",
             failure_detail=str(exc),
         )
 
@@ -1115,8 +1029,6 @@ def build_cognition_audit_snapshot() -> Dict[str, Any]:
         check_handoff_envelope_v2_android_wire_format(),
         # Section 4: multimodal
         check_multimodal_ingress_bus_existence(),
-        check_android_vlm_service_existence(),
-        check_android_model_checksums_populated(),  # expected to flag gap
         # Section 5: transport / recovery
         check_pending_delivery_buffer_guarantees(),
         check_nats_bus_graceful_degradation(),

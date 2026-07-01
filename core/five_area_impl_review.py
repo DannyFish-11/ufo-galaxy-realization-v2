@@ -1587,10 +1587,6 @@ def _review_multimodal_canonical_path() -> AreaReviewEntry:
             "DeviceStateSnapshot — mobilevlm_present / seeclick_present fields"
         ),
         _anchor(
-            "galaxy_gateway.android_vlm_service", "v2",
-            "AndroidVLMService — center-side VLM inference for Android"
-        ),
-        _anchor(
             "core.multi_llm_router", "v2",
             "MultiLLMRouter.route_multimodal_first() — native-multimodal-first routing"
         ),
@@ -1681,14 +1677,6 @@ def _review_multimodal_canonical_path() -> AreaReviewEntry:
             "core.android_device_state_store (seeclick_present field)"
         )
 
-    # AndroidVLMService
-    if _try_import("galaxy_gateway.android_vlm_service"):
-        established.append(
-            "AndroidVLMService importable — center-side VLM inference for Android; "
-            "plan() + ground() methods for mobile UI planning and element grounding"
-        )
-        android_refs.append("galaxy_gateway.android_vlm_service")
-
     # Disabled by default (the gap)
     disabled_by_default = False
     for mm_mod in ["core.multimodal", "core.multimodal.multimodal_ingest_bus"]:
@@ -1763,7 +1751,7 @@ def _review_multimodal_canonical_path() -> AreaReviewEntry:
             "native-MM or text-fusion fallback. "
             "PATH C (Android visual grounding): "
             "Android screen capture → Android vision uplink (galaxy_gateway handler) → "
-            "AndroidVLMService.plan()/ground() at center → execution dispatch. "
+            "execution dispatch. "
             "MobileVLM/SeeClick presence tracked in DeviceStateSnapshot. "
             "All three paths are structurally present and importable; none are "
             "CI-proven end-to-end with real multimodal activation."
@@ -1809,19 +1797,6 @@ def _review_multimodal_canonical_path() -> AreaReviewEntry:
                 change_type="test_only",
                 estimated_scope="medium",
             ),
-            ImplCutPoint(
-                cut_point_id="android_vlm_decision_influence_proof",
-                description=(
-                    "Add test/evidence that when mobilevlm_present=True in "
-                    "DeviceStateSnapshot, AndroidVLMService.plan() is invoked and "
-                    "influences routing or execution. Requires wiring "
-                    "the mobilevlm_present field into device_selection.py "
-                    "capability scoring."
-                ),
-                target_module="galaxy_gateway.routing.device_selection",
-                change_type="wire_existing",
-                estimated_scope="medium",
-            ),
         ],
         modification_zones=[
             ModificationZone(
@@ -1839,17 +1814,17 @@ def _review_multimodal_canonical_path() -> AreaReviewEntry:
                 ),
             ),
             ModificationZone(
-                zone_id="android_vlm_decision_zone",
+                zone_id="android_device_state_decision_zone",
                 files_or_modules=[
                     "galaxy_gateway/routing/device_selection.py",
-                    "galaxy_gateway/android_vlm_service.py",
                     "core/android_device_state_store.py",
                 ],
                 rationale=(
                     "device_selection.py is where DeviceStateSnapshot (including "
                     "mobilevlm_present) is consumed for routing scoring. Wiring "
-                    "mobilevlm_present into the capability score would make Android VLM "
-                    "presence influence routing decisions — closing the Android MM gap."
+                    "device-state presence fields into the capability score would make "
+                    "Android device capabilities influence routing decisions — closing "
+                    "the Android MM gap."
                 ),
             ),
         ],
@@ -1858,7 +1833,6 @@ def _review_multimodal_canonical_path() -> AreaReviewEntry:
             "After this PR: the system's multimodal claims become CI-provable. "
             "Request-bound multimodal path (chat + image) is CI-verified. "
             "Ambient perception activation is CI-tested (with enable flag). "
-            "Android VLM presence influence on routing is provably wired. "
             "The system graduates from 'infrastructure present' to "
             "'multimodal-capable with CI-proven activation paths'."
         ),

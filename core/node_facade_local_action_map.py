@@ -259,10 +259,6 @@ _ACTION_MAP: Dict[str, Dict[str, str]] = {
         "get_node_instance": "get_node_instance"
     },
     # ── AI/ML ──
-    "Node_113_AndroidVLM": {
-        "execute": "execute",
-        "get_node_instance": "get_node_instance"
-    },
     "Node_114_DocumentIntelligence": {
         "execute": "execute",
         "get_node_instance": "get_node_instance"

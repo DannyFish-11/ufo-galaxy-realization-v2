@@ -106,20 +106,6 @@ class TestMultimodalChecks:
         c = _get_check("multimodal_ingress_bus_existence")
         assert c["passed"], c["failure_detail"]
 
-    def test_android_vlm_service_existence_passes(self):
-        c = _get_check("android_vlm_service_existence")
-        assert c["passed"], c["failure_detail"]
-
-    def test_android_model_checksums_flags_gap(self):
-        """The SHA-256 checksum gap must be flagged, not silently ignored."""
-        c = _get_check("android_model_checksums_populated")
-        assert not c["passed"], (
-            "Expected android_model_checksums_populated to flag the empty-SHA-256 gap, "
-            "but it passed. Fill in real checksums and update this test."
-        )
-        assert c["failure_detail"] is not None
-        assert "sha256" in c["failure_detail"].lower() or "empty" in c["failure_detail"].lower()
-
 
 # ---------------------------------------------------------------------------
 # 5. Transport / recovery checks
