@@ -22,22 +22,29 @@ function isPhaseMessage(msg: WebSocketMessage | null): msg is WebSocketMessage &
   );
 }
 
-function extractPhase(msg: WebSocketMessage): Phase | null {
-  const type = (msg.type || msg.event_type || '').toLowerCase();
+// 后端在场桥用"存在模式"词汇 static/liminal/manifest 广播(见
+// core/lumiv_websocket_bridge._build_message: payload.phase = _current_mode),
+// 而面板三态词汇是 silent/liminal/manifest。"static" 等同于 "silent"(待机)。
+// 之前只认 "silent" → 回到待机的 static 帧被丢弃 → 覆盖层/面板三态回不去 →
+// 表现为"触发不了三态变化"。此处把 static/idle/quiet 都归一到 silent。
+function _mapPhaseToken(raw: string): Phase | null {
+  const t = raw.toLowerCase();
+  if (t.includes('silent') || t.includes('static') || t.includes('idle') || t.includes('quiet')) return 'silent';
+  if (t.includes('liminal') || t.includes('processing')) return 'liminal';
+  if (t.includes('manifest') || t.includes('completed') || t.includes('active')) return 'manifest';
+  return null;
+}
 
-  if (type.includes('silent')) return 'silent';
-  if (type.includes('liminal') || type.includes('processing')) return 'liminal';
-  if (type.includes('manifest') || type.includes('completed')) return 'manifest';
+function extractPhase(msg: WebSocketMessage): Phase | null {
+  const byType = _mapPhaseToken(msg.type || msg.event_type || '');
+  if (byType) return byType;
 
   // 关键修复：ambient state_event 的相位在 payload.phase 里（桥广播的结构），
   // 之前只看 msg.phase/target_phase → WS 环境三态永远取不到 → 面板三态不变。
   const payload = (msg.payload as { phase?: string } | undefined) || undefined;
   const target = msg.target_phase || msg.phase || payload?.phase;
   if (target && typeof target === 'string') {
-    const t = target.toLowerCase();
-    if (t.includes('silent')) return 'silent';
-    if (t.includes('liminal') || t.includes('processing')) return 'liminal';
-    if (t.includes('manifest') || t.includes('completed')) return 'manifest';
+    return _mapPhaseToken(target);
   }
 
   return null;
