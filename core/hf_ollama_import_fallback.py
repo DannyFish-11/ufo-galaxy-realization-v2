@@ -178,11 +178,19 @@ def download_and_import_to_ollama(
         def ollama_create_fn(name: str, gguf_path: str) -> bool:  # type: ignore[no-redef]
             return _ollama_create(name, gguf_path)
 
+    # 关键修复:之前"候选无匹配/不存在"只走 logger.info()——这个 app 的启动横幅
+    # 全部走 print()/WARNING 级日志，INFO 默认不显示在控制台。真机复现过:全部
+    # 候选都因 repo 不存在/无 .gguf 而跳过时，用户在控制台【什么都看不到】，
+    # 只当"HF 回退好像没跑"。这里把每个候选的尝试与结果都用 print() 打出来，
+    # 不管成败——下次真机复现，日志本身就能看出到底试了哪些 repo、每个为什么
+    # 没成，而不必再靠猜测候选名字对不对。
+    tried: List[str] = []
     for repo_id in cand_list:
         try:
             gguf_filename = find_gguf_file_fn(repo_id, size_budget_mb=size_budget_mb)
             if not gguf_filename:
-                logger.info("HF 回退:候选 %s 无匹配 .gguf 或不存在，跳过", repo_id)
+                print(f"     · HuggingFace 候选 {repo_id}:未找到匹配的 .gguf 文件(repo 不存在，或没有 GGUF 量化版)，跳过")
+                tried.append(repo_id)
                 continue
 
             print(f"  ▶  Ollama 无 {tag}，尝试从 HuggingFace 回退下载:{repo_id} / {gguf_filename} …")
@@ -197,11 +205,15 @@ def download_and_import_to_ollama(
                 print(f"  ✓ 已从 HuggingFace({repo_id})导入本地模型:{local_name}")
                 return local_name
             else:
-                logger.info("HF 回退:候选 %s 下载成功但 ollama create 失败，换下一个候选", repo_id)
+                print(f"     · HuggingFace 候选 {repo_id}:下载成功但 `ollama create` 导入失败，换下一个候选")
+                tried.append(repo_id)
         except Exception as exc:  # noqa: BLE001
-            logger.info("HF 回退:候选 %s 失败(%s)，换下一个候选", repo_id, exc)
+            print(f"     · HuggingFace 候选 {repo_id}:失败({exc})，换下一个候选")
+            tried.append(repo_id)
             continue
 
+    if tried:
+        print(f"     全部 {len(tried)} 个 HuggingFace 候选均未成功:{', '.join(tried)}")
     return None
 
 
