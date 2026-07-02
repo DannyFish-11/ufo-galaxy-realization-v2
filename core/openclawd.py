@@ -7970,9 +7970,16 @@ class OpenClawd:
             #   3. Adaptive task history (cross-session via TaskMemory)
             #   4. Event chain (current session via TaskMemory)
             try:
+                import asyncio as _aio
                 from core.session_memory_facade import get_unified_context
 
-                _ctx_messages = get_unified_context(
+                # get_unified_context 内部经统一记忆层做语义召回,对 Chroma 后端而言
+                # 要先把 query 编码成向量(SentenceTransformer.encode，CPU 密集)。
+                # 这是同步函数;在 async handle_chat 里直接调用会占住共享事件循环 —— 每次
+                # 对话都触发,期间任何其它并发请求(含完全无关的轻量端点)都会被卡住
+                # 数秒,是真机复现的"聊天时其它请求集体变慢"的根因之一。offload 到线程。
+                _ctx_messages = await _aio.to_thread(
+                    get_unified_context,
                     session_id=session_id,
                     query=message,
                     depth="auto",
