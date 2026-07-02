@@ -286,6 +286,18 @@ class GalaxyTray:
         else:
             self._show_notification("Galaxy", "覆盖层未就绪（Electron 可能未运行）")
 
+    def _hide_overlay(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
+        """通过 IPC 隐藏三态覆盖层（不依赖快捷键）。
+
+        补齐"放下"的托盘兜底——此前托盘只有 Wake(显示)一个入口,没有对应的隐藏
+        菜单项;若 Ctrl+Alt+H 等隐藏快捷键在用户机器上被占用而注册失败,唤醒后的
+        覆盖层就完全没有办法收起去。走 /ipc/hide-overlay(始终【隐藏】,幂等不显示)。
+        """
+        if self._post_ipc("/ipc/hide-overlay"):
+            logger.info("Overlay hidden via IPC (/ipc/hide-overlay)")
+        else:
+            self._show_notification("Galaxy", "覆盖层未就绪（Electron 可能未运行）")
+
     def _open_config(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         """在浏览器中打开配置面板。"""
         urls = [
@@ -429,6 +441,7 @@ class GalaxyTray:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Show Panel (F12)", self._open_gui, default=True),
             pystray.MenuItem("Wake Overlay (Ctrl+Alt+Space)", self._wake_overlay),
+            pystray.MenuItem("Hide Overlay (Ctrl+Alt+H)", self._hide_overlay),
             pystray.MenuItem("三态动画日志 (Overlay Log)", self._open_overlay_log),
             pystray.MenuItem("Config Panel", self._open_config),
             pystray.MenuItem("View Logs", self._open_logs),

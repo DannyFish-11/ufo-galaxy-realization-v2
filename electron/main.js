@@ -297,6 +297,17 @@ app.whenReady().then(async () => {
                 res.end('{"success": true, "action": "toggle-overlay"}');
                 return;
             }
+            // /ipc/hide-overlay = 始终【隐藏】覆盖层（幂等,永不显示）。
+            // 补齐"放下"的托盘兜底——此前托盘只有 Wake(显示),没有对应的隐藏入口；
+            // 若 Ctrl+Alt+H 等隐藏快捷键在用户机器上被占用而注册失败,此前完全没有
+            // 办法把已唤醒的覆盖层收起去,只能靠可能失灵的快捷键(用户反馈"放下也
+            // 没有完全注册"的直接根因)。
+            if (req.method === 'POST' && req.url === '/ipc/hide-overlay') {
+                try { setOverlayPhase(false); } catch (e) { /* ignore */ }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end('{"success": true, "action": "hide-overlay"}');
+                return;
+            }
             if (req.method === 'POST' && req.url === '/ipc/presence-state') {
                 let body = '';
                 req.on('data', chunk => body += chunk);
