@@ -152,6 +152,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception as exc:  # noqa: BLE001
             logger.debug("panel feed: 相位/presence 聚合失败: %s", exc)
 
+        # 修复:build_unified_panel_payload() 算出的 tri_state_phase 走的是
+        # DesktopPresenceRuntime._continuum_state(单例上从未被赋值)→ 兜底走
+        # core.cognitive_field_engine(模块路径本身就是错的,ModuleNotFoundError
+        # 被静默吞掉)这条死路径,结果这个字段【永远是 "silent"】——WS 断线重连
+        # 期间(App.tsx 会退回到 IPC feed)面板因此被错误拉回"待机",跟桌面
+        # 覆盖层实际显示的相位完全脱节。这里改用 GalaxyPresenceBridge 的真实
+        # 实时状态(同一份驱动覆盖层"暖金氛围光"的状态)覆盖掉上面这个死值，
+        # 让面板与覆盖层从同一个真相来源读数据。
+        try:
+            from core.lumiv_websocket_bridge import get_current_phase
+            feed["tri_state_phase"] = get_current_phase()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("panel feed: 相位覆盖失败,沿用聚合值: %s", exc)
+
         # MCP 服务器 + Skills(来自 CapabilityRegistry)
         try:
             from core.agent.capability_registry import get_capability_registry

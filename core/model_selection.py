@@ -224,7 +224,20 @@ def background_pull(tag: str) -> None:
     import shutil
     import subprocess
     import threading
-    if not tag or not shutil.which("ollama"):
+    if not tag:
+        return
+    if not shutil.which("ollama"):
+        # 修复:之前这里直接 return,不打印任何东西——真机复现过用户反馈"看到
+        # [尝试]任何 HuggingFace 下载模型,Ollama 上没找到模型就默认直接跳过了"，
+        # 排查后发现根因就是这个静默 return:找不到 ollama 命令时,不光跳过了
+        # `ollama pull`,连 HuggingFace 回退(download_and_import_to_ollama 需要
+        # `ollama create` 才能把下载的 GGUF 导入成本地模型,同样依赖这个命令)
+        # 也一起被跳过,但控制台【什么提示都没有】,用户只会觉得"什么都没发生"。
+        # 这里改成至少打印一句清楚的原因,不再彻底沉默。
+        print(f"     未检测到 ollama 命令,跳过本地主脑模型拉取与 HuggingFace 回退"
+              f"(两者都需要 ollama 命令来导入/运行模型)。"
+              f"可先在「模型」tab 填一个云端 API Key 作为主力兜底，"
+              f"或安装 Ollama: https://ollama.com/download")
         return
 
     def _pull() -> None:

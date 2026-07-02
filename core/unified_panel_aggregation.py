@@ -1453,8 +1453,12 @@ def _get_continuum_state_fallback() -> Optional[Any]:
         from core.continuum.types import ContinuumState, ContinuumPhase
 
         # Attempt to obtain a live ContinuumState from the cognitive field engine.
+        # 修复:模块路径写错了("core.cognitive_field_engine" 不存在，真实路径是
+        # "core.cognitive.cognitive_field_engine")，之前每次都 ModuleNotFoundError，
+        # 被下面的 except 静默吞掉，这个函数因此【永远】走到最后一行的硬编码
+        # SILENT 兜底，从未真正尝试过读取认知场引擎的活跃状态。
         try:
-            from core.cognitive_field_engine import get_cognitive_field_engine
+            from core.cognitive.cognitive_field_engine import get_cognitive_field_engine
             cfe = get_cognitive_field_engine()
             cs = getattr(cfe, "continuum_state", None) or getattr(cfe, "_state", None)
             if cs is not None and isinstance(cs, ContinuumState):

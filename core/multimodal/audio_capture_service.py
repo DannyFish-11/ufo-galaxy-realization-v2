@@ -107,6 +107,12 @@ class AudioCaptureService:
         # Voice input callback — invoked when ASR produces text
         self.on_voice_input: Optional[Callable[[str], None]] = None
 
+        # 主事件循环引用——ASR 转写现在跑在线程池 worker 线程里(见
+        # add_whisper_callback),worker 线程没有"当前运行的事件循环"，
+        # asyncio.create_task() 在那里会直接 RuntimeError。start() 里捕获，
+        # _emit_voice_input 据此用 run_coroutine_threadsafe 跨线程安全调度。
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+
         # Wire internal callback to pipeline
         self._pipeline.add_callback(self._on_audio_chunk)
 
@@ -186,15 +192,31 @@ class AudioCaptureService:
                 buffer = []
                 buffer_duration = 0.0
 
+                # 修复(语音链路稳定性排查):whisper_asr.transcribe() 是同步、
+                # CPU 密集调用(几百毫秒到数秒不等)。这个回调本身是从
+                # AudioIngestPipeline._process_chunk() 的异步主循环里【同步】
+                # 调用的——之前直接在这里跑 transcribe()，等于把转写工作压在
+                # 和 FastAPI 服务共用的同一个事件循环线程上：每次用户说完一句
+                # 话触发转写，HTTP/WS/面板轮询等所有其它并发工作都会被真实冻结
+                # 相应时长，且没有任何用户可见提示。这里改成丢进线程池执行，
+                # 事件循环不再被阻塞；buffer 的读取/清空仍在本次回调内同步完成，
+                # 不影响后续音频块的正确累积。
+                def _transcribe_in_thread(_audio=audio_np, _sr=state.sample_rate) -> None:
+                    try:
+                        text = whisper_asr.transcribe(_audio, sample_rate=_sr, language=language)
+                        if text:
+                            logger.info("ASR result: %s", text)
+                            self._emit_voice_input(text)
+                    except Exception as exc:
+                        logger.warning("Whisper ASR error: %s", exc)
+
                 try:
-                    text = whisper_asr.transcribe(
-                        audio_np, sample_rate=state.sample_rate, language=language
-                    )
-                    if text:
-                        logger.info("ASR result: %s", text)
-                        self._emit_voice_input(text)
-                except Exception as exc:
-                    logger.warning("Whisper ASR error: %s", exc)
+                    loop = asyncio.get_running_loop()
+                    loop.run_in_executor(None, _transcribe_in_thread)
+                except RuntimeError:
+                    # 理论上不会发生(本回调总是从运行中的事件循环里被同步调用)，
+                    # 保守兜底：退回原来的同步调用，至少不丢失这段转写。
+                    _transcribe_in_thread()
 
         self.add_asr_callback(_asr_callback)
         logger.info(
@@ -204,16 +226,30 @@ class AudioCaptureService:
         )
 
     def _emit_voice_input(self, text: str) -> None:
-        """Emit a voice input event to the registered callback."""
-        if self.on_voice_input is not None:
-            try:
-                if asyncio.iscoroutinefunction(self.on_voice_input):
-                    # Schedule async callback
-                    asyncio.create_task(self.on_voice_input(text))  # noqa: RUF006
-                else:
-                    self.on_voice_input(text)
-            except Exception as exc:
-                logger.debug("Voice input callback error: %s", exc)
+        """Emit a voice input event to the registered callback.
+
+        可能从主事件循环线程调用，也可能从 ASR 线程池 worker 线程调用(见
+        add_whisper_callback 的转写现在跑在 run_in_executor 里)——两种情况
+        都要能正确调度 async 回调，不能假设"当前线程就是事件循环线程"。
+        """
+        if self.on_voice_input is None:
+            return
+        try:
+            if asyncio.iscoroutinefunction(self.on_voice_input):
+                try:
+                    # 在事件循环线程里调用:直接 create_task。
+                    asyncio.get_running_loop().create_task(self.on_voice_input(text))  # noqa: RUF006
+                except RuntimeError:
+                    # 在 worker 线程里调用(无运行中的事件循环):跨线程安全调度
+                    # 到 start() 时捕获的主循环。
+                    if self._loop is not None and not self._loop.is_closed():
+                        asyncio.run_coroutine_threadsafe(self.on_voice_input(text), self._loop)
+                    else:
+                        logger.debug("Voice input callback dropped: no usable event loop")
+            else:
+                self.on_voice_input(text)
+        except Exception as exc:
+            logger.debug("Voice input callback error: %s", exc)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -227,6 +263,11 @@ class AudioCaptureService:
         if self._task is not None and not self._task.done():
             logger.debug("AudioCaptureService already running")
             return
+
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None
 
         self._start_ts = time.monotonic()
         self._chunks_processed = 0

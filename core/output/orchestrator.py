@@ -166,15 +166,18 @@ class OutputOrchestrator:
             mode=mode,
             persona_state=persona_state,
         )
-        # build 只产计划；启用语音时再后台「合成并播放」让 AI 真开口（不阻塞、失败静默降级）。
-        if voice_enabled and response_text:
-            try:
-                import asyncio
-                asyncio.get_running_loop().create_task(
-                    self._voice.synthesize_and_play(response_text, persona_state)
-                )
-            except Exception:
-                pass  # 无运行事件循环 / edge-tts 不可用 → 跳过播放，不影响文本输出
+        # 修复(三态/语音链路稳定性排查):这里之前会在 build 完计划后，自己再
+        # 起一个后台任务用独立的 VoiceChannel/EdgeTTSEngine 实例真正合成并
+        # 播放——但 core/desktop_presence_runtime.py::handle_request() 收尾
+        # 已经无条件调用 core.speech_output.speak_response(result["response"])
+        # 把"任何渠道的回复都默认朗读"做成了集中式 TTS（这是仓库既有的、
+        # 明确的设计意图）。本模块顶部文档字符串也写着 voice 是"stub TTS
+        # plan"——即这里本该只产出"计划"，不该自己动手播放。两条路径叠加的
+        # 真实后果:任何被 scene_interpreter 归类为 ambient_companion/
+        # field_assistant 的消息(包括所有 ≤8 字的短消息，语音场景下极常见)
+        # 会被两个完全独立的 TTS 引擎实例各合成播放一遍——用户听感上就是
+        # "AI 把同一句话念了两遍"。这里改回只产计划，真正的播放动作交给
+        # 唯一的集中入口 speak_response()，不再重复触发。
         avatar_plan = self._avatar.build(
             enabled=avatar_enabled,
             mode=mode,
