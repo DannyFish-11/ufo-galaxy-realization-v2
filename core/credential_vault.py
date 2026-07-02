@@ -79,11 +79,30 @@ _DEFAULT_VAULT_URL = "http://localhost:8003"
 PLACEHOLDER_PREFIXES: tuple = ("your_", "your-", "change_me", "todo", "<", "example", "xxx")
 
 # 支持的凭证键名 -> 对应的环境变量名
+#
+# 之前只覆盖 8 个 provider，漏了 google/xai/mistral/qwen/zhipu/minimax/step/
+# mimo/moonshot/perplexity 共 10 个——MultiLLMRouter._get_key() 的第 2 层
+# (CredentialVault)对这些 provider 会静默查不到值、直接落到第 3 层(环境变量)。
+# 目前第 3 层已经用真实长名兜底(见 multi_llm_router._PROVIDER_ENV_KEY_MAP)，
+# 所以不是致命的——但会导致这一层形同虚设、且任何其它直接调用
+# get_credential() 的代码路径对这些 provider 一样拿不到值。这里补齐，跟
+# multi_llm_router._PROVIDER_ENV_KEY_MAP 保持一致(单一事实来源分散在两处
+# 是历史包袱，先保证两边内容对齐，不引入新的抽象)。
 _ENV_MAPPING: Dict[str, str] = {
     "openai": "OPENAI_API_KEY",
     "openai_base": "OPENAI_API_BASE",
     "anthropic": "ANTHROPIC_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "xai": "XAI_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
+    "qwen": "QWEN_API_KEY",
+    "zhipu": "ZHIPU_API_KEY",
+    "minimax": "MINIMAX_API_KEY",
+    "step": "STEP_API_KEY",
+    "mimo": "MIMO_API_KEY",
+    "moonshot": "MOONSHOT_API_KEY",
+    "perplexity": "PERPLEXITY_API_KEY",
     "groq": "GROQ_API_KEY",
     "ollama": "OLLAMA_URL",
     "oneapi": "ONEAPI_API_KEY",
