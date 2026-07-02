@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { getBackendUrl } from '@/lib/api';
 import './SettingsTab.css';
 
 // ── IPC API Interfaces ──────────────────────────────────────────────
@@ -14,7 +15,10 @@ export interface ConfigItem {
 
 interface GalaxyAPI {
   getConfig: () => Promise<Record<string, ConfigItem>>;
-  setConfig: (config: Record<string, string>) => Promise<{ success: boolean }>;
+  // 修复:之前只返回 { success: boolean },失败时真实原因(未知配置键、
+  // .env 写入失败等)在 Electron IPC 层就被丢弃了,前端只能显示笼统的
+  // "保存失败"，用户没法自己判断到底是哪个字段的问题。现在带回 error。
+  setConfig: (config: Record<string, string>) => Promise<{ success: boolean; error?: string }>;
   // 完整明细(本 tab 用):与 getConfig 分开路径,避免后端 /api/config 路由遮蔽
   // (system.py 精简版先注册、抢占同路径)导致这里永远读不到任何一项内容。
   getSettings?: () => Promise<Record<string, ConfigItem>>;
@@ -242,6 +246,12 @@ export default function SettingsTab() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 「端口与节点」「网络」「组网」分类里全是纯文本配置(URL/端口),之前从
+  // 没做过任何真实连通性探测——用户看不到"这个地址现在到底通不通"，被解读
+  // 成"没有接真实数据"。probeResults 保存每个 url 类字段的真实探测结果。
+  const [probeResults, setProbeResults] = useState<
+    Record<string, { loading: boolean; reachable?: boolean; latencyMs?: number | null; error?: string | null }>
+  >({});
 
   // ── Load config on mount ─────────────────────────────────────────
 
@@ -313,7 +323,15 @@ export default function SettingsTab() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ config: changed }),
             });
-            return { success: r.ok };
+            if (r.ok) return { success: true };
+            let detail = `HTTP ${r.status}`;
+            try {
+              const body = await r.json();
+              detail = body.detail || body.error || body.message || detail;
+            } catch {
+              /* 响应体不是 JSON，退回状态码文案 */
+            }
+            return { success: false, error: detail };
           })();
       if (result.success) {
         setConfig((prev) => {
@@ -328,7 +346,9 @@ export default function SettingsTab() {
         setChanged({});
         showToast('已保存并即时生效');
       } else {
-        showToast('保存失败');
+        // 修复:之前不管真实原因是什么,一律显示"保存失败"四个字，用户没法
+        // 自己判断问题出在哪个字段。现在把后端/IPC 层透传上来的真实原因带出。
+        showToast(result.error ? `保存失败：${result.error}` : '保存失败');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
@@ -340,6 +360,36 @@ export default function SettingsTab() {
 
   const handleCancel = useCallback(() => {
     setChanged({});
+  }, []);
+
+  // ── 连通性探测(真实 TCP 连接,不是伪造的固定状态) ──────────────────
+
+  const probeKey = useCallback(async (key: string) => {
+    setProbeResults((prev) => ({ ...prev, [key]: { loading: true } }));
+    try {
+      const base = await getBackendUrl();
+      const r = await fetch(`${base}/api/config/probe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keys: [key] }),
+      });
+      const body = await r.json();
+      const result = body?.results?.[key];
+      setProbeResults((prev) => ({
+        ...prev,
+        [key]: {
+          loading: false,
+          reachable: Boolean(result?.reachable),
+          latencyMs: result?.latency_ms ?? null,
+          error: result?.error ?? null,
+        },
+      }));
+    } catch (err) {
+      setProbeResults((prev) => ({
+        ...prev,
+        [key]: { loading: false, reachable: false, error: err instanceof Error ? err.message : '探测失败' },
+      }));
+    }
   }, []);
 
   // ── Render a single config item ──────────────────────────────────
@@ -396,14 +446,45 @@ export default function SettingsTab() {
       }
 
       case 'url': {
+        const probe = probeResults[key];
+        const dotTone = probe?.loading
+          ? 'checking'
+          : probe?.reachable === true
+            ? 'ok'
+            : probe?.reachable === false
+              ? 'fail'
+              : 'idle';
+        const dotTitle = probe?.loading
+          ? '探测中…'
+          : probe?.reachable === true
+            ? `可达 · ${probe.latencyMs}ms`
+            : probe?.reachable === false
+              ? probe.error || '不可达'
+              : '尚未探测';
         return (
-          <input
-            type="url"
-            className="settings-input"
-            value={currentValue}
-            placeholder={item.default || 'https://...'}
-            onChange={(e) => handleChange(key, e.target.value)}
-          />
+          <div className="settings-url-probe-wrap">
+            <input
+              type="url"
+              className="settings-input"
+              value={currentValue}
+              placeholder={item.default || 'https://...'}
+              onChange={(e) => handleChange(key, e.target.value)}
+            />
+            <span
+              className={`settings-probe-dot settings-probe-dot-${dotTone}`}
+              title={dotTitle}
+              aria-label={dotTitle}
+            />
+            <button
+              type="button"
+              className="settings-probe-btn"
+              onClick={() => probeKey(key)}
+              disabled={probe?.loading}
+              title="测试真实连通性(TCP 连接)"
+            >
+              {probe?.loading ? '…' : '测试'}
+            </button>
+          </div>
         );
       }
 

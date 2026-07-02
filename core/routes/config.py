@@ -37,6 +37,11 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "STEP_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "StepFun API Key"},
     "ONEAPI_URL": {"default": "", "type": "url", "category": "llm", "description": "OneAPI Base URL"},
     "ONEAPI_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "OneAPI Key"},
+    "OPENROUTER_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "OpenRouter API Key"},
+    "DEEPSEEK_OCR2_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "DeepSeek OCR API Key"},
+    "OPENAI_API_BASE": {"default": "", "type": "url", "category": "llm", "description": "OpenAI-compatible Base URL (代理/中转)"},
+    "SONAR_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Perplexity Sonar API Key (alias)"},
+    "VLLM_URL": {"default": "", "type": "url", "category": "llm", "description": "vLLM URL (alias)"},
     "LOCAL_VLLM_URL": {"default": "", "type": "url", "category": "llm", "description": "Local vLLM URL"},
     "OLLAMA_MODEL": {"default": "", "type": "select", "category": "llm", "description": "本地主脑模型（原生多模态）", "options": ["gemma4:12b", "openbmb/minicpm-o4.5", "gemma4:e4b", "gemma4:e2b"]},
 
@@ -173,13 +178,32 @@ async def get_config():
 @router.post("")
 async def update_config(req: ConfigUpdateRequest):
     """批量更新配置（写入环境变量 + .env 文件）"""
+    # 修复:之前是"边校验边写 os.environ",遇到批次里某个未知 key 时半途
+    # raise——已经处理过的合法 key 已经写进 os.environ(内存态生效),但因为
+    # 异常发生在 _write_env_file() 之前,这些改动从未落盘到 .env,重启即丢失,
+    # 前端只看到笼统的 400。这里先做一遍完整性校验,全部合法才动手写,
+    # 避免"部分生效、部分丢失"的诡异中间态。
+    unknown_keys = [k for k in req.config if k not in CONFIG_SCHEMA]
+    if unknown_keys:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown config key(s): {', '.join(unknown_keys)}",
+        )
+
     for key, value in req.config.items():
-        if key not in CONFIG_SCHEMA:
-            raise HTTPException(status_code=400, detail=f"Unknown config key: {key}")
         os.environ[key] = str(value)
 
-    # 同步写入 .env 文件
-    _write_env_file()
+    # 修复:_write_env_file() 之前完全没有 try/except——Windows 上 .env 若被
+    # 杀毒软件/编辑器占用锁定,或所在目录权限不足,write_text() 会抛
+    # PermissionError,FastAPI 缺省转成裸 500、无任何 detail,前端只能显示
+    # "保存失败"四个字,排查全靠猜。这里显式捕获并把真实原因透传出去。
+    try:
+        _write_env_file()
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"写入 .env 失败: {exc}(检查文件是否被占用/只读，或目录权限）",
+        ) from exc
 
     # 若改动涉及模型 API（llm 类），热刷新 LLM 路由器，让新填的 key 即时生效（无需重启）。
     refreshed = None
@@ -198,6 +222,71 @@ async def save_config():
     """强制保存当前配置到 .env"""
     _write_env_file()
     return {"success": True}
+
+
+class ProbeRequest(BaseModel):
+    keys: list[str]
+
+
+def _probe_one(raw: str) -> Dict[str, Any]:
+    """对单个地址做同步 TCP 连接探测(在线程池里跑,不阻塞事件循环)。"""
+    import socket
+    import time as _time
+    from urllib.parse import urlsplit
+
+    raw = raw.strip()
+    if not raw:
+        return {"reachable": False, "latency_ms": None, "error": "未配置"}
+
+    # 补默认 scheme,方便 urlsplit 解析出 host/port(例如 "localhost:4222"
+    # 这种没写 scheme 的值)。
+    parseable = raw if "://" in raw else f"tcp://{raw}"
+    parsed = urlsplit(parseable)
+    host = parsed.hostname
+    port = parsed.port or {"http": 80, "https": 443, "redis": 6379, "nats": 4222}.get(parsed.scheme)
+
+    if not host or not port:
+        return {"reachable": False, "latency_ms": None, "error": f"无法解析地址: {raw}"}
+
+    start = _time.monotonic()
+    try:
+        with socket.create_connection((host, port), timeout=1.5):
+            latency_ms = round((_time.monotonic() - start) * 1000, 1)
+            return {"reachable": True, "latency_ms": latency_ms, "error": None}
+    except OSError as exc:
+        return {"reachable": False, "latency_ms": None, "error": str(exc)}
+
+
+@router.post("/probe")
+async def probe_config_urls(req: ProbeRequest):
+    """对「设置」tab 里 type=url 的项做真实连通性探测(TCP 连接,不识别协议)。
+
+    背景:「端口与节点」「网络」「组网」这几个分类之前只是纯文本配置编辑器——
+    值本身是真实的(读写 os.environ/.env),但用户在设置页完全看不到"这个地址
+    现在到底通不通"，被误认为"没有接真实数据"。这里补一个真正的、非伪造的
+    连通性探测:对每个 key 解析出 host:port，尝试建立 TCP 连接(1.5s 超时)，
+    成功即视为"可达"，不需要认识每种协议(NATS/Redis/HTTP 等)的具体握手。
+    多个 key 用 asyncio.to_thread 并发探测,避免阻塞事件循环、也避免用户等待
+    N 个地址依次超时的总时长。
+    """
+    import asyncio as _asyncio
+
+    to_probe: Dict[str, str] = {}
+    results: Dict[str, Dict[str, Any]] = {}
+    for key in req.keys:
+        meta = CONFIG_SCHEMA.get(key)
+        if meta is None or meta.get("type") != "url":
+            results[key] = {"reachable": False, "latency_ms": None, "error": "not a url-type key"}
+            continue
+        to_probe[key] = os.environ.get(key, meta["default"])
+
+    if to_probe:
+        probed = await _asyncio.gather(
+            *(_asyncio.to_thread(_probe_one, raw) for raw in to_probe.values())
+        )
+        results.update(zip(to_probe.keys(), probed))
+
+    return {"results": results}
 
 
 def _write_env_file():
