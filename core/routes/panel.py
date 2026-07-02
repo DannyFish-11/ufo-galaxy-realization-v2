@@ -149,8 +149,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             for k in ("tri_state_phase", "presence_intensity", "coherence"):
                 if k in p:
                     feed[k] = p[k]
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("panel feed: 相位/presence 聚合失败: %s", exc)
 
         # MCP 服务器 + Skills(来自 CapabilityRegistry)
         try:
@@ -189,8 +189,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 pass
             if skills:
                 feed["skills"] = skills
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("panel feed: MCP/Skills 聚合失败: %s", exc)
 
         # LLM 路由 active providers
         try:
@@ -199,26 +199,47 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             provs = list(getattr(r, "providers", {}) or {})
             if provs:
                 feed["llm_routing"] = {"active_providers": provs, "last_model_used": getattr(r, "_last_model", "") or ""}
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("panel feed: LLM 路由聚合失败: %s", exc)
 
         # OpenClawd 运行状态
+        #
+        # 修复:get_openclawd().get_status() 实际返回的是嵌套结构
+        # {"openclawd": {"initialized", "request_count", "uptime_seconds", ...},
+        #  "agent_factory": {"total_agents", "by_state", ...}, "llm_router": {...}, ...}——
+        # 之前这里直接 st.get("runtime_state")/st.get("phase")/st.get("active_tasks") 等
+        # 顶层键从来就不存在,每次都无声地落到 .get(..., 默认值),导致面板"运行"永远显示
+        # RUNNING、"任务"永远是 0 活跃、诊断抽屉 uptime 永远是 0s——看起来像实时遥测,
+        # 实际是写死的默认值。这里改成从真实嵌套字段取。
         try:
             from core.openclawd import get_openclawd
             st = await get_openclawd().get_status()
             if isinstance(st, dict):
+                oc = st.get("openclawd", {}) or {}
+                by_state = (st.get("agent_factory", {}) or {}).get("by_state", {}) or {}
+                active_agent_states = ("working", "waiting", "splitting")
+                try:
+                    from core.routes._shared import registered_devices as _rd
+                    connected_devices = len(_rd)
+                except Exception:  # noqa: BLE001
+                    connected_devices = 0
+                try:
+                    from core.nats_bus import get_nats_bus as _get_bus
+                    last_tick = int(_get_bus().get_stats().get("messages_received", 0))
+                except Exception:  # noqa: BLE001
+                    last_tick = 0
                 feed["openclawd_status"] = {
-                    "runtimeState": str(st.get("runtime_state") or st.get("state") or "RUNNING").upper(),
-                    "phase": st.get("phase", "silent"),
-                    "coherence": st.get("coherence", 0.95),
-                    "activeTasks": st.get("active_tasks", 0),
-                    "completedTasks": st.get("completed_tasks", 0),
-                    "connectedDevices": st.get("connected_devices", 0),
-                    "lastTick": st.get("last_tick", 0),
-                    "uptime": st.get("uptime", 0),
+                    "runtimeState": "RUNNING" if oc.get("initialized") else "RESTARTING",
+                    "phase": feed.get("tri_state_phase", "silent"),
+                    "coherence": feed.get("coherence", 0.0),
+                    "activeTasks": sum(by_state.get(s, 0) for s in active_agent_states),
+                    "completedTasks": by_state.get("completed", 0),
+                    "connectedDevices": connected_devices,
+                    "lastTick": last_tick,
+                    "uptime": oc.get("uptime_seconds", 0),
                 }
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("panel feed: OpenClawd 状态聚合失败: %s", exc)
 
         # 节点/设备拓扑（真实设备列表 + 边）
         try:
@@ -275,10 +296,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             }
             feed["topology_nodes"] = topo_nodes
             feed["topology_edges"] = topo_edges
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("panel feed: 节点拓扑聚合失败: %s", exc)
 
-        # Mesh 会话（NATS bus 真实状态）
+        # Mesh 会话（NATS bus 连接状态 + BodyMeshRegistry 真实参与者）
         try:
             from core.nats_bus import get_nats_bus
             import time as _time
@@ -286,12 +307,31 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             stats = bus.get_stats()
             noop = bool(stats.get("noop_mode"))
             connected = bool(stats.get("connected"))
+
+            # 修复:之前 participants 无条件写死 []、barrierStatus 无条件写死 "open"——
+            # NATS bus 本身只是消息总线,没有"参与者"/"barrier"概念,之前的 "open" 纯属
+            # 编造。真实的 mesh 参与者来自 BodyMeshRegistry(设备注册进 mesh 时写入),
+            # 这里改成读它的真实条目;没有条目时诚实显示空列表 + "n/a",不再编造状态。
+            participants = []
+            try:
+                from core.mesh.body_mesh_registry import get_body_mesh_registry
+                for entry in get_body_mesh_registry().list_entries():
+                    roles = sorted(r.value for r in entry.roles)
+                    participants.append({
+                        "nodeId": entry.device_id,
+                        "role": roles[0] if roles else "participant",
+                        "status": "active" if entry.session_id else "idle",
+                        "lastSeen": int(entry.registered_at * 1000),
+                    })
+            except Exception:  # noqa: BLE001
+                pass
+
             feed["mesh_session"] = {
                 "sessionId": "local" if noop else "nats-mesh",
                 "status": "closed" if noop else ("active" if connected else "pending"),
-                "barrierStatus": "n/a" if noop else "open",
+                "barrierStatus": "active" if participants else "n/a",
                 "tickSequence": stats.get("messages_received", 0),
-                "participants": [],
+                "participants": participants,
                 "createdAt": int(_time.time() * 1000),
             }
             # NATS 订阅主题作为消息日志条目
@@ -307,8 +347,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 }
                 for i, s in enumerate(subjects[:20])
             ]
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             # 无 NATS 时返回空列表，不伪造
+            logger.debug("panel feed: Mesh/NATS 聚合失败: %s", exc)
             feed.setdefault("mesh_session", {
                 "sessionId": "local",
                 "status": "closed",
@@ -328,8 +369,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 "tokens_input": int(cs.get("total_input_tokens", 0)),
                 "tokens_output": int(cs.get("total_output_tokens", 0)),
             }
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("panel feed: 成本汇总聚合失败: %s", exc)
 
         return JSONResponse(content={"success": True, "feed": feed})
 

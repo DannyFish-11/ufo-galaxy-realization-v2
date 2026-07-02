@@ -17,7 +17,6 @@ interface PerceptionStatus {
   camera: boolean;
   screen: boolean;
   audio: boolean;
-  model: string;
 }
 
 function usePerception(): PerceptionStatus {
@@ -25,7 +24,6 @@ function usePerception(): PerceptionStatus {
     camera: false,
     screen: false,
     audio: false,
-    model: '',
   });
 
   useEffect(() => {
@@ -37,11 +35,15 @@ function usePerception(): PerceptionStatus {
         const resp = await fetch(`${base}/api/perception/desktop/status`);
         if (resp.ok && alive) {
           const d = await resp.json();
+          // 修复:后端 /api/perception/desktop/status 返回 {success, store: {...}}——
+          // 字段全部嵌在 store 下,之前直接读 d.camera_received 等顶层键,永远是
+          // undefined,导致"感知·SENSES"三个药丸无论摄像头/屏幕/麦克风是否真的在
+          // 工作,永远显示未激活。
+          const s = d?.store ?? {};
           setP({
-            camera: Boolean(d?.camera_received ?? d?.camera ?? d?.camera_fresh),
-            screen: Boolean(d?.screen_received ?? d?.screen ?? d?.screen_fresh),
-            audio: Boolean(d?.audio_received ?? d?.audio ?? d?.audio_fresh),
-            model: String(d?.model ?? ''),
+            camera: Boolean(s.camera_received ?? s.camera_fresh),
+            screen: Boolean(s.screen_received ?? s.screen_fresh),
+            audio: Boolean(s.audio_received ?? s.audio_fresh),
           });
         }
       } catch {
@@ -72,7 +74,7 @@ export default function PresencePanel({ phase, streaming, data, turns = [], spea
   const perc = usePerception();
   const intensity = Math.round((data.presenceIntensity || 0) * 100);
   const coherence = Math.round((data.coherence || 0) * 100);
-  const model = data.llmRouting?.lastModelUsed || perc.model || '—';
+  const model = data.llmRouting?.lastModelUsed || '—';
 
   // 实时上下文自动滚到底
   const ctxRef = useRef<HTMLDivElement | null>(null);

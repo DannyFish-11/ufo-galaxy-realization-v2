@@ -218,15 +218,8 @@ def _write_env_file():
     ENV_FILE.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _load_env_file():
-    """启动时从 .env 加载配置到环境变量"""
-    if not ENV_FILE.exists():
-        return
-    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        if key and key not in os.environ:
-            os.environ[key] = value.strip()
+# 注:曾经这里有一个 _load_env_file()——但全仓库排查确认它从未被任何地方调用过,
+# 是一段死代码(容易让人误以为"config.py 会自己加载 .env"从而误删/误改
+# main.py 顶部真正生效的 dotenv.load_dotenv() 那段逻辑,造成隐蔽回归)。
+# .env → os.environ 的真正加载点在 main.py / unified_launcher.py 顶部
+# 的 load_dotenv() 调用,已删除此处死代码。

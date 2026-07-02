@@ -64,6 +64,7 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
+from typing import Optional
 
 from core.ascii_art import print_banner, print_section_header, print_status_row
 
@@ -483,7 +484,18 @@ def start_gateway_backend():
         raise
 
 
-def start_electron_frontend() -> subprocess.Popen:
+def start_electron_frontend() -> Optional[subprocess.Popen]:
+    from core.electron_launch_guard import already_running, resolve_gateway_port, write_lock
+
+    # PR-ELECTRON-DEDUP: start_gateway_backend() 把整个 `python main.py` 拉起为子
+    # 进程,而 main.py 内部本身就含两条桌面壳启动路径(Phase 6 + unified_launcher)。
+    # 之前这里毫不知情地再起第三次,单次 `python launch_desktop.py` 最多触发 3 次
+    # 独立的 Electron 拉起尝试。共享同一把锁后,只要 main.py 子进程内部已经成功
+    # 拉起(通常会更快抢到锁),这里直接跳过。
+    if already_running():
+        logger.info("  Electron 桌面覆盖层已由后端子进程拉起，跳过重复启动")
+        return None
+
     logger.info("  启动 Electron 桌面覆盖层...")
     node_modules = ELECTRON_DIR / "node_modules"
     npm = shutil.which("npm")
@@ -499,12 +511,17 @@ def start_electron_frontend() -> subprocess.Popen:
     env = os.environ.copy()
     env["ELECTRON_ENABLE_LOGGING"] = "1"
     env["PATH"] = str(Path(npm).parent) + os.pathsep + env.get("PATH", "")
+    # 同步真实网关端口给 Electron——之前这里完全不注入,Electron 只能猜默认 9000。
+    env["GALAXY_GATEWAY_PORT"] = str(resolve_gateway_port())
+    env.setdefault("PORT", env["GALAXY_GATEWAY_PORT"])
     # PR-WIN-ELECTRON: Windows needs DETACHED_PROCESS for clean Electron start
     popen_kwargs = {}
     if sys.platform == "win32":
         popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-    return subprocess.Popen([npx, "electron", "."], cwd=str(ELECTRON_DIR), env=env,
+    proc = subprocess.Popen([npx, "electron", "."], cwd=str(ELECTRON_DIR), env=env,
                             stdout=None, stderr=None, **popen_kwargs)
+    write_lock(proc.pid)
+    return proc
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -561,6 +578,9 @@ def main():
             sys.exit(1)
         global _proc_electron
         _proc_electron = start_electron_frontend()
+        if _proc_electron is None:
+            logger.info("桌面覆盖层已由其他启动路径拉起，本进程无需再等待")
+            return
         _proc_electron.wait()
         return
 
@@ -620,7 +640,10 @@ def main():
     banner("Phase 4: 启动三态桌面覆盖层")
     try:
         _proc_electron = start_electron_frontend()
-        ok(f"Electron 启动 ✓ PID={_proc_electron.pid}")
+        if _proc_electron is not None:
+            ok(f"Electron 启动 ✓ PID={_proc_electron.pid}")
+        else:
+            ok("Electron 已由后端子进程内部启动路径拉起 ✓")
     except RuntimeError as e:
         fail(str(e))
         kill_proc(_proc_gateway, "Gateway")
@@ -643,7 +666,7 @@ def main():
                 kill_proc(_proc_electron, "Electron")
                 sys.exit(1)
 
-            if _proc_electron.poll() is not None:
+            if _proc_electron is not None and _proc_electron.poll() is not None:
                 code = _proc_electron.returncode
                 logger.warning("Electron 已退出 (code=%d)", code)
                 logger.info("Gateway 仍在后台运行。按 Ctrl+C 完全退出。")

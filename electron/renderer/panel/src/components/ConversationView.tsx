@@ -21,11 +21,35 @@ const WELCOME: Message = {
   content: '你好，我是 Galaxy。说点什么，或交给我一件事。',
 };
 
+const SESSION_STORAGE_KEY = 'galaxy_session_id';
+
+/** 读取上次持久化的会话 id;取不到(隐私模式/首次运行)则返回空串。 */
+function loadPersistedSessionId(): string {
+  try {
+    return localStorage.getItem(SESSION_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+/** 修复:sessionIdRef 之前永远从 '' 起步、且从未持久化——每次面板重开/刷新都会
+ * 丢失会话 id,导致挂载时的 fetchHistory(sessionIdRef.current) 恒等于
+ * fetchHistory('')(在 lib/api.ts 里直接短路返回 []),历史消息永远拉不回来，
+ * 界面上"看似能恢复会话"实为死代码。这里把 session_id 存进 localStorage，
+ * 挂载时先读回来，让"进入时拉历史"真正生效。 */
+function persistSessionId(id: string): void {
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, id);
+  } catch {
+    /* 隐私模式等场景下持久化失败不影响当次对话 */
+  }
+}
+
 export default function ConversationView({ onStreamPhase }: ConversationViewProps) {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const sessionIdRef = useRef('');
+  const sessionIdRef = useRef(loadPersistedSessionId());
   const idRef = useRef(1);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -86,7 +110,10 @@ export default function ConversationView({ onStreamPhase }: ConversationViewProp
         onEvent: (ev) => {
           switch (ev.type) {
             case 'meta':
-              if (ev.session_id) sessionIdRef.current = ev.session_id;
+              if (ev.session_id) {
+                sessionIdRef.current = ev.session_id;
+                persistSessionId(ev.session_id);
+              }
               break;
             case 'phase':
               if (ev.phase) onStreamPhase?.(ev.phase);

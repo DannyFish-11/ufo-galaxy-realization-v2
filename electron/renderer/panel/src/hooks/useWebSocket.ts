@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { WebSocketMessage } from '@/types/phase';
+import { getBackendUrl } from '@/lib/api';
 
-// P25 修复：端口统一为 9000（与主窗口 app.js 一致）
-const WS_URL = 'ws://localhost:9000/ws/desktop-presence';
 // P26 修复：指数退避参数（与主窗口 app.js 保持一致）
 const RECONNECT_BASE_INTERVAL = 1000;
 const RECONNECT_MAX_INTERVAL = 30000;
@@ -21,12 +20,19 @@ export function useWebSocket(): UseWebSocketReturn {
   const reconnectAttemptsRef = useRef(0);
   const isMountedRef = useRef(true);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!isMountedRef.current) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     try {
-      const ws = new WebSocket(WS_URL);
+      // 修复:之前硬编码 ws://localhost:9000,与「设置」tab 里可编辑的网关端口
+      // (GATEWAY_PORT)完全脱节——用户改了端口,WS 仍悄悄连着旧端口,永远连不上,
+      // 面板只能靠慢速 IPC 轮询兜底,且没有任何可见报错。这里改成跟 REST 请求
+      // 共用同一套后端地址解析(getBackendUrl),端口一致，来源单一。
+      const base = await getBackendUrl();
+      if (!isMountedRef.current) return;
+      const wsUrl = base.replace(/^http/, 'ws') + '/ws/desktop-presence';
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
