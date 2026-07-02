@@ -1,4 +1,5 @@
 import type { Phase } from '@/types/phase';
+import { PHASE_ZH, TRI_PHASE_ORDER } from '@/types/phase';
 
 export interface TabDef {
   key: string;
@@ -54,10 +55,17 @@ export default function IconRail({
         >
           <span className="rail-icon">{ICONS.diagnostics}</span>
         </button>
-        <span
-          className={`rail-status phase-${phase} ${connected ? 'connected' : ''}`}
-          title={connected ? '已连接' : '未连接'}
-        />
+        <div
+          className={`tri-compact ${connected ? 'connected' : ''}`}
+          title={connected ? `三态 · ${PHASE_ZH[phase]}` : '未连接'}
+        >
+          {TRI_PHASE_ORDER.map((p) => (
+            <span
+              key={p}
+              className={`tri-compact-dot tri-${p} ${phase === p ? 'active' : ''}`}
+            />
+          ))}
+        </div>
       </div>
     </nav>
   );

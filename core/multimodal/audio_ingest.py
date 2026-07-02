@@ -178,7 +178,32 @@ class AudioIngestPipeline:
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
             self._quality = SignalQuality.degraded(str(exc))
-            logger.warning("Audio ingest error: %s", exc)
+            # 真机常见:PortAudio "Unanticipated host error [PaErrorCode -9999]" +
+            # "MME error 1" —— Windows MME 后端打不开默认录音设备的经典组合，
+            # 通常是驱动/独占模式占用问题，与本仓库代码无关，此环境也无法复现。
+            # 之前只打一行原始异常文本，排查时两眼一抹黑。这里在同一次失败里
+            # 顺手枚举一次可用设备/host API，把诊断信息打进同一条日志——下次
+            # 真机复现时，日志本身就能看出"到底有没有可用设备、默认设备是谁"，
+            # 而不必再靠猜。绝不影响主流程(仅诊断，任何异常都吞掉)。
+            _diag = ""
+            try:
+                devices = sd.query_devices()
+                hostapis = sd.query_hostapis()
+                default_in = sd.default.device[0] if hasattr(sd.default, "device") else None
+                _diag = (
+                    f" | 诊断:默认输入设备索引={default_in}，"
+                    f"可用设备数={len(devices)}，"
+                    f"host API={[h.get('name') for h in hostapis]}"
+                )
+            except Exception:
+                _diag = " | 诊断:枚举设备本身也失败(可能压根没有录音设备)"
+            logger.warning(
+                "Audio ingest error: %s%s —— 常见于 Windows MME 后端打不开默认"
+                "录音设备(驱动/独占模式占用);不影响其它功能，语音走独立的 "
+                "Whisper 采集路径。可尝试:Windows 声音设置 → 录制 → 默认设备 "
+                "→ 属性 → 高级 → 取消勾选\"允许应用程序独占控制\"。",
+                exc, _diag,
+            )
         finally:
             self._running = False
             logger.info("Audio ingest stopped")
