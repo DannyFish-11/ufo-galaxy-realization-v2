@@ -37,8 +37,8 @@
   width: 18px;
   height: 18px;
   border-radius: var(--r-pill);
-  background: radial-gradient(circle at 35% 30%, var(--phase-manifest), var(--accent-press));
-  box-shadow: var(--glow-accent);
+  background: radial-gradient(circle at 32% 30%, var(--avatar-from), var(--avatar-via) 55%, var(--avatar-to));
+  box-shadow: var(--avatar-glow);
 }
 
 .rail-tabs {
@@ -91,19 +91,53 @@
   align-items: center;
   gap: var(--md);
 }
-.rail-status {
+
+/* 三态紧凑指示点 — 面板左下角,像 macOS 窗口那三颗交通灯一样紧凑排列,
+   黑(静态)/灰(阈限态)/白(显现态) 依次递进,当前态呼吸脉冲 + 平滑过渡。 */
+.tri-compact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px;
+  opacity: 0.55;
+  transition: opacity var(--base) var(--ease);
+}
+.tri-compact.connected {
+  opacity: 1;
+}
+.tri-compact-dot {
   width: 8px;
   height: 8px;
   border-radius: var(--r-pill);
-  background: var(--text-muted);
-  opacity: 0.5;
+  background: var(--tri-idle);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  transform: scale(0.82);
+  transition:
+    background-color var(--base) var(--ease),
+    box-shadow var(--base) var(--ease),
+    transform var(--base) var(--ease);
 }
-.rail-status.connected {
-  opacity: 1;
+.tri-compact-dot.active {
+  transform: scale(1);
+  box-shadow: inset 0 0 0 1px var(--tri-ring);
 }
-.rail-status.phase-silent.connected { background: var(--phase-silent); }
-.rail-status.phase-liminal.connected { background: var(--phase-liminal); animation: pulse 1.8s var(--ease) infinite; }
-.rail-status.phase-manifest.connected { background: var(--phase-manifest); }
+.tri-compact-dot.tri-silent.active {
+  background: var(--tri-silent);
+  box-shadow: inset 0 0 0 1px var(--tri-ring), 0 0 6px rgba(0, 0, 0, 0.6);
+}
+.tri-compact-dot.tri-liminal.active {
+  background: var(--tri-liminal);
+  box-shadow: inset 0 0 0 1px var(--tri-ring), 0 0 8px rgba(146, 150, 161, 0.6);
+  animation: tri-breathe 1.7s var(--ease) infinite;
+}
+.tri-compact-dot.tri-manifest.active {
+  background: var(--tri-manifest);
+  box-shadow: inset 0 0 0 1px var(--tri-ring), 0 0 9px rgba(243, 244, 247, 0.65);
+}
+@keyframes tri-breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.28); opacity: 0.72; }
+}
 
 /* ── 中:舞台 ──────────────────────────────────────────────── */
 .stage {
@@ -275,20 +309,19 @@
   height: 40px;
   flex: none;
   border-radius: var(--r-pill);
-  background: var(--phase-silent);
-  transition: background var(--slow) var(--ease), box-shadow var(--slow) var(--ease);
+  background: radial-gradient(circle at 32% 28%, var(--avatar-from), var(--avatar-via) 55%, var(--avatar-to));
+  box-shadow: var(--avatar-glow);
+  transition: box-shadow var(--slow) var(--ease), transform var(--slow) var(--ease);
 }
 .orb.phase-silent {
-  background: radial-gradient(circle at 35% 30%, #b8a36a, var(--phase-silent));
+  opacity: 0.82;
 }
 .orb.phase-liminal {
-  background: radial-gradient(circle at 35% 30%, var(--phase-manifest), var(--phase-liminal));
-  box-shadow: var(--glow-accent);
+  box-shadow: var(--avatar-glow), 0 0 24px rgba(63, 212, 240, 0.3);
   animation: pulse 1.8s var(--ease) infinite;
 }
 .orb.phase-manifest {
-  background: radial-gradient(circle at 35% 30%, #fff0cf, var(--phase-manifest));
-  box-shadow: var(--glow-accent);
+  box-shadow: var(--avatar-glow), 0 0 30px rgba(230, 62, 200, 0.4);
 }
 .presence-state {
   font-size: 17px;
@@ -302,32 +335,6 @@
 .presence-section {
   display: flex;
   flex-direction: column;
-}
-
-/* 三态点 */
-.tri-dots {
-  display: flex;
-  justify-content: space-between;
-}
-.tri-dot-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--xs);
-}
-.tri-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.12);
-  transition: all var(--base) var(--ease);
-}
-.tri-dot.active.phase-silent { background: var(--phase-silent); }
-.tri-dot.active.phase-liminal { background: var(--phase-liminal); box-shadow: var(--glow-accent); animation: pulse 1.8s var(--ease) infinite; }
-.tri-dot.active.phase-manifest { background: var(--phase-manifest); box-shadow: var(--glow-accent); }
-.tri-dot-label {
-  font-size: 11px;
-  color: var(--text-muted);
 }
 
 /* 进度条 */

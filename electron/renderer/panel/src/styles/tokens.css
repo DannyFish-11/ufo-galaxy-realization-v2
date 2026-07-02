@@ -23,10 +23,23 @@
   --accent-dim: #8b6820;
   --on-accent: #1f0e00;
 
-  /* 三态 */
+  /* 三态(桌面浮层 · 暖金氛围光,勿改) */
   --phase-silent: #7a5820;
   --phase-liminal: #ffeb97;
   --phase-manifest: #fff5c8;
+
+  /* 三态紧凑指示点(面板左下角 · 黑灰白,呼应静态/阈限态/显现态的递进) */
+  --tri-silent: #101114;
+  --tri-liminal: #9296a1;
+  --tri-manifest: #f3f4f7;
+  --tri-ring: rgba(255, 255, 255, 0.22);
+  --tri-idle: rgba(255, 255, 255, 0.14);
+
+  /* 头像/品牌点(与 app 图标里的光球同色系:青 → 紫罗兰 → 洋红) */
+  --avatar-from: #3fd4f0;
+  --avatar-via: #8b6ef0;
+  --avatar-to: #e63ec8;
+  --avatar-glow: 0 0 20px rgba(139, 110, 240, 0.4);
 
   /* 语义(柔和) */
   --success: #74b79a;

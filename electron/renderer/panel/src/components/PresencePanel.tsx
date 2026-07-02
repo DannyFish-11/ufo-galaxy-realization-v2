@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Phase } from '@/types/phase';
+import { PHASE_ZH } from '@/types/phase';
 import type { PanelData } from '@/hooks/usePanelData';
 import type { ConversationTurn } from '@/hooks/useConversation';
 import { getBackendUrl } from '@/lib/api';
@@ -11,12 +12,6 @@ interface PresencePanelProps {
   turns?: ConversationTurn[];
   speaking?: boolean;
 }
-
-const PHASE_LABEL: Record<Phase, string> = {
-  silent: '待机',
-  liminal: '思考中',
-  manifest: '表达中',
-};
 
 interface PerceptionStatus {
   camera: boolean;
@@ -90,7 +85,7 @@ export default function PresencePanel({ phase, streaming, data, turns = [], spea
       <div className="presence-head">
         <div className={`orb phase-${phase}`} />
         <div className="presence-title">
-          <div className="presence-state">{PHASE_LABEL[phase]}</div>
+          <div className="presence-state">{PHASE_ZH[phase]}</div>
           <div className="presence-sub">
             {speaking ? '正在朗读…' : streaming ? '正在实时生成…' : '在场'}
           </div>
@@ -112,20 +107,6 @@ export default function PresencePanel({ phase, streaming, data, turns = [], spea
               </div>
             ))
           )}
-        </div>
-      </div>
-
-      <div className="presence-section">
-        <div className="section-header">三态 · TRI-STATE</div>
-        <div className="tri-dots">
-          {(['silent', 'liminal', 'manifest'] as Phase[]).map((p) => (
-            <div key={p} className="tri-dot-wrap">
-              <span
-                className={`tri-dot phase-${p} ${phase === p ? 'active' : ''}`}
-              />
-              <span className="tri-dot-label">{PHASE_LABEL[p]}</span>
-            </div>
-          ))}
         </div>
       </div>
 

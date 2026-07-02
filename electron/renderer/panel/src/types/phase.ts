@@ -37,3 +37,13 @@ export const PHASE_CONFIG: Record<Phase, PhaseConfig> = {
     panelClass: 'phase-manifest',
   },
 };
+
+/** 三态中文名 — 静态(silent)/阈限态(liminal)/显现态(manifest),面板与左下角紧凑指示点共用。 */
+export const PHASE_ZH: Record<Phase, string> = {
+  silent: '静态',
+  liminal: '阈限态',
+  manifest: '显现态',
+};
+
+/** 三态紧凑指示点顺序,固定为 静态 → 阈限态 → 显现态,对应黑 → 灰 → 白。 */
+export const TRI_PHASE_ORDER: Phase[] = ['silent', 'liminal', 'manifest'];
