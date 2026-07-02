@@ -37,8 +37,21 @@ function App() {
     handleMessage(lastMessage);
   }, [lastMessage, handleMessage]);
 
-  // 有效三态:对话流式态优先 > 任一通道(IPC feed / WS)的非待机态 > 待机
-  const ambient: Phase = panelData.phase !== 'silent' ? panelData.phase : wsPhase;
+  // 有效三态:对话流式态优先 > 实时 WS 相位(真实请求驱动,权威) > IPC 慢轮询
+  // feed(仅 WS 未连接时兜底)。
+  //
+  // 关键修复:之前反过来——IPC feed 非待机就优先于 WS。但 IPC feed
+  // (/api/v1/panel/feed，5 秒轮询一次)的相位来自 unified_panel_aggregation
+  // 的 _fill_from_runtime_projection：它读的是 DesktopPresenceRuntime【单例】
+  // 上一个从未被赋值过的 _continuum_state 属性(真正的相位只挂在每次请求的
+  // RuntimeSession 上，从未回写到单例)，永远取不到，于是落到
+  // core.cognitive_field_engine 的独立"认知场"环境模拟状态兜底——这套状态
+  // 跟真实对话请求的生命周期完全不同步。一旦轮询恰好读到它的非 silent 值，
+  // 就会把这个跟对话无关的态摆在最前，面板表现为"直接跳到表达中"且卡住不回
+  // 待机(因为它不是被真实请求的 SILENT→LIMINAL→MANIFEST→SILENT 驱动的)。
+  // 而 WS(/ws/desktop-presence)由 GalaxyPresenceBridge 订阅 StateEventBus，
+  // 是真正跟随每次请求实时更新的权威源——WS 已连接时应始终优先于慢轮询 feed。
+  const ambient: Phase = connected ? wsPhase : panelData.phase;
   const effectivePhase: Phase = streamPhase ?? ambient;
   const streaming = streamPhase !== null;
 
