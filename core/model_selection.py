@@ -216,12 +216,19 @@ def background_pull(tag: str) -> None:
             if proc.returncode == 0:
                 print(f"  ✓ 本地主脑模型已就绪:{tag}")
             else:
-                # 关键:不要静默吞掉失败——最常见原因是模型 tag 不存在于 Ollama 库
-                # (例如 gemma4 尚未在 Ollama 官方库,应改用 gemma3/gemma2 等真实 tag)。
+                # 关键:不要静默吞掉失败。gemma4/minicpm-o4.5 是较新的 Ollama 库条目,
+                # 最常见失败原因是本地 Ollama 版本过旧(不认识这些较新 tag/family)。
                 _err = (proc.stderr or proc.stdout or "").strip()[:300]
                 print(f"  ⚠ 本地主脑模型拉取失败:{tag} — {_err}")
-                print(f"     可先在「模型」tab 填一个云端 API Key(DeepSeek/通义/Claude…)作为主力,")
-                print(f"     或用 `ollama list` 确认可用 tag、`ollama pull <正确tag>` 手动拉取。")
+                try:
+                    _ver = subprocess.run(["ollama", "--version"], capture_output=True, text=True,
+                                          encoding="utf-8", errors="replace", timeout=5).stdout.strip()
+                    print(f"     当前 Ollama 版本:{_ver or '(未知)'}")
+                except Exception:
+                    pass
+                print(f"     最常见原因:Ollama 版本过旧,不认识 {root} 系列——请先 `ollama --version`")
+                print(f"     确认版本、需要时升级 Ollama 到最新版后重试 `ollama pull {tag}`。")
+                print(f"     也可先在「模型」tab 填一个云端 API Key(DeepSeek/通义/Claude…)作为主力兜底。")
         except Exception as exc:  # noqa: BLE001
             print(f"  ⚠ 本地主脑模型拉取异常:{tag} — {exc}")
 

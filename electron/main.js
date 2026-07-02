@@ -654,9 +654,10 @@ let _perceptionFailLogAt = 0;
 // ═══════════════════════════════════════════
 
 // 内存中的配置缓存
-let configCache = {};
+let configCache = {};      // 精简版(模型 tab):{api_base_url, ws_url, status, configured, values}
+let settingsCache = {};    // 完整明细(设置 tab):{KEY: {value, default, type, category, description}}
 
-// 从 Python 后端获取配置
+// 从 Python 后端获取配置(精简版 —— 模型 tab 消费)
 async function fetchConfigFromBackend() {
     try {
         const response = await fetch(`${GATEWAY_BASE}/api/config`);
@@ -670,9 +671,28 @@ async function fetchConfigFromBackend() {
     return configCache;
 }
 
-// GET 配置
+// 从 Python 后端获取完整配置明细(设置 tab 消费,与精简版不同路径,避免路由遮蔽)
+async function fetchSettingsFromBackend() {
+    try {
+        const response = await fetch(`${GATEWAY_BASE}/api/config/all`);
+        if (response.ok) {
+            settingsCache = await response.json();
+            return settingsCache;
+        }
+    } catch (e) {
+        console.error('[Main] Failed to fetch settings:', e.message);
+    }
+    return settingsCache;
+}
+
+// GET 配置(精简版 —— 模型 tab)
 ipcMain.handle('galaxy:get-config', async () => {
     return await fetchConfigFromBackend();
+});
+
+// GET 配置(完整明细 —— 设置 tab)
+ipcMain.handle('galaxy:get-settings', async () => {
+    return await fetchSettingsFromBackend();
 });
 
 // SET 配置（批量更新）
@@ -686,9 +706,14 @@ ipcMain.handle('galaxy:set-config', async (_, config) => {
         });
         if (response.ok) {
             configCache = { ...configCache, ...config };
-            // 广播到所有窗口
+            // 同步更新完整明细缓存里对应项的 value(保持 ConfigItem 形状,
+            // 不用裸字符串覆盖整项 —— 否则设置 tab 下次渲染会读到 undefined)。
+            Object.entries(config).forEach(([k, v]) => {
+                if (settingsCache[k]) settingsCache[k] = { ...settingsCache[k], value: v };
+            });
+            // 广播到所有窗口(裸的 {KEY: 新值} —— 由各 tab 自行按需合并到自己的形状)。
             BrowserWindow.getAllWindows().forEach(w => {
-                w.webContents.send('galaxy:config-update', configCache);
+                w.webContents.send('galaxy:config-update', config);
             });
             return { success: true };
         }

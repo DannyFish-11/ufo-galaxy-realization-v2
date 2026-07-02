@@ -147,9 +147,15 @@ class ConfigUpdateRequest(BaseModel):
     config: Dict[str, str]
 
 
-@router.get("")
+@router.get("/all")
 async def get_config():
-    """获取当前所有配置项（从环境变量 + 默认值合并）"""
+    """获取当前所有配置项（从环境变量 + 默认值合并）— 供「设置」tab 使用的完整明细。
+
+    注意:不是挂在裸路径 GET /api/config —— core/routes/system.py 的精简版
+    (仅 api_base_url/ws_url/status)先于本路由注册,会遮蔽同路径同方法的路由,
+    导致「设置」tab 拿到的永远是精简版、按 key 查不到任何一项 → 只见左侧分类
+    标签、右侧内容空白。故完整明细改挂 /api/config/all,与精简版共存不冲突。
+    """
     result = {}
     for key, meta in CONFIG_SCHEMA.items():
         result[key] = {

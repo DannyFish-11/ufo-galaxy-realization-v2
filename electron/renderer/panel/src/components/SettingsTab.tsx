@@ -15,8 +15,19 @@ export interface ConfigItem {
 interface GalaxyAPI {
   getConfig: () => Promise<Record<string, ConfigItem>>;
   setConfig: (config: Record<string, string>) => Promise<{ success: boolean }>;
-  onConfigUpdate: (callback: (config: Record<string, ConfigItem>) => void) => () => void;
+  // 完整明细(本 tab 用):与 getConfig 分开路径,避免后端 /api/config 路由遮蔽
+  // (system.py 精简版先注册、抢占同路径)导致这里永远读不到任何一项内容。
+  getSettings?: () => Promise<Record<string, ConfigItem>>;
+  onConfigUpdate: (callback: (changed: Record<string, string>) => void) => () => void;
   saveConfig: () => Promise<{ success: boolean }>;
+}
+
+// 浏览器预览兜底(无 galaxyAPI 时):直连后端完整明细端点。
+async function fetchSettings(): Promise<Record<string, ConfigItem>> {
+  if (window.galaxyAPI?.getSettings) return window.galaxyAPI.getSettings();
+  const r = await fetch('/api/config/all');
+  if (!r.ok) throw new Error(`/api/config/all ${r.status}`);
+  return r.json();
 }
 
 declare global {
@@ -238,10 +249,7 @@ export default function SettingsTab() {
     setLoading(true);
     setError(null);
     try {
-      if (!window.galaxyAPI) {
-        throw new Error('Galaxy API not available — running in browser mode?');
-      }
-      const data = await window.galaxyAPI.getConfig();
+      const data = await fetchSettings();
       setConfig(data);
       setChanged({});
     } catch (err) {
@@ -260,10 +268,16 @@ export default function SettingsTab() {
 
   useEffect(() => {
     if (!window.galaxyAPI) return;
-    const unsubscribe = window.galaxyAPI.onConfigUpdate((newConfig) => {
+    // 广播载荷是裸的 {KEY: 新值}(见 electron/main.js galaxy:set-config)，
+    // 按 key 合并进已有 ConfigItem 的 .value，不能整项覆盖(否则 .value 之外的
+    // type/category/description 会丢，渲染直接读到 undefined)。
+    const unsubscribe = window.galaxyAPI.onConfigUpdate((changed) => {
       setConfig((prev) => {
-        const merged = { ...prev, ...newConfig };
-        return merged;
+        const next = { ...prev };
+        Object.entries(changed).forEach(([k, v]) => {
+          if (next[k]) next[k] = { ...next[k], value: v };
+        });
+        return next;
       });
     });
     return () => unsubscribe();
