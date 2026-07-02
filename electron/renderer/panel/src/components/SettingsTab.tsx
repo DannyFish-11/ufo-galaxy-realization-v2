@@ -47,14 +47,14 @@ interface CategoryDef {
 
 // 注：模型 API（llm 类）已迁到专门的「模型」tab（ModelsTab），此处不再重复。
 const CATEGORIES: CategoryDef[] = [
-  { key: 'ports', label: 'Ports', icon: '🔌', count: 16 },
-  { key: 'auth', label: 'Auth', icon: '🔒', count: 12 },
-  { key: 'mesh', label: 'Mesh', icon: '🕸️', count: 11 },
-  { key: 'circuit', label: 'Circuit', icon: '⚡', count: 14 },
-  { key: 'storage', label: 'Storage', icon: '💾', count: 7 },
-  { key: 'dev', label: 'Dev', icon: '🛠️', count: 11 },
-  { key: 'network', label: 'Network', icon: '🌐', count: 7 },
-  { key: 'slo', label: 'SLO', icon: '📊', count: 7 },
+  { key: 'ports', label: '端口与节点', icon: '🔌', count: 16 },
+  { key: 'auth', label: '鉴权', icon: '🔒', count: 12 },
+  { key: 'mesh', label: '组网', icon: '🕸️', count: 11 },
+  { key: 'circuit', label: '限流熔断', icon: '⚡', count: 14 },
+  { key: 'storage', label: '存储', icon: '💾', count: 7 },
+  { key: 'dev', label: '开发者', icon: '🛠️', count: 11 },
+  { key: 'network', label: '网络', icon: '🌐', count: 7 },
+  { key: 'slo', label: '服务水平', icon: '📊', count: 7 },
 ];
 
 // ── Config Key Registry (105 items) ─────────────────────────────────
@@ -172,7 +172,7 @@ function PasswordInput({
         onClick={() => setVisible(!visible)}
         type="button"
         tabIndex={-1}
-        aria-label={visible ? 'Hide password' : 'Show password'}
+        aria-label={visible ? '隐藏' : '显示'}
       >
         {visible ? '🙈' : '👁️'}
       </button>
@@ -227,7 +227,7 @@ function LoadingSpinner() {
   return (
     <div className="settings-loading">
       <div className="settings-spinner" />
-      <span className="settings-loading-text">Loading configuration...</span>
+      <span className="settings-loading-text">正在读取配置…</span>
     </div>
   );
 }
@@ -253,7 +253,7 @@ export default function SettingsTab() {
       setConfig(data);
       setChanged({});
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load config';
+      const msg = err instanceof Error ? err.message : '加载配置失败';
       setError(msg);
     } finally {
       setLoading(false);
@@ -304,12 +304,17 @@ export default function SettingsTab() {
   // ── Save handler ─────────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
-    if (!window.galaxyAPI) {
-      showToast('Error: Galaxy API not available');
-      return;
-    }
     try {
-      const result = await window.galaxyAPI.setConfig(changed);
+      const result = window.galaxyAPI
+        ? await window.galaxyAPI.setConfig(changed)
+        : await (async () => {
+            const r = await fetch('/api/config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ config: changed }),
+            });
+            return { success: r.ok };
+          })();
       if (result.success) {
         setConfig((prev) => {
           const updated = { ...prev };
@@ -321,13 +326,13 @@ export default function SettingsTab() {
           return updated;
         });
         setChanged({});
-        showToast('Configuration saved successfully');
+        showToast('已保存并即时生效');
       } else {
-        showToast('Failed to save configuration');
+        showToast('保存失败');
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Save failed';
-      showToast(`Error: ${msg}`);
+      const msg = err instanceof Error ? err.message : '';
+      showToast(`保存出错：${msg}`);
     }
   }, [changed, showToast]);
 
@@ -357,7 +362,7 @@ export default function SettingsTab() {
         return (
           <PasswordInput
             value={currentValue}
-            placeholder={item.default || 'Enter value'}
+            placeholder={item.default || '请输入…'}
             onChange={(v) => handleChange(key, v)}
           />
         );
@@ -409,7 +414,7 @@ export default function SettingsTab() {
             type="text"
             className="settings-input"
             value={currentValue}
-            placeholder={item.default || 'Enter value'}
+            placeholder={item.default || '请输入…'}
             onChange={(e) => handleChange(key, e.target.value)}
           />
         );
@@ -484,7 +489,7 @@ export default function SettingsTab() {
             <div className="settings-error-icon">⚠️</div>
             <div className="settings-error-text">{error}</div>
             <button className="settings-btn settings-btn-retry" onClick={loadConfig}>
-              Retry
+              重试
             </button>
           </div>
         ) : (
@@ -493,7 +498,7 @@ export default function SettingsTab() {
               <h2 className="settings-group-title">
                 {activeLabel}
                 <span className="settings-count">
-                  {CONFIG_KEYS[activeCategory]?.length ?? 0} items
+                  {CONFIG_KEYS[activeCategory]?.length ?? 0} 项
                 </span>
               </h2>
               <div className="settings-list">{renderCategoryItems()}</div>
@@ -506,14 +511,14 @@ export default function SettingsTab() {
                 onClick={handleCancel}
                 disabled={!isDirty}
               >
-                Cancel
+                放弃
               </button>
               <button
                 className={`settings-btn settings-btn-save ${isDirty ? 'dirty' : ''}`}
                 onClick={handleSave}
                 disabled={!isDirty}
               >
-                Save Changes
+                保存
                 {isDirty && (
                   <span className="settings-dirty-badge">
                     {Object.keys(changed).length}
