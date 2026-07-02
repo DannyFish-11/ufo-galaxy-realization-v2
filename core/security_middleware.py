@@ -502,6 +502,7 @@ def create_rate_limit_middleware(app, rate_limiter: Optional[RateLimiter] = None
     """
     创建速率限制中间件
     """
+    import os
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
@@ -509,12 +510,31 @@ def create_rate_limit_middleware(app, rate_limiter: Optional[RateLimiter] = None
     if rate_limiter is None:
         rate_limiter = RateLimiter()
 
+    # 关键修复:真机复现过——本机桌面应用(Electron 主进程 + 渲染层 + 面板轮询 +
+    # WS + 桌面连续感知帧上传)全部从 127.0.0.1 打向同一个本地后端，按 IP 分桶
+    # 的速率限制器把它们全算作【同一个客户端】共用一个令牌桶(默认 120 req/min、
+    # 突发 30)。仅面板启动时的初始化请求(GET /api/config、/api/config/all、
+    # /api/v1/system/mcp、/api/v1/system/skills……)加上 WS 握手、5 秒轮询、
+    # 摄像头/麦克风连续感知帧,就足以在几秒内耗尽这个预算——用户点"保存"这种
+    # 偶发交互，只要撞上预算耗尽的窗口，就会被无差别 429，表现为"填了 API Key
+    # 点保存,显示保存失败"，且和 Key 本身、保存逻辑毫无关系(纯负载巧合，
+    # 难以稳定复现)。这个仓库是本机可信单用户桌面应用(GALAXY_AUTH_ENABLED
+    # 默认关闭也是同一设计取向)——对 127.0.0.1/::1 的流量做速率限制没有实际
+    # 防护意义(不存在"限制自己攻自己"这种威胁模型)，反而会误伤本应用自己的
+    # 正常轮询/交互。默认放行本机回环地址；GALAXY_RATE_LIMIT_LOOPBACK=1 可
+    # 强制对回环地址也限流(如需要测试限流本身的行为)。
+    _rate_limit_loopback = os.environ.get("GALAXY_RATE_LIMIT_LOOPBACK", "0").strip().lower() in ("1", "true", "yes", "on")
+    _LOOPBACK_IPS = ("127.0.0.1", "::1", "localhost")
+
     class RateLimitMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next) -> Response:
             client_ip = request.client.host if request.client else "unknown"
 
             # 跳过健康检查端点
             if request.url.path in ("/health", "/healthz", "/ready"):
+                return await call_next(request)
+
+            if not _rate_limit_loopback and client_ip in _LOOPBACK_IPS:
                 return await call_next(request)
 
             if not rate_limiter.is_allowed(client_ip):

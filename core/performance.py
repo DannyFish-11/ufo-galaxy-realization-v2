@@ -20,6 +20,7 @@ import gzip
 import hashlib
 import json
 import logging
+import os
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -183,6 +184,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # 获取限流 key（优先 API Key，其次 IP）
         api_key = request.headers.get("x-api-key", "")
         client_ip = request.client.host if request.client else "unknown"
+
+        # 关键修复:本机可信单用户桌面应用(Electron 主进程 + 渲染层 + 面板轮询 +
+        # WS + 桌面连续感知帧)全部从 127.0.0.1 打向同一个本地后端、且不带
+        # x-api-key，按 IP 分桶会把它们全算作同一个客户端共用一个配额——面板
+        # 自身的轮询/感知流量足以把配额提前耗尽，导致用户偶发交互(如保存配置)
+        # 被无差别 429，跟同类问题(core/security_middleware.py 的另一个限流层)
+        # 是同一根因，一并修。默认放行回环地址；
+        # GALAXY_RATE_LIMIT_LOOPBACK=1 可强制限流(如需测试限流本身)。
+        if not api_key and client_ip in ("127.0.0.1", "::1", "localhost"):
+            if os.environ.get("GALAXY_RATE_LIMIT_LOOPBACK", "0").strip().lower() not in ("1", "true", "yes", "on"):
+                return await call_next(request)
+
         rate_key = f"apikey:{api_key}" if api_key else f"ip:{client_ip}"
 
         allowed, info = await self.limiter.is_allowed(rate_key)
