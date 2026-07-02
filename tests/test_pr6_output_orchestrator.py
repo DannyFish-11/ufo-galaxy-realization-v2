@@ -462,3 +462,47 @@ class TestOpenClawdOutputPlan:
         """Confirm that ``output_plan`` never modifies the ``response`` value."""
         result = await self._run_process(message="hello")
         assert result["response"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# 三态/语音链路稳定性排查回归:OutputOrchestrator 不该自己触发 TTS 播放
+# ---------------------------------------------------------------------------
+
+class TestOutputOrchestratorDoesNotDoubleSpeak:
+    """真实故障:core/desktop_presence_runtime.py::handle_request() 收尾已经
+    无条件调用 core.speech_output.speak_response() 做集中式 TTS("任何渠道的
+    回复都默认朗读"是仓库既有设计)。但 OutputOrchestrator.orchestrate() 之前
+    在 voice 计划 enabled 时,还会自己另起一个后台任务、用独立的 VoiceChannel
+    实例真正合成并播放同一段 response_text——两条路径叠加，任何被分类为
+    ambient_companion/field_assistant 的消息(含所有 ≤8 字的短消息)都会被
+    播放两遍。orchestrate() 应该只产出"计划"(voice.enabled=True 供调用方
+    参考)，不应该自己动手播放。
+    """
+
+    def _orch(self):
+        from core.output.orchestrator import OutputOrchestrator
+        return OutputOrchestrator()
+
+    def test_voice_enabled_does_not_trigger_synthesize_and_play(self):
+        from core.output.voice_channel import VoiceChannel
+
+        envelope = {
+            "mode": "field_assistant",
+            "output_plan": {
+                "text": True, "voice": True, "avatar": False,
+                "overlay": False, "ui_surface": "field_overlay",
+            },
+        }
+        with patch.object(VoiceChannel, "synthesize_and_play") as mock_play:
+            plan = self._orch().orchestrate(
+                interaction_envelope=envelope,
+                persona_state=None,
+                response_text="guide me",
+            )
+
+        assert plan["voice"]["enabled"] is True, "计划本身仍应正确反映 voice 已启用"
+        mock_play.assert_not_called(), (
+            "orchestrate() 不该自己触发 TTS 播放——真正的播放由 "
+            "desktop_presence_runtime.handle_request() 收尾的 speak_response() "
+            "集中触发一次，这里重复触发会导致同一句话被念两遍"
+        )

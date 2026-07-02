@@ -373,5 +373,31 @@ def set_ai_speaking(value: bool) -> None:
         logger.debug("set_ai_speaking failed (non-fatal): %s", exc)
 
 
+def get_current_phase() -> str:
+    """返回当前真实三态相位("silent"/"liminal"/"manifest")。
+
+    修复:core/unified_panel_aggregation.py::_fill_from_runtime_projection()
+    之前从 DesktopPresenceRuntime 单例读 _continuum_state——但该属性只在每次
+    请求新建的临时 RuntimeSession 上被赋值，单例自身从未被赋值过，永远是
+    None，必然走到 _get_continuum_state_fallback()；而后者 import 的
+    "core.cognitive_field_engine" 路径本身就不存在(真实路径是
+    "core.cognitive.cognitive_field_engine")，ModuleNotFoundError 被静默吞掉，
+    最终硬编码返回 ContinuumState(phase=SILENT)。结果:/api/v1/panel/feed 的
+    tri_state_phase 字段【永远是 "silent"】，跟桌面覆盖层实际显示的相位完全
+    脱节——WS 断线重连期间(最长可达 30 秒)面板会被这条死路径的数据错误地
+    拉回"待机"，即便 AI 其实还在 LIMINAL/MANIFEST。
+
+    这里改为直接读 GalaxyPresenceBridge._current_mode——这正是驱动桌面覆盖层
+    "暖金氛围光"的同一份、真实随 StateEventBus 事件实时更新的状态，让面板
+    与覆盖层从同一个真相来源读数据，不再各算各的。
+    """
+    try:
+        mode = GalaxyPresenceBridge.get_instance()._current_mode
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("get_current_phase failed (non-fatal): %s", exc)
+        return "silent"
+    return "silent" if mode == "static" else mode
+
+
 # 兼容旧类名
 LumivWebSocketBridge = GalaxyPresenceBridge
