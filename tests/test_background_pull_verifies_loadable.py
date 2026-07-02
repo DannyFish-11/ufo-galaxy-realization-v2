@@ -163,3 +163,35 @@ def test_broken_manifest_then_pull_fails_still_reaches_hf_fallback():
     assert hf_fallback_called == ["gemma4:e2b"], (
         "残缺条目被正确识别为未安装、重新拉取又失败后，必须真正走到 HF 回退这一步"
     )
+
+
+def test_ollama_not_on_path_prints_reason_instead_of_silent_skip(capsys):
+    """真机复现:用户反馈"看到[尝试]任何 HuggingFace 下载模型,Ollama 上没找到
+    模型就默认直接跳过了"——根因是 shutil.which("ollama") 找不到命令时,函数
+    直接 return,不打印任何东西(pull 和 HF 回退都需要 ollama 命令,确实都跳过
+    了没错,但控制台一片沉默，用户完全不知道发生了什么、也不知道该怎么办)。
+    修复后必须至少打印一条说明原因的提示。
+    """
+    with patch("shutil.which", return_value=None):
+        ms.background_pull("gemma4:e2b")
+        for t in threading.enumerate():
+            if t.name == "GalaxyModelPull":
+                t.join(timeout=5)
+
+    out = capsys.readouterr().out
+    assert "未检测到 ollama 命令" in out, (
+        f"找不到 ollama 命令时必须打印清楚的原因，不能彻底沉默。实际输出: {out!r}"
+    )
+
+
+def test_empty_tag_still_silently_returns():
+    """tag 为空是正常的"没有主脑模型可拉"状态(比如用户还没选主脑)，不算故障，
+    维持静默返回，不应该被上面的修复误伤成也打印一堆东西。"""
+    with patch("shutil.which", return_value="/usr/bin/ollama"), \
+         patch("subprocess.run") as mock_run:
+        ms.background_pull("")
+        for t in threading.enumerate():
+            if t.name == "GalaxyModelPull":
+                t.join(timeout=1)
+
+    mock_run.assert_not_called()
