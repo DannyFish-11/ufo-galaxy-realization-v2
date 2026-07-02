@@ -2455,8 +2455,13 @@ class MultiLLMRouter:
         self.adapters.clear()
         self.circuit_breakers.clear()
 
-        # 重新发现
-        self._discover_providers()
+        # 重新发现——_discover_providers() 是同步方法,内部对 Ollama/OneAPI 等
+        # 做阻塞 httpx.get(timeout=2~5s) 网络探测。refresh_providers() 本身是
+        # async 方法,若直接同步调用,会在探测耗时的整个窗口内冻结共享事件循环，
+        # 期间任何其它并发请求(包括完全无关的轻量端点)都会被阻塞排队——这正是
+        # "保存模型 API Key 后其它请求集体卡几秒"的根因。offload 到线程,不阻塞
+        # 事件循环。
+        await asyncio.to_thread(self._discover_providers)
 
         # 为新发现的提供商创建断路器
         for name in self.providers:
