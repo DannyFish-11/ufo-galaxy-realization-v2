@@ -32,8 +32,12 @@ contextBridge.exposeInMainWorld('galaxyAPI', {
   platform: process.platform,
 
   // -- 配置管理 --
+  // getConfig/setConfig：精简版(模型 tab)—— status/configured/values,不含密钥明文。
   getConfig: () => ipcRenderer.invoke('galaxy:get-config'),
   setConfig: (config) => ipcRenderer.invoke('galaxy:set-config', config),
+  // getSettings：完整明细(设置 tab)—— 105 项配置的 value/default/type/category/description。
+  // 与 getConfig 分开路径,避免后端路由遮蔽导致设置 tab 拿不到任何一项内容。
+  getSettings: () => ipcRenderer.invoke('galaxy:get-settings'),
   onConfigUpdate: (callback) => {
     const handler = (_, data) => callback(data);
     ipcRenderer.on('galaxy:config-update', handler);

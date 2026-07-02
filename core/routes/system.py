@@ -474,7 +474,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 try:
                     from core.llm.route_authority import get_llm_route_authority
                     router = get_llm_route_authority().execution_router
-                    router._discover_providers()  # 重新发现 providers
+                    # _discover_providers() 是同步方法,内部对 Ollama/OneAPI 等做阻塞
+                    # httpx.get(timeout=2~5s)网络探测。这里在 async 路由处理函数里,
+                    # 若直接同步调用会冻结共享事件循环——保存一次模型 Key 就让其它
+                    # 所有并发请求(含完全无关的轻量端点)集体卡上几秒。offload 到
+                    # 线程,不阻塞事件循环。
+                    import asyncio as _asyncio
+                    await _asyncio.to_thread(router._discover_providers)
                     logger.info(f"LLM Router 已热重载 (更新: {updated_keys})")
                 except Exception as e:
                     logger.warning(f"LLM Router 热重载失败: {e}")

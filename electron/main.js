@@ -297,6 +297,17 @@ app.whenReady().then(async () => {
                 res.end('{"success": true, "action": "toggle-overlay"}');
                 return;
             }
+            // /ipc/hide-overlay = 始终【隐藏】覆盖层（幂等,永不显示）。
+            // 补齐"放下"的托盘兜底——此前托盘只有 Wake(显示),没有对应的隐藏入口；
+            // 若 Ctrl+Alt+H 等隐藏快捷键在用户机器上被占用而注册失败,此前完全没有
+            // 办法把已唤醒的覆盖层收起去,只能靠可能失灵的快捷键(用户反馈"放下也
+            // 没有完全注册"的直接根因)。
+            if (req.method === 'POST' && req.url === '/ipc/hide-overlay') {
+                try { setOverlayPhase(false); } catch (e) { /* ignore */ }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end('{"success": true, "action": "hide-overlay"}');
+                return;
+            }
             if (req.method === 'POST' && req.url === '/ipc/presence-state') {
                 let body = '';
                 req.on('data', chunk => body += chunk);
@@ -654,9 +665,10 @@ let _perceptionFailLogAt = 0;
 // ═══════════════════════════════════════════
 
 // 内存中的配置缓存
-let configCache = {};
+let configCache = {};      // 精简版(模型 tab):{api_base_url, ws_url, status, configured, values}
+let settingsCache = {};    // 完整明细(设置 tab):{KEY: {value, default, type, category, description}}
 
-// 从 Python 后端获取配置
+// 从 Python 后端获取配置(精简版 —— 模型 tab 消费)
 async function fetchConfigFromBackend() {
     try {
         const response = await fetch(`${GATEWAY_BASE}/api/config`);
@@ -670,9 +682,28 @@ async function fetchConfigFromBackend() {
     return configCache;
 }
 
-// GET 配置
+// 从 Python 后端获取完整配置明细(设置 tab 消费,与精简版不同路径,避免路由遮蔽)
+async function fetchSettingsFromBackend() {
+    try {
+        const response = await fetch(`${GATEWAY_BASE}/api/config/all`);
+        if (response.ok) {
+            settingsCache = await response.json();
+            return settingsCache;
+        }
+    } catch (e) {
+        console.error('[Main] Failed to fetch settings:', e.message);
+    }
+    return settingsCache;
+}
+
+// GET 配置(精简版 —— 模型 tab)
 ipcMain.handle('galaxy:get-config', async () => {
     return await fetchConfigFromBackend();
+});
+
+// GET 配置(完整明细 —— 设置 tab)
+ipcMain.handle('galaxy:get-settings', async () => {
+    return await fetchSettingsFromBackend();
 });
 
 // SET 配置（批量更新）
@@ -686,9 +717,14 @@ ipcMain.handle('galaxy:set-config', async (_, config) => {
         });
         if (response.ok) {
             configCache = { ...configCache, ...config };
-            // 广播到所有窗口
+            // 同步更新完整明细缓存里对应项的 value(保持 ConfigItem 形状,
+            // 不用裸字符串覆盖整项 —— 否则设置 tab 下次渲染会读到 undefined)。
+            Object.entries(config).forEach(([k, v]) => {
+                if (settingsCache[k]) settingsCache[k] = { ...settingsCache[k], value: v };
+            });
+            // 广播到所有窗口(裸的 {KEY: 新值} —— 由各 tab 自行按需合并到自己的形状)。
             BrowserWindow.getAllWindows().forEach(w => {
-                w.webContents.send('galaxy:config-update', configCache);
+                w.webContents.send('galaxy:config-update', config);
             });
             return { success: true };
         }

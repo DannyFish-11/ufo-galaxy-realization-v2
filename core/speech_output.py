@@ -83,10 +83,23 @@ def speak_response(text: str, *, source: str = "") -> None:
         return
 
     async def _run() -> None:
+        # 播放前后把"正在朗读"同步到桌面三态覆盖层(u_speaking)——此前 TTS 播放
+        # 与覆盖层完全脱节：_speaking 只在相位事件里被动带一手且 MANIFEST 一进入
+        # 就被强制置 False，而实际播放发生在那之后，覆盖层永远等不到真实信号，
+        # 三态动画不随"AI 说话"运转。finally 确保异常/提前返回也一定复位。
+        try:
+            from core.lumiv_websocket_bridge import set_ai_speaking as _set_speaking
+        except Exception:
+            _set_speaking = None  # type: ignore
+        if _set_speaking is not None:
+            _set_speaking(True)
         try:
             await engine.synthesize_and_play(spoken)
         except Exception as exc:  # noqa: BLE001
             logger.debug("语音输出失败(降级): %s", exc)
+        finally:
+            if _set_speaking is not None:
+                _set_speaking(False)
 
     try:
         loop = asyncio.get_running_loop()

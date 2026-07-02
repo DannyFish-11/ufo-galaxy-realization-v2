@@ -185,6 +185,22 @@ class GalaxyPresenceBridge:
         self._speaking = p.get("speaking", False)
         self._schedule_broadcast()
 
+    def set_speaking(self, value: bool) -> None:
+        """把"AI 正在朗读(TTS 播放中)"实时同步到桌面三态覆盖层。
+
+        修复:_speaking 此前只在相位事件里被动带一手(且 MANIFEST 一进入就被强制
+        置 False),而 TTS 真正播放音频发生在 MANIFEST 快结束/已回 SILENT 之后——
+        speak_response() 从未调用过这里，导致覆盖层的 u_speaking 着色器 uniform
+        永远等不到"说话中"这个真实信号，三态动画不随实际朗读运转。
+        由 core.speech_output.speak_response() 在播放前后调用，立即广播
+        (不等下一次 ambient tick)，容错、永不抛出。
+        """
+        try:
+            self._speaking = bool(value)
+            self._schedule_broadcast()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("set_speaking 广播失败(non-fatal): %s", exc)
+
     # ── WebSocket 客户端管理 ──
 
     async def register_client(self, websocket: WebSocket) -> None:
@@ -346,6 +362,15 @@ def emit_conversation(
         )
     except Exception as exc:  # noqa: BLE001
         logger.debug("emit_conversation failed (non-fatal): %s", exc)
+
+
+def set_ai_speaking(value: bool) -> None:
+    """供 TTS 播放路径(core.speech_output.speak_response)一行调用，把"正在朗读"
+    实时同步到桌面三态覆盖层的 u_speaking uniform。容错、永不抛出。"""
+    try:
+        GalaxyPresenceBridge.get_instance().set_speaking(value)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("set_ai_speaking failed (non-fatal): %s", exc)
 
 
 # 兼容旧类名

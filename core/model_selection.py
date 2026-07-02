@@ -210,10 +210,27 @@ def background_pull(tag: str) -> None:
             root = tag.split(":")[0]
             if any(h == tag or h.startswith(tag + ":") or h.split(":")[0] == root for h in have):
                 return  # 已安装
-            subprocess.run(["ollama", "pull", tag], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=3600)
-        except Exception:
-            pass
+            print(f"  ▶  正在后台拉取本地主脑模型 ollama pull {tag} …(不阻塞启动)")
+            proc = subprocess.run(["ollama", "pull", tag], capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", timeout=3600)
+            if proc.returncode == 0:
+                print(f"  ✓ 本地主脑模型已就绪:{tag}")
+            else:
+                # 关键:不要静默吞掉失败。gemma4/minicpm-o4.5 是较新的 Ollama 库条目,
+                # 最常见失败原因是本地 Ollama 版本过旧(不认识这些较新 tag/family)。
+                _err = (proc.stderr or proc.stdout or "").strip()[:300]
+                print(f"  ⚠ 本地主脑模型拉取失败:{tag} — {_err}")
+                try:
+                    _ver = subprocess.run(["ollama", "--version"], capture_output=True, text=True,
+                                          encoding="utf-8", errors="replace", timeout=5).stdout.strip()
+                    print(f"     当前 Ollama 版本:{_ver or '(未知)'}")
+                except Exception:
+                    pass
+                print(f"     最常见原因:Ollama 版本过旧,不认识 {root} 系列——请先 `ollama --version`")
+                print(f"     确认版本、需要时升级 Ollama 到最新版后重试 `ollama pull {tag}`。")
+                print(f"     也可先在「模型」tab 填一个云端 API Key(DeepSeek/通义/Claude…)作为主力兜底。")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  ⚠ 本地主脑模型拉取异常:{tag} — {exc}")
 
     threading.Thread(target=_pull, name="GalaxyModelPull", daemon=True).start()
 
