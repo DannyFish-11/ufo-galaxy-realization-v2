@@ -29,6 +29,7 @@ interface Provider {
 
 const OPEN_CLOUD: Provider[] = [
   { key: 'DEEPSEEK_API_KEY', name: 'DeepSeek', latin: 'deepseek', note: 'V4 / R1 · 推理 · 代码' },
+  { key: 'DEEPSEEK_OCR2_API_KEY', name: 'DeepSeek OCR', latin: 'deepseek-ocr2', note: '文档/图像识别' },
   { key: 'QWEN_API_KEY', name: '通义千问', latin: 'Qwen', note: 'Qwen-Max · 通用' },
   { key: 'ZHIPU_API_KEY', name: '智谱 GLM', latin: 'GLM', note: 'GLM · 多模态' },
   { key: 'GROQ_API_KEY', name: 'Groq', latin: 'groq', note: 'Llama 等 · 极速' },
@@ -41,7 +42,10 @@ const OPEN_CLOUD: Provider[] = [
 
 const PROPRIETARY: Provider[] = [
   { key: 'ANTHROPIC_API_KEY', name: 'Claude', latin: 'anthropic', note: '强推理 · 兜底' },
-  { key: 'OPENAI_API_KEY', name: 'OpenAI', latin: 'openai', note: 'GPT · 兜底' },
+  {
+    key: 'OPENAI_API_KEY', name: 'OpenAI', latin: 'openai', note: 'GPT · 兜底',
+    extraKey: 'OPENAI_API_BASE', extraLabel: '自定义 API 地址（可选，兼容代理/中转）',
+  },
   { key: 'GOOGLE_API_KEY', name: 'Gemini', latin: 'google', note: '多模态 · 兜底' },
   { key: 'XAI_API_KEY', name: 'xAI', latin: 'grok' },
   { key: 'PERPLEXITY_API_KEY', name: 'Perplexity', latin: 'perplexity', note: '联网检索' },
@@ -50,6 +54,7 @@ const PROPRIETARY: Provider[] = [
 const AGGREGATE: Provider[] = [
   { key: 'HF_API_TOKEN', name: 'HuggingFace', latin: 'hf', note: 'Token · 开源模型库' },
   { key: 'ONEAPI_API_KEY', name: 'OneAPI 聚合', latin: 'oneapi', extraKey: 'ONEAPI_URL', extraLabel: '聚合地址' },
+  { key: 'OPENROUTER_API_KEY', name: 'OpenRouter', latin: 'openrouter', note: '多模型聚合路由' },
   { key: 'LOCAL_VLLM_URL', name: '本地 vLLM', latin: 'vllm', note: '自托管推理地址' },
 ];
 

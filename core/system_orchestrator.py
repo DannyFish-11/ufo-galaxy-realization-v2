@@ -556,6 +556,21 @@ class SystemOrchestrator:
         """
         logger.info("[Phase 6] Desktop surface bring-up (Electron three-state GUI) ...")
 
+        # PR-ELECTRON-DEDUP: 跨启动路径共享同一把 .electron.pid 锁——本 Phase 常常是
+        # 最先发起桌面壳启动的路径(网关甚至还没开始监听端口),之前完全不检查/不写
+        # 这把锁,导致 unified_launcher 侧再次尝试启动时重复起一个 Electron 子进程
+        # (npm install/npm start 各跑两遍),且谁先抢到 Electron 自身的单实例锁完全
+        # 随机、可能是没被注入正确网关端口的那一个。这里先查锁,已有存活实例则
+        # 直接跳过(不做任何 npm 探测/安装工作)。
+        from core.electron_launch_guard import already_running, resolve_gateway_port, write_lock
+
+        if already_running():
+            return PhaseResult(
+                phase=StartupPhase.DESKTOP_SURFACE,
+                status=PhaseStatus.OK,
+                detail="Electron GUI already running (started by another launch path)",
+            )
+
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         electron_dir = os.path.join(project_root, "electron")
 
@@ -617,6 +632,11 @@ class SystemOrchestrator:
         try:
             env = os.environ.copy()
             env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
+            # 同步真实网关端口给 Electron,避免 --port 覆盖时"赢"下单实例锁的这个
+            # 实例仍连默认 9000,导致面板/感知帧全部 fetch 到错误端口(参见
+            # core/electron_launch_guard.py 顶部说明)。
+            env["GALAXY_GATEWAY_PORT"] = str(resolve_gateway_port())
+            env.setdefault("PORT", env["GALAXY_GATEWAY_PORT"])
 
             # Use shell=False for security; npm start will run electron .
             process = subprocess.Popen(
@@ -631,6 +651,7 @@ class SystemOrchestrator:
                 # (POSIX: setsid via start_new_session; ignored on Windows.)
                 start_new_session=True if sys.platform != "win32" else False,
             )
+            write_lock(process.pid)
 
             # Start a background thread to drain stdout (prevents pipe buffer fill)
             threading.Thread(

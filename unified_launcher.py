@@ -811,6 +811,15 @@ class GalaxyUnified:
         """启动 Electron 桌面三态覆盖层。"""
         import shutil
         import subprocess as sp
+        from core.electron_launch_guard import already_running, write_lock
+
+        # PR-ELECTRON-DEDUP: 与 Phase 6(system_orchestrator)/launch_desktop.py 共享
+        # 同一把 .electron.pid 锁——避免那两条路径已经成功拉起桌面壳后,这里又重复
+        # 起一个(此前 4 条启动路径里只有一条会写这把锁,其余 3 条互不知情)。
+        if already_running():
+            logger.info("Electron GUI already running (started by another launch path)")
+            return True
+
         electron_dir = Path("electron")
         if not electron_dir.exists():
             logger.warning("electron/ directory not found")
@@ -881,6 +890,7 @@ class GalaxyUnified:
                 stdout=_elog, stderr=sp.STDOUT,
                 env=env,
             )
+            write_lock(self.electron_proc.pid)
             return True
         except Exception as exc:
             logger.error(f"Electron start failed: {exc}")
@@ -895,8 +905,12 @@ class GalaxyUnified:
         """
         import shutil  # noqa: F401  (对齐 start_electron 的导入风格，未来可能用到)
         import subprocess as sp
+        from core.electron_launch_guard import already_running, write_lock
         if os.environ.get("GALAXY_DESKTOP_SHELL", "").strip().lower() == "electron":
             return False  # 显式强制 Electron
+        if already_running():
+            logger.info("桌面壳已由其他启动路径拉起，跳过 Tauri 启动")
+            return True
         tdir = Path("desktop-tauri")
         if not tdir.exists():
             return False
@@ -936,6 +950,7 @@ class GalaxyUnified:
                 stdout=_tlog, stderr=sp.STDOUT,
                 env=env,
             )
+            write_lock(self.electron_proc.pid)
             self._desktop_shell = "tauri"
             return True
         except Exception as exc:
@@ -1592,13 +1607,14 @@ async def _run_check_only(lumiv: 'GalaxyUnified'):
 def _start_electron_gui():
     """Launch Electron three-state GUI if available.
 
-    PR-ELECTRON-DEDUP: PID file lock prevents duplicate launches when both
-    Phase 6 (system_orchestrator) and unified_launcher try to start Electron.
-    Phase 6 writes the lock first; this function exits if lock exists + alive.
+    PR-ELECTRON-DEDUP: shares the same .electron.pid lock (core.electron_launch_guard)
+    as Phase 6 (system_orchestrator) and GalaxyUnified.start_electron() — whichever
+    launch path runs first wins the lock, the rest skip launching a second instance.
     """
     import os
     import subprocess
     import sys
+    from core.electron_launch_guard import already_running, resolve_gateway_port, write_lock
 
     if os.environ.get("GALAXY_SKIP_ELECTRON", "").lower() in ("1", "true", "yes"):
         return
@@ -1611,17 +1627,9 @@ def _start_electron_gui():
     if not os.path.isdir(os.path.join(electron_dir, "node_modules")):
         return
 
-    # PR-ELECTRON-DEDUP: PID file lock
-    pid_file = os.path.join(project_root, ".electron.pid")
-    if os.path.exists(pid_file):
-        try:
-            with open(pid_file) as f:
-                pid = int(f.read().strip())
-            os.kill(pid, 0)  # raises OSError if process is dead
-            print("[Launcher] Electron already running (pid=%d)" % pid)
-            return
-        except (OSError, ValueError):
-            os.remove(pid_file)  # stale lock
+    if already_running():
+        print("[Launcher] Electron already running (started by another launch path)")
+        return
 
     # PR-ABSOLUTE-PATH: use shutil.which to find npm — works even when not in PATH
     import shutil
@@ -1632,6 +1640,10 @@ def _start_electron_gui():
     try:
         env = os.environ.copy()
         env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
+        # 之前这里完全没有注入网关端口——若用户用 --port 覆盖了默认 9000,这条路径
+        # "赢"下 Electron 单实例锁时,面板/感知帧会 fetch 到错误端口且静默失败。
+        env["GALAXY_GATEWAY_PORT"] = str(resolve_gateway_port())
+        env.setdefault("PORT", env["GALAXY_GATEWAY_PORT"])
         # Windows: use CREATE_NEW_PROCESS_GROUP for detached Electron
         popen_kwargs = {}
         if sys.platform == "win32":
@@ -1644,8 +1656,7 @@ def _start_electron_gui():
             stderr=subprocess.DEVNULL,
             **popen_kwargs,
         )
-        with open(pid_file, "w") as f:
-            f.write(str(proc.pid))
+        write_lock(proc.pid)
         print("[Launcher] Electron GUI started (pid=%d)" % proc.pid)
     except Exception:
         pass
