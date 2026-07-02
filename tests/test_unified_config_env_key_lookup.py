@@ -21,9 +21,31 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import pytest
+
 from core.unified_config import UnifiedConfig
+
+
+@pytest.fixture(autouse=True)
+def _isolate_os_environ():
+    """UnifiedConfig._load_env() 会扫描真实 os.environ 里匹配
+    OPENAI/ANTHROPIC/DEEPSEEK/... 前缀的 key 并入 _config——若同一 pytest
+    进程内更早的测试(如通过 unified_launcher.py 防御性 load_dotenv())把
+    仓库根目录真实的 .env(哪怕只是空值占位)加载进了 os.environ，会让这里
+    的"未配置应为空"类断言变得依赖执行顺序、不稳定。这些测试用例通过
+    _make_cfg() 显式构造自己的 .env 内容，完全不需要任何 ambient 环境变量——
+    测试开始前清空 os.environ(不止测试后恢复，因为污染在测试【开始前】就
+    已经发生)，结束后精确恢复原始快照。"""
+    snapshot = dict(os.environ)
+    os.environ.clear()
+    try:
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(snapshot)
 
 
 def _make_cfg(env_content: str, tmp_path: Path) -> UnifiedConfig:

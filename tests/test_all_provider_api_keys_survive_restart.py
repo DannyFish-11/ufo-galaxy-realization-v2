@@ -78,34 +78,41 @@ _EXPECTED = {
 
 
 @pytest.fixture
-def fresh_env_and_config(tmp_path, monkeypatch):
+def fresh_env_and_config(tmp_path):
     """模拟一次全新进程启动:.env 存在但 os.environ 尚未被填充，
-    先 load_dotenv() 再构造 UnifiedConfig（复刻真实 main.py 启动顺序）。"""
+    先 load_dotenv() 再构造 UnifiedConfig（复刻真实 main.py 启动顺序）。
+
+    注意:load_dotenv() 直接写 os.environ，不经过 monkeypatch 的追踪——用
+    monkeypatch.setenv/delenv 无法可靠撤销它的效果。这里改为对整个 os.environ
+    做快照/精确恢复(而不是只清理"已知的" _EXPECTED 键)，避免残留污染到本
+    进程里运行的其它测试(真实复现过:遗留的 DEEPSEEK_API_KEY 等会让同一
+    pytest 会话里其它文件的"未配置应为空"断言拿到脏数据)。
+    """
     env_path = tmp_path / ".env"
     env_path.write_text(ALL_ENV_CONTENT, encoding="utf-8")
 
-    for _, (env_key, _val) in _EXPECTED.items():
-        monkeypatch.delenv(env_key, raising=False)
-
-    from dotenv import load_dotenv
-    load_dotenv(dotenv_path=str(env_path), override=True)
-
-    import core.unified_config as uc
-    cfg = uc.UnifiedConfig.__new__(uc.UnifiedConfig)
-    cfg._config = {}
-    cfg._callbacks = {}
-    cfg.project_root = tmp_path
-    cfg.env_file = env_path
-    cfg._load_env()
-
-    original_config = uc.config
-    uc.config = cfg
+    env_snapshot = dict(os.environ)
     try:
-        yield cfg
+        from dotenv import load_dotenv
+        load_dotenv(dotenv_path=str(env_path), override=True)
+
+        import core.unified_config as uc
+        cfg = uc.UnifiedConfig.__new__(uc.UnifiedConfig)
+        cfg._config = {}
+        cfg._callbacks = {}
+        cfg.project_root = tmp_path
+        cfg.env_file = env_path
+        cfg._load_env()
+
+        original_config = uc.config
+        uc.config = cfg
+        try:
+            yield cfg
+        finally:
+            uc.config = original_config
     finally:
-        uc.config = original_config
-        for _, (env_key, _val) in _EXPECTED.items():
-            monkeypatch.delenv(env_key, raising=False)
+        os.environ.clear()
+        os.environ.update(env_snapshot)
 
 
 class TestAllProviderKeysResolveAfterRestart:
