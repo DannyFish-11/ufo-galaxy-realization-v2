@@ -228,7 +228,23 @@ class UnifiedConfig:
             key.replace(".", "_"),
             key.replace("_", "."),
         ]
-        
+
+        # 关键修复:_load_env() 把 .env / os.environ 里的 KEY=VALUE 按【扁平小写】
+        # 存进 _config(如 "DEEPSEEK_API_KEY" → "deepseek_api_key")，但调用方(如
+        # multi_llm_router._get_key)常按带命名空间前缀的路径查询，例如
+        # "api_keys.DEEPSEEK_API_KEY" 或 "llm.providers.DEEPSEEK_API_KEY.api_key"。
+        # 以上 keys_to_try 的变体全部保留点号分隔结构，永远匹配不到扁平存储的
+        # key——即便 .env 里明明写着这个值，get() 也会返回默认值(空)。
+        # 真机复现过:用户在「模型」tab 存了 DeepSeek Key，写进 .env 确认无误，
+        # 但重启新进程后 _get_key() 查询不到，被误判为"未配置"。
+        # 这里补上"取最后一段(以及其小写)"的兜底：无论查询路径带多少层命名空间
+        # 前缀，只要最后一段与某个扁平 env key 匹配，就能取到值。
+        if "." in key:
+            last_segment = key.rsplit(".", 1)[-1]
+            keys_to_try.append(last_segment)
+            keys_to_try.append(last_segment.lower())
+            keys_to_try.append(last_segment.upper())
+
         for k in keys_to_try:
             if k in self._config:
                 return self._config[k]

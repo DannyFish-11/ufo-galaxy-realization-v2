@@ -16,6 +16,21 @@ if sys.platform == "win32":
         os.environ["PYTHONIOENCODING"] = "utf-8:replace"
     except Exception:
         pass
+
+# PR-DOTENV: 与上面的 UTF-8 设置同一模式——继承 main.py 已加载的 .env(正常路径
+# 是 main.py 直接调用本文件的 GalaxyUnified,同进程共享 os.environ);若本文件被
+# 单独运行(python unified_launcher.py，绕过 main.py)，这里防御性地自己再加载
+# 一遍，确保任何 provider API Key 都能从 .env 正确进入 os.environ。
+# override=False：不覆盖已存在的真实 shell/系统环境变量。
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    import os as _os
+    _load_dotenv(
+        dotenv_path=_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".env"),
+        override=False,
+    )
+except Exception:
+    pass
 """
 Galaxy - 统一启动器 (Subordinate Launcher Component — PR-2)
 ===========================================================

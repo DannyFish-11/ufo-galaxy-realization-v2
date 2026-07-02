@@ -2,6 +2,22 @@
 # PR-WIN-ENCODING: Force UTF-8 on Windows to prevent UnicodeEncodeError in logs
 import sys
 import os
+
+# ── .env 加载:必须在任何读取 os.environ 的代码之前完成 ──────────────────
+# python-dotenv 早就在 requirements 里锁了版本,但全仓库范围内从未被真正调用
+# 过——.env 文件从来没有被加载进 os.environ。真机复现过:「模型」tab 存的任何
+# API Key(不止 DeepSeek，OpenAI/Anthropic/Gemini/Groq/... 全部受影响)在保存
+# 当次生效(setConfig 会同步写 os.environ),但重启新进程后——凡是代码直接读
+# os.environ(而不是全部经过 core.unified_config 的间接路径)——统统读不到，
+# 表现为"存了，重启后又没了"。这里在进程最早期加载 .env，且 override=False
+# (不覆盖已存在的真实 shell/系统环境变量，尊重用户显式导出的优先级更高)。
+try:
+    from dotenv import load_dotenv
+    _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    load_dotenv(dotenv_path=_env_path, override=False)
+except Exception:
+    pass
+
 if sys.platform == "win32":
     # Set console to UTF-8 mode (Python 3.7+)
     try:

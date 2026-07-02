@@ -117,6 +117,37 @@ LOCAL_LLM_PROVIDER_ROLE: str = (
     "NOT governed by this router.  Closes PR-3 local-provider role clarity."
 )
 
+# _get_key() 短 provider 名 → 真实 .env / os.environ 长名的映射。
+#
+# 关键背景:_get_key() 在 _discover_providers() 里全部按短名调用(如
+# self._get_key("deepseek")),但 .env / os.environ / UnifiedConfig._load_env()
+# 存的都是长名(如 DEEPSEEK_API_KEY，小写存成 deepseek_api_key)——短名
+# "deepseek" 从未真正命中过 unified_config 或 os.environ 里的任何一层，
+# _get_key() 事实上只有 CredentialVault(层 2)显式按短名写入时才会命中，
+# ENV/.env(层 1 的 flat 兜底 + 层 3)从未真正生效过。真机复现过:「模型」tab
+# 存的任何 API Key(DeepSeek/OpenAI/Anthropic/……全部受影响，不止某一家)
+# 保存当次生效(setConfig 同步写了 os.environ)，但重启新进程后一律读不回来。
+_PROVIDER_ENV_KEY_MAP: Dict[str, str] = {
+    "openai": "OPENAI_API_KEY",
+    "openai_base": "OPENAI_API_BASE",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "xai": "XAI_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "qwen": "QWEN_API_KEY",
+    "zhipu": "ZHIPU_API_KEY",
+    "minimax": "MINIMAX_API_KEY",
+    "step": "STEP_API_KEY",
+    "mimo": "MIMO_API_KEY",
+    "moonshot": "MOONSHOT_API_KEY",
+    "perplexity": "PERPLEXITY_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "ollama": "OLLAMA_URL",
+    "oneapi": "ONEAPI_API_KEY",
+    "oneapi_url": "ONEAPI_URL",
+}
+
 # 任务类型 → 提供商优先级
 # LOCAL-BRAIN-FIRST: Ollama 被移到第一位作为本地主脑优先策略。
 # 只有本地模型不可用或能力不足时才回退到云端 API。
@@ -868,7 +899,15 @@ class MultiLLMRouter:
             self.circuit_breakers[name] = ProviderCircuitBreaker(name)
 
     def _get_key(self, key_name: str) -> str:
-        """配置优先级: Dashboard > CredentialVault > ENV（PR86）"""
+        """配置优先级: Dashboard > CredentialVault > ENV（PR86）
+
+        key_name 是内部短 provider 名(如 "deepseek")，与 .env/os.environ 里的
+        真实长名(如 "DEEPSEEK_API_KEY")不是一回事——见模块级
+        _PROVIDER_ENV_KEY_MAP 顶部注释：之前三层查找全部只按短名查，从未真正
+        从 .env/环境变量取到过值。这里同时尝试短名(保留，兼容任何显式按短名
+        写入 Dashboard/Vault 的历史数据)和真实长名(修复 .env/环境变量这条路)。
+        """
+        real_env_key = _PROVIDER_ENV_KEY_MAP.get(key_name, key_name)
         # 1. Dashboard 配置（最高优先级）— 通过 UnifiedConfig 获取
         try:
             from core.unified_config import config as _cfg
@@ -876,6 +915,10 @@ class MultiLLMRouter:
             val = _cfg.get(f"llm.providers.{key_name}.api_key", "")
             if not val:
                 val = _cfg.get(f"api_keys.{key_name}", "")
+            if not val and real_env_key != key_name:
+                # 修复:.env/UnifiedConfig._load_env() 按真实长名(小写)存储，
+                # 短名从未命中过——补上按长名查询。
+                val = _cfg.get(f"api_keys.{real_env_key}", "")
             if val and not str(val).startswith("your-"):
                 return str(val)
         except Exception as exc:
@@ -888,7 +931,11 @@ class MultiLLMRouter:
                 return val
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
-        # 3. 环境变量（兜底）
+        # 3. 环境变量（兜底）—— 修复:优先用真实长名查(.env/系统环境变量都是
+        # 这个约定)，短名查询保留作最后兜底(不改变既有行为)。
+        val = os.environ.get(real_env_key, "")
+        if val:
+            return val
         return os.environ.get(key_name.upper() if "_" in key_name else key_name, "")
 
     def _discover_providers(self):
