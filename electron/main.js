@@ -728,7 +728,19 @@ ipcMain.handle('galaxy:set-config', async (_, config) => {
             });
             return { success: true };
         }
-        return { success: false, error: 'Backend rejected config' };
+        // 修复:之前不管后端返回 400 还是 500，一律折叠成同一句
+        // 'Backend rejected config'，后端 HTTPException 里真正有用的 detail
+        // (比如"Unknown config key: XXX"、".env 写入失败: ...")被直接丢弃，
+        // 前端只能显示"保存失败"四个字，没法自己排查。这里改成尽量读出
+        // 后端返回体里的 detail/error/message 字段透传给渲染层。
+        let detail = `HTTP ${response.status}`;
+        try {
+            const body = await response.json();
+            detail = body.detail || body.error || body.message || detail;
+        } catch (parseErr) {
+            // 响应体不是 JSON（罕见），退回状态码文案
+        }
+        return { success: false, error: detail };
     } catch (e) {
         console.error('[Main] Failed to set config:', e.message);
         return { success: false, error: e.message };

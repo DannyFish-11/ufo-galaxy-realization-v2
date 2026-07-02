@@ -564,6 +564,7 @@ def create_input_validation_middleware(app, validator: Optional[InputValidator] 
 
     检查请求体中的注入攻击模式。
     """
+    import os
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
@@ -572,8 +573,21 @@ def create_input_validation_middleware(app, validator: Optional[InputValidator] 
     if validator is None:
         validator = InputValidator()
 
+    # 与 create_rate_limit_middleware() 同一套判断:本机是单用户可信桌面应用,
+    # 攻击自己没有实际威胁模型。之前这里没有回环豁免——用户在「模型」tab 里
+    # 填的 URL 类字段(OneAPI/vLLM/自定义 API 地址等,允许任意字符串)一旦包含
+    # `../`、反引号、`$(...)` 等字符,会被判定为"疑似注入攻击"直接 400,而
+    # 前端只会显示笼统的"保存失败"，跟限流误伤长得完全不一样但同样难排查。
+    # GALAXY_INPUT_VALIDATION_LOOPBACK=1 可强制对回环地址也校验(专门测试用)。
+    _iv_loopback = os.environ.get("GALAXY_INPUT_VALIDATION_LOOPBACK", "0").strip().lower() in ("1", "true", "yes", "on")
+    _IV_LOOPBACK_IPS = ("127.0.0.1", "::1", "localhost")
+
     class InputValidationMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next) -> Response:
+            client_ip = request.client.host if request.client else "unknown"
+            if not _iv_loopback and client_ip in _IV_LOOPBACK_IPS:
+                return await call_next(request)
+
             # 只检查 POST/PUT/PATCH 请求
             if request.method in ("POST", "PUT", "PATCH"):
                 content_type = request.headers.get("content-type", "")

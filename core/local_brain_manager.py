@@ -322,12 +322,24 @@ class LocalBrainManager:
 
         # 2. Ollama not running, try to start
         self._status = LocalBrainStatus.STARTING
+        # 修复:之前这里 shutil.which("ollama") 是否找到命令的结果，只在
+        # _start_ollama() 内部用来决定"要不要 Popen 拉起进程"，从来没有被
+        # 后续代码读取来区分"命令根本不存在"和"命令存在、服务只是没在
+        # 限定时间内响应"这两种完全不同的情况——真机复现过:Phase 0 明确显示
+        # "✓ Ollama 已安装"，几分钟后这里却打印"Ollama not found"，纯属误导
+        # (真实原因是 Windows 首次冷启动 Ollama 服务较慢——GPU/驱动探测、
+        # 杀毒软件扫描 exe 等，原来只给 10 秒重试预算不够)。这里先把
+        # "命令是否存在"缓存下来，用来决定后续该走"再等等"还是"真的没装"。
+        ollama_cmd_found = shutil.which("ollama") is not None
         logger.info("Ollama 未运行，尝试启动...")
 
         if await self._start_ollama():
-            # Wait for Ollama to fully start
-            for attempt in range(10):
-                await asyncio.sleep(1)
+            # 修复:原来只给 10×1 秒(~10s)重试预算，对 Windows 首次冷启动
+            # (GPU/驱动探测、杀毒软件扫描 exe)明显偏短，真机复现过刚好在这个
+            # 窗口内服务还没绑定好 11434 端口就被判定失败。加长到 30×1 秒并
+            # 做简单退避，给服务更充分的启动时间。
+            for attempt in range(30):
+                await asyncio.sleep(1 if attempt < 10 else 2)
                 if await self._ping_ollama():
                     self._status = LocalBrainStatus.HEALTHY
                     self._healthy = True
@@ -339,36 +351,49 @@ class LocalBrainManager:
                     )
                     return True
 
-        # PR-I1: Auto-install Ollama if not found
-        logger.info("Ollama not found, attempting auto-install...")
-        installed = await self._auto_install_ollama()
-        if installed:
-            # Retry connection
-            from core.local_model_backends import create_backend
+        # PR-I1: Auto-install Ollama —— 仅当命令确实不存在时才尝试，
+        # 修复:之前不管 shutil.which("ollama") 有没有找到命令都无条件走到这里，
+        # 对着一台明明已经装了 Ollama、只是服务启动慢的机器打印"not found"
+        # 并尝试"自动安装"，白白浪费时间还产生误导性日志。命令已存在时，
+        # 真实问题是"服务没起来"，不是"没装"，应该直接进入下面的失败分支，
+        # 给出准确、可操作的提示，而不是去下载一个本来就不需要的安装包。
+        if not ollama_cmd_found:
+            logger.info("未检测到 ollama 命令，尝试自动安装...")
+            installed = await self._auto_install_ollama()
+            if installed:
+                # Retry connection
+                from core.local_model_backends import create_backend
 
-            self.backend_name = "ollama"
-            self._backend = create_backend("ollama", base_url=self.ollama_url)
-            await self._backend.load_model(self.brain_model)
-            for attempt in range(10):
-                await asyncio.sleep(1)
-                if await self._ping_ollama():
-                    self._status = LocalBrainStatus.HEALTHY
-                    self._healthy = True
-                    await self._refresh_model_list()
-                    logger.info(
-                        "本地主脑已启动 [ollama-auto-install]: %s (模型: %s)",
-                        self.ollama_url,
-                        self.available_models,
-                    )
-                    return True
+                self.backend_name = "ollama"
+                self._backend = create_backend("ollama", base_url=self.ollama_url)
+                await self._backend.load_model(self.brain_model)
+                for attempt in range(10):
+                    await asyncio.sleep(1)
+                    if await self._ping_ollama():
+                        self._status = LocalBrainStatus.HEALTHY
+                        self._healthy = True
+                        await self._refresh_model_list()
+                        logger.info(
+                            "本地主脑已启动 [ollama-auto-install]: %s (模型: %s)",
+                            self.ollama_url,
+                            self.available_models,
+                        )
+                        return True
 
-        # 3. Start failed
+        # 3. Start failed —— 区分"确实没装"与"装了但服务没起来"两种措辞，
+        # 后者不该再提示"请安装"，而应提示手动启动服务。
         self._status = LocalBrainStatus.UNAVAILABLE
         self._healthy = False
-        logger.warning(
-            "Ollama 不可用（未安装或未运行）。"
-            "请安装: https://ollama.com/download"
-        )
+        if ollama_cmd_found:
+            logger.warning(
+                "Ollama 已安装，但服务在等待窗口内未响应（可能仍在冷启动，或未随系统自启）。"
+                "可尝试手动运行: ollama serve，或稍后重启 Galaxy。"
+            )
+        else:
+            logger.warning(
+                "Ollama 不可用（未安装）。"
+                "请安装: https://ollama.com/download"
+            )
         return False
 
     async def stop(self):
@@ -659,7 +684,7 @@ class LocalBrainManager:
         """Auto-download and install Ollama
 
         Supported platforms:
-        - Windows: Download ollama-windows-amd64.exe
+        - Windows: 无法可靠静默安装（见下方说明），直接提示手动安装
         - Linux: curl -fsSL https://ollama.com/install.sh | sh
         - macOS: brew install ollama or download pkg
         """
@@ -671,27 +696,21 @@ class LocalBrainManager:
 
         try:
             if system == "Windows":
-                # Windows: Download installer
-                ollama_dir = Path.home() / ".ollama"
-                ollama_dir.mkdir(exist_ok=True)
-                ollama_exe = ollama_dir / "ollama.exe"
-
-                if not ollama_exe.exists():
-                    import urllib.request
-
-                    url = "https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.exe"
-                    logger.info("Downloading Ollama from %s...", url)
-                    urllib.request.urlretrieve(url, str(ollama_exe))
-                    logger.info("Ollama downloaded to %s", ollama_exe)
-
-                # Start Ollama
-                subprocess.Popen(
-                    [str(ollama_exe), "serve"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                # 修复:之前这里从 GitHub Releases 下载 "ollama-windows-amd64.exe"，
+                # 真机复现直接 404——Ollama 官方 Windows 分发早已经不是这个文件名
+                # 的可移植单文件了，而是一个真正的 GUI 安装器(现为 OllamaSetup.exe)，
+                # 装完是走系统安装流程(装到 %LOCALAPPDATA%\Programs\Ollama 之类的
+                # 位置)，不是"下载一个 exe、直接当命令行工具用 `<exe> serve` 启动"
+                # 这种可移植二进制的用法——原实现的假设从一开始就和真实分发方式不
+                # 匹配。此沙箱环境无法联网核实当前真实下载直链，与其继续猜一个同样
+                # 验证不了、可能一样错的 URL，不如干脆不再尝试这个必然失败的自动
+                # 下载,直接给用户一个明确、可操作的提示,省掉这几十秒的无效等待。
+                logger.warning(
+                    "Windows 上无法可靠自动安装 Ollama（官方分发是图形安装器，"
+                    "非可直接调用的独立二进制）。请手动下载安装: "
+                    "https://ollama.com/download/windows"
                 )
-                await asyncio.sleep(5)  # Wait for startup
-                return True
+                return False
 
             elif system == "Linux":
                 result = subprocess.run(

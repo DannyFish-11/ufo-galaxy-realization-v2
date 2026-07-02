@@ -85,14 +85,25 @@ async function fetchConfig(): Promise<FrontendConfig> {
 }
 // ── 保存配置:POST /api/config {config:{KEY:VALUE}} → config.py 持久化到 .env
 //    并热刷新 LLM 路由(新填的 key 即时生效,无需重启)。──────────────────
-async function saveConfig(changed: Record<string, string>): Promise<boolean> {
-  if (window.galaxyAPI?.setConfig) return (await window.galaxyAPI.setConfig(changed)).success;
+// 修复:之前只返回 boolean,后端/Electron IPC 层其实带回了真实错误原因
+// (未知配置键、.env 写入失败等),但被这里直接丢弃,失败时只能显示笼统的
+// "保存失败"，用户没法自己判断到底是哪个字段的问题。现在把 error 一并带出。
+async function saveConfig(changed: Record<string, string>): Promise<{ success: boolean; error?: string }> {
+  if (window.galaxyAPI?.setConfig) return window.galaxyAPI.setConfig(changed);
   const r = await fetch('/api/config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ config: changed }),
   });
-  return r.ok;
+  if (r.ok) return { success: true };
+  let detail = `HTTP ${r.status}`;
+  try {
+    const body = await r.json();
+    detail = body.detail || body.error || body.message || detail;
+  } catch {
+    /* 响应体不是 JSON，退回状态码文案 */
+  }
+  return { success: false, error: detail };
 }
 
 // ── 密钥输入（带显隐）──────────────────────────────────────────────────
@@ -215,13 +226,15 @@ export default function ModelsTab() {
 
   const save = useCallback(async () => {
     try {
-      const ok = await saveConfig(changed);
-      if (ok) {
+      const result = await saveConfig(changed);
+      if (result.success) {
         // 保存成功后回读服务端真值(configured/values 刷新),而非本地臆测。
         await load();
         flash('已保存并即时生效');
       } else {
-        flash('保存失败');
+        // 修复:之前不管真实原因是什么,一律显示"保存失败"四个字。现在把
+        // 后端/IPC 层透传上来的真实原因(未知配置键、.env 写入失败等)带出。
+        flash(result.error ? `保存失败：${result.error}` : '保存失败');
       }
     } catch (e) {
       flash(`保存出错：${e instanceof Error ? e.message : ''}`);
