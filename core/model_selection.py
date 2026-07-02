@@ -230,17 +230,34 @@ def background_pull(tag: str) -> None:
     def _pull() -> None:
         try:
             import httpx
+            base = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
             have: List[str] = []
             try:
-                base = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
                 r = httpx.get(f"{base}/api/tags", timeout=3.0)
                 if r.status_code == 200:
                     have = [m.get("name", "") for m in r.json().get("models", [])]
             except Exception:
                 pass
             root = tag.split(":")[0]
-            if any(h == tag or h.startswith(tag + ":") or h.split(":")[0] == root for h in have):
-                return  # 已安装
+            matched = next(
+                (h for h in have if h == tag or h.startswith(tag + ":") or h.split(":")[0] == root),
+                None,
+            )
+            if matched:
+                # 关键:不能只信"名字出现在 /api/tags 里"就判定已装好——之前失败
+                # (比如版本不兼容)的拉取偶尔会留下一个能列出名字、但打不开的
+                # 残缺 manifest,若只看 /api/tags 就直接放行,会导致这个坏掉的
+                # 条目【永久】拦住后续所有重试和 HuggingFace 回退(每次重启都
+                # 误判"已安装"，实际每次对话都还是 404)。用 /api/show 核实一下
+                # 它是不是真的能打开;打不开就当没装,继续走下面的拉取/回退。
+                try:
+                    show_r = httpx.post(f"{base}/api/show", json={"name": matched}, timeout=5.0)
+                    if show_r.status_code == 200:
+                        return  # 确实已装好且可用
+                    print(f"  ⚠ Ollama 列表里有 {matched}，但 /api/show 核实不可用"
+                          f"(status={show_r.status_code})——当作未安装，重新拉取。")
+                except Exception as exc:
+                    print(f"  ⚠ Ollama 列表里有 {matched}，但核实可用性失败({exc})——当作未安装，重新拉取。")
             print(f"  ▶  正在后台拉取本地主脑模型 ollama pull {tag} …(不阻塞启动)")
             proc = subprocess.run(["ollama", "pull", tag], capture_output=True, text=True,
                                   encoding="utf-8", errors="replace", timeout=3600)
