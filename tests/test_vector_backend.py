@@ -238,3 +238,50 @@ def test_skill_loader_singleton():
     assert isinstance(skills, list)
     stats = skill_loader.get_stats()
     assert isinstance(stats, dict)
+
+
+# ---------------------------------------------------------------------------
+# _coerce_chroma_metadata — 回归防护(真机日志实测每轮对话都写失败)
+# ---------------------------------------------------------------------------
+
+class TestCoerceChromaMetadata:
+    """Chroma 只接受标量 metadata 值；调用方(如统一记忆 provider 把
+    tags: List[str] 直接塞进 metadata)常带 list 值，之前每次 upsert 都失败、
+    悄悄退化成本地关键词索引(真机实测:每一轮对话都报
+    "got ['user']/['assistant'] which is a list")。"""
+
+    def test_list_value_coerced_to_comma_joined_string(self):
+        from core.vector_backend import _coerce_chroma_metadata
+
+        out = _coerce_chroma_metadata({"role": ["user"], "tags": ["a", "b"]})
+        assert out["role"] == "user"
+        assert out["tags"] == "a,b"
+
+    def test_scalar_values_pass_through_unchanged(self):
+        from core.vector_backend import _coerce_chroma_metadata
+
+        out = _coerce_chroma_metadata({"s": "x", "i": 1, "f": 1.5, "b": True, "n": None})
+        assert out == {"s": "x", "i": 1, "f": 1.5, "b": True, "n": None}
+
+    def test_dict_value_coerced_to_string(self):
+        from core.vector_backend import _coerce_chroma_metadata
+
+        out = _coerce_chroma_metadata({"nested": {"k": "v"}})
+        assert out["nested"] == "{'k': 'v'}"
+
+    def test_chroma_upsert_accepts_list_valued_metadata_end_to_end(self, tmp_path):
+        """端到端复现真机场景：role 以 list 形式传入仍应写入并检索成功。"""
+        pytest.importorskip("chromadb")
+        from core.vector_backend import create_vector_backend, _ChromaBackend
+
+        backend = create_vector_backend(backend="chroma", chroma_persist_dir=str(tmp_path))
+        if not isinstance(backend, _ChromaBackend):
+            pytest.skip("chromadb 初始化失败，跳过端到端验证")
+
+        backend.add_document("turn-user-1", "今天天气怎么样", {"role": ["user"]})
+        backend.add_document("turn-ai-1", "今天晴天", {"role": ["assistant"]})
+
+        results = backend.search("天气", top_k=5)
+        assert len(results) == 2
+        roles = {r.metadata.get("role") for r in results}
+        assert roles == {"user", "assistant"}

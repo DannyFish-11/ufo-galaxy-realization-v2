@@ -172,7 +172,7 @@ class _ChromaBackend:
             self._collection.upsert(
                 ids=[_id],
                 documents=[content],
-                metadatas=[{**(metadata or {}), "_doc_id": doc_id}],
+                metadatas=[_coerce_chroma_metadata({**(metadata or {}), "_doc_id": doc_id})],
             )
         except Exception as exc:
             logger.warning(f"ChromaDB add_document 失败: {exc}，写入本地索引")
@@ -354,6 +354,27 @@ class _QdrantBackend:
 def _stable_id(doc_id: str) -> str:
     """为 ChromaDB 生成稳定字符串 ID"""
     return hashlib.sha256(doc_id.encode()).hexdigest()
+
+
+def _coerce_chroma_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """把 metadata 的值规整成 Chroma 接受的标量类型(str/int/float/bool/None)。
+
+    Chroma 的 upsert 只接受标量 metadata 值;调用方(如统一记忆 provider 把
+    ``tags: List[str]`` 直接塞进 metadata)经常带 list/dict 值，之前会导致
+    upsert 每次都失败、悄悄退化成本地关键词索引(实测:每一轮对话都报
+    "got ['user']/['assistant'] which is a list"）。这里在写入前统一规整，
+    而不是要求所有调用方各自小心——Chroma 的标量约束是不变的，在边界处
+    兜底一次即可,一劳永逸。
+    """
+    coerced: Dict[str, Any] = {}
+    for k, v in metadata.items():
+        if v is None or isinstance(v, (str, int, float, bool)):
+            coerced[k] = v
+        elif isinstance(v, (list, tuple, set)):
+            coerced[k] = ",".join(str(x) for x in v)
+        else:
+            coerced[k] = str(v)
+    return coerced
 
 
 def _int_id(doc_id: str) -> int:
