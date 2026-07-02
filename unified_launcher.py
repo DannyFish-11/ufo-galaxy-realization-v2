@@ -195,6 +195,56 @@ def _get_lan_ip() -> str:
         return ""
 
 
+_CLOUD_LLM_KEY_ENV_VARS = (
+    "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "GEMINI_API_KEY",
+    "GOOGLE_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "ZHIPU_API_KEY",
+    "QWEN_API_KEY", "MOONSHOT_API_KEY", "MINIMAX_API_KEY", "XAI_API_KEY",
+)
+
+
+def _model_tag_root(tag: str) -> str:
+    """模型 tag 去掉冒号后缀，取根名(如 'gemma4:e2b' -> 'gemma4')，用于宽松匹配。"""
+    return (tag or "").split(":")[0].strip().lower()
+
+
+def ai_brain_readiness(
+    chosen_model: str,
+    available_models: list,
+    ollama_healthy: bool,
+    env: Optional[Dict[str, str]] = None,
+) -> Tuple[str, bool, str]:
+    """判定"AI 大脑"启动状态是否真的可用,而不仅仅是"Ollama 服务可达"。
+
+    真机复现过的坑:LocalBrainManager._healthy 只代表"Ollama 服务本身可达"，
+    不代表"用户选中的这个模型真的装好了"——曾经服务健康但 gemma4:e2b 从未拉取
+    成功,启动横幅却照样打 ✓、显示"就绪"，用户看着一片绿实际上一句话都问不出来
+    (每次调用都 404)。这里额外核实选中模型是否真的在已安装列表里(按 tag 前缀
+    宽松匹配，兼容 "gemma4:e2b" 与 "gemma4:e2b-q4" 等变体)；若本地模型没装好但
+    配置了任一云端 API Key，仍可对话，不算彻底不可用。
+
+    Returns:
+        (status, model_installed, model_status_label)
+        status: "ok" | "warn" | "fail" —— 供启动横幅 & 最终"降级"统计使用。
+    """
+    env = env if env is not None else os.environ
+    model_installed = bool(chosen_model) and any(
+        _model_tag_root(a) == _model_tag_root(chosen_model) for a in available_models
+    )
+    cloud_key_set = any(
+        env.get(k, "").strip() and not env.get(k, "").startswith("your-")
+        for k in _CLOUD_LLM_KEY_ENV_VARS
+    )
+    truly_usable = model_installed or cloud_key_set
+    status = "ok" if (ollama_healthy and model_installed) else ("warn" if truly_usable else "fail")
+    if model_installed:
+        label = "已安装"
+    elif cloud_key_set:
+        label = "未安装(拉取失败/未完成)—— 已配置云端 API Key 可兜底"
+    else:
+        label = "未安装(拉取失败/未完成)—— 且无云端 API Key,当前无法对话！请去「模型」tab 配置"
+    return status, model_installed, label
+
+
 # ============================================================================
 # Launcher sub-module imports
 # (Enums, config, service management, core/node/health/shutdown)
@@ -1101,12 +1151,19 @@ class GalaxyUnified:
         verbose = bool(getattr(self, "_verbose", False))
         port = self.config.web_ui_port
         host = self.config.host
-        phases_state: List[Tuple[str, str]] = []  # (阶段名, 状态) → 末尾总结卡用
+        phases_state: List[Tuple[str, str, Optional[str]]] = []  # (阶段名, 状态, 专属修复建议) → 末尾总结卡用
 
         def _emit(name: str, value: str, status: str,
-                  details: Optional[List[Tuple[str, str, str]]] = None) -> None:
-            """记录并渲染一个阶段：默认折叠成一行；-v 时打印小标题 + 逐项明细。"""
-            phases_state.append((name, status))
+                  details: Optional[List[Tuple[str, str, str]]] = None,
+                  hint: Optional[str] = None) -> None:
+            """记录并渲染一个阶段：默认折叠成一行；-v 时打印小标题 + 逐项明细。
+
+            hint: 若该阶段最终判定为降级/失败，末尾总结卡"降级"行要展示的
+            该项【专属】修复建议（而非把所有降级项共用一句通用提示——那样会
+            出现"AI 大脑需要重新拉模型/配 Key，却被告知装 Docker 后重跑即恢复"
+            这种文不对题的情况）。不传则总结卡显示该项名称、不附带建议。
+            """
+            phases_state.append((name, status, hint))
             if verbose:
                 r.section(name)
                 for label, val, st in (details or [(name, value, status)]):
@@ -1145,7 +1202,8 @@ class GalaxyUnified:
         d_details = [("Docker 基础设施", d_value, d_status)]
         if d_note:
             d_details.append(("下一步", d_note, "info"))
-        _emit("基础设施 · Docker", d_value, d_status, details=d_details)
+        _emit("基础设施 · Docker", d_value, d_status, details=d_details,
+              hint="装后重跑即恢复" if d_status != "ok" else None)
 
         # ── 消息总线 ──
         bus_details: List[Tuple[str, str, str]] = []
@@ -1192,11 +1250,17 @@ class GalaxyUnified:
                 hw = f"GPU {getattr(hp, 'gpu_name', '?') or '?'} | 显存 {getattr(hp, 'vram_mb', 0)} MB"
             else:
                 hw = "CPU 模式（无独显，软件推理）"
-            st = "ok" if healthy else "warn"
-            _emit("AI 大脑", f"{bm}  ·  {hw}", st, details=[
+
+            # 关键修复:_healthy 只代表"Ollama 服务本身可达",不代表"选中的这个模型
+            # 真的装好了"——真机复现过:服务健康但 gemma4:e2b 从未拉取成功,这里却照样
+            # 打 ✓、显示"就绪",用户看着一片绿实际上一句话都问不出来(每次调用都
+            # 404)。ai_brain_readiness() 额外核实选中模型是否真的在已安装列表里。
+            st, model_installed, model_status_label = ai_brain_readiness(bm, avail, healthy)
+            _emit("AI 大脑", f"{bm}  ·  {hw}" + ("" if model_installed else "  ⚠ 模型未就绪"), st,
+                  hint=(None if model_installed else model_status_label), details=[
                 ("Ollama 推理服务", "就绪" if healthy else "未就绪（检查 ollama 是否运行）",
                  "ok" if healthy else "fail"),
-                ("AI 主脑模型", bm, "ok"),
+                ("AI 主脑模型", f"{bm} — {model_status_label}", "ok" if model_installed else "warn"),
                 ("已安装模型", shown, "ok" if avail else "warn"),
                 ("硬件", hw, "ok"),
             ])
@@ -1303,19 +1367,22 @@ class GalaxyUnified:
         )
 
         # ── 总结卡：状态 + 关键入口 + 降级项 + 下一步 ──
-        ok_n = sum(1 for _, s in phases_state if s == "ok")
-        degraded_names = [n for n, s in phases_state if s in ("warn", "fail")]
+        ok_n = sum(1 for _, s, _h in phases_state if s == "ok")
+        # 每个降级项各带自己的专属修复建议，而不是所有项共用一句"装后重跑即恢复"——
+        # 那句话只对 Docker 这类"装个东西重跑就好"的场景成立;AI 大脑之类的降级
+        # (模型没拉好/没配 Key)配的建议完全不同，共用会文不对题、误导用户。
+        degraded_items = [(n, h) for n, s, h in phases_state if s in ("warn", "fail")]
         r.summary_card(
             title="Galaxy L4 · v2.3.21",
             state_ok=ok_n,
-            state_degraded=len(degraded_names),
+            state_degraded=len(degraded_items),
             rows=[
                 ("面板", f"http://localhost:{port}"),
                 ("文档", f"http://localhost:{port}/docs"),
                 ("唤醒", "Ctrl+Alt+Space    隐藏 Ctrl+Alt+H"),
                 ("日志", "托盘 →「三态动画日志」"),
             ],
-            degraded=degraded_names or None,
+            degraded=degraded_items or None,
             hints=[("停止", "Ctrl+C"), ("详细", "python main.py -v")],
         )
 

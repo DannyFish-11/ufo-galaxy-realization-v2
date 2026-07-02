@@ -483,7 +483,9 @@ class ExecutionPlanner:
 
         # 经验学习闭环(上层)：根据历史经验里"策略→成败"记录,若当前策略在相似任务上
         # 反复失败、而另一策略明显更优,则自动改用更优策略。失败即沿用原策略。
-        strategy = self._experience_strategy_adjust(plan.message, strategy)
+        # _experience_strategy_adjust 内部同样调用 um.recall(CPU 密集的同步向量
+        # 检索);execute() 是 async 方法,直接调用会占住共享事件循环——offload 到线程。
+        strategy = await asyncio.to_thread(self._experience_strategy_adjust, plan.message, strategy)
 
         # 协作模式细化(Octo 六模式)：当本就要组队(specialized/parallel/swarm)时，
         # 用 collaboration_mode_policy 进一步判断是否该用 critic(做/审分离) / pipeline
@@ -567,10 +569,14 @@ class ExecutionPlanner:
         # 经验复用（READ）：从统一记忆层语义召回与本任务相关的历史经验，注入上下文。
         # 与 ReAct 反思形成闭环：做→反思→沉淀(见下方 WRITE)→下次规划时召回。失败即跳过。
         try:
+            import asyncio as _aio
             from core.memory import get_unified_memory
             _um = get_unified_memory()
             if _um.enabled and plan.message:
-                _exp_hits = _um.recall(plan.message, top_k=3)
+                # _um.recall 对 Chroma 后端要先把 query 编码成向量(CPU 密集的同步
+                # 调用);execute() 是 async 方法,直接调用会占住共享事件循环——
+                # offload 到线程。
+                _exp_hits = await _aio.to_thread(_um.recall, plan.message, top_k=3)
                 _exp_lines = [
                     f"- {h.content[:240]}" for h in _exp_hits
                     if h.content and "experience" in (h.metadata.get("tags") or [])

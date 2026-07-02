@@ -107,12 +107,16 @@ def summary_card(
     state_ok: int,
     state_degraded: int,
     rows: Sequence[Tuple[str, str]],
-    degraded: Optional[Sequence[str]] = None,
+    degraded: Optional[Sequence[Tuple[str, Optional[str]]]] = None,
     hints: Optional[Sequence[Tuple[str, str]]] = None,
 ) -> None:
     """结尾总结卡：状态 + 关键值 + 降级项 + 下一步。一屏看完。
 
     rows / hints 均为 (label, value) 列表，按显示宽度对齐。
+    degraded 为 (名称, 专属修复建议) 列表——每一项各自的建议独立展示，而不是
+    所有降级项共用一句话（"装后重跑即恢复"只对 Docker 这类场景成立；换成
+    "模型没拉好"之类的降级，共用同一句会文不对题、误导用户该怎么修）。
+    建议为 None 的项只展示名称，不编造建议。
     """
     key_w = max([display_width(k) for k, _ in list(rows) + list(hints or [])] + [4])
     print()
@@ -126,9 +130,10 @@ def summary_card(
     for k, v in rows:
         print(f"    {_c(pad_display(k, key_w), Colors.CYAN)}   {v}")
     if degraded:
-        joined = " · ".join(degraded)
+        parts = [f"{name} → {hint}" if hint else name for name, hint in degraded]
+        joined = "  ·  ".join(parts)
         print(f"    {_c(pad_display('降级', key_w), Colors.YELLOW)}   "
-              f"{_c(joined + '  → 装后重跑即恢复', Colors.DIM)}")
+              f"{_c(joined, Colors.DIM)}")
     if hints:
         print()
         for k, v in hints:

@@ -462,8 +462,13 @@ class MemoryScope:
             )
         except Exception as exc:  # noqa: BLE001
             logger.debug("MemoryScope ensure_session 跳过: %s", exc)
-        self.context = recall(
-            self.session_id, self.query,
+        # recall() 内部经统一记忆层做语义召回,对 Chroma 后端要先把 query 编码成
+        # 向量(SentenceTransformer.encode，CPU 密集)。同步函数;在 async __aenter__
+        # 里直接调用会占住共享事件循环——offload 到线程,避免每次进入 MemoryScope
+        # 都让其它并发请求集体卡顿。
+        import asyncio as _aio
+        self.context = await _aio.to_thread(
+            recall, self.session_id, self.query,
             depth=self._depth, max_turns=self._max_turns,
         )
         return self
