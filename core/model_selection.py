@@ -15,10 +15,13 @@ MODEL_SIZE_ESTIMATE_MB —— 单一真相来源）。本模块只在其之上�
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger("Galaxy.ModelSelection")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _CHOICE_FILE = PROJECT_ROOT / ".galaxy_model"
@@ -215,20 +218,36 @@ def background_pull(tag: str) -> None:
                                   encoding="utf-8", errors="replace", timeout=3600)
             if proc.returncode == 0:
                 print(f"  ✓ 本地主脑模型已就绪:{tag}")
-            else:
-                # 关键:不要静默吞掉失败。gemma4/minicpm-o4.5 是较新的 Ollama 库条目,
-                # 最常见失败原因是本地 Ollama 版本过旧(不认识这些较新 tag/family)。
-                _err = (proc.stderr or proc.stdout or "").strip()[:300]
-                print(f"  ⚠ 本地主脑模型拉取失败:{tag} — {_err}")
+                return
+            # 关键:不要静默吞掉失败。gemma4/minicpm-o4.5 是较新的 Ollama 库条目,
+            # 最常见失败原因是本地 Ollama 版本过旧,或库里压根没有(用户实测确认过)。
+            _err = (proc.stderr or proc.stdout or "").strip()[:300]
+            print(f"  ⚠ Ollama 库没有 {tag}(或版本太旧不认识)— {_err}")
+            try:
+                _ver = subprocess.run(["ollama", "--version"], capture_output=True, text=True,
+                                      encoding="utf-8", errors="replace", timeout=5).stdout.strip()
+                print(f"     当前 Ollama 版本:{_ver or '(未知)'}")
+            except Exception:
+                pass
+
+            # 兜底:Ollama 库没有就直接从 HuggingFace 下载相关模型,再导入成本地
+            # Ollama 自定义模型(复用 Ollama 现成的 serving 路径,下游无需改动)。
+            # GALAXY_HF_OLLAMA_FALLBACK=0 可关闭。
+            if os.environ.get("GALAXY_HF_OLLAMA_FALLBACK", "1").strip().lower() not in ("0", "false", "no", "off"):
                 try:
-                    _ver = subprocess.run(["ollama", "--version"], capture_output=True, text=True,
-                                          encoding="utf-8", errors="replace", timeout=5).stdout.strip()
-                    print(f"     当前 Ollama 版本:{_ver or '(未知)'}")
-                except Exception:
-                    pass
-                print(f"     最常见原因:Ollama 版本过旧,不认识 {root} 系列——请先 `ollama --version`")
-                print(f"     确认版本、需要时升级 Ollama 到最新版后重试 `ollama pull {tag}`。")
-                print(f"     也可先在「模型」tab 填一个云端 API Key(DeepSeek/通义/Claude…)作为主力兜底。")
+                    from core.hf_ollama_import_fallback import download_and_import_to_ollama
+                    local_tag = download_and_import_to_ollama(tag)
+                except Exception as exc:  # noqa: BLE001
+                    local_tag = None
+                    logger.debug("HF 回退导入异常(非致命): %s", exc)
+                if local_tag:
+                    save_choice(local_tag)
+                    print(f"  ✓ 本地主脑模型已就绪(HuggingFace 回退导入):{local_tag}")
+                    return
+                print(f"     HuggingFace 回退候选也都试过,未能导入成功。")
+
+            print(f"     可先在「模型」tab 填一个云端 API Key(DeepSeek/通义/Claude…)作为主力兜底,")
+            print(f"     或手动确认版本、升级 Ollama 后重试 `ollama pull {tag}`。")
         except Exception as exc:  # noqa: BLE001
             print(f"  ⚠ 本地主脑模型拉取异常:{tag} — {exc}")
 
