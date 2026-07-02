@@ -37,6 +37,34 @@ _LABELS: Dict[str, Tuple[str, str]] = {
 }
 _SMALLEST_FALLBACK = "gemma4:e2b"
 
+# gemma4 系列需要较新的 Ollama 客户端才能解析其 manifest(联网核实：多个独立来源
+# ——open-webui issue #23471《Gemma4 requires a newer version of Ollama》、社区
+# 排障笔记、版本变更记录——一致指向"旧版 Ollama 拉不动 gemma4，需 ≥ 0.22，
+# 官方在 0.30.x 系列里持续修 gemma4 相关 bug"。这里保守取 0.22 作为下限，
+# 低于此版本时给出明确、可操作的升级指引，而不是笼统的"版本可能过旧"。
+MIN_OLLAMA_VERSION_FOR_GEMMA4: Tuple[int, int, int] = (0, 22, 0)
+
+
+def parse_ollama_version(version_output: str) -> Optional[Tuple[int, int, int]]:
+    """从 `ollama --version` 输出(如 "ollama version is 0.14.1")解析出
+    (major, minor, patch)；解析不出返回 None。"""
+    import re
+    m = re.search(r"(\d+)\.(\d+)\.(\d+)", version_output or "")
+    if not m:
+        return None
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+
+
+def is_ollama_version_too_old(
+    version_output: str,
+    min_version: Tuple[int, int, int] = MIN_OLLAMA_VERSION_FOR_GEMMA4,
+) -> Optional[bool]:
+    """版本太旧返回 True；够新返回 False；解析不出版本号返回 None(未知，不下结论)。"""
+    parsed = parse_ollama_version(version_output)
+    if parsed is None:
+        return None
+    return parsed < min_version
+
 
 def _brain_sizes() -> Dict[str, int]:
     """模型尺寸(MB)取自现有 LocalBrainManager（单一真相来源），失败时空表。"""
@@ -219,14 +247,26 @@ def background_pull(tag: str) -> None:
             if proc.returncode == 0:
                 print(f"  ✓ 本地主脑模型已就绪:{tag}")
                 return
-            # 关键:不要静默吞掉失败。gemma4/minicpm-o4.5 是较新的 Ollama 库条目,
-            # 最常见失败原因是本地 Ollama 版本过旧,或库里压根没有(用户实测确认过)。
+            # 关键:不要静默吞掉失败。联网核实过(open-webui issue #23471 等多个
+            # 独立来源一致印证):gemma4 系列需要较新 Ollama 客户端才能解析其
+            # manifest,旧版会在 "pulling manifest" 就失败——这正是最常见根因。
             _err = (proc.stderr or proc.stdout or "").strip()[:300]
-            print(f"  ⚠ Ollama 库没有 {tag}(或版本太旧不认识)— {_err}")
+            print(f"  ⚠ 拉取 {tag} 失败 — {_err}")
             try:
                 _ver = subprocess.run(["ollama", "--version"], capture_output=True, text=True,
                                       encoding="utf-8", errors="replace", timeout=5).stdout.strip()
                 print(f"     当前 Ollama 版本:{_ver or '(未知)'}")
+                _too_old = is_ollama_version_too_old(_ver)
+                if _too_old is True:
+                    print(f"     ⚠ 你的 Ollama 版本明显低于 {root} 系列所需的最低版本"
+                          f"(经核实需 ≥ {'.'.join(map(str, MIN_OLLAMA_VERSION_FOR_GEMMA4))}，"
+                          f"建议直接升到最新版)。这几乎可以肯定就是拉取失败的原因。")
+                    print(f"     Windows 升级:winget upgrade Ollama.Ollama ,"
+                          f"或从 https://ollama.com/download/windows 下载最新安装包直接覆盖安装"
+                          f"(会保留已下载的模型)。升级后重跑 `ollama pull {tag}` 应该就能成功。")
+                elif _too_old is False:
+                    print(f"     Ollama 版本本身不算旧，拉取失败更可能是网络/registry 问题，"
+                          f"或该 tag 确实不在库里——继续尝试 HuggingFace 回退。")
             except Exception:
                 pass
 
