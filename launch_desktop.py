@@ -497,13 +497,16 @@ def start_electron_frontend() -> Optional[subprocess.Popen]:
         return None
 
     logger.info("  启动 Electron 桌面覆盖层...")
+    from core.electron_launch_guard import electron_package_intact
     node_modules = ELECTRON_DIR / "node_modules"
     npm = shutil.which("npm")
     if not npm:
         raise RuntimeError("npm 未安装")
-    if not node_modules.exists():
-        logger.info("  → 首次运行，执行 npm install ...")
-        rc, _, err = run([npm, "install"], cwd=ELECTRON_DIR, timeout=120)
+    # 不能只看目录存在——中断安装的残局(.bin 存根在、electron/cli.js 缺失)
+    # 直接拉起必然 MODULE_NOT_FOUND 崩溃,需重跑 npm install 修复。
+    if not node_modules.exists() or not electron_package_intact(str(ELECTRON_DIR)):
+        logger.info("  → 依赖缺失或不完整，执行 npm install ...")
+        rc, _, err = run([npm, "install"], cwd=ELECTRON_DIR, timeout=300)
         if rc != 0:
             raise RuntimeError(f"npm install 失败: {err[:200]}")
 

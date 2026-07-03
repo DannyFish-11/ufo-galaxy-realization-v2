@@ -12,9 +12,19 @@ import os
 # 表现为"存了，重启后又没了"。这里在进程最早期加载 .env，且 override=False
 # (不覆盖已存在的真实 shell/系统环境变量，尊重用户显式导出的优先级更高)。
 try:
-    from dotenv import load_dotenv
+    from dotenv import dotenv_values
     _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-    load_dotenv(dotenv_path=_env_path, override=False)
+    # 关键:不能用 load_dotenv() 整个灌进去——设置面板自动生成的 .env 会把
+    # 【全部】schema 键写成 KEY=(空值)。空字符串一旦进了 os.environ,就会把
+    # 代码里的默认值顶掉:os.environ.get("OLLAMA_URL", "http://localhost:11434")
+    # 在 OLLAMA_URL="" 存在时返回的是 ""，不是默认值!真机复现过的一整串症状
+    # 都源于此——LocalBrainManager 拿着空 URL ping Ollama(报"Request URL is
+    # missing an 'http://' or 'https://' protocol"、Ollama 明明在跑却判"服务
+    # 未响应/模型未就绪")、Redis "must specify scheme"、NATS "invalid
+    # hostname"。这里改为只加载【非空】值,空值视同未配置,让代码默认值生效。
+    for _k, _v in (dotenv_values(_env_path) or {}).items():
+        if _v and _k not in os.environ:
+            os.environ[_k] = _v
 except Exception:
     pass
 
