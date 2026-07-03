@@ -406,6 +406,32 @@ class MessageType(str, Enum):
     OPERATOR_ACTION_RESULT = "operator_action_result"
     PING = "ping"
 
+    # === V2_INTERNAL: Cross-repo client wire-value compat aliases (协议单一真相源对齐) ===
+    # tools/protocol/check_aip_msgtype_drift.py 把本 enum 当作三仓消息契约的唯一真相
+    # 源(SSOT),对着 android `shared-protocol/MsgType.kt` 与 wearos
+    # `data/MsgType.kt` 做漂移检查。检查发现两客户端历史上用了一批【短别名】wire 值,
+    # 语义与本 enum 的 canonical 值完全一致,但字符串不同 —— 客户端发这些类型时
+    # server 端 `MessageType('relay')` 会 ValueError → 返回 UNKNOWN_MESSAGE_TYPE,
+    # 整条消息被拒。沿用本文件既有做法(见上 HANDOFF_DISPATCH / cancel_result /
+    # ack / operator_action_result 等"previously absent → added"补丁),把这些客户端
+    # 短别名登记为【仅入向兼容别名】:server 认得、经 catch-all 优雅路由(与其
+    # canonical 对应类型同样落到 handle_unregistered),canonical 输出仍只用长名。
+    # 别名 → canonical 对照(供客户端后续迁移):
+    #   relay      → relay_request      forward → relay_forward   reply → relay_reply
+    #   lock       → coord_lock         unlock  → coord_unlock    broadcast → coord_broadcast
+    # 另有两个客户端已发、v2 此前无对应的真实类型,一并补齐(否则同样被拒):
+    #   operator_action_request —— 设备侧发起的操作请求(对应已存在的
+    #     operator_action_result;经 catch-all 优雅接收,避免请求被整条丢弃)。
+    #   device_audit_report —— 设备审计上报(与 device_*_report 家族并列)。
+    RELAY = "relay"                                # ← relay_request 的客户端短别名
+    RELAY_FORWARD_ALIAS = "forward"               # ← relay_forward 的客户端短别名
+    RELAY_REPLY_ALIAS = "reply"                   # ← relay_reply 的客户端短别名
+    COORD_LOCK_ALIAS = "lock"                     # ← coord_lock 的客户端短别名
+    COORD_UNLOCK_ALIAS = "unlock"                 # ← coord_unlock 的客户端短别名
+    COORD_BROADCAST_ALIAS = "broadcast"           # ← coord_broadcast 的客户端短别名
+    OPERATOR_ACTION_REQUEST = "operator_action_request"
+    DEVICE_AUDIT_REPORT = "device_audit_report"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""
