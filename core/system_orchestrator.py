@@ -597,16 +597,20 @@ class SystemOrchestrator:
                 detail="Electron GUI skipped (Node.js not installed or not in PATH)",
             )
 
-        # Check if node_modules exists (npm install has been run)
+        # Check if node_modules exists AND electron 包完整(不能只看目录存在——
+        # 重新克隆/中断安装的残局里 .bin 存根在、electron/cli.js 缺失,直接拉起
+        # 必然 "Cannot find module ...electron\cli.js" 崩溃;见
+        # core.electron_launch_guard.electron_package_intact 的说明)。
+        from core.electron_launch_guard import electron_package_intact
         node_modules = os.path.join(electron_dir, "node_modules")
-        if not os.path.isdir(node_modules):
+        if not os.path.isdir(node_modules) or not electron_package_intact(electron_dir):
             if not npm_path:
                 return PhaseResult(
                     phase=StartupPhase.DESKTOP_SURFACE,
                     status=PhaseStatus.DEGRADED,
                     detail="Electron GUI skipped (npm not in PATH — Node.js installed but npm missing)",
                 )
-            logger.warning("[Phase 6] electron/node_modules not found -- running npm install ...")
+            logger.warning("[Phase 6] electron 依赖缺失或不完整 -- running npm install ...")
             try:
                 npm_result = subprocess.run(
                     [npm_path, "install"],

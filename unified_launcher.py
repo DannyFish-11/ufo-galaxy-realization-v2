@@ -21,14 +21,18 @@ if sys.platform == "win32":
 # 是 main.py 直接调用本文件的 GalaxyUnified,同进程共享 os.environ);若本文件被
 # 单独运行(python unified_launcher.py，绕过 main.py)，这里防御性地自己再加载
 # 一遍，确保任何 provider API Key 都能从 .env 正确进入 os.environ。
-# override=False：不覆盖已存在的真实 shell/系统环境变量。
+# 与 main.py 同一关键约束:只加载【非空】值——设置面板自动生成的 .env 会把全部
+# schema 键写成 KEY=(空值),空字符串进入 os.environ 会把代码默认值顶掉(真机
+# 复现:OLLAMA_URL="" 导致拿空 URL ping Ollama、明明在跑却判"未响应")。
+# 不覆盖已存在的真实 shell/系统环境变量。
 try:
-    from dotenv import load_dotenv as _load_dotenv
+    from dotenv import dotenv_values as _dotenv_values
     import os as _os
-    _load_dotenv(
-        dotenv_path=_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".env"),
-        override=False,
-    )
+    for _k, _v in (_dotenv_values(
+        _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".env")
+    ) or {}).items():
+        if _v and _k not in _os.environ:
+            _os.environ[_k] = _v
 except Exception:
     pass
 """
@@ -829,9 +833,18 @@ class GalaxyUnified:
         if not npm:
             logger.warning("npm not found in PATH")
             return False
-        # Ensure npm deps
-        if not (electron_dir / "node_modules").exists():
-            print_status_row("首次启动：安装 Electron 桌面层依赖 (npm install，可能数分钟)…", status="success")
+        # Ensure npm deps —— 关键修复:不能只看 node_modules 目录存不存在。
+        # 真机复现(重新克隆后):.bin/electron.cmd 存根在、但 electron/cli.js
+        # 缺失(npm install 中断的残局),旧判断"目录存在→跳过安装"会让 Electron
+        # 每次都以 "Cannot find module ...electron\cli.js" 崩掉,保活重启 8 次
+        # 全是同一个死法,期间从未尝试过真正的修复(重跑 npm install)。现在用
+        # electron_package_intact() 核实包完整性,不完整就自动修复安装。
+        from core.electron_launch_guard import electron_package_intact
+        if not (electron_dir / "node_modules").exists() or not electron_package_intact(str(electron_dir)):
+            _reason = ("首次启动：安装 Electron 桌面层依赖"
+                       if not (electron_dir / "node_modules").exists()
+                       else "检测到 Electron 依赖不完整(疑似上次 npm install 中断)，正在修复安装")
+            print_status_row(f"{_reason} (npm install，可能数分钟)…", status="success")
             try:
                 _r = sp.run([npm, "install"], cwd=str(electron_dir),
                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
@@ -839,6 +852,13 @@ class GalaxyUnified:
                     logger.error(
                         "Electron npm install 失败 (rc=%s):\n%s",
                         _r.returncode, (_r.stderr or _r.stdout or "")[-1000:],
+                    )
+                    return False
+                if not electron_package_intact(str(electron_dir)):
+                    logger.error(
+                        "npm install 完成但 electron 包仍不完整(node_modules/electron/"
+                        "cli.js 缺失)。请手动执行: cd electron && rmdir /s /q node_modules "
+                        "&& npm install"
                     )
                     return False
             except Exception as exc:
@@ -1625,6 +1645,12 @@ def _start_electron_gui():
     if not os.path.isdir(electron_dir):
         return
     if not os.path.isdir(os.path.join(electron_dir, "node_modules")):
+        return
+    # electron 包不完整(中断安装残局)时不要拉起——必然以 MODULE_NOT_FOUND 崩溃;
+    # 交给 GalaxyUnified.start_electron() 的修复安装路径处理。
+    from core.electron_launch_guard import electron_package_intact
+    if not electron_package_intact(electron_dir):
+        print("[Launcher] electron 依赖不完整(疑似 npm install 中断)，跳过此路径,由主启动路径修复")
         return
 
     if already_running():

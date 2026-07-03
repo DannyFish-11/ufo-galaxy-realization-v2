@@ -90,3 +90,23 @@ def write_lock(pid: int) -> None:
             f.write(str(pid))
     except OSError:
         pass
+
+
+def electron_package_intact(electron_dir: str) -> bool:
+    """检查 electron npm 包是否【完整】——不只是 node_modules 目录存在。
+
+    真机复现(用户重新克隆仓库后):node_modules/.bin/electron.cmd 存根在、
+    但 node_modules/electron/cli.js 缺失(npm install 中断/不完整的典型残局)。
+    之前所有启动路径都只判断 node_modules 目录是否存在——存在就跳过安装、
+    直接拉起 electron.cmd,后者立刻以 "Cannot find module ...electron\\cli.js"
+    崩掉;而保活重启逻辑每次重启走的还是同一个"目录存在→跳过安装"判断,
+    于是 GPU 模式崩 3 次、软件渲染崩 5 次、最终彻底放弃——期间没有任何一次
+    尝试过真正的修复动作(重跑 npm install)。
+
+    这里检查 electron 包的两个关键文件都在,任何一个缺失都视为"需要修复安装"。
+    """
+    pkg = os.path.join(electron_dir, "node_modules", "electron")
+    return (
+        os.path.isfile(os.path.join(pkg, "package.json"))
+        and os.path.isfile(os.path.join(pkg, "cli.js"))
+    )
