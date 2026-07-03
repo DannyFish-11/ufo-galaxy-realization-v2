@@ -258,13 +258,20 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["dependency_check"] = {"status": "skipped", "error": str(e)}
 
     # 注册信号处理器
+    # 注:asyncio 的 loop.add_signal_handler 在 Windows(ProactorEventLoop)上
+    # 本就【不支持】,必然抛 NotImplementedError——这是平台预期行为,不是故障。
+    # Windows 下 Ctrl+C 仍能通过 KeyboardInterrupt 正常停止。之前这里打 WARNING
+    # 让用户以为出了问题,现在按平台区分:Windows/非主线程用 info 级如实说明。
     try:
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(_handle_signal(s)))
         logger.info("已注册 SIGTERM/SIGINT 信号处理器")
     except (RuntimeError, NotImplementedError):
-        logger.warning("无法注册信号处理器（可能在非主线程或 Windows 环境）")
+        logger.info(
+            "跳过 asyncio 信号处理器注册（Windows 或非主线程下不支持,属预期;"
+            "Ctrl+C 仍可正常停止）"
+        )
 
     # 启动前校验依赖图
     dep_errors = _validate_startup_deps()
