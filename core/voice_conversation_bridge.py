@@ -104,8 +104,24 @@ def start_voice_loop() -> bool:
 
     仅当 GALAXY_VOICE_LOOP=1 时执行；任何依赖缺失/无麦克风都安全返回 False，
     绝不阻塞或破坏桌面运行时启动。需在真机上验证。
+
+    A 融合:core.voice_loop.VoiceLoop(GALAXY_VOICE=1 默认开启,unified_launcher
+    拉起)现在已是本模块的功能超集——同样喂 handle_request(source="voice")驱动
+    三态、同样交集中式 speech_output 朗读,且已补上 emit_conversation 面板推送。
+    两条闭环若同时启动(默认 GALAXY_VOICE=1 且用户又显式 GALAXY_VOICE_LOOP=1),
+    会对同一句话双重转写+双重 handle_request+面板双条目。这里加互斥:主 VoiceLoop
+    在跑时本模块跳过,收敛为单一语音闭环。仅当用户显式关掉主 VoiceLoop
+    (GALAXY_VOICE=0)时,本模块才作为备用闭环启动。
     """
     if not voice_loop_enabled():
+        return False
+    _main_voice_on = os.environ.get("GALAXY_VOICE", "1").strip().lower() not in ("0", "false", "no", "off")
+    if _main_voice_on:
+        logger.info(
+            "voice_conversation_bridge 跳过:默认 VoiceLoop(GALAXY_VOICE)已在运行并覆盖"
+            "全部功能(含面板推送);避免同一句话被双重处理。如需改用本闭环,请设"
+            " GALAXY_VOICE=0。"
+        )
         return False
     try:
         from core.multimodal.audio_capture_service import AudioCaptureService
