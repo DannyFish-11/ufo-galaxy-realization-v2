@@ -161,7 +161,7 @@
 
 ```bash
 # 8. 远程 Linux 服务器 — 注册 SSH 密钥
-curl -X POST http://localhost:8765/api/v1/agents/linux/servers \
+curl -X POST http://localhost:9000/api/v1/agents/linux/servers \
   -d '{"name":"我的服务器","host":"IP","user":"root","key_path":"~/.ssh/id_rsa"}'
 ```
 

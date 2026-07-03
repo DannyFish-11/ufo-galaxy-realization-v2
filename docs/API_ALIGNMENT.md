@@ -214,9 +214,9 @@ Android 端每 10 秒向服务端同步设备状态：
 ```env
 # 服务器配置
 SERVER_HOST=0.0.0.0
-SERVER_PORT=8765
+SERVER_PORT=9000
 DEVICE_API_PORT=8766
-WS_PORT=8765
+WS_PORT=9000
 
 # 设备管理
 DEVICE_HEARTBEAT_INTERVAL=30
@@ -262,7 +262,7 @@ KEY_STATUS_SYNC_INTERVAL = "status_sync_interval"  // 默认 10000ms
 ./start_unified.sh
 
 # 测试 WebSocket 连接
-wscat -c ws://localhost:8765/ws
+wscat -c ws://localhost:9000/ws
 ```
 
 ### 8.2 API 测试

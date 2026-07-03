@@ -16,7 +16,7 @@ git clone https://github.com/DannyFish-11/galaxy-android.git
 cd galaxy-android
 
 # 2. 配置服务端地址（编辑 app/build.gradle）
-#    buildConfigField "String", "GALAXY_SERVER_URL", '"ws://YOUR_SERVER_IP:8765"'
+#    buildConfigField "String", "GALAXY_SERVER_URL", '"ws://YOUR_SERVER_IP:9000"'
 
 # 3. 构建 Debug APK
 ./gradlew assembleDebug
@@ -31,8 +31,8 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 | 端点 | 说明 |
 |------|------|
-| `ws://<host>:8765/ws/android` | Android 设备主连接端点 |
-| `ws://<host>:8765/ws/device/{device_id}` | 设备专属通道 |
+| `ws://<host>:9000/ws/android` | Android 设备主连接端点 |
+| `ws://<host>:9000/ws/device/{device_id}` | 设备专属通道 |
 
 协议版本：AIP v3.0。完整协议文档见：[docs/ANDROID_PROTOCOL_ALIGNMENT.md](../../../docs/ANDROID_PROTOCOL_ALIGNMENT.md)
 
@@ -43,7 +43,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
   DannyFish-11/galaxy-android
         │
         │  WebSocket (AIP v3.0)
-        │  ws://<host>:8765/ws/android
+        │  ws://<host>:9000/ws/android
         ▼
 galaxy_gateway/android_bridge.py   ← 桥接层（本仓库）
         │

@@ -66,22 +66,6 @@ except ImportError:  # pragma: no cover
     _get_node_count_from_canonical_source = None  # type: ignore[assignment]
 
 # 支持的 API Key 白名单
-ALLOWED_CONFIG_KEYS = {
-    "OPENAI_API_KEY", "OPENAI_API_BASE",
-    "GEMINI_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "DEEPSEEK_API_KEY",
-    "OPENROUTER_API_KEY",
-    "GROQ_API_KEY",
-    "XAI_API_KEY",
-    "ZHIPU_API_KEY",
-    "ONEAPI_URL", "ONEAPI_API_KEY",
-    "PERPLEXITY_API_KEY", "SONAR_API_KEY",
-    "DEEPSEEK_OCR2_API_KEY",
-    "OLLAMA_URL", "VLLM_URL",
-}
-
-
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create system & config routes router."""
     router = APIRouter()
@@ -424,78 +408,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             logger.warning(f"获取 Skill 状态失败: {e}")
             return JSONResponse({"skills": [], "stats": {}, "error": str(e)})
 
-    @router.post("/api/config/update")
-    async def update_config(request: Request, auth: dict = Depends(require_auth)):
-        """
-        更新配置 - 支持所有 LLM API Key
-        写入 .env 文件并即时热更新到 os.environ
-        """
-        data = await request.json()
-        env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
-
-        try:
-            # 读取现有 .env
-            current_env = {}
-            if os.path.exists(env_path):
-                with open(env_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith("#") and "=" in line:
-                            key, val = line.split("=", 1)
-                            current_env[key.strip()] = val.strip()
-
-            # 支持两种格式:
-            # 1. 直接 {KEY: VALUE} (旧格式)
-            # 2. {"keys": {KEY: VALUE}} (新格式，来自 Dashboard)
-            keys_data = data.get("keys", data) if isinstance(data, dict) else data
-
-            updated_keys = []
-            for key, val in keys_data.items():
-                if key in ALLOWED_CONFIG_KEYS:
-                    val = str(val).strip()
-                    if val:
-                        current_env[key] = val
-                        os.environ[key] = val
-                        updated_keys.append(key)
-                    else:
-                        current_env.pop(key, None)
-                        os.environ.pop(key, None)
-                        updated_keys.append(f"{key} (removed)")
-
-            # 写回 .env
-            with open(env_path, "w", encoding="utf-8") as f:
-                f.write("# Galaxy - Environment Configuration\n")
-                f.write(f"# Updated: {datetime.now().isoformat()}\n\n")
-                for key, val in sorted(current_env.items()):
-                    f.write(f"{key}={val}\n")
-
-            # 热重载 LLM Router 以拾取新 API Key
-            if updated_keys and any("API_KEY" in k or "URL" in k for k in updated_keys):
-                try:
-                    from core.llm.route_authority import get_llm_route_authority
-                    router = get_llm_route_authority().execution_router
-                    # _discover_providers() 是同步方法,内部对 Ollama/OneAPI 等做阻塞
-                    # httpx.get(timeout=2~5s)网络探测。这里在 async 路由处理函数里,
-                    # 若直接同步调用会冻结共享事件循环——保存一次模型 Key 就让其它
-                    # 所有并发请求(含完全无关的轻量端点)集体卡上几秒。offload 到
-                    # 线程,不阻塞事件循环。
-                    import asyncio as _asyncio
-                    await _asyncio.to_thread(router._discover_providers)
-                    logger.info(f"LLM Router 已热重载 (更新: {updated_keys})")
-                except Exception as e:
-                    logger.warning(f"LLM Router 热重载失败: {e}")
-
-                # 同步刷新能力编排器
-                try:
-                    from core.capability_orchestrator import capability_orchestrator
-                    await capability_orchestrator.reinitialize()
-                    logger.info("CapabilityOrchestrator 已重新加载")
-                except Exception as e:
-                    logger.debug(f"CapabilityOrchestrator 重载跳过: {e}")
-
-            return {"status": "success", "message": "Configuration updated", "updated": updated_keys}
-        except Exception as e:
-            return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+    # 注:此处曾有第二个写配置端点 POST /api/config/update(配 ALLOWED_CONFIG_KEYS
+    # 白名单)。全仓库排查确认它【零真实调用方】——前端(ModelsTab/SettingsTab)、
+    # Electron IPC、Android、dashboard 全都走 core/routes/config.py 的
+    # POST /api/config;唯一提及它的只有一处测试的文档字符串。两份并存的写配置
+    # 实现 + 两份互不同步的键白名单(这份 ALLOWED_CONFIG_KEYS vs config.py 的
+    # CONFIG_SCHEMA)正是之前"填了 Key 保存失败"一类配置漂移 bug 的温床。已删除
+    # 本冗余端点,写配置收口到 core/routes/config.py 这一处唯一实现。
 
     @router.get("/api/v1/system/mode-status")
     async def system_mode_status():

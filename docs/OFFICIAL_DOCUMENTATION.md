@@ -85,7 +85,7 @@ Galaxy 是一个**桌面原生 AI 助手操作系统**，通过 Electron 三态�
                     │  │             ──► MANIFEST│ │   Esc 关闭
                     │  │                      │   │
                     │  │   WebSocket          │   │
-                    │  │   ws://localhost:8765│   │
+                    │  │   ws://localhost:9000│   │
                     │  └──────────────────────┘   │
                     │                              │
                     │  ┌──────────────────────┐   │
@@ -97,7 +97,7 @@ Galaxy 是一个**桌面原生 AI 助手操作系统**，通过 Electron 三态�
                                    │
                     ┌──────────────┴──────────────┐
                     │     Galaxy Gateway          │
-                    │     (FastAPI :8765)         │
+                    │     (FastAPI :9000)         │
                     │                             │
                     │  REST API: /api/v1/*        │
                     │  WebSocket: /ws/*           │
@@ -573,7 +573,7 @@ Node_XX_Name/
 
 ```
 Electron (WebSocket客户端)
-    ws://localhost:8765/ws/desktop-presence
+    ws://localhost:9000/ws/desktop-presence
         ↓
 Galaxy Gateway (WebSocket服务器)
     galaxy_gateway/routes/websocket.py
@@ -668,7 +668,7 @@ Galaxy Gateway (WebSocket服务器)
 | `GALAXY_SYSTEM_MODE` | `desktop-local` | 桌面本地模式 |
 | `GALAXY_MODE` | `development` | 开发/生产模式 |
 | `GALAXY_LOG_LEVEL` | `INFO` | 日志级别 |
-| `PORT` | `8765` | Gateway端口 |
+| `PORT` | `9000` | Gateway端口 |
 | `HOST` | `127.0.0.1` | 绑定地址 |
 
 #### LLM API Key (至少配一个，云端兜底用)
@@ -719,7 +719,7 @@ Galaxy Gateway (WebSocket服务器)
 | 服务 | 端口 | 说明 |
 |------|------|------|
 | galaxy | — | 主应用 |
-| galaxy-gateway | 8765 | API网关 |
+| galaxy-gateway | 9000 | API网关 |
 | ollama | 11434 | 本地LLM |
 | neo4j | 7474/7687 | 图数据库 |
 | qdrant | 6333 | 向量数据库 |
@@ -821,7 +821,7 @@ ollama pull gemma4:31b       # ~17GB
 | 症状 | 原因 | 解决 |
 |------|------|------|
 | `ImportError` | 依赖未安装 | `pip install -r requirements.txt` |
-| 端口 8765 占用 | 其他进程占用 | `lsof -i :8765` 杀掉进程 |
+| 端口 9000 占用 | 其他进程占用 | `lsof -i :9000` 杀掉进程 |
 | `.env` 缺失 | 环境变量未配置 | `cp .env.example .env` 后编辑 |
 | `time` 未定义 | api_routes.py 导入问题 | 已修复 (PR-v10) |
 | `dataclass` 未定义 | ai_intent.py 导入问题 | 已修复 (PR-v10) |
@@ -848,13 +848,13 @@ ollama pull gemma4:31b       # ~17GB
 
 ```bash
 # 检查 Gateway 是否运行
-curl http://localhost:8765/health
+curl http://localhost:9000/health
 
 # 检查 WebSocket 端点
 python3 -c "
 import asyncio, websockets
 async def test():
-    async with websockets.connect('ws://localhost:8765/ws/desktop-presence') as ws:
+    async with websockets.connect('ws://localhost:9000/ws/desktop-presence') as ws:
         print('WebSocket连接成功')
 asyncio.run(test())
 "

@@ -42,7 +42,7 @@ Domain → 子模块映射：
   /ws/status            → (create_websocket_routes)    （状态推送 WebSocket）
 
 NOTE — Device WebSocket ingress authority:
-  The CANONICAL device ingress is lumiv_gateway/routes/websocket.py /ws/device/{device_id}.
+  The CANONICAL device ingress is galaxy_gateway/routes/websocket.py /ws/device/{device_id}.
   The /ws/device/{device_id} route in THIS file (core/api_routes.py) is a
   COMPATIBILITY-ONLY path retained for legacy/core-direct clients.  It must NOT
   be treated as a competing primary ingress.  New device clients MUST connect
@@ -110,7 +110,7 @@ API_COMPATIBILITY_SURFACE_BOUNDARY_PR8_SENTINEL = (
 CORE_COMPAT_DEVICE_INGRESS_POLICY_AUTHORITY = (
     "CORE_COMPAT_DEVICE_INGRESS_POLICY_AUTHORITY_V1: "
     "core.api_routes compatibility websocket ingress is never production-equivalent. "
-    "The canonical Android/V2 device ingress remains lumiv_gateway.routes.websocket "
+    "The canonical Android/V2 device ingress remains galaxy_gateway.routes.websocket "
     "/ws/device/{device_id}; protected cross-device mode blocks the core-direct "
     "compatibility ingress unless an explicit override is set for controlled fallback use."
 )
@@ -151,7 +151,7 @@ _API_COMPATIBILITY_SURFACES: tuple[APICompatibilitySurface, ...] = (
         surface_id="core_direct_device_websocket_ingress",
         path="/ws/device/{device_id}",
         module="core.api_routes.create_websocket_routes",
-        canonical_replacement="/ws/device/{device_id} (lumiv_gateway/routes/websocket.py)",
+        canonical_replacement="/ws/device/{device_id} (galaxy_gateway/routes/websocket.py)",
         compatibility_scope="legacy_core_direct_ws_clients",
     ),
 )
@@ -221,7 +221,7 @@ def get_core_compat_device_ingress_policy(
         "compatibility_surface_factory": "core.api_routes.create_websocket_routes",
         "classification": "compatibility-only",
         "canonical_device_ingress": "/ws/device/{device_id}",
-        "canonical_device_ingress_module": "lumiv_gateway.routes.websocket",
+        "canonical_device_ingress_module": "galaxy_gateway.routes.websocket",
         "canonical_required_for_production": True,
         "production_equivalent": False,
         "system_mode": fabric.mode.value,
@@ -241,7 +241,7 @@ def get_device_ingress_surface_report(
     env: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Return a machine-readable view of canonical and compatibility ingress surfaces."""
-    from lumiv_gateway.routes.websocket import (
+    from galaxy_gateway.routes.websocket import (
         CANONICAL_DEVICE_INGRESS_AUTHORITY,
         DEVICE_WS_INGRESS_SURFACE_REGISTRY,
     )
@@ -633,7 +633,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
 
     COMPATIBILITY SURFACE — NOT the canonical device ingress.
 
-    The canonical device ingress is lumiv_gateway/routes/websocket.py
+    The canonical device ingress is galaxy_gateway/routes/websocket.py
     /ws/device/{device_id}.  The routes registered here are retained for
     legacy/core-direct clients only and must not be introduced as a second
     primary device ingress authority.
@@ -655,7 +655,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
     logger.warning(
         "DEPRECATED: core/api_routes.py create_websocket_routes() is a "
         "compatibility surface. New clients MUST use "
-        "lumiv_gateway/routes/websocket.py /ws/device/{device_id} "
+        "galaxy_gateway/routes/websocket.py /ws/device/{device_id} "
         "as the sole canonical device ingress. "
         "This compat path will be removed in a future release."
     )
@@ -694,7 +694,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
     #
     # Compatibility-only device WebSocket path.  This endpoint is NOT the
     # canonical device ingress.  The canonical path is:
-    #   lumiv_gateway/routes/websocket.py → /ws/device/{device_id}
+    #   galaxy_gateway/routes/websocket.py → /ws/device/{device_id}
     #
     # This route is retained for clients that connect directly to the core
     # layer without going through the gateway.  It must not be extended with
@@ -705,7 +705,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         """[COMPAT] 设备 WebSocket 连接 — 兼容路径（非规范主入口）
 
         Compatibility-only path.  The canonical device ingress is
-        lumiv_gateway/routes/websocket.py /ws/device/{device_id}.
+        galaxy_gateway/routes/websocket.py /ws/device/{device_id}.
         """
         if not compat_ws_policy["effective_enabled"]:
             blocked_by_policy = compat_ws_policy["blocked_by_protected_mode"]

@@ -148,6 +148,17 @@ class VoiceLoop:
 
         logger.info("Voice input: %s", text)
 
+        # A 融合:把语音对话实时推给面板"实时上下文"。此前只有默认【关闭】的
+        # core.voice_conversation_bridge 调用 emit_conversation,而真正默认【开启】、
+        # 驱动三态与朗读的正是本 VoiceLoop——它此前从不推送,导致默认配置下面板的
+        # 语音实时显示永远是空的(PresencePanel 的"语音"标签形同虚设)。这里在本
+        # (唯一默认活跃的)语音闭环里补上推送,让面板与语音真正一体。容错、永不抛出。
+        try:
+            from core.lumiv_websocket_bridge import emit_conversation
+            emit_conversation("user", text, source="voice")
+        except Exception as _exc:  # noqa: BLE001
+            logger.debug("emit_conversation(user) 跳过(非致命): %s", _exc)
+
         try:
             # 1. 发送给 Galaxy 处理
             if asyncio.iscoroutinefunction(self.galaxy.process):
@@ -166,6 +177,13 @@ class VoiceLoop:
                 return
 
             logger.info("Galaxy response: %s", response[:100])
+
+            # A 融合:AI 的语音回复也推给面板"实时上下文"。
+            try:
+                from core.lumiv_websocket_bridge import emit_conversation
+                emit_conversation("ai", response, source="voice")
+            except Exception as _exc:  # noqa: BLE001
+                logger.debug("emit_conversation(ai) 跳过(非致命): %s", _exc)
 
             # 2. TTS 合成并播放(仅当本回路负责朗读;集成进 Galaxy 时由 handle_request 集中朗读,
             #    此处 speak_responses=False,避免同一句念两遍)。

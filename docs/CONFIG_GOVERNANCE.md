@@ -131,7 +131,7 @@ GALAXY_API_TOKEN=super-secret-token-here
 GALAXY_AUTH_ENABLED=true
 
 # Android client — set WS URL in the app:
-#   ws://<server-ip>:8765/ws/android?token=super-secret-token-here
+#   ws://<server-ip>:9000/ws/android?token=super-secret-token-here
 ```
 
 > **Important**: Without `GALAXY_AUTH_ENABLED=true` any Android device on the

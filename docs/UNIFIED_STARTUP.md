@@ -36,7 +36,7 @@ All ports are defined in **`config/unified_ports.yaml`** — the single authorit
 | 8160, 8163, 8180 | Intelligence overflows | RL (8160), Fuzzy (8163), MemSystem v2 (8180) |
 | 8299 | Infrastructure | (legacy) EmbeddingService overflow |
 | 9000 | Infrastructure | UnifiedLauncher Web UI / Galaxy Gateway (single client entry) |
-| 8765 | Gateway | Galaxy API Gateway |
+| 9000 | Gateway | Galaxy API Gateway |
 | 3001 | OneAPI Web | External LLM Gateway UI |
 | 4222 / 8222 | NATS | Client / HTTP monitor |
 | 6333 / 6334 | Qdrant | REST / gRPC |

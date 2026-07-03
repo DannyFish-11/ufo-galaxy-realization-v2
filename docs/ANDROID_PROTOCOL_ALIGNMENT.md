@@ -247,7 +247,7 @@ MessageHandler / DeviceManager (只处理 v3 字段)
            ▼                          ▼
 ┌──────────────────────┐   ┌──────────────────────────────┐
 │  galaxy_gateway/     │   │  core/api_routes.py          │
-│  app.py (port 8765)  │   │  (port 8000)                 │
+│  app.py (port 9000)  │   │  (port 8000)                 │
 │                      │   │                              │
 │  /ws/device/{id}  ◄──┘   │  POST   /api/v1/devices/     │
 │  /ws/android         │   │         register             │
@@ -278,10 +278,10 @@ MessageHandler / DeviceManager (只处理 v3 字段)
 
 | 端点 | 说明 |
 |------|------|
-| `ws://<host>:8765/ws/device/{device_id}` | **主通道**（推荐）：注册成功后的设备专属通道 |
-| `ws://<host>:8765/ws/android` | 初始连接端点：设备注册及通用消息通道 |
-| `ws://<host>:8765/ws/status` | 状态广播推送（只读订阅） |
-| `ws://<host>:8765/ws/ufo3/{device_id}` | 向后兼容路径（等同于主通道） |
+| `ws://<host>:9000/ws/device/{device_id}` | **主通道**（推荐）：注册成功后的设备专属通道 |
+| `ws://<host>:9000/ws/android` | 初始连接端点：设备注册及通用消息通道 |
+| `ws://<host>:9000/ws/status` | 状态广播推送（只读订阅） |
+| `ws://<host>:9000/ws/ufo3/{device_id}` | 向后兼容路径（等同于主通道） |
 
 ### REST API 端点（`/api/v1/devices/*`）
 
@@ -394,9 +394,9 @@ DeviceCapability.COMM_BLUETOOTH | DeviceCapability.COMM_NFC | DeviceCapability.C
 
 | 路径 | 说明 | 推荐度 |
 |------|------|--------|
-| `ws://<host>:8765/ws/device/{device_id}` | **主通道**（推荐）：设备注册后的专属通道 | ✅ 推荐 |
-| `ws://<host>:8765/ws/android` | 初始连接端点：自动分配设备 ID | ✅ 支持 |
-| `ws://<host>:8765/ws/ufo3/{device_id}` | 向后兼容路径（等同于主通道） | ⚠️ 兼容 |
+| `ws://<host>:9000/ws/device/{device_id}` | **主通道**（推荐）：设备注册后的专属通道 | ✅ 推荐 |
+| `ws://<host>:9000/ws/android` | 初始连接端点：自动分配设备 ID | ✅ 支持 |
+| `ws://<host>:9000/ws/ufo3/{device_id}` | 向后兼容路径（等同于主通道） | ⚠️ 兼容 |
 
 > **Android 客户端应统一使用主通道 `/ws/device/{device_id}`。**
 > 以上所有路径均路由到 `galaxy_gateway/app.py` 中同一个 `WebSocketManager.handle_connection()` 处理器。
@@ -508,7 +508,7 @@ task_result → AndroidBridge._handle_task_result() → 返回结果
 1. **统一使用 AIPMessageBuilder**，并确保发送完整 v3 字段：
    `version: "3.0"`、`message_id`（UUID）、`timestamp`（毫秒）、`device_id`、`type`。
 
-2. **连接路径**：统一配置为 `ws://<host>:8765/ws/device/{device_id}`。
+2. **连接路径**：统一配置为 `ws://<host>:9000/ws/device/{device_id}`。
 
 3. **capability_report 消息**在设备连接后立即发送，`supported_actions` 列表应枚举
    设备实际支持的操作名称（如 `["screenshot", "tap", "swipe", "input_text"]`）。
@@ -717,4 +717,54 @@ python -m pytest tests/test_v3_schemas.py -v
 
 ---
 
-*最后更新：2026-03-16*
+## 11. 消息类型单一真相源（SSOT）与跨仓漂移门禁
+
+三仓（v2 中枢 / `ufo-galaxy-android` / `galaxy-wearos`）的消息类型契约以 v2 的
+`galaxy_gateway/protocol/aip_v3.py` 中 `class MessageType` 为**唯一真相源（SSOT）**，
+server 权威。Android 的 `shared-protocol/.../MsgType.kt`、WearOS 的
+`app/.../data/MsgType.kt` 都是对着它做的手工镜像 —— 手工镜像必然漂移。
+
+### 11.1 自动漂移检查器
+
+`tools/protocol/check_aip_msgtype_drift.py` 把 v2 `MessageType` 当作标准，解析各客户端
+Kotlin `MsgType` 的 wire 值，分四类报告，并可在 `--strict` 下作为 CI 门禁：
+
+```bash
+# sibling checkout（../ufo-galaxy-android、../galaxy-wearos）时零参即可
+python tools/protocol/check_aip_msgtype_drift.py --strict
+```
+
+| 分类 | 含义 |
+|------|------|
+| **canonical 一致** | wire 值与 v2 完全一致（健康） |
+| **已接受兼容别名** | 客户端用了 v2 已登记的入向兼容别名（server 认得，但建议客户端后续迁到 canonical 长名） |
+| **客户端专有扩展** | client→面板 / client 内部事件，server 无需识别（白名单内，正常） |
+| **未知（server 会拒）** | v2 既无此值、也非已登记别名/扩展 —— server 端 `MessageType(...)` 会 `ValueError` → 返回 `UNKNOWN_MESSAGE_TYPE`，整条消息被拒。`--strict` 下非 0 退出 |
+
+回归防护见 `tests/test_protocol_msgtype_ssot.py`（不依赖 sibling 仓 checkout，可在纯 v2 CI 跑）。
+
+### 11.2 已登记的客户端入向兼容别名
+
+历史上两客户端发着一批 v2 canonical 值的**短别名**，字符串不同会被 server 拒。沿用本仓
+既有 "previously absent → added" 补丁做法，已把它们登记进 `MessageType` 作为**仅入向兼容
+别名**（server 认得、经 catch-all 与 canonical 对应类型一样优雅路由；canonical 输出仍只用长名）：
+
+| 客户端短别名 | v2 canonical 长名 |
+|------|------|
+| `relay` | `relay_request` |
+| `forward` | `relay_forward` |
+| `reply` | `relay_reply` |
+| `lock` | `coord_lock` |
+| `unlock` | `coord_unlock` |
+| `broadcast` | `coord_broadcast` |
+
+另补齐两个客户端已发、v2 此前无对应的真实类型：`operator_action_request`
+（对应已存在的 `operator_action_result`）、`device_audit_report`（与 `device_*_report` 家族并列）。
+
+> **迁移建议（非强制）**：server 端已兼容,现网客户端无需改动即可连通。若要收敛到纯 canonical,
+> 可在客户端 `MsgType.kt` 把上述短别名的 wire 值改为对应长名 —— 改动需在各自仓库本地
+> 用 Android SDK/Gradle 构建验证（v2 沙箱无 Android 工具链，无法代为编译）。
+
+---
+
+*最后更新：2026-07-03*
