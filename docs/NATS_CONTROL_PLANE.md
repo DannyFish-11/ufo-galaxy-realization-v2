@@ -148,7 +148,7 @@ New endpoints available in both the Galaxy core API and the gateway service:
 
 ```bash
 # Gateway NATS health
-curl http://localhost:8765/health/nats
+curl http://localhost:9000/health/nats
 
 # Core API NATS health
 curl http://localhost:8000/health/nats

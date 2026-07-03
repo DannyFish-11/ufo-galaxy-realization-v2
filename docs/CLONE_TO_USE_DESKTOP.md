@@ -32,7 +32,7 @@ UFO Galaxy 是一个**桌面原生 AI 助手系统**。通过 Electron 三态覆
          ▼
 ┌─────────────────┐     ┌──────────────────┐
 │ Galaxy Gateway  │────►│ Ollama (Gemma 4) │
-│ (FastAPI :8765) │     └──────────────────┘
+│ (FastAPI :9000) │     └──────────────────┘
 └────────┬────────┘     ┌──────────────────┐
          │              │ DeepSeek (兜底)   │
          ├──────────────┼──────────────────┤
@@ -172,7 +172,7 @@ cd electron && npm start
 ### 注册服务器
 
 ```bash
-curl -X POST http://localhost:8765/api/v1/agents/linux/servers \
+curl -X POST http://localhost:9000/api/v1/agents/linux/servers \
   -H "Content-Type: application/json" \
   -d '{
     "name": "华为云",
@@ -189,14 +189,14 @@ curl -X POST http://localhost:8765/api/v1/agents/linux/servers \
 ### 执行命令
 
 ```bash
-curl -X POST http://localhost:8765/api/v1/agents/linux/servers/a1b2c3d4/execute \
+curl -X POST http://localhost:9000/api/v1/agents/linux/servers/a1b2c3d4/execute \
   -d '{"command": "uname -a && df -h"}'
 ```
 
 ### 查看系统信息
 
 ```bash
-curl http://localhost:8765/api/v1/agents/linux/servers/a1b2c3d4/info
+curl http://localhost:9000/api/v1/agents/linux/servers/a1b2c3d4/info
 ```
 
 ### API 端点列表
@@ -222,7 +222,7 @@ curl http://localhost:8765/api/v1/agents/linux/servers/a1b2c3d4/info
 | 症状 | 原因 | 解决 |
 |------|------|------|
 | `ImportError` | 依赖未安装 | `pip install -r requirements.txt` |
-| 端口占用 | 8765 被占用 | `lsof -i :8765` 杀掉进程 |
+| 端口占用 | 9000 被占用 | `lsof -i :9000` 杀掉进程 |
 | `.env` 缺失 | 环境变量未配置 | `cp .env.example .env` 后编辑 |
 
 ### Electron 启动失败

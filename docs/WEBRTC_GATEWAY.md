@@ -46,7 +46,7 @@ Galaxy Gateway  ─────────────────────�
 | Variable      | Default                  | Description                                     |
 |---------------|--------------------------|-------------------------------------------------|
 | `NODE_95_URL` | `http://localhost:8095`  | HTTP base URL of `Node_95_WebRTC_Receiver`.     |
-| `GATEWAY_URL` | `http://localhost:8765`  | HTTP base URL of this gateway service (unified port — WS + REST + WebRTC on same port). |
+| `GATEWAY_URL` | `http://localhost:9000`  | HTTP base URL of this gateway service (unified port — WS + REST + WebRTC on same port). |
 
 Both variables are read at call-time, so they can be changed without
 restarting the process (useful for testing).
@@ -64,7 +64,7 @@ WebRTC signaling connection.
 {
   "node95_url": "http://localhost:8095",
   "ws_signaling_path": "/signaling/{device_id}",
-  "gateway_ws_url": "http://localhost:8765",
+  "gateway_ws_url": "http://localhost:9000",
   "gateway_ws_path": "/ws/webrtc/{device_id}"
 }
 ```
@@ -140,7 +140,7 @@ resp = await router.route(TransportRequest(
 ))
 
 print(resp.endpoint)
-# ws://localhost:8765/ws/webrtc/phone_a
+# ws://localhost:9000/ws/webrtc/phone_a
 ```
 
 ---
@@ -185,11 +185,11 @@ clients can obtain configuration before they have a token.
 
 ```json
 {
-  "ws_base": "ws://192.168.1.10:8765",
-  "rest_base": "http://192.168.1.10:8765",
-  "ws_url": "ws://192.168.1.10:8765/ws/device/{id}",
-  "gateway_ws_url": "ws://192.168.1.10:8765/ws/device/{id}",
-  "ws_url_template": "ws://192.168.1.10:8765/ws/device/{id}",
+  "ws_base": "ws://192.168.1.10:9000",
+  "rest_base": "http://192.168.1.10:9000",
+  "ws_url": "ws://192.168.1.10:9000/ws/device/{id}",
+  "gateway_ws_url": "ws://192.168.1.10:9000/ws/device/{id}",
+  "ws_url_template": "ws://192.168.1.10:9000/ws/device/{id}",
   "ws_canonical_path": "/ws/device/{id}",
   "ws_paths": [
     "/ws/device/{id}",
@@ -260,7 +260,7 @@ val wsUrl = "${config.wsBase}${config.wsPaths[0].replace("{id}", deviceId)}"
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GATEWAY_URL` | `http://localhost:8765` | HTTP base URL — used to derive `rest_base` and `ws_base`. |
+| `GATEWAY_URL` | `http://localhost:9000` | HTTP base URL — used to derive `rest_base` and `ws_base`. |
 | `GALAXY_STUN_URLS` | `stun:stun.l.google.com:19302` | Comma-separated STUN URLs. |
 | `GALAXY_TURN_URLS` | _(not set)_ | Comma-separated TURN URLs.  Omit to return an empty `turn_servers`. |
 | `GALAXY_TURN_USERNAME` | _(not set)_ | TURN credential username. |
@@ -689,7 +689,7 @@ This installs:
 ```bash
 python tools/camera_webrtc_sender.py \
     --device-id desktop_cam_1 \
-    --gateway-ws-url ws://localhost:8765/ws/webrtc \
+    --gateway-ws-url ws://localhost:9000/ws/webrtc \
     --camera-index 0 \
     --frame-rate 15 \
     --resolution 1280x720
@@ -698,7 +698,7 @@ python tools/camera_webrtc_sender.py \
 The script will:
 
 1. Open webcam index `0` at 1280×720 / 15 fps.
-2. Connect to `ws://localhost:8765/ws/webrtc/desktop_cam_1`.
+2. Connect to `ws://localhost:9000/ws/webrtc/desktop_cam_1`.
 3. Send an SDP **offer**, wait for the **answer** from Node_95 (via the Gateway proxy).
 4. Exchange ICE candidates in trickle mode.
 5. Stream video until interrupted (`Ctrl+C`).
@@ -710,7 +710,7 @@ All CLI arguments can also be set via environment variables:
 | Variable          | CLI flag              | Default                             | Description                              |
 |-------------------|-----------------------|-------------------------------------|------------------------------------------|
 | `DEVICE_ID`       | `--device-id`         | `desktop_cam_1`                     | Unique identifier for this device        |
-| `GATEWAY_WS_URL`  | `--gateway-ws-url`    | `ws://localhost:8765/ws/webrtc`     | Gateway base WebSocket URL (no device_id suffix) |
+| `GATEWAY_WS_URL`  | `--gateway-ws-url`    | `ws://localhost:9000/ws/webrtc`     | Gateway base WebSocket URL (no device_id suffix) |
 | `CAMERA_INDEX`    | `--camera-index`      | `0`                                 | OpenCV camera device index               |
 | `FRAME_RATE`      | `--frame-rate`        | `15`                                | Target frames per second                 |
 | `RESOLUTION`      | `--resolution`        | `1280x720`                          | Video resolution as `WxH`                |
@@ -719,7 +719,7 @@ Example using environment variables:
 
 ```bash
 DEVICE_ID=office_cam \
-GATEWAY_WS_URL=ws://192.168.1.10:8765/ws/webrtc \
+GATEWAY_WS_URL=ws://192.168.1.10:9000/ws/webrtc \
 FRAME_RATE=10 \
 python tools/camera_webrtc_sender.py
 ```

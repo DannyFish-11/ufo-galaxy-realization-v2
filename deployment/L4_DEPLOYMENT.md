@@ -44,7 +44,7 @@ nano config/l4_config.json
   },
   "gateway": {
     "host": "0.0.0.0",
-    "port": 8765
+    "port": 9000
   },
   "devices": {
     "android": {"enabled": true},
@@ -95,7 +95,7 @@ docker build -t galaxy-l4 -f Dockerfile.l4 .
 docker run -d \
   --name galaxy-l4 \
   --restart always \
-  -p 8765:8765 \
+  -p 9000:9000 \
   -v $(pwd)/config:/app/config \
   -v $(pwd)/logs:/app/logs \
   galaxy-l4
@@ -108,7 +108,7 @@ docker run -d \
 ### 1. 检查系统状态
 
 ```bash
-curl http://localhost:8765/status
+curl http://localhost:9000/status
 ```
 
 预期输出：
@@ -125,7 +125,7 @@ curl http://localhost:8765/status
 ### 2. 提交测试目标
 
 ```bash
-curl -X POST http://localhost:8765/goal \
+curl -X POST http://localhost:9000/goal \
   -H "Content-Type: application/json" \
   -d '{
     "description": "了解量子计算的最新进展",
@@ -148,7 +148,7 @@ tail -f logs/galaxy_l4.log
 在安卓端 `WebSocketClient.kt` 中设置服务器地址：
 
 ```kotlin
-private val serverUrl = "ws://服务器IP:8765/android"
+private val serverUrl = "ws://服务器IP:9000/android"
 ```
 
 ### 2. 发送设备注册消息
@@ -245,13 +245,13 @@ INFO - 安卓设备已注册: device_xxx
 ### 1. 健康检查
 
 ```bash
-curl http://localhost:8765/health
+curl http://localhost:9000/health
 ```
 
 ### 2. 查看性能指标
 
 ```bash
-curl http://localhost:8765/metrics
+curl http://localhost:9000/metrics
 ```
 
 ### 3. 重启服务
@@ -291,13 +291,13 @@ python3 main.py
 
 ```bash
 # 检查防火墙
-sudo ufw allow 8765
+sudo ufw allow 9000
 
 # 检查端口占用
-netstat -tuln | grep 8765
+netstat -tuln | grep 9000
 
 # 测试 WebSocket 连接
-wscat -c ws://localhost:8765/android
+wscat -c ws://localhost:9000/android
 ```
 
 ### 问题 3：性能下降
