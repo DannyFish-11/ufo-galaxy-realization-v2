@@ -8,7 +8,7 @@
 
 | 仓库 | 地址 | 职责 |
 |------|------|------|
-| **服务端** (本仓库) | `DannyFish-11/ufo-galaxy-realization` | Galaxy Gateway + 桌面覆盖层 |
+| **服务端** (本仓库) | `DannyFish-11/ufo-galaxy-realization-v2` | Galaxy Gateway + 桌面覆盖层 |
 | **Android 客户端** | `DannyFish-11/ufo-galaxy-android` | Android APK |
 
 克隆 Android 客户端：
@@ -62,8 +62,8 @@ Android 端支持两种运行模式：
 
 ```bash
 # 服务端（本仓库）
-git clone https://github.com/DannyFish-11/ufo-galaxy-realization.git
-cd ufo-galaxy-realization
+git clone https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git
+cd ufo-galaxy-realization-v2
 
 # Android 客户端（同级目录）
 git clone https://github.com/DannyFish-11/ufo-galaxy-android.git
@@ -72,13 +72,13 @@ git clone https://github.com/DannyFish-11/ufo-galaxy-android.git
 ### 2. 启动服务端 Gateway
 
 ```bash
-cd ufo-galaxy-realization
+cd ufo-galaxy-realization-v2
 python main.py
 # 或
 python launch_desktop.py --backend
 ```
 
-确保 Gateway 在 `ws://<host>:8765` 可访问。
+确保 Gateway 在 `ws://<host>:9000` 可访问。（端口来自 `config/unified_ports.yaml` 的 `gateway: 9000`；此前文档写的 8765 是历史值，已在端口冲突解决时统一为 9000。）
 
 ### 3. 配置 Android 端连接
 
@@ -89,7 +89,7 @@ python launch_desktop.py --backend
 | 字段 | 示例值 |
 |------|--------|
 | Host / IP | `192.168.1.100` 或 Tailscale IP |
-| Port | `8765` |
+| Port | `9000` |
 | Use TLS | 开发关闭，生产开启 |
 | Device ID | 留空使用系统默认值 |
 
@@ -100,8 +100,8 @@ python launch_desktop.py --backend
 ```bash
 cd ufo-galaxy-android
 # 编辑 app/src/main/assets/config.properties
-galaxy_gateway_url=ws://192.168.1.100:8765
-rest_base_url=http://192.168.1.100:8765
+galaxy_gateway_url=ws://192.168.1.100:9000
+rest_base_url=http://192.168.1.100:9000
 cross_device_enabled=true
 ```
 
@@ -150,17 +150,18 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 Android 通过 AIP v3.0 协议与服务端通信。
 
-| 端点 | 用途 |
-|------|------|
-| `ws://<host>:8765/ws/android/{device_id}` | **主路径**，推荐 |
-| `ws://<host>:8765/ws/{device_id}` | 通用设备路径 |
-| `ws://<host>:8765/ws` | 自动分配 device_id |
-| `ws://<host>:8765/ws/device/{device_id}` | 兼容别名 |
-| `ws://<host>:8765/ws/ufo3/{device_id}` | UFO3 遗留路径 |
+> 以下路径与用途以 **代码实际注册为准**（`galaxy_gateway/routes/websocket.py`，PR-25：唯一 canonical 入口 + 若干 compat 别名，全部汇聚到同一个 handler）。此前本表把主/次写反、还列了两个代码里不存在的路径（`/ws/{device_id}`、裸 `/ws`），已按代码更正。
 
-**连接示例：**
+| 端点 | 分类 | 用途 |
+|------|------|------|
+| `ws://<host>:9000/ws/device/{device_id}` | **canonical（主路径，推荐）** | 唯一规范设备入口（`websocket.py` classification="canonical"） |
+| `ws://<host>:9000/ws/android/{device_id}` | compat | 遗留 Android 入口（path 参），委派到同一 handler |
+| `ws://<host>:9000/ws/android`（device_id 走 query 参） | compat | 遗留 Android 入口（query 参） |
+| `ws://<host>:9000/ws/ufo3/{device_id}` | compat | 遗留 UFO3 入口 |
+
+**连接示例（用 canonical 主路径）：**
 ```
-ws://192.168.1.100:8765/ws/android/my-device-001
+ws://192.168.1.100:9000/ws/device/my-device-001
 ```
 
 ---
@@ -213,7 +214,7 @@ LoopController → 循环或完成
 | WebSocket 连接失败 | Gateway 未启动 | 启动 `python main.py` |
 | 连接超时 | IP/端口错误 | 检查 `config.properties` 中的 IP |
 | TLS 握手失败 | 证书问题 | 开发环境关闭 TLS |
-| 设备注册失败 | 防火墙拦截 | 检查 8765 端口开放 |
+| 设备注册失败 | 防火墙拦截 | 检查 9000 端口开放 |
 
 ### 本地模型问题
 

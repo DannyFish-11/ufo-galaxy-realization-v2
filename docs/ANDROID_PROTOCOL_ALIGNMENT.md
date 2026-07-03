@@ -247,7 +247,7 @@ MessageHandler / DeviceManager (只处理 v3 字段)
            ▼                          ▼
 ┌──────────────────────┐   ┌──────────────────────────────┐
 │  galaxy_gateway/     │   │  core/api_routes.py          │
-│  app.py (port 8765)  │   │  (port 8000)                 │
+│  app.py (port 9000)  │   │  (port 8000)                 │
 │                      │   │                              │
 │  /ws/device/{id}  ◄──┘   │  POST   /api/v1/devices/     │
 │  /ws/android         │   │         register             │
@@ -278,10 +278,10 @@ MessageHandler / DeviceManager (只处理 v3 字段)
 
 | 端点 | 说明 |
 |------|------|
-| `ws://<host>:8765/ws/device/{device_id}` | **主通道**（推荐）：注册成功后的设备专属通道 |
-| `ws://<host>:8765/ws/android` | 初始连接端点：设备注册及通用消息通道 |
-| `ws://<host>:8765/ws/status` | 状态广播推送（只读订阅） |
-| `ws://<host>:8765/ws/ufo3/{device_id}` | 向后兼容路径（等同于主通道） |
+| `ws://<host>:9000/ws/device/{device_id}` | **主通道**（推荐）：注册成功后的设备专属通道 |
+| `ws://<host>:9000/ws/android` | 初始连接端点：设备注册及通用消息通道 |
+| `ws://<host>:9000/ws/status` | 状态广播推送（只读订阅） |
+| `ws://<host>:9000/ws/ufo3/{device_id}` | 向后兼容路径（等同于主通道） |
 
 ### REST API 端点（`/api/v1/devices/*`）
 
@@ -394,9 +394,9 @@ DeviceCapability.COMM_BLUETOOTH | DeviceCapability.COMM_NFC | DeviceCapability.C
 
 | 路径 | 说明 | 推荐度 |
 |------|------|--------|
-| `ws://<host>:8765/ws/device/{device_id}` | **主通道**（推荐）：设备注册后的专属通道 | ✅ 推荐 |
-| `ws://<host>:8765/ws/android` | 初始连接端点：自动分配设备 ID | ✅ 支持 |
-| `ws://<host>:8765/ws/ufo3/{device_id}` | 向后兼容路径（等同于主通道） | ⚠️ 兼容 |
+| `ws://<host>:9000/ws/device/{device_id}` | **主通道**（推荐）：设备注册后的专属通道 | ✅ 推荐 |
+| `ws://<host>:9000/ws/android` | 初始连接端点：自动分配设备 ID | ✅ 支持 |
+| `ws://<host>:9000/ws/ufo3/{device_id}` | 向后兼容路径（等同于主通道） | ⚠️ 兼容 |
 
 > **Android 客户端应统一使用主通道 `/ws/device/{device_id}`。**
 > 以上所有路径均路由到 `galaxy_gateway/app.py` 中同一个 `WebSocketManager.handle_connection()` 处理器。
@@ -508,7 +508,7 @@ task_result → AndroidBridge._handle_task_result() → 返回结果
 1. **统一使用 AIPMessageBuilder**，并确保发送完整 v3 字段：
    `version: "3.0"`、`message_id`（UUID）、`timestamp`（毫秒）、`device_id`、`type`。
 
-2. **连接路径**：统一配置为 `ws://<host>:8765/ws/device/{device_id}`。
+2. **连接路径**：统一配置为 `ws://<host>:9000/ws/device/{device_id}`。
 
 3. **capability_report 消息**在设备连接后立即发送，`supported_actions` 列表应枚举
    设备实际支持的操作名称（如 `["screenshot", "tap", "swipe", "input_text"]`）。
