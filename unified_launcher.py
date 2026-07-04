@@ -742,44 +742,41 @@ class GalaxyUnified:
         if flag in ("0", "false", "no", "off"):
             return ("warn", "已禁用 (GALAXY_AUTO_DOCKER=0)", "")
 
-        docker = shutil.which("docker")
-        if not docker:
-            return ("warn", "未安装 — 依赖基础设施的节点将跳过（不影响桌面）",
-                    "启用全部节点：装 Docker 后重跑 — https://docs.docker.com/get-docker/")
+        # 选择容器运行时:Docker 或 Podman(两者都装时首启会让你选,单一已装直接用,
+        # 都没装则跳过)。选择结果持久化到 .galaxy_runtime,并驱动后台【静默拉取】。
+        from core import container_runtime as cr
+        runtime = await asyncio.to_thread(cr.resolve_runtime, True)
+        if not runtime:
+            return ("warn", "未安装 Docker/Podman — 依赖基础设施的节点将跳过（不影响桌面）",
+                    "启用全部节点：装 Docker 或 Podman 后重跑 — "
+                    "https://docs.docker.com/get-docker/ 或 https://podman.io/get-started")
+        rt_bin = cr.runtime_binary(runtime)
+        rt_name = cr.display_name(runtime)
 
         compose_file = PROJECT_ROOT / "docker-compose.yml"
         if not compose_file.exists():
-            return ("warn", "docker-compose.yml 缺失 — 跳过 Docker 基础设施", "")
+            return ("warn", f"docker-compose.yml 缺失 — 跳过 {rt_name} 基础设施", "")
 
         # 仅基础设施后端；排除 galaxy/galaxy-gateway(应用本身) 与 ollama(避免与本地 Ollama 冲突)。
         services = ["nats", "redis", "qdrant", "neo4j", "mongodb"]
 
-        def _run(cmd, timeout=None):
-            return sp.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
-
         def _daemon_up() -> bool:
-            try:
-                return _run([docker, "info"], timeout=15).returncode == 0
-            except Exception:
-                return False
+            return cr.daemon_up(runtime)
 
         def _compose_base():
-            try:
-                if _run([docker, "compose", "version"], timeout=15).returncode == 0:
-                    return [docker, "compose"]
-            except Exception:
-                pass
-            dc = shutil.which("docker-compose")
-            return [dc] if dc else None
+            return cr.compose_base(runtime)
 
         def _bring_up():
             if not _daemon_up():
-                _try_start_docker_daemon(docker)
-                deadline = _time.time() + float(os.environ.get("GALAXY_AUTO_DOCKER_DAEMON_WAIT", "60"))
-                while _time.time() < deadline:
-                    if _daemon_up():
-                        break
-                    _time.sleep(3)
+                # Podman 无守护进程(rootless),info 不通多半是配置问题,不尝试"启动守护";
+                # 仅 Docker 尝试拉起 Docker Desktop/daemon 并轮询等待。
+                if runtime == "docker":
+                    _try_start_docker_daemon(rt_bin)
+                    deadline = _time.time() + float(os.environ.get("GALAXY_AUTO_DOCKER_DAEMON_WAIT", "60"))
+                    while _time.time() < deadline:
+                        if _daemon_up():
+                            break
+                        _time.sleep(3)
                 if not _daemon_up():
                     return ("daemon_down", None)
             base = _compose_base()
@@ -801,15 +798,18 @@ class GalaxyUnified:
 
         status, rc = await asyncio.to_thread(_bring_up)
         if status == "up" and rc == 0:
-            return ("ok", "nats / redis / qdrant / neo4j / mongodb 已就绪", "")
+            return ("ok", f"nats / redis / qdrant / neo4j / mongodb 已就绪 · via {rt_name}", "")
         if status == "pulling":
-            return ("warn", "首次镜像下载中（后台）",
+            return ("warn", f"首次镜像下载中（{rt_name} 后台静默拉取）",
                     "进度见 logs/docker.log；本轮先跳过依赖节点，下次启动即生效")
         if status == "daemon_down":
-            return ("warn", "守护未能自动启动 — 手动启动 Docker Desktop 后重跑", "")
+            _hint = ("手动启动 Docker Desktop 后重跑" if runtime == "docker"
+                     else "Podman 引擎/machine 未就绪 — 试 `podman machine start` 后重跑")
+            return ("warn", f"{rt_name} 未就绪 — {_hint}", "")
         if status == "no_compose":
-            return ("warn", "未找到 docker compose 命令 — 跳过", "")
-        return ("warn", f"启动异常 (rc={rc})，详情见 logs/docker.log", "")
+            return ("warn", f"未找到 {runtime} compose 命令 — 跳过 "
+                            f"(装 {runtime}-compose 或启用 compose 插件)", "")
+        return ("warn", f"{rt_name} 启动异常 (rc={rc})，详情见 logs/docker.log", "")
 
     async def start_electron(self) -> bool:
         """启动 Electron 桌面三态覆盖层。"""
@@ -1243,17 +1243,20 @@ class GalaxyUnified:
             _emit("核心服务", "启动失败", "fail")
             logger.error(f"Core services: {exc}")
 
-        # ── 基础设施 (Docker，自动拉起；依赖它的节点才能起来) ──
+        # ── 基础设施 (Docker / Podman，自动拉起；依赖它的节点才能起来) ──
         try:
             d_status, d_value, d_note = await self.ensure_docker_infra()
         except Exception as exc:
             d_status, d_value, d_note = "warn", "基础设施启动异常（非致命）", ""
             logger.warning("ensure_docker_infra failed: %s", exc)
-        d_details = [("Docker 基础设施", d_value, d_status)]
+        # 标签反映实际选中的运行时(Docker / Podman);resolve_runtime 已把选择写入
+        # GALAXY_CONTAINER_RUNTIME,未选到则统一显示 "容器"。
+        _rt = os.environ.get("GALAXY_CONTAINER_RUNTIME", "").strip().capitalize() or "容器"
+        d_details = [(f"{_rt} 基础设施", d_value, d_status)]
         if d_note:
             d_details.append(("下一步", d_note, "info"))
-        _emit("基础设施 · Docker", d_value, d_status, details=d_details,
-              hint="装后重跑即恢复" if d_status != "ok" else None)
+        _emit(f"基础设施 · {_rt}", d_value, d_status, details=d_details,
+              hint="装 Docker/Podman 后重跑即恢复" if d_status != "ok" else None)
 
         # ── 消息总线 ──
         bus_details: List[Tuple[str, str, str]] = []
