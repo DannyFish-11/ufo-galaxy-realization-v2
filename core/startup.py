@@ -813,8 +813,44 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     try:
         from galaxy_gateway.app import app as gateway_app
         app.mount("/gateway", gateway_app)
-        results["galaxy_gateway"] = {"status": "ok"}
-        logger.info("Galaxy Gateway 已挂载到 /gateway")
+
+        # Starlette 不会为【被挂载的子应用】运行其 lifespan —— 而 galaxy_gateway 的
+        # lifespan 负责创建 DeviceManager / WebSocketManager / TaskOrchestrator 并写入
+        # gateway_app.state。父应用又是命令式启动、根本没有自己的 lifespan(见
+        # unified_launcher 里 FastAPI(...) 无 lifespan 参数),所以子应用 lifespan 永不
+        # 触发。后果:/gateway/* 下所有走 Depends(get_device_manager/...) 的 REST 路由,
+        # 会因 app.state.X 为 None 被 dependencies._get_state 判定 503 "Service not ready"
+        # ——真机可复现的"/gateway/* 恒 503"。
+        # 修复:只补齐【必需的四个核心服务】(dependencies 里会抛 503 的那批),复用
+        # lifecycle.init_gateway_core_services()。**刻意不跑完整 lifespan**——完整 lifespan
+        # 还会连 NATS、起 TCP/UDP 监听(绑端口)、注册 AIPTransport 适配器、起 MasterBrain
+        # 等,这些要么重、要么会与主 app 已启动的同类服务【双绑端口/重复注册】。可选服务
+        # (openclawd/llm_router/nats_adapter)缺失时 dependencies 返回 None、不报 503,
+        # 所以只补必需项即可精确消除 503,不引入端口冲突。
+        # 注:设备 WebSocket(/ws/device/{id})走根路径、由 unified_launcher 独立注册,
+        # 不受此影响;本修复只补活 /gateway/* 的 REST 面。
+        try:
+            from galaxy_gateway.bootstrap.lifecycle import init_gateway_core_services
+            (
+                _gw_dm, _gw_mh, _gw_wsm, _gw_to,
+            ) = await init_gateway_core_services(gateway_app)
+
+            async def _shutdown_gateway_core() -> None:
+                import contextlib as _ctx
+                with _ctx.suppress(Exception):
+                    await _gw_to.stop()
+                with _ctx.suppress(Exception):
+                    await _gw_wsm.stop()
+
+            app.add_event_handler("shutdown", _shutdown_gateway_core)
+            results["galaxy_gateway"] = {"status": "ok", "core_services": "started"}
+            logger.info(
+                "Galaxy Gateway 已挂载到 /gateway(必需核心服务已就绪,/gateway/* 不再 503)"
+            )
+        except Exception as _le:
+            # 核心服务启动失败不应阻断整体:挂载仍在,只是 /gateway/* 可能仍 503。
+            results["galaxy_gateway"] = {"status": "degraded", "error": str(_le)}
+            logger.warning("Galaxy Gateway 已挂载,但核心服务启动失败: %s", _le)
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)
         results["galaxy_gateway"] = {"status": "not_available", "error": str(e)}
