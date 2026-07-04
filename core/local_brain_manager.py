@@ -272,7 +272,7 @@ class LocalBrainManager:
 
         # Priority 2: Ollama (most stable, easiest setup)
         if "ollama" in available:
-            # Check if Ollama is actually running
+            # Check if Ollama is actually running (快速探测)
             try:
                 import httpx
 
@@ -286,6 +286,20 @@ class LocalBrainManager:
                     return "ollama"
             except Exception as exc:
                 logger.debug("Ollama availability check failed: %s", exc)
+
+            # 快速探测失败 ≠ 没装 Ollama。真机复现:Ollama 首次冷启动、或正在把
+            # 大模型(如用户后台 pull 的 12B)载入内存时,/api/tags 可能几秒内不回;
+            # 若此时配置的主脑模型是 Ollama 标签(如 "gemma4:latest",带冒号、由
+            # ollama pull 管理),绝不能因为探测超时就跌落到 transformers——
+            # transformers 会把这个 Ollama 标签当 HuggingFace repo 加载,必然
+            # "模型加载失败"。只要 ollama 二进制在,就选 ollama:后续
+            # _ensure_ollama_running() 有 ~50s 冷启动等待窗口来正确拉起并就绪。
+            if shutil.which("ollama"):
+                logger.info(
+                    "自动选择 ollama 后端 (Ollama 已安装但快速探测未响应,"
+                    "转由冷启动长等待路径处理)"
+                )
+                return "ollama"
 
         # Priority 3: llama_cpp without GPU (still works on CPU)
         if "llama_cpp" in available:
