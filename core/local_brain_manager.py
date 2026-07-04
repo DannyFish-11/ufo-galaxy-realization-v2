@@ -672,22 +672,44 @@ class LocalBrainManager:
             return False
 
     async def _start_ollama(self) -> bool:
-        """尝试启动 Ollama 服务"""
+        """把 Ollama 作为【常驻服务】拉起(ollama serve 必须一直在,模型才能加载)。
+
+        真机复现的两个坑,这里一并修:
+        1) 之前 stdout/stderr=PIPE 且【没有任何人读取】——ollama serve 会持续往
+           stderr 写日志,OS 管道缓冲(约 64KB)填满后写操作阻塞,serve 主循环被
+           卡住 → 表现为"Ollama 已安装,但服务在等待窗口内未响应"。改为把输出重定向
+           到日志文件(logs/ollama.log),彻底避免管道回压。
+        2) start_new_session 是 POSIX 专有,Windows 上不生效、进程会绑到当前控制台,
+           父进程/控制台一退,serve 跟着被杀,不"常驻"。Windows 改用
+           DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP 真正脱离控制台常驻。
+        """
         try:
-            # 检查 ollama 命令是否存在
             ollama_cmd = shutil.which("ollama")
             if not ollama_cmd:
                 logger.warning("ollama 命令未找到，请安装 Ollama")
                 return False
 
-            # 后台启动 ollama serve
-            subprocess.Popen(
-                [ollama_cmd, "serve"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                start_new_session=True,
-            )
-            logger.info("Ollama 服务已启动")
+            import os as _os
+            from pathlib import Path as _Path
+            _log_dir = _Path("logs")
+            try:
+                _log_dir.mkdir(exist_ok=True)
+                _out = open(_log_dir / "ollama.log", "ab")
+            except Exception:
+                _out = subprocess.DEVNULL  # 连日志都开不了也不能用 PIPE
+
+            _popen_kwargs = dict(stdout=_out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+            if sys.platform == "win32":
+                # 脱离父控制台常驻(避免父进程/终端退出时被连带杀掉)。
+                _flags = 0
+                _flags |= getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+                _flags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+                _popen_kwargs["creationflags"] = _flags
+            else:
+                _popen_kwargs["start_new_session"] = True
+
+            subprocess.Popen([ollama_cmd, "serve"], **_popen_kwargs)
+            logger.info("Ollama 服务已作为常驻进程启动(日志: logs/ollama.log)")
             return True
 
         except Exception as e:
