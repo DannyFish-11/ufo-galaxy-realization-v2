@@ -41,6 +41,10 @@ env/
 .env.local
 *.local
 
+# Per-machine persisted choices (main-brain model / container runtime) — 本机状态，非源码
+.galaxy_model
+.galaxy_runtime
+
 # Logs
 *.log
 logs/
