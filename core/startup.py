@@ -408,9 +408,12 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         from core.security_middleware import get_security_manager
 
         security_mgr = get_security_manager()
-        security_mgr.setup_middleware(app)
+        # HTTP 限流收口到下面步骤 3 的性能中间件链(唯一权威限流层),这里不再重复
+        # 安装本管理器自带的 RateLimiter——否则同一请求被两个独立限流器双重计数
+        # (双层限流叠加,阈值/分桶键还不一致)。审计/安全头/IP黑名单/输入验证照装。
+        security_mgr.setup_middleware(app, include_rate_limit=False)
         results["security_middleware"] = {"status": "ok"}
-        logger.info("安全中间件已安装 (审计日志 + 安全头 + IP 黑名单)")
+        logger.info("安全中间件已安装 (审计日志 + 安全头 + IP 黑名单 + 输入验证;HTTP 限流收口到性能层)")
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)
         results["security_middleware"] = {"status": "degraded", "error": str(e)}
