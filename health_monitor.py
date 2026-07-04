@@ -1,15 +1,34 @@
 """
-Galaxy 健康监控系统
-========================
+Galaxy 健康监控系统（可选独立看门狗 / Prometheus 导出器）
+========================================================
 
-实时监控所有节点的健康状态，自动重启失败的节点
+实时监控所有节点的健康状态，自动重启失败的节点，并暴露 Prometheus /metrics。
 
 功能：
 1. 实时监控所有节点
 2. 自动重启失败的节点
 3. 发送告警通知
 4. 生成健康报告
-5. Web 仪表板
+5. Web 仪表板 + Prometheus /metrics
+
+【它与主应用的关系 —— 避免"隐藏入口点"误解】
+--------------------------------------------------------------------
+本文件是一个【独立进程】服务(自带 FastAPI app + uvicorn,默认端口 9100),
+**不由 `python main.py` 启动**,也【不需要】被它启动:
+
+  - 主应用(端口 9000)已经通过 `core/routes/monitoring.py` 暴露了等价的
+    `/metrics`(Prometheus)、`/api/v1/slo/metrics`、`/health/ready` —— 用的是
+    同一个 `core.slo_metrics.get_slo_metrics()`。所以跑 `python main.py` 时这些
+    指标/就绪端点【已经有了】,不缺。
+  - 节点健康巡检 + 自动重启,在主路径上由已接线的
+    `core.health_integration.UnifiedHealthManager`(core/startup.py 步骤 15)承担。
+
+因此本文件定位为【可选的独立看门狗 / 导出器】:
+  - 由 `daemon/galaxy_daemon.py` 作为受管子进程拉起(`python -m health_monitor
+    --watchdog`),用于不跑完整主应用、只想要一个轻量节点看门狗的部署;
+  - 或手动 `python health_monitor.py` 单独起一个健康仪表板 / Prometheus 抓取点。
+既不是死代码(daemon 与若干结构测试都依赖它),也不该塞进主启动(会与上述两处
+重复巡检 / 重复暴露端点)。
 
 作者：Galaxy Team
 日期：2026-01-23
@@ -404,12 +423,38 @@ async def startup_event():
     asyncio.create_task(monitor.monitor_loop())
 
 if __name__ == "__main__":
+    import argparse
     import uvicorn
 
-    # 启动 Web 服务（监控循环通过 startup 事件自动启动）
+    # daemon/galaxy_daemon.py 以 `python -m health_monitor --watchdog` 拉起本进程,
+    # 但此前 __main__ 直接 uvicorn.run、把 --watchdog 静默丢弃(argv 根本没被解析)。
+    # 这里显式解析,让守护进程的调用意图变得诚实可读,并允许覆盖端口。
     try:
         from core.port_config import get_service_port
-        _hm_port = get_service_port("health_monitor")
+        _default_port = get_service_port("health_monitor")
     except Exception:
-        _hm_port = 9100
-    uvicorn.run(app, host="0.0.0.0", port=_hm_port)
+        _default_port = 9100
+
+    _parser = argparse.ArgumentParser(
+        description="Galaxy 独立健康看门狗 / Prometheus 导出器(可选;主应用已内置等价端点)"
+    )
+    _parser.add_argument(
+        "--watchdog", action="store_true",
+        help="以看门狗模式运行(节点巡检 + 自动重启循环由 startup 事件启动;"
+             "本进程即独立看门狗,该标志用于让 daemon 的调用意图显式化)",
+    )
+    _parser.add_argument(
+        "--port", type=int, default=_default_port,
+        help=f"HTTP 监听端口(默认 {_default_port})",
+    )
+    _parser.add_argument("--host", default="0.0.0.0", help="HTTP 监听地址(默认 0.0.0.0)")
+    _args = _parser.parse_args()
+
+    print(
+        f"🩺 Galaxy Health Monitor 独立启动 "
+        f"(watchdog={'on' if _args.watchdog else 'off'}, "
+        f"http://{_args.host}:{_args.port}) —— 主应用(:9000)已内置等价 /metrics"
+        f"、/api/v1/slo/metrics、/health/ready,本进程为可选独立看门狗/导出器。"
+    )
+    # 启动 Web 服务（监控循环通过 startup 事件自动启动）
+    uvicorn.run(app, host=_args.host, port=_args.port)
