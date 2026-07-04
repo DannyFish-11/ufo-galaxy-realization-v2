@@ -441,8 +441,19 @@ def phase0_env_check() -> dict:
         print_item("Node.js 未安装", "warn")
     status["node_installed"] = node_ok
 
-    # Electron deps
-    electron_deps_ok = (ELECTRON_DIR / "node_modules").exists() if npm_ok else False
+    # Electron deps —— 判定"完整"而非仅"node_modules 目录存在"。
+    # 只看目录存在会漏掉【残缺安装】(npm install 中断:electron.cmd 存根在、但
+    # electron/cli.js 缺失),那样会跳过安装、直接拉起 electron 然后崩。用
+    # electron_package_intact 做完整性检查:缺失或残缺都判 False,让下面的
+    # `npm install`(正常下载)照跑并把缺的补齐——这就是"正常下载 + 缺失/残缺才补"。
+    if npm_ok:
+        try:
+            from core.electron_launch_guard import electron_package_intact
+            electron_deps_ok = electron_package_intact(str(ELECTRON_DIR))
+        except Exception:
+            electron_deps_ok = (ELECTRON_DIR / "node_modules").exists()
+    else:
+        electron_deps_ok = False
     status["electron_deps_ok"] = electron_deps_ok
 
     # Ollama
@@ -621,20 +632,29 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                 if not node_installed:
                     print_item("Node.js 安装失败", "warn", "请手动安装: https://nodejs.org/")
 
-    # 2.4 Electron / npm deps
+    # 2.4 Electron / npm deps —— 正常下载 + 缺失/残缺自动补齐
+    #   electron_deps_ok 现在是【完整性】判定(见 check_environment):
+    #     - node_modules 不存在        → 全新正常下载(npm install)
+    #     - node_modules 在但 cli.js 缺 → 残缺,同样跑 npm install 把缺的补齐
+    #     - 完整                        → 跳过
+    #   npm install 本身是幂等的:该下的下、已在的跳过,既是"正常下载"也是"补齐"。
     npm_cmd = shutil.which("npm")
     if npm_cmd and not env_status.get("electron_deps_ok"):
-        print_item("正在安装 Electron 依赖...", "ok")
+        _node_modules_exists = (ELECTRON_DIR / "node_modules").exists()
+        if _node_modules_exists:
+            print_item("检测到 Electron 依赖残缺，正在补齐...", "ok")
+        else:
+            print_item("正在下载 Electron 依赖...", "ok")
         try:
             rc = sp.run(
                 [npm_cmd, "install"],
                 cwd=str(ELECTRON_DIR),
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300,
             ).returncode
             if rc == 0:
-                print_item("Electron 依赖安装完成", "ok")
+                print_item("Electron 依赖就绪", "ok")
             else:
-                print_item("npm install 失败", "warn")
+                print_item("npm install 失败", "warn", "可手动进入 electron/ 跑 npm install")
         except Exception as exc:
             print_item(f"npm install 异常: {exc}", "warn")
 

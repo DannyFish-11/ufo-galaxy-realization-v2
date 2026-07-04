@@ -225,13 +225,18 @@ def _colorize_line(line: str, banner_width: int = 60) -> str:
 # 状态图标映射 (trailing spaces removed — print_status_row adds uniform spacing)
 # ---------------------------------------------------------------------------
 
+# 与 core.cli_render 统一为【一套 1 显示格的文本符号】(不再混用 ✅/⚠️/❌ 这类带变体
+# 选择符、多数终端渲染成 2 格的 emoji)——否则同一屏里 emoji 行(2 格)、▶ 行(1 格)、
+# cli_render 的 ✓ 行(1 格)三种图标宽度不一,对勾列各自缩进,永远对不齐。统一成 1 格
+# 文本符号后,配合下面 print_status_row 的"图标+单空格"排版,标签一律从第 4 列起,
+# 与 cli_render 的 phase()/detail() 完全同列。
 _STATUS_ICONS: dict = {
-    "success": "✅",
-    "warning": "⚠️",
-    "error":   "❌",
-    "loading": "⏳",
+    "success": "✓",
+    "warning": "⚠",
+    "error":   "✗",
+    "loading": "◐",
     "step":    "▶",
-    "info":    "ℹ️",
+    "info":    "·",
 }
 
 
@@ -316,7 +321,7 @@ def print_status_row(
     label: str,
     value: str = "",
     status: str = "info",
-    label_width: int = 28,
+    label_width: int = 22,
     use_color: bool = True,
 ) -> None:
     """打印对齐的状态行（图标 + 左对齐标签 + 右侧值）。
@@ -352,11 +357,13 @@ def print_status_row(
     else:
         color = end = ""
 
+    # 图标 + 【单】空格(图标现为 1 显示格),标签左对齐 —— 标签从第 4 列起,与
+    # core.cli_render 的 phase()/detail() 同列,对勾/标签跨两套打印器完全对齐。
     padded = label.ljust(label_width)
     if value:
-        print(f"  {color}{icon}  {padded}{value}{end}")
+        print(f"  {color}{icon} {padded}{end}{value}")
     else:
-        print(f"  {color}{icon}  {padded}{end}")
+        print(f"  {color}{icon} {padded}{end}")
 
 
 # ---------------------------------------------------------------------------
