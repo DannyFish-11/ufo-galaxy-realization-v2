@@ -153,6 +153,22 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "registry_authority": "canonical:NodeFabricRegistry",
         })
 
+    @router.get("/api/v1/nodes/roster")
+    async def nodes_roster():
+        """节点【名单台】:全部 125 个节点的分类静态目录 ⊕ 端口 ⊕ 实时状态。
+
+        面板「端口与节点」页用它按【类型分组、编号排序】展示所有节点(不只已注册的),
+        并标出哪些是 OAuth/Key 连接器候选。与上面 canonical 的 /api/v1/nodes 不同:
+        那个只列【已在 NodeFabricRegistry 注册】的运行节点;roster 覆盖磁盘上全部节点,
+        用于管理/展示(状态取不到时为 unknown)。数据源见 core.node_catalog。
+        """
+        try:
+            from core.node_catalog import get_node_roster
+            return JSONResponse(get_node_roster())
+        except Exception as e:  # noqa: BLE001
+            logger.warning("nodes_roster 失败: %s", e)
+            return JSONResponse({"count": 0, "nodes": [], "error": str(e)}, status_code=200)
+
     @router.get("/api/v1/nodes/legacy/filesystem")
     async def list_nodes_legacy_filesystem():
         """LEGACY/COMPAT: 从磁盘目录扫描列出节点。
