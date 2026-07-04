@@ -173,7 +173,10 @@ def print_item(name: str, status: str = "ok", detail: str = "") -> None:
     printed = False
     try:
         from core import cli_render as r
-        r.detail(name, detail, _status_map.get(status, "info"))
+        # 用 phase()(2 格缩进,标签第 4 列)而非 detail()(6 格缩进)——让 Phase 0/1/2
+        # 的状态项与「系统启动」后的运行时项(核心服务/基础设施/... 也走 phase)以及
+        # ▶ 启动行处在【同一列】。此前 Phase 段 6 格、运行时段 2 格,对勾对不齐。
+        r.phase(name, detail, _status_map.get(status, "info"))
         printed = True
     except Exception:
         printed = False

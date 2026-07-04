@@ -271,7 +271,7 @@ def background_pull(tag: str) -> None:
                           f"(status={show_r.status_code})——当作未安装，重新拉取。")
                 except Exception as exc:
                     print(f"  ⚠ Ollama 列表里有 {matched}，但核实可用性失败({exc})——当作未安装，重新拉取。")
-            print(f"  ▶  正在后台拉取本地主脑模型 ollama pull {tag} …(不阻塞启动)")
+            print(f"  ▶ 正在后台拉取本地主脑模型 ollama pull {tag} …(不阻塞启动)")
             proc = subprocess.run(["ollama", "pull", tag], capture_output=True, text=True,
                                   encoding="utf-8", errors="replace", timeout=3600)
             if proc.returncode == 0:
