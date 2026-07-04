@@ -6,12 +6,24 @@
 .app {
   display: grid;
   grid-template-columns: var(--rail-w) 1fr var(--presence-w);
-  height: 100%;
-  width: 100%;
+  height: 100vh;
+  width: 100vw;
   background:
     radial-gradient(120% 80% at 50% -10%, rgba(230, 192, 123, 0.05), transparent 60%),
     var(--canvas);
   position: relative;
+  /* 四角圆润(参考 Codex 面板):窗口为 transparent+frameless,.app 即可见表面,
+     圆角 + overflow:hidden 让四个外角一起裁圆;留 1px 细描边收边更利落。 */
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* transparent 窗口下,html/body 不能有实底,否则圆角外露出直角背景。 */
+html, body, #root {
+  background: transparent !important;
+  height: 100%;
+  margin: 0;
 }
 
 /* ── 左:图标栏(玻璃) ─────────────────────────────────────── */
