@@ -838,14 +838,29 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
                 _gw_dm, _gw_mh, _gw_wsm, _gw_to,
             ) = await init_gateway_core_services(gateway_app)
 
-            async def _shutdown_gateway_core() -> None:
-                import contextlib as _ctx
-                with _ctx.suppress(Exception):
-                    await _gw_to.stop()
-                with _ctx.suppress(Exception):
-                    await _gw_wsm.stop()
+            # 到这里【必需核心服务已就绪、/gateway/* 已不再 503】——这才是本修复的实质。
+            # 下面注册进程退出时的清理钩子只是【尽力而为】:不同 Starlette/FastAPI 版本
+            # 注册 shutdown 的接口不一(部分版本 app.add_event_handler 已被移除,只有
+            # app.router.on_shutdown),真机上就因 'FastAPI' object has no attribute
+            # 'add_event_handler' 抛错,把明明已修好的网关误报成 degraded。故把钩子注册
+            # 单独 try 掉,任何失败都不得回退核心服务"已就绪"的结论。
+            def _register_gateway_shutdown() -> None:
+                async def _shutdown_gateway_core() -> None:
+                    import contextlib as _ctx
+                    with _ctx.suppress(Exception):
+                        await _gw_to.stop()
+                    with _ctx.suppress(Exception):
+                        await _gw_wsm.stop()
+                if hasattr(app, "add_event_handler"):
+                    app.add_event_handler("shutdown", _shutdown_gateway_core)
+                elif hasattr(getattr(app, "router", None), "on_shutdown"):
+                    app.router.on_shutdown.append(_shutdown_gateway_core)
 
-            app.add_event_handler("shutdown", _shutdown_gateway_core)
+            try:
+                _register_gateway_shutdown()
+            except Exception as _she:  # noqa: BLE001
+                logger.debug("gateway shutdown 钩子注册跳过(非致命,不影响 /gateway/* 已就绪): %s", _she)
+
             results["galaxy_gateway"] = {"status": "ok", "core_services": "started"}
             logger.info(
                 "Galaxy Gateway 已挂载到 /gateway(必需核心服务已就绪,/gateway/* 不再 503)"

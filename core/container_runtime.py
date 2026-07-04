@@ -122,10 +122,64 @@ def interactive_select(avail: List[str]) -> str:
         print("  " + _c("⚠ 无效输入，请重新选择（或直接回车用默认）。", Colors.YELLOW))
 
 
-def resolve_runtime(interactive: bool = True) -> str:
-    """解析并持久化最终容器运行时。返回运行时名("" = 无可用运行时,跳过)。
+_INSTALL_HINTS: Dict[str, str] = {
+    "docker": "https://docs.docker.com/get-docker/ (Windows 装 Docker Desktop)",
+    "podman": "https://podman.io/get-started (Windows: winget install RedHat.Podman)",
+}
 
-    环境 > 已保存 > 单一已装 > (两者都装且交互)提示 > 都没装 → ""。
+
+def interactive_install_guide() -> str:
+    """两者都【未安装】且交互时:仍展示选择菜单,让用户选定偏好运行时并给出安装指引。
+
+    容器运行时的二进制需系统级安装(需管理员/重启,无法静默拉取),故这里不"下载",
+    而是【选偏好 + 给安装链接】,并把选择持久化——装好后下次启动即自动采用、后台静默
+    拉取节点镜像。非交互终端直接返回 "" 不打扰。返回持久化的偏好名(仍 "" 表示当前不可用)。
+    """
+    if not (sys.stdin and sys.stdin.isatty()):
+        return ""
+    from core import cli_render as r
+    from core.ascii_art import Colors
+
+    def _c(t, color):
+        return f"{color}{t}{Colors.ENDC}" if r._use_color() else t
+
+    print()
+    print("  " + _c("选择容器运行时", Colors.BOLD + Colors.CYAN)
+          + _c("  (节点基础设施需要;两者都未检测到,先选一个偏好并安装)", Colors.DIM))
+    r.rule()
+    for i, rt in enumerate(_RUNTIMES, 1):
+        marker = _c("▸", Colors.GREEN) if i == 1 else " "
+        num = _c(f"[{i}]", Colors.BOLD if i == 1 else Colors.DIM)
+        name = r.pad_display(rt.capitalize(), 10)
+        tail = _c("  ← 默认", Colors.GREEN) if i == 1 else ""
+        print(f"  {marker} {num} {name}{tail}")
+        print(f"         {_c(_LABELS.get(rt, ''), Colors.DIM)}")
+        print(f"         {_c('安装: ' + _INSTALL_HINTS.get(rt, ''), Colors.DIM)}")
+    r.rule()
+    print("  " + _c("回车=记住默认(Docker) · 数字=记住偏好 · s=跳过(桌面照常运行)", Colors.DIM))
+    try:
+        choice = input(f"  选择偏好运行时 [1-{len(_RUNTIMES)} / 回车 / s]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return ""
+    if choice == "s":
+        return ""
+    pick = _RUNTIMES[0]
+    if choice.isdigit() and 1 <= int(choice) <= len(_RUNTIMES):
+        pick = _RUNTIMES[int(choice) - 1]
+    elif choice in _RUNTIMES:
+        pick = choice
+    save_choice(pick)  # 记住偏好;装好后下次即自动采用
+    print("  " + _c(f"已记住偏好: {pick.capitalize()} —— 安装后重跑即自动使用并后台拉取节点镜像。",
+                    Colors.GREEN))
+    print("  " + _c(f"  安装: {_INSTALL_HINTS.get(pick, '')}", Colors.DIM))
+    return ""  # 当前仍不可用(未安装),但偏好已持久化
+
+
+def resolve_runtime(interactive: bool = True) -> str:
+    """解析并持久化最终容器运行时。返回运行时名("" = 当前无可用运行时)。
+
+    环境 > 已保存(且已装) > 单一已装 > (两者都装且交互)提示 > 都没装:交互则展示
+    选择+安装指引菜单(记住偏好、返回 ""),非交互则返回 ""。
     """
     env = _env_choice()
     if env in _RUNTIMES and shutil.which(env):
@@ -139,6 +193,9 @@ def resolve_runtime(interactive: bool = True) -> str:
 
     avail = available_runtimes()
     if not avail:
+        # 都没装:交互时也【给出选择菜单 + 安装指引】(而不是静默跳过),记住偏好。
+        if interactive:
+            return interactive_install_guide()
         return ""
     if len(avail) == 1:
         save_choice(avail[0])

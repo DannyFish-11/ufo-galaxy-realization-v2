@@ -551,11 +551,18 @@ class APIManager:
         
         if not model_config or not model_config.api_key:
             return {"success": False, "error": "Model not configured"}
-        
+
+        # base_url 为空/缺 scheme 时,f"{base_url}/chat/completions" 会变成
+        # "/chat/completions" → httpx 抛 "Request URL is missing an 'http://'…"。
+        # .env 半配置(base_url 空)时这是常见来源。这里直接判为未配置,不发请求。
+        _bu = (model_config.base_url or "").strip()
+        if "://" not in _bu:
+            return {"success": False, "error": "Model base_url not configured (missing scheme)"}
+
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
-                    f"{model_config.base_url}/chat/completions",
+                    f"{_bu.rstrip('/')}/chat/completions",
                     headers={
                         "Authorization": f"Bearer {model_config.api_key}",
                         "Content-Type": "application/json"
