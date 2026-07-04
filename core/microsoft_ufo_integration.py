@@ -228,8 +228,15 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
             return True
 
         except ImportError as e:
-            logger.warning(f"Microsoft UFO not available: {e}")
-            # 降级到 pyautogui
+            # Microsoft UFO(github.com/microsoft/UFO)是可选的重量级依赖,默认不随
+            # Galaxy 安装。缺失属预期,不是错误——UI 自动化会自动降级到 pyautogui,
+            # 功能可用。用 info 级别陈述事实 + 给出安装指引,避免真机上被误读为故障。
+            logger.info(
+                "Microsoft UFO 未安装(可选依赖,缺失属正常),UI 自动化降级到 "
+                "pyautogui。如需启用 UFO 深度控制,请安装 microsoft/UFO 到 PYTHONPATH。"
+                " [%s]",
+                e,
+            )
             return await self._initialize_fallback()
         except Exception as e:
             logger.error(f"Failed to initialize Microsoft UFO: {e}")

@@ -652,12 +652,13 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         compat_ws_policy["protected_mode"],
         compat_ws_policy["system_mode"],
     )
-    logger.warning(
-        "DEPRECATED: core/api_routes.py create_websocket_routes() is a "
-        "compatibility surface. New clients MUST use "
-        "galaxy_gateway/routes/websocket.py /ws/device/{device_id} "
-        "as the sole canonical device ingress. "
-        "This compat path will be removed in a future release."
+    # 这条弃用提示每次桌面启动都会打印一遍(默认路径就会走到这里),对最终用户
+    # 是噪音——它面向的是【集成方开发者】,不是运行时故障。降到 info 级别陈述一次
+    # 即可,避免真机日志里一条 WARNING 反复吓人。
+    logger.info(
+        "core/api_routes.py create_websocket_routes() 为兼容层;新客户端应使用 "
+        "galaxy_gateway/routes/websocket.py 的 /ws/device/{device_id} 作为唯一"
+        "规范设备入口(此兼容路径未来会移除)。"
     )
 
     def _stamp_problem_closure_to_task_queue(

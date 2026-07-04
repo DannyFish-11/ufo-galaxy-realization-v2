@@ -340,11 +340,19 @@ class PreflightReport:
     # ── display ──────────────────────────────────────────────────────────
 
     def format(self, verbose: bool = True) -> str:
+        # 盒子标题按盒宽【居中计算】,不再手写空格——真机复现过标题行内宽 57、
+        # 上下边框内宽 58,导致标题右侧 ║ 比边框的 ╗ 缩进一格(整个白框歪一行)。
+        # 盒宽 58 与启动 banner(core.ascii_art)一致,两个白框从此完全对齐。
+        _box_inner = 58
+        _title = "Galaxy Pre-flight Configuration Check"
+        _pad = max(0, _box_inner - len(_title))
+        _left = _pad // 2
+        _right = _pad - _left
         lines: List[str] = [
             "",
-            "╔══════════════════════════════════════════════════════════╗",
-            "║         Galaxy Pre-flight Configuration Check           ║",
-            "╚══════════════════════════════════════════════════════════╝",
+            "╔" + "═" * _box_inner + "╗",
+            "║" + " " * _left + _title + " " * _right + "║",
+            "╚" + "═" * _box_inner + "╝",
             f"  Mode  : {self.mode}",
             f"  Checks: {len(self.findings)}  "
             f"passed={len(self.passed)}  "
@@ -353,8 +361,11 @@ class PreflightReport:
             "",
         ]
 
+        # 符号与 core.cli_render 统一(✓/⚠/✗,均为 1 显示格),不再混用 emoji
+        # ✅/⚠️/❌(带变体选择符、多数终端渲染成 2 格),避免整个克隆界面对号列
+        # 因图标宽度不一而错位——真机反馈"绿色对号没对齐成一列"根因之一。
         if self.criticals:
-            lines.append("  ❌  CRITICAL — startup blocked")
+            lines.append("  ✗  CRITICAL — startup blocked")
             lines.append("  " + "─" * 56)
             for f in self.criticals:
                 lines.append(f"  • {f.check.var}")
@@ -364,7 +375,7 @@ class PreflightReport:
                 lines.append("")
 
         if self.warnings and verbose:
-            lines.append("  ⚠️   WARNING — degraded functionality")
+            lines.append("  ⚠  WARNING — degraded functionality")
             lines.append("  " + "─" * 56)
             for f in self.warnings:
                 lines.append(f"  • {f.check.var}")
@@ -374,7 +385,7 @@ class PreflightReport:
                 lines.append("")
 
         if self.ok:
-            lines.append("  ✅  All CRITICAL checks passed.")
+            lines.append("  ✓  All CRITICAL checks passed.")
 
         lines.append("")
         return "\n".join(lines)

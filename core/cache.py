@@ -105,7 +105,9 @@ class RedisCache:
             logger.info(f"Redis 已连接: {self.url}")
             return True
         except Exception as e:
-            logger.warning(f"Redis 连接失败: {e}")
+            # Redis 在桌面单机模式是可选项:连不上会安静降级到内存缓存(见
+            # CacheManager.initialize)。用 info 陈述,不用 warning 吓人。
+            logger.info("Redis 未连接(降级到内存缓存,桌面单机属正常): %s", e)
             self._redis = None
             return False
 
@@ -194,8 +196,15 @@ class CacheManager:
 
     async def initialize(self) -> str:
         """初始化缓存后端，返回后端类型"""
-        if self.redis_url:
-            redis_cache = RedisCache(self.redis_url)
+        url = (self.redis_url or "").strip()
+        if url:
+            # 容错:允许 .env 里只写 host:port(如 REDIS_HOST/REDIS_PORT 拼出的
+            # "localhost:6379")而漏掉 scheme —— 否则 aioredis.from_url 会直接抛
+            # "Redis URL must specify one of the following schemes"。补默认
+            # redis:// 再连。真机复现过此告警,根因即 .env 里 REDIS_URL 半配置。
+            if "://" not in url:
+                url = "redis://" + url
+            redis_cache = RedisCache(url)
             if await redis_cache.connect():
                 self._backend = redis_cache
                 self._is_redis = True

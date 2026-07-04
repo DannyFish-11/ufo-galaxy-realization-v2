@@ -1188,7 +1188,17 @@ class NATSBus:
 
     async def _on_error(self, exc: Exception) -> None:
         self._stats["errors"] += 1
-        logger.error(f"NATSBus: error — {exc}")
+        # nats-py 在向【可选/未就绪】的 NATS 反复重连时会不断回调此处,而 exc 常
+        # stringify 为空 —— 真机上刷出一串刺眼的 "NATSBus: error —"(消息为空)。
+        # 桌面单机默认 NATS 可选(GALAXY_NATS_ENABLED=false,见 .env.example),
+        # 这类重连期错误降噪:用 repr 保证信息不为空;非 fabric 严格模式降到 debug,
+        # 严格模式仍保留 error,不掩盖真正需要 NATS 时的故障。
+        detail = repr(exc) if not str(exc).strip() else str(exc)
+        _strict = os.environ.get("GALAXY_FABRIC_STRICT", "").strip().lower() in ("1", "true", "yes", "on")
+        if _strict:
+            logger.error("NATSBus: error — %s", detail)
+        else:
+            logger.debug("NATSBus: error(重连期,NATS 桌面单机可选,已降噪)— %s", detail)
 
 
 # ── Module-level singleton (constraint C1) ─────────────────────────────────

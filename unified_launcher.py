@@ -1479,12 +1479,12 @@ class GalaxyUnified:
         
         print(f"\n{Colors.BOLD}LLM API:{Colors.ENDC}")
         for api, configured in status["llm_apis"].items():
-            icon = "✅" if configured else "❌"
+            icon = "✓" if configured else "✗"
             print(f"  {icon} {api.upper()}")
             
         print(f"\n{Colors.BOLD}数据库:{Colors.ENDC}")
         for db, configured in status["database"].items():
-            icon = "✅" if configured else "❌"
+            icon = "✓" if configured else "✗"
             print(f"  {icon} {db}")
             
         print_section("节点统计")

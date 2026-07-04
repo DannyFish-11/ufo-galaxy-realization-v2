@@ -28,6 +28,20 @@ try:
 except Exception:
     pass
 
+# ── 第三方库的已知噪音告警降噪 ─────────────────────────────────────────────
+# 真机启动日志里有几条来自【第三方依赖】的 UserWarning,与 Galaxy 自身无关、
+# 用户既无法也无需处理,却每次启动都刷屏。用精确匹配把这几条静音(只针对已知
+# 来源,不做全局吞并,避免掩盖真正的告警):
+#   - webrtcvad → "pkg_resources is deprecated"(setuptools 弃用,第三方未适配)
+#   - pywinauto → "Revert to STA COM threading mode"(Windows COM 线程模式提示)
+import warnings as _warnings
+try:
+    _warnings.filterwarnings("ignore", message=r".*pkg_resources is deprecated.*")
+    _warnings.filterwarnings("ignore", message=r".*Revert to STA COM threading mode.*")
+    _warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"webrtcvad.*")
+except Exception:
+    pass
+
 if sys.platform == "win32":
     # Set console to UTF-8 mode (Python 3.7+)
     try:

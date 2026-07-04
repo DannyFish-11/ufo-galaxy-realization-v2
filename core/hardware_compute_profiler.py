@@ -278,7 +278,9 @@ class HardwareComputeProfiler:
                         temperature_c=temp,
                     ))
             except Exception as exc:
-                logger.warning("Exception suppressed: %s", exc)
+                # pynvml 缺失 / 无 NVIDIA GPU 属预期(桌面无独显机器很常见),
+                # 不是故障——降到 debug,不刷 WARNING。
+                logger.debug("NVIDIA GPU 探测跳过(pynvml 不可用或无 N 卡): %s", exc)
 
         # AMD GPU (rocm)
         if not gpus:
@@ -297,7 +299,9 @@ class HardwareComputeProfiler:
                         utilization_percent=0.0, temperature_c=0.0,
                     ))
             except Exception as exc:
-                logger.warning("Exception suppressed: %s", exc)
+                # rocm-smi 不存在(非 AMD/无 ROCm,Windows 上必 FileNotFoundError
+                # [WinError 2])属预期,不是故障——降到 debug。
+                logger.debug("AMD GPU 探测跳过(rocm-smi 不可用): %s", exc)
 
         # Intel GPU
         if not gpus:

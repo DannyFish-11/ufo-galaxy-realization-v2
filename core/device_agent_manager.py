@@ -308,7 +308,12 @@ class WindowsDeviceAgent(BaseDeviceAgent):
             self.ufo_available = True
             logger.info("Microsoft UFO loaded successfully")
         except ImportError as e:
-            logger.warning(f"Microsoft UFO not available: {e}")
+            # 可选重量级依赖,缺失属预期(见 microsoft_ufo_integration 说明);
+            # 设备代理无 UFO 时按 ufo_available=False 正常降级,不是故障。
+            logger.info(
+                "Microsoft UFO 未安装(可选依赖,缺失属正常),设备代理降级运行。 [%s]",
+                e,
+            )
             self.ufo_available = False
     
     async def disconnect(self) -> bool:
