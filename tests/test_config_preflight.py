@@ -233,7 +233,8 @@ class TestPreflightReportFormat(unittest.TestCase):
         with patch.dict(os.environ, {"__GALAXY_FORMAT_OK__": "real-value"}, clear=False):
             report = run_preflight(dry_run=True, checks=checks, mode="all", verbose=False)
         text = report.format(verbose=False)
-        self.assertIn("✅", text)
+        # 符号已统一为 core.cli_render 的文本 ✓(不再用 emoji ✅,避免跨打印器对不齐)。
+        self.assertIn("✓", text)
 
 
 # ===========================================================================

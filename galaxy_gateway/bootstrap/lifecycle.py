@@ -21,15 +21,23 @@ from fastapi import FastAPI
 logger = logging.getLogger(__name__)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bootstrap)
-    """Galaxy Gateway application lifespan — startup → yield → shutdown."""
+async def init_gateway_core_services(app: FastAPI):
+    """创建并启动 Gateway 的【必需】核心服务并写入 ``app.state``。
 
-    # ------------------------------------------------------------------
-    # Startup
-    # ------------------------------------------------------------------
-    logger.info("Initializing Galaxy Gateway...")
+    这四个服务(device_manager / message_handler / websocket_manager /
+    task_orchestrator)是 ``galaxy_gateway.dependencies`` 里【会因缺失而抛 503】
+    的 required 依赖 —— ``/gateway/*`` 下所有 REST 路由都靠它们。
 
+    抽成独立函数,供两条启动路径共用、避免逻辑漂移:
+      1. 独立运行 Gateway 时:``lifespan`` 调用它;
+      2. 作为子应用被主 app ``app.mount('/gateway', ...)`` 挂载时:Starlette
+         不会跑子应用 lifespan,由 ``core.startup`` 在挂载后直接调用它,让 required
+         依赖照样就绪(不再 503)。**只做这四个必需服务**——不碰 NATS 连接、TCP/UDP
+         监听、AIPTransport 适配器、MasterBrain 等重/会绑端口/可能与主 app 重复的项,
+         避免挂载路径下双绑端口/重复注册。
+
+    返回 (device_manager, message_handler, websocket_manager, task_orchestrator)。
+    """
     from galaxy_gateway.transport import WebSocketManager
     from galaxy_gateway.handlers import DeviceManager, MessageHandler
     from galaxy_gateway.orchestrator import TaskOrchestrator
@@ -82,6 +90,35 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     app.state.message_handler = message_handler
     app.state.websocket_manager = websocket_manager
     app.state.task_orchestrator = task_orchestrator
+
+    # 同步旧的模块级 backward-compat 全局(legacy import 路径)
+    try:
+        import galaxy_gateway.app as _gw_app
+        _gw_app.device_manager = device_manager
+        _gw_app.message_handler = message_handler
+        _gw_app.websocket_manager = websocket_manager
+        _gw_app.task_orchestrator = task_orchestrator
+    except Exception as _bc_err:
+        logger.debug("core-services backward-compat globals update failed: %s", _bc_err)
+
+    return device_manager, message_handler, websocket_manager, task_orchestrator
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bootstrap)
+    """Galaxy Gateway application lifespan — startup → yield → shutdown."""
+
+    # ------------------------------------------------------------------
+    # Startup
+    # ------------------------------------------------------------------
+    logger.info("Initializing Galaxy Gateway...")
+
+    (
+        device_manager,
+        message_handler,
+        websocket_manager,
+        task_orchestrator,
+    ) = await init_gateway_core_services(app)
 
     # Initialize optional services — these start as None; set to real
     # objects if initialization succeeds.

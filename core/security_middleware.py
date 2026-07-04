@@ -650,18 +650,32 @@ class SecurityManager:
             strict=config.get("strict_validation", False)
         )
 
-    def setup_middleware(self, app):
-        """为 FastAPI 应用安装所有安全中间件"""
+    def setup_middleware(self, app, include_rate_limit: bool = True):
+        """为 FastAPI 应用安装所有安全中间件
+
+        Args:
+            include_rate_limit: 是否安装本管理器自带的 HTTP 速率限制中间件。
+                主 app 的性能中间件链(core.performance.RateLimitMiddleware,见
+                core/startup.py 步骤 3)已经是【权威 HTTP 限流层】(支持 apikey 分桶、
+                可配置 RATE_LIMIT_MAX_REQUESTS/WINDOW、回环豁免)。若在同一个 app 上
+                再装本管理器的 RateLimiter,同一条 HTTP 请求会被【两个独立限流器双重
+                计数】——两者阈值/分桶键还不同(此处 120rpm/按 IP,性能层 200/60s/按
+                apikey-or-ip),更严的那个静默生效,配置文不对题。故主 app 挂载时传
+                include_rate_limit=False,把 HTTP 限流【收口到性能层唯一一处】。
+                默认 True 以保持 SecurityManager 单独使用时(无性能层)仍自带限流。
+        """
         # 注意：中间件按添加的逆序执行
-        # 执行顺序：IP Block → Rate Limit → Input Validation → Security Headers → Audit → Handler
+        # 执行顺序：IP Block → [Rate Limit] → Input Validation → Security Headers → Audit → Handler
 
         create_audit_middleware(app, self.audit)
         create_security_headers_middleware(app)
         create_input_validation_middleware(app, self.input_validator)
-        create_rate_limit_middleware(app, self.rate_limiter)
+        if include_rate_limit:
+            create_rate_limit_middleware(app, self.rate_limiter)
         create_ip_block_middleware(app, self.ip_block)
 
-        logger.info("安全中间件已全部安装 (审计日志 + 安全头 + IP黑名单 + 速率限制 + 输入验证)")
+        _rl = "速率限制 + " if include_rate_limit else ""
+        logger.info("安全中间件已安装 (审计日志 + 安全头 + IP黑名单 + %s输入验证)", _rl)
 
     def get_dashboard(self) -> Dict:
         return {
