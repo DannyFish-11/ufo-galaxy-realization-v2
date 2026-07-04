@@ -543,6 +543,10 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         "ollama": "ollama",
         "nats": "nats-py",
         "websockets": "websockets",
+        # 依赖审计补齐:被核心能力真实 import,补进自动安装(与 requirements.txt 一致)
+        "jsonschema": "jsonschema",          # 事件总线 schema 校验
+        "huggingface_hub": "huggingface-hub",  # 本地模型 HF 下载 + Ollama 回退
+        "tqdm": "tqdm",                       # 模型下载进度条
     }
     for mod_name, pip_name in core_modules.items():
         try:
