@@ -71,6 +71,27 @@ async function fetchRoster(): Promise<NodeRoster | null> {
   }
 }
 
+export interface ConnectorInfo {
+  service: string;
+  label: string;
+  status: 'needs_config' | 'disconnected' | 'connected';
+  account?: string | null;
+  redirect_uri: string;
+  create_app_url?: string;
+  create_hint?: string;
+  has_client_id: boolean;
+}
+async function fetchConnectors(): Promise<ConnectorInfo[] | null> {
+  try {
+    const r = await fetch(`${getBackendUrl()}/api/v1/connectors`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j.connectors ?? [];
+  } catch {
+    return null;
+  }
+}
+
 // 状态 → 中文 + 颜色类
 function statusMeta(s: string): { label: string; cls: string } {
   const t = (s || '').toLowerCase();
@@ -296,6 +317,11 @@ export default function SettingsTab() {
   >({});
   // 节点名单(端口与节点页顶部展示全部 125 个节点:分类+排序+状态)。
   const [roster, setRoster] = useState<NodeRoster | null>(null);
+  // OAuth 连接器(自建 A 方案):外部账号 Gmail/GitHub/Notion/Slack/Discord。
+  const [connectors, setConnectors] = useState<ConnectorInfo[] | null>(null);
+  const [connCfg, setConnCfg] = useState<string | null>(null); // 正在配 client_id 的服务
+  const [cid, setCid] = useState('');
+  const [csecret, setCsecret] = useState('');
 
   // ── Load config on mount ─────────────────────────────────────────
 
@@ -318,14 +344,20 @@ export default function SettingsTab() {
     loadConfig();
   }, [loadConfig]);
 
-  // ── 拉节点名单(端口与节点页用);每 15s 刷新一次状态 ──
+  // ── 拉节点名单 + 连接器状态(端口与节点页用);每 15s 刷新 ──
   useEffect(() => {
     let alive = true;
-    const load = () => fetchRoster().then((r) => { if (alive && r) setRoster(r); });
+    const load = () => {
+      fetchRoster().then((r) => { if (alive && r) setRoster(r); });
+      fetchConnectors().then((c) => { if (alive && c) setConnectors(c); });
+    };
     load();
     const t = setInterval(load, 15000);
     return () => { alive = false; clearInterval(t); };
   }, []);
+
+  const refreshConnectors = useCallback(
+    () => fetchConnectors().then((c) => { if (c) setConnectors(c); }), []);
 
   // ── Listen for backend config updates ────────────────────────────
 
@@ -357,6 +389,27 @@ export default function SettingsTab() {
       setToast(null);
     }, 3000);
   }, []);
+
+  // ── OAuth 连接器操作(showToast 之后定义,避免前向引用)──
+  const connectService = useCallback((svc: string) => {
+    window.open(`${getBackendUrl()}/api/v1/connectors/${svc}/authorize`, '_blank', 'width=560,height=720');
+    setTimeout(refreshConnectors, 4000);
+  }, [refreshConnectors]);
+
+  const disconnectService = useCallback(async (svc: string) => {
+    await fetch(`${getBackendUrl()}/api/v1/connectors/${svc}/disconnect`, { method: 'POST' });
+    refreshConnectors();
+  }, [refreshConnectors]);
+
+  const saveConnCreds = useCallback(async (svc: string) => {
+    await fetch(`${getBackendUrl()}/api/v1/connectors/${svc}/credentials`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: cid.trim(), client_secret: csecret.trim() }),
+    });
+    setConnCfg(null); setCid(''); setCsecret('');
+    showToast(`${svc} 凭据已保存,可点连接授权`);
+    refreshConnectors();
+  }, [cid, csecret, refreshConnectors, showToast]);
 
   // ── Value change handler ─────────────────────────────────────────
 
@@ -618,6 +671,58 @@ export default function SettingsTab() {
     }
   }, [showToast]);
 
+  // ── 外部账号一键连接(自建 OAuth,A 方案)────────────────────────────
+  const renderConnectors = () => {
+    if (!connectors || connectors.length === 0) return null;
+    const stMap: Record<string, { label: string; cls: string }> = {
+      connected: { label: '已连接', cls: 'ok' },
+      disconnected: { label: '未连接', cls: 'idle' },
+      needs_config: { label: '待配置', cls: 'warn' },
+    };
+    return (
+      <div className="connectors">
+        <div className="connectors-title">外部账号连接<span className="connectors-sub">一键 OAuth · token 存本机</span></div>
+        <div className="connector-grid">
+          {connectors.map((c) => {
+            const st = stMap[c.status] ?? stMap.disconnected;
+            return (
+              <div className="connector-card" key={c.service}>
+                <div className="connector-row">
+                  <span className="connector-name">{c.label}</span>
+                  <span className={`connector-status ${st.cls}`}>{st.label}</span>
+                </div>
+                <div className="connector-actions">
+                  {c.status === 'connected' ? (
+                    <button className="connector-btn off" onClick={() => disconnectService(c.service)}>断开</button>
+                  ) : c.status === 'disconnected' ? (
+                    <button className="connector-btn on" onClick={() => connectService(c.service)}>连接授权</button>
+                  ) : (
+                    <button className="connector-btn cfg" onClick={() => setConnCfg(connCfg === c.service ? null : c.service)}>
+                      {connCfg === c.service ? '收起' : '配置 App'}
+                    </button>
+                  )}
+                </div>
+                {connCfg === c.service && (
+                  <div className="connector-cfg">
+                    <div className="connector-cfg-hint">
+                      1. 去 <a href={c.create_app_url} target="_blank" rel="noreferrer">建 OAuth App</a>;{c.create_hint}
+                    </div>
+                    <div className="connector-cfg-redirect">
+                      回调地址(填进 App):<code>{c.redirect_uri}</code>
+                    </div>
+                    <input className="connector-input" placeholder="client_id" value={cid} onChange={(e) => setCid(e.target.value)} />
+                    <input className="connector-input" placeholder="client_secret" type="password" value={csecret} onChange={(e) => setCsecret(e.target.value)} />
+                    <button className="connector-btn on" onClick={() => saveConnCreds(c.service)}>保存凭据</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   // ── 节点名单台(端口与节点页):125 个节点,按类型分组、编号排序、显示状态 ──
   const renderNodeRoster = () => {
     if (!roster) {
@@ -738,6 +843,7 @@ export default function SettingsTab() {
                   {CONFIG_KEYS[activeCategory]?.length ?? 0} 项
                 </span>
               </h2>
+              {activeCategory === 'ports' && renderConnectors()}
               {activeCategory === 'ports' && renderNodeRoster()}
               <div className="settings-list">{renderCategoryItems()}</div>
             </div>

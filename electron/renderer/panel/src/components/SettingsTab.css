@@ -376,3 +376,26 @@
 .node-toggle.start:hover { background: rgba(126,224,168,0.14); }
 .node-toggle.stop { color: #e08a8a; }
 .node-toggle.stop:hover { background: rgba(224,138,138,0.14); }
+
+/* ── 外部账号连接器(自建 OAuth)────────────────────────────── */
+.connectors { margin: 0 0 var(--lg); }
+.connectors-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--sm); }
+.connectors-sub { font-size: 11px; color: var(--text-muted); margin-left: 8px; font-weight: 400; }
+.connector-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.connector-card { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: var(--r-md); padding: 10px; }
+.connector-row { display: flex; align-items: center; justify-content: space-between; }
+.connector-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.connector-status { font-size: 10px; padding: 1px 6px; border-radius: var(--r-pill); }
+.connector-status.ok { color: #7ee0a8; background: rgba(126,224,168,0.12); }
+.connector-status.warn { color: #e6c07b; background: rgba(230,192,123,0.12); }
+.connector-status.idle { color: var(--text-muted); background: rgba(255,255,255,0.05); }
+.connector-actions { margin-top: 8px; }
+.connector-btn { font-size: 11px; padding: 3px 12px; border-radius: var(--r-pill); border: 1px solid var(--border-subtle); background: transparent; cursor: pointer; }
+.connector-btn.on { color: #8fb8ff; } .connector-btn.on:hover { background: rgba(143,184,255,0.14); }
+.connector-btn.off { color: #e08a8a; } .connector-btn.off:hover { background: rgba(224,138,138,0.14); }
+.connector-btn.cfg { color: #e6c07b; } .connector-btn.cfg:hover { background: rgba(230,192,123,0.14); }
+.connector-cfg { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border-subtle); padding-top: 8px; }
+.connector-cfg-hint, .connector-cfg-redirect { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+.connector-cfg-redirect code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 10px; word-break: break-all; }
+.connector-cfg-hint a { color: #8fb8ff; }
+.connector-input { background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); color: var(--text-primary); font-size: 12px; padding: 5px 8px; outline: none; }
