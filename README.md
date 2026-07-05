@@ -1,12 +1,12 @@
 # Galaxy — 桌面原生 AI 助手系统
 
-> **版本**: v10.0 | **模型**: Google Gemma 4 E4B (128K 上下文) | **日期**: 2026-05-31
+> **版本**: v10.0 | **模型**: Gemma 4 E4B / 26B / 31B + MiniCPM-o 4.5 / V 4.6 | **日期**: 2026-07-05
 
 ---
 
 ## 一句话介绍
 
-**Galaxy** 是一个桌面原生 AI 助手系统。通过 Electron 三态覆盖层（SILENT/LIMINAL/MANIFEST）直接在桌面上与 AI 对话，本地运行 Google Gemma 4 多模态模型，支持远程服务器操作、AI 搜索、持久记忆、Skill 扩展。
+**Galaxy** 是一个桌面原生 AI 助手系统。通过 Electron 三态覆盖层（SILENT/LIMINAL/MANIFEST）直接在桌面上与 AI 对话，本地运行 Ollama 模型（Gemma 4 全系 / MiniCPM-o 4.5 / MiniCPM-V 4.6），支持远程服务器操作、AI 搜索、持久记忆、Skill 扩展。
 
 ---
 
@@ -49,7 +49,7 @@
 │    ... 37 个端点                             │
 └───────────┬─────────────────────────────────┘
             │
-            ├── 本地模型: Ollama (Gemma 4 E4B)
+            ├── 本地模型: Ollama (Gemma 4 E4B/E2B/12B/26B/31B + MiniCPM)
             ├── 云端兜底: DeepSeek → OpenRouter → Groq
             ├── 持久记忆: SQLite (/app/data/)
             ├── 上下文压缩: 突破 128K 限制
@@ -75,10 +75,11 @@
 
 ## 核心能力
 
-### 1. 本地多模态 AI (Gemma 4 E4B)
-- **模型**: Google Gemma 4 E4B (默认), 可选 26B MoE / 31B
-- **显存**: E4B 约 5GB (4-bit 量化)
-- **上下文**: 128K tokens
+### 1. 本地多模态 AI (Ollama)
+- **模型**: Google Gemma 4 全系 (E4B 默认 / E2B / 12B / 26B MoE / 31B) + MiniCPM-o 4.5 / MiniCPM-V 4.6
+- **显存**: E4B ~5GB | 12B ~8GB | 26B ~15.6GB | 31B ~17.4GB (4-bit)
+- **上下文**: 128K-256K tokens
+- **Ollama 版本**: 需要 0.22+ (`ollama --version` 检查)
 - **突破**: 通过上下文压缩 + 记忆召回，对话长度理论上无限
 
 ### 2. 模型宕机保护 (四级级联回退)
@@ -86,7 +87,7 @@
 用户请求
   │
   ▼
-[本地 Ollama Gemma 4] ──失败──┐
+[本地 Ollama Gemma 4 / MiniCPM] ──失败──┐
   │ 成功                      ▼
 返回结果              [DeepSeek API]
                         │ 失败
@@ -323,7 +324,7 @@ WebSocket: `ws://localhost:8765/ws/desktop-presence`
 | Gateway | `galaxy_gateway/app.py` | FastAPI 应用 |
 | Electron 入口 | `electron/main.js` | 桌面主进程 |
 | 三态管理 | `electron/renderer/app.js` | SILENT/LIMINAL/MANIFEST |
-| NLU 引擎 | `galaxy_gateway/enhanced_nlu_v2.py` | Gemma 4 + 级联回退 |
+| NLU 引擎 | `galaxy_gateway/enhanced_nlu_v2.py` | Gemma 4 / MiniCPM + 级联回退 |
 | 上下文压缩 | `core/context_compressor.py` | 突破 128K 限制 |
 | 沙箱 | `galaxy_gateway/routes/sandbox.py` | 安全检查 |
 | Linux Agent | `galaxy_gateway/routes/linux_agent.py` | 远程服务器 |
