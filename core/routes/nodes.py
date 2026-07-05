@@ -170,18 +170,25 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse({"count": 0, "nodes": [], "error": str(e)}, status_code=200)
 
     @router.post("/api/v1/nodes/{node}/start")
-    async def node_start(node: str):
-        """一键启动单个节点(阶段2a;受管子进程,日志 logs/nodes/)。"""
+    async def node_start(node: str, mode: str = "subprocess"):
+        """一键启动单个节点。mode=subprocess(默认,阶段2a)| container(阶段3,跑进
+        所选 Docker/Podman;首次 build 慢,按需逐个起防本机过载)。"""
         try:
+            if mode == "container":
+                from core.node_lifecycle import container_start_node
+                return JSONResponse(container_start_node(node))
             from core.node_lifecycle import start_node
             return JSONResponse(start_node(node))
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
 
     @router.post("/api/v1/nodes/{node}/stop")
-    async def node_stop(node: str):
-        """一键停止单个节点(只停本进程拉起的,不误杀他人起的)。"""
+    async def node_stop(node: str, mode: str = "subprocess"):
+        """一键停止单个节点。mode=container 时停并删该节点容器。"""
         try:
+            if mode == "container":
+                from core.node_lifecycle import container_stop_node
+                return JSONResponse(container_stop_node(node))
             from core.node_lifecycle import stop_node
             return JSONResponse(stop_node(node))
         except Exception as e:  # noqa: BLE001

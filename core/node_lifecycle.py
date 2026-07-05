@@ -145,6 +145,76 @@ def start_node(node: str) -> Dict[str, object]:
         return {"ok": False, "error": str(exc), "dir": dir_name}
 
 
+# ── 阶段3:按需跑在所选 Docker/Podman ────────────────────────────────
+def _container_name(dir_name: str) -> str:
+    return f"galaxy-node-{dir_name.lower()}"
+
+
+def container_start_node(node: str) -> Dict[str, object]:
+    """把单个节点跑进【所选运行时(Docker/Podman)】的容器(用它自带的 Dockerfile)。
+
+    首次会 build 镜像(慢,放前台等 build 完再 run;失败即返回),之后 run -d 起容器
+    并把节点端口映射出来。按需逐个起,避免一次性 125 个压满本机(用户在面板逐个选)。
+    无可用运行时则回退子进程。
+    """
+    dir_name = _resolve_dir(node)
+    if not dir_name:
+        return {"ok": False, "error": f"未找到节点: {node}"}
+    node_dir = _NODES_DIR / dir_name
+    if not (node_dir / "Dockerfile").exists():
+        return {"ok": False, "error": f"{dir_name} 无 Dockerfile,改用子进程启动", "fallback": "subprocess"}
+    try:
+        from core import container_runtime as cr
+        rt = cr.resolve_runtime(interactive=False)
+        if not rt:
+            return {"ok": False, "error": "未装 Docker/Podman,回退子进程", "fallback": "subprocess"}
+        rt_bin = cr.runtime_binary(rt)
+        cname = _container_name(dir_name)
+        image = cname
+        try:
+            from core.port_config import get_node_port
+            port = int(get_node_port(dir_name) or 0)
+        except Exception:  # noqa: BLE001
+            port = 0
+        _LOG_DIR.mkdir(parents=True, exist_ok=True)
+        logf = open(_LOG_DIR / f"{dir_name}.container.log", "ab")
+        # build(幂等:已存在的层会缓存)
+        b = subprocess.run([rt_bin, "build", "-t", image, str(node_dir)],
+                           stdout=logf, stderr=subprocess.STDOUT, timeout=1800)
+        if b.returncode != 0:
+            return {"ok": False, "error": f"{rt} build 失败(详见 logs/nodes/{dir_name}.container.log)"}
+        # 先清掉同名旧容器,再 run -d
+        subprocess.run([rt_bin, "rm", "-f", cname], capture_output=True, timeout=30)
+        run_cmd = [rt_bin, "run", "-d", "--name", cname, "--restart", "unless-stopped"]
+        if port:
+            run_cmd += ["-p", f"{port}:{port}"]
+        run_cmd.append(image)
+        r = subprocess.run(run_cmd, capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            return {"ok": False, "error": f"{rt} run 失败: {(r.stderr or '')[:160]}"}
+        logger.info("节点容器已启动 %s via %s (%s)", dir_name, rt, cname)
+        return {"ok": True, "dir": dir_name, "runtime": rt, "container": cname, "port": port}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc), "dir": dir_name}
+
+
+def container_stop_node(node: str) -> Dict[str, object]:
+    """停并删除该节点的容器。"""
+    dir_name = _resolve_dir(node)
+    if not dir_name:
+        return {"ok": False, "error": f"未找到节点: {node}"}
+    try:
+        from core import container_runtime as cr
+        rt = cr.resolve_runtime(interactive=False)
+        if not rt:
+            return {"ok": True, "already_stopped": True, "dir": dir_name}
+        rt_bin = cr.runtime_binary(rt)
+        subprocess.run([rt_bin, "rm", "-f", _container_name(dir_name)], capture_output=True, timeout=30)
+        return {"ok": True, "dir": dir_name, "runtime": rt}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc), "dir": dir_name}
+
+
 def stop_node(node: str) -> Dict[str, object]:
     """一键停止我们拉起的单个节点。只停 PID 文件里记录的(不误杀别人起的)。"""
     dir_name = _resolve_dir(node)

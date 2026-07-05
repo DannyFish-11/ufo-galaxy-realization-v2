@@ -322,6 +322,8 @@ export default function SettingsTab() {
   const [connCfg, setConnCfg] = useState<string | null>(null); // 正在配 client_id 的服务
   const [cid, setCid] = useState('');
   const [csecret, setCsecret] = useState('');
+  // 节点启停方式:子进程(默认,轻)或 容器(跑进所选 Docker/Podman,首次 build 慢)。
+  const [nodeMode, setNodeMode] = useState<'subprocess' | 'container'>('subprocess');
 
   // ── Load config on mount ─────────────────────────────────────────
 
@@ -660,16 +662,18 @@ export default function SettingsTab() {
   // 一键启停单个节点(阶段2a):POST /start|/stop → 刷新名单。
   const toggleNode = useCallback(async (n: RosterNode, running: boolean) => {
     try {
-      await fetch(`${getBackendUrl()}/api/v1/nodes/${n.num}/${running ? 'stop' : 'start'}`, {
-        method: 'POST',
-      });
-      showToast(`${running ? '停止' : '启动'} #${n.num} ${n.name}…`);
-      // 稍等后端起进程再刷新状态。
-      setTimeout(() => fetchRoster().then((r) => { if (r) setRoster(r); }), 1200);
+      await fetch(
+        `${getBackendUrl()}/api/v1/nodes/${n.num}/${running ? 'stop' : 'start'}?mode=${nodeMode}`,
+        { method: 'POST' });
+      const via = nodeMode === 'container' ? '(容器)' : '';
+      showToast(`${running ? '停止' : '启动'}${via} #${n.num} ${n.name}…`);
+      // 容器首次要 build,给更久再刷新。
+      setTimeout(() => fetchRoster().then((r) => { if (r) setRoster(r); }),
+        nodeMode === 'container' ? 3000 : 1200);
     } catch {
       showToast(`操作 #${n.num} 失败`);
     }
-  }, [showToast]);
+  }, [showToast, nodeMode]);
 
   // ── 外部账号一键连接(自建 OAuth,A 方案)────────────────────────────
   const renderConnectors = () => {
@@ -740,6 +744,19 @@ export default function SettingsTab() {
           <span className="node-roster-title">节点系统</span>
           <span className="node-roster-sub">
             共 {roster.count} 个 · {typeOrder.length} 类
+          </span>
+          <span className="node-mode-switch">
+            启停方式:
+            <button
+              className={`node-mode-btn ${nodeMode === 'subprocess' ? 'active' : ''}`}
+              onClick={() => setNodeMode('subprocess')}
+              title="以本机 Python 子进程启动(轻,默认)"
+            >子进程</button>
+            <button
+              className={`node-mode-btn ${nodeMode === 'container' ? 'active' : ''}`}
+              onClick={() => setNodeMode('container')}
+              title="跑进所选 Docker/Podman 容器(首次 build 慢,按需逐个起)"
+            >容器</button>
           </span>
         </div>
         {typeOrder.map((type) => {

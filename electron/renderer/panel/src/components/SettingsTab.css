@@ -399,3 +399,9 @@
 .connector-cfg-redirect code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 10px; word-break: break-all; }
 .connector-cfg-hint a { color: #8fb8ff; }
 .connector-input { background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); color: var(--text-primary); font-size: 12px; padding: 5px 8px; outline: none; }
+
+/* 节点启停方式切换(子进程/容器)*/
+.node-mode-switch { font-size: 11px; color: var(--text-muted); margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.node-mode-btn { font-size: 11px; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid var(--border-subtle); background: transparent; color: var(--text-muted); cursor: pointer; }
+.node-mode-btn.active { color: var(--text-primary); background: rgba(230,192,123,0.10); border-color: rgba(230,192,123,0.3); }
+.node-roster-head { flex-wrap: wrap; }
