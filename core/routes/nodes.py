@@ -169,6 +169,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             logger.warning("nodes_roster 失败: %s", e)
             return JSONResponse({"count": 0, "nodes": [], "error": str(e)}, status_code=200)
 
+    @router.post("/api/v1/nodes/{node}/start")
+    async def node_start(node: str):
+        """一键启动单个节点(阶段2a;受管子进程,日志 logs/nodes/)。"""
+        try:
+            from core.node_lifecycle import start_node
+            return JSONResponse(start_node(node))
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
+
+    @router.post("/api/v1/nodes/{node}/stop")
+    async def node_stop(node: str):
+        """一键停止单个节点(只停本进程拉起的,不误杀他人起的)。"""
+        try:
+            from core.node_lifecycle import stop_node
+            return JSONResponse(stop_node(node))
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
+
     @router.get("/api/v1/nodes/legacy/filesystem")
     async def list_nodes_legacy_filesystem():
         """LEGACY/COMPAT: 从磁盘目录扫描列出节点。

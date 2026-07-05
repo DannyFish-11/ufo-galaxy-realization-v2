@@ -365,3 +365,14 @@
   font-size: 11px; color: var(--text-muted); line-height: 1.5;
   border-top: 1px solid var(--border-subtle); padding-top: var(--sm); margin-top: 6px;
 }
+
+/* 节点一键启停按钮 */
+.node-toggle {
+  font-size: 10px; padding: 1px 8px; border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle); background: transparent;
+  cursor: pointer; flex: none; transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.node-toggle.start { color: #7ee0a8; }
+.node-toggle.start:hover { background: rgba(126,224,168,0.14); }
+.node-toggle.stop { color: #e08a8a; }
+.node-toggle.stop:hover { background: rgba(224,138,138,0.14); }

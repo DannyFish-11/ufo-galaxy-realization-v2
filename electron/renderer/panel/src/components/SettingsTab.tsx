@@ -604,6 +604,20 @@ export default function SettingsTab() {
     return items;
   };
 
+  // 一键启停单个节点(阶段2a):POST /start|/stop → 刷新名单。
+  const toggleNode = useCallback(async (n: RosterNode, running: boolean) => {
+    try {
+      await fetch(`${getBackendUrl()}/api/v1/nodes/${n.num}/${running ? 'stop' : 'start'}`, {
+        method: 'POST',
+      });
+      showToast(`${running ? '停止' : '启动'} #${n.num} ${n.name}…`);
+      // 稍等后端起进程再刷新状态。
+      setTimeout(() => fetchRoster().then((r) => { if (r) setRoster(r); }), 1200);
+    } catch {
+      showToast(`操作 #${n.num} 失败`);
+    }
+  }, [showToast]);
+
   // ── 节点名单台(端口与节点页):125 个节点,按类型分组、编号排序、显示状态 ──
   const renderNodeRoster = () => {
     if (!roster) {
@@ -634,12 +648,22 @@ export default function SettingsTab() {
               <div className="node-grid">
                 {list.map((n) => {
                   const st = statusMeta(n.status);
+                  const running = st.cls === 'ok' || st.cls === 'warn';
                   return (
                     <div className="node-card" key={n.num} title={n.purpose}>
                       <div className="node-card-top">
                         <span className="node-num">#{n.num}</span>
                         <span className="node-name">{n.name}</span>
                         <span className={`node-status ${st.cls}`}>{st.label}</span>
+                        {n.runnable && (
+                          <button
+                            className={`node-toggle ${running ? 'stop' : 'start'}`}
+                            onClick={() => toggleNode(n, running)}
+                            title={running ? '停止该节点' : '启动该节点'}
+                          >
+                            {running ? '停止' : '启动'}
+                          </button>
+                        )}
                       </div>
                       <div className="node-card-meta">
                         {n.port && <span className="node-port">:{n.port}</span>}
