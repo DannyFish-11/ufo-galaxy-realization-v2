@@ -320,6 +320,37 @@ class LocalBrainManager:
         logger.info("自动选择 ollama 后端 (默认)")
         return "ollama"
 
+    async def _warm_up_ollama_model(self) -> None:
+        """把选定的主脑模型【显式加载进 Ollama 内存】(不阻塞启动)。
+
+        真机反馈:serve 起来了、模型也 pull 了,面板却一直「模型未就绪」——因为
+        Ollama 是【惰性加载】:serve 启动不预载任何模型,直到第一次推理请求才把权重
+        读进内存。所以只 ping 通 serve 不等于「模型可用」。这里在后台发一个最小
+        generate 请求(keep_alive=30m 常驻),主动触发加载;加载成功即把状态标为
+        真正就绪。纯 CPU 上大模型加载慢,故放后台,完成再更新状态,不卡启动。
+        """
+        model = (self.brain_model or "").strip()
+        if not model:
+            return
+        try:
+            import httpx
+            base = (self.ollama_url or "http://localhost:11434").rstrip("/")
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                # prompt 留空 + keep_alive:Ollama 只加载模型、常驻内存,不真正生成。
+                resp = await client.post(
+                    f"{base}/api/generate",
+                    json={"model": model, "prompt": "", "stream": False, "keep_alive": "30m"},
+                )
+                if resp.status_code == 200:
+                    self._status = LocalBrainStatus.HEALTHY
+                    self._healthy = True
+                    logger.info("本地主脑模型已加载进内存并常驻 [ollama]: %s", model)
+                else:
+                    logger.info("主脑模型预载返回 %s(%s);首次对话时会自动加载。",
+                                resp.status_code, model)
+        except Exception as exc:  # noqa: BLE001
+            logger.info("主脑模型后台预载未完成(非致命,首次对话会触发加载): %s", exc)
+
     async def _ensure_ollama_running(self) -> bool:
         """Legacy Ollama-specific startup path"""
         # 1. Check if Ollama is already running
@@ -332,6 +363,8 @@ class LocalBrainManager:
                 self.ollama_url,
                 self.available_models,
             )
+            # 后台显式加载选定模型进内存(Ollama 惰性加载,ping 通≠模型可用)。
+            asyncio.create_task(self._warm_up_ollama_model())
             return True
 
         # 2. Ollama not running, try to start
@@ -363,6 +396,8 @@ class LocalBrainManager:
                         self.ollama_url,
                         self.available_models,
                     )
+                    # 后台显式加载模型进内存(serve 刚起,更需要主动预载)。
+                    asyncio.create_task(self._warm_up_ollama_model())
                     return True
 
         # PR-I1: Auto-install Ollama —— 仅当命令确实不存在时才尝试，

@@ -127,6 +127,77 @@ _INSTALL_HINTS: Dict[str, str] = {
     "podman": "https://podman.io/get-started (Windows: winget install RedHat.Podman)",
 }
 
+# 各平台【自动安装】命令。Windows 用 winget(会弹 UAC,由用户确认),Podman 最轻;
+# Linux 用发行版包管理器(需 sudo,无 sudo 权限时会失败,属尽力而为);macOS 用 brew。
+_WINGET_ID: Dict[str, str] = {"docker": "Docker.DockerDesktop", "podman": "RedHat.Podman"}
+
+
+def can_auto_install() -> bool:
+    """当前平台是否具备【后台自动安装】容器运行时的手段(winget / brew / apt / dnf)。"""
+    if sys.platform == "win32":
+        return shutil.which("winget") is not None
+    if sys.platform == "darwin":
+        return shutil.which("brew") is not None
+    return any(shutil.which(pm) for pm in ("apt-get", "dnf", "pacman", "zypper"))
+
+
+def _install_command(rt: str) -> Optional[List[str]]:
+    """返回在当前平台自动安装 rt 的命令(拿不到返回 None)。"""
+    if rt not in _RUNTIMES:
+        return None
+    if sys.platform == "win32":
+        wg = shutil.which("winget")
+        if wg and rt in _WINGET_ID:
+            return [wg, "install", "--id", _WINGET_ID[rt], "-e", "--silent",
+                    "--accept-package-agreements", "--accept-source-agreements"]
+        return None
+    if sys.platform == "darwin":
+        brew = shutil.which("brew")
+        if brew:
+            # docker 用 cask(Docker Desktop),podman 是普通 formula
+            return [brew, "install", "--cask", "docker"] if rt == "docker" else [brew, "install", "podman"]
+        return None
+    # Linux:优先 apt,其次 dnf/pacman/zypper。docker 用发行版包名 docker.io / docker;
+    # 无 sudo 时会失败(尽力而为)。Podman 在各发行版包名统一为 podman。
+    pkg = "podman" if rt == "podman" else ("docker.io" if shutil.which("apt-get") else "docker")
+    for pm, args in (("apt-get", ["install", "-y", pkg]),
+                     ("dnf", ["install", "-y", pkg]),
+                     ("pacman", ["-S", "--noconfirm", pkg]),
+                     ("zypper", ["install", "-y", pkg])):
+        if shutil.which(pm):
+            base = ["sudo", pm] if shutil.which("sudo") else [pm]
+            return base + args
+    return None
+
+
+def background_install(rt: str) -> bool:
+    """后台【静默/尽力而为】安装容器运行时(不阻塞启动)。返回是否已发起安装进程。
+
+    Windows 会弹 UAC 由用户确认(无法真正完全静默安装系统级软件,这是 OS 的安全约束);
+    其它平台用包管理器(可能需 sudo)。安装日志写 logs/container_runtime_install.log。
+    装好后【下次启动】即自动检测并采用(偏好已由调用方持久化)。
+    """
+    cmd = _install_command(rt)
+    if not cmd:
+        return False
+    import subprocess as _sp
+    import threading as _th
+    from pathlib import Path as _Path
+
+    def _run() -> None:
+        try:
+            _log_dir = _Path("logs")
+            _log_dir.mkdir(exist_ok=True)
+            with open(_log_dir / "container_runtime_install.log", "ab") as _f:
+                _f.write(f"\n== auto-install {rt}: {cmd} ==\n".encode("utf-8", "replace"))
+                _f.flush()
+                _sp.run(cmd, stdout=_f, stderr=_sp.STDOUT, timeout=1800)
+        except Exception as exc:  # noqa: BLE001
+            logger.info("容器运行时自动安装(%s)未完成(尽力而为): %s", rt, exc)
+
+    _th.Thread(target=_run, name=f"GalaxyRuntimeInstall-{rt}", daemon=True).start()
+    return True
+
 
 def interactive_install_guide() -> str:
     """两者都【未安装】且交互时:仍展示选择菜单,让用户选定偏好运行时并给出安装指引。
@@ -169,10 +240,18 @@ def interactive_install_guide() -> str:
     elif choice in _RUNTIMES:
         pick = choice
     save_choice(pick)  # 记住偏好;装好后下次即自动采用
-    print("  " + _c(f"已记住偏好: {pick.capitalize()} —— 安装后重跑即自动使用并后台拉取节点镜像。",
-                    Colors.GREEN))
-    print("  " + _c(f"  安装: {_INSTALL_HINTS.get(pick, '')}", Colors.DIM))
-    return ""  # 当前仍不可用(未安装),但偏好已持久化
+    print("  " + _c(f"已记住偏好: {pick.capitalize()}", Colors.GREEN))
+    # 能自动装就【后台自己下】,不用用户手动。Windows 会弹 UAC 确认(系统级软件
+    # 无法完全静默,属 OS 安全约束);装好后下次启动自动采用并后台拉取节点镜像。
+    if can_auto_install():
+        if background_install(pick):
+            print("  " + _c(f"  正在【后台自动安装】{pick.capitalize()}…(日志 logs/container_runtime_install.log;"
+                            f"Windows 会弹一次 UAC 确认)。装好后重跑即自动启用。", Colors.CYAN))
+        else:
+            print("  " + _c(f"  安装(手动): {_INSTALL_HINTS.get(pick, '')}", Colors.DIM))
+    else:
+        print("  " + _c(f"  未检测到可用的自动安装工具,请手动安装: {_INSTALL_HINTS.get(pick, '')}", Colors.DIM))
+    return ""  # 当前仍不可用(安装进行中/待装),偏好已持久化
 
 
 def resolve_runtime(interactive: bool = True) -> str:

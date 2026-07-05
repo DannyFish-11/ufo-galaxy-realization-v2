@@ -139,3 +139,9 @@ runtime/panel_last_operator_action.json
 
 # Client-discovery entrypoint written by unified_launcher on every launch
 runtime/entrypoint.json
+
+# 节点一键启停的本机 PID 状态(core/node_lifecycle.py 运行时生成,勿入库)
+runtime/node_pids.json
+
+# OAuth 连接器 token/凭据本机存储(勿入库)
+runtime/oauth_connectors.json

@@ -479,6 +479,16 @@ function createPanelWindow() {
     // 现在：把渲染层日志/加载失败打到 logs/electron.log，并在彻底加载失败时回退到一张
     // 不透明的提示页，保证窗口「看得见」而不是一片空白。
     const wc = panelWindow.webContents;
+    // 窗口级 F12 兜底:globalShortcut 在部分环境会被 OS/其它应用/输入法吞掉(用户
+    // 反复反馈「F12 唤不出也关不掉」)。当【面板窗口本身聚焦】时,直接在这里拦 F12
+    // keydown → togglePanel,并 preventDefault 阻止 F12 打开 DevTools。这样至少
+    // 「面板已开时按 F12 关闭」永远有效,与 globalShortcut 双保险。
+    wc.on('before-input-event', (event, input) => {
+        if (input.type === 'keyDown' && input.key === 'F12') {
+            event.preventDefault();
+            togglePanel();
+        }
+    });
     wc.on('did-finish-load', () => console.log('[Panel] did-finish-load:', panelPath));
     wc.on('did-fail-load', (_e, code, desc, url) => {
         console.error(`[Panel] did-fail-load code=${code} desc=${desc} url=${url}`);

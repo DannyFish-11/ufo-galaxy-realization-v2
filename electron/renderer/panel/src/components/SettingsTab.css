@@ -312,3 +312,96 @@
   font-size: 13px;
   box-shadow: var(--e2);
 }
+
+/* ── 节点名单台(端口与节点页)────────────────────────────── */
+.node-roster { margin: 0 0 var(--lg); }
+.node-roster-loading { padding: var(--md); color: var(--text-muted); font-size: 13px; }
+.node-roster-head {
+  display: flex; align-items: baseline; gap: var(--sm);
+  margin-bottom: var(--sm);
+}
+.node-roster-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.node-roster-sub { font-size: 12px; color: var(--text-muted); }
+.node-group { margin-bottom: var(--md); }
+.node-group-title {
+  font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  margin: var(--sm) 0 6px; display: flex; align-items: center; gap: 6px;
+}
+.node-group-count {
+  font-size: 11px; color: var(--text-muted);
+  background: rgba(255,255,255,0.05); border-radius: var(--r-pill);
+  padding: 0 6px; min-width: 18px; text-align: center;
+}
+.node-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+}
+.node-card {
+  background: var(--surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md); padding: 8px 10px; min-width: 0;
+}
+.node-card-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.node-num { font-size: 11px; color: var(--text-muted); flex: none; font-variant-numeric: tabular-nums; }
+.node-name {
+  font-size: 13px; color: var(--text-primary); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.node-status {
+  font-size: 10px; padding: 1px 6px; border-radius: var(--r-pill); flex: none;
+}
+.node-status.ok   { color: #7ee0a8; background: rgba(126,224,168,0.12); }
+.node-status.warn { color: #e6c07b; background: rgba(230,192,123,0.12); }
+.node-status.off  { color: #e08a8a; background: rgba(224,138,138,0.12); }
+.node-status.idle { color: var(--text-muted); background: rgba(255,255,255,0.05); }
+.node-card-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.node-port { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.node-conn {
+  font-size: 10px; padding: 1px 6px; border-radius: var(--r-pill);
+}
+.node-conn.oauth { color: #8fb8ff; background: rgba(143,184,255,0.12); }
+.node-conn.key   { color: #c9a8e0; background: rgba(201,168,224,0.12); }
+.node-conn.stub  { color: var(--text-muted); background: rgba(255,255,255,0.04); }
+.node-roster-note {
+  font-size: 11px; color: var(--text-muted); line-height: 1.5;
+  border-top: 1px solid var(--border-subtle); padding-top: var(--sm); margin-top: 6px;
+}
+
+/* 节点一键启停按钮 */
+.node-toggle {
+  font-size: 10px; padding: 1px 8px; border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle); background: transparent;
+  cursor: pointer; flex: none; transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.node-toggle.start { color: #7ee0a8; }
+.node-toggle.start:hover { background: rgba(126,224,168,0.14); }
+.node-toggle.stop { color: #e08a8a; }
+.node-toggle.stop:hover { background: rgba(224,138,138,0.14); }
+
+/* ── 外部账号连接器(自建 OAuth)────────────────────────────── */
+.connectors { margin: 0 0 var(--lg); }
+.connectors-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--sm); }
+.connectors-sub { font-size: 11px; color: var(--text-muted); margin-left: 8px; font-weight: 400; }
+.connector-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.connector-card { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: var(--r-md); padding: 10px; }
+.connector-row { display: flex; align-items: center; justify-content: space-between; }
+.connector-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.connector-status { font-size: 10px; padding: 1px 6px; border-radius: var(--r-pill); }
+.connector-status.ok { color: #7ee0a8; background: rgba(126,224,168,0.12); }
+.connector-status.warn { color: #e6c07b; background: rgba(230,192,123,0.12); }
+.connector-status.idle { color: var(--text-muted); background: rgba(255,255,255,0.05); }
+.connector-actions { margin-top: 8px; }
+.connector-btn { font-size: 11px; padding: 3px 12px; border-radius: var(--r-pill); border: 1px solid var(--border-subtle); background: transparent; cursor: pointer; }
+.connector-btn.on { color: #8fb8ff; } .connector-btn.on:hover { background: rgba(143,184,255,0.14); }
+.connector-btn.off { color: #e08a8a; } .connector-btn.off:hover { background: rgba(224,138,138,0.14); }
+.connector-btn.cfg { color: #e6c07b; } .connector-btn.cfg:hover { background: rgba(230,192,123,0.14); }
+.connector-cfg { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border-subtle); padding-top: 8px; }
+.connector-cfg-hint, .connector-cfg-redirect { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+.connector-cfg-redirect code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 10px; word-break: break-all; }
+.connector-cfg-hint a { color: #8fb8ff; }
+.connector-input { background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); color: var(--text-primary); font-size: 12px; padding: 5px 8px; outline: none; }
+
+/* 节点启停方式切换(子进程/容器)*/
+.node-mode-switch { font-size: 11px; color: var(--text-muted); margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.node-mode-btn { font-size: 11px; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid var(--border-subtle); background: transparent; color: var(--text-muted); cursor: pointer; }
+.node-mode-btn.active { color: var(--text-primary); background: rgba(230,192,123,0.10); border-color: rgba(230,192,123,0.3); }
+.node-roster-head { flex-wrap: wrap; }

@@ -154,3 +154,13 @@ zeroconf>=0.132.0
 # Optional: RSS feed parsing (silently ignored if not installed)
 # ============================================================================
 feedparser>=6.0.0
+
+# ============================================================================
+# 依赖补齐(依赖审计):以下包被核心能力真实 import,但此前只存在于
+# requirements-core / 或仅靠 main.py 硬编码自动安装 / 或仅作传递依赖存在——
+# 在纯 requirements.txt / Docker / CI 安装路径下会缺失。显式声明以消除隐患。
+# ============================================================================
+jsonschema>=4.0.0          # integration/event_bus.py 事件schema校验;缺失则降级为基础字段检查
+huggingface_hub>=0.20.0    # 本地模型 HF 下载 + HF↔Ollama 回退(此前仅传递依赖)
+ollama>=0.3.0              # external/memos 的 Ollama LLM/embedder 后端(此前仅 main.py 硬编码装)
+tqdm>=4.65.0              # 模型下载/长任务进度条(此前仅在 requirements-core.txt)

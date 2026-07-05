@@ -35,7 +35,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from core.auth import require_auth
 from fastapi.responses import JSONResponse
@@ -152,6 +152,110 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "total": len(nodes),
             "registry_authority": "canonical:NodeFabricRegistry",
         })
+
+    @router.get("/api/v1/nodes/roster")
+    async def nodes_roster():
+        """节点【名单台】:全部 125 个节点的分类静态目录 ⊕ 端口 ⊕ 实时状态。
+
+        面板「端口与节点」页用它按【类型分组、编号排序】展示所有节点(不只已注册的),
+        并标出哪些是 OAuth/Key 连接器候选。与上面 canonical 的 /api/v1/nodes 不同:
+        那个只列【已在 NodeFabricRegistry 注册】的运行节点;roster 覆盖磁盘上全部节点,
+        用于管理/展示(状态取不到时为 unknown)。数据源见 core.node_catalog。
+        """
+        try:
+            from core.node_catalog import get_node_roster
+            return JSONResponse(get_node_roster())
+        except Exception as e:  # noqa: BLE001
+            logger.warning("nodes_roster 失败: %s", e)
+            return JSONResponse({"count": 0, "nodes": [], "error": str(e)}, status_code=200)
+
+    @router.post("/api/v1/nodes/{node}/start")
+    async def node_start(node: str, mode: str = "subprocess"):
+        """一键启动单个节点。mode=subprocess(默认,阶段2a)| container(阶段3,跑进
+        所选 Docker/Podman;首次 build 慢,按需逐个起防本机过载)。"""
+        try:
+            if mode == "container":
+                from core.node_lifecycle import container_start_node
+                return JSONResponse(container_start_node(node))
+            from core.node_lifecycle import start_node
+            return JSONResponse(start_node(node))
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
+
+    @router.post("/api/v1/nodes/{node}/stop")
+    async def node_stop(node: str, mode: str = "subprocess"):
+        """一键停止单个节点。mode=container 时停并删该节点容器。"""
+        try:
+            if mode == "container":
+                from core.node_lifecycle import container_stop_node
+                return JSONResponse(container_stop_node(node))
+            from core.node_lifecycle import stop_node
+            return JSONResponse(stop_node(node))
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
+
+    # ── 阶段2b:自建 OAuth 连接器(Gmail/GitHub/Notion/Slack/Discord)──
+    @router.get("/api/v1/connectors")
+    async def connectors_list():
+        """列出连接器 + 状态(needs_config / disconnected / connected)+ 各自 redirect_uri。"""
+        try:
+            from core.oauth_connectors import list_connectors
+            return JSONResponse(list_connectors())
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"connectors": [], "error": str(e)}, status_code=200)
+
+    @router.post("/api/v1/connectors/{service}/credentials")
+    async def connector_creds(service: str, request: Request):
+        """存该服务自建 OAuth App 的 client_id/secret(首次配置)。"""
+        try:
+            body = await request.json()
+            from core.oauth_connectors import set_credentials
+            return JSONResponse(set_credentials(
+                service, body.get("client_id", ""), body.get("client_secret", "")))
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
+
+    @router.get("/api/v1/connectors/{service}/authorize")
+    async def connector_authorize(service: str):
+        """一键授权:302 跳到服务的 OAuth 授权页(带 redirect_uri + state)。"""
+        from fastapi.responses import RedirectResponse
+        try:
+            from core.oauth_connectors import build_authorize_url
+            url, err = build_authorize_url(service)
+            if err == "needs_config":
+                return JSONResponse({"ok": False, "error": "needs_config"}, status_code=200)
+            if err or not url:
+                return JSONResponse({"ok": False, "error": err or "无法生成授权链接"}, status_code=200)
+            return RedirectResponse(url)
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
+
+    @router.get("/api/v1/connectors/{service}/callback")
+    async def connector_callback(service: str, code: str = "", state: str = ""):
+        """OAuth 回调:用 code 换 token 存本机,返回一个可自动关闭的提示页。"""
+        from fastapi.responses import HTMLResponse
+        from core.oauth_connectors import handle_callback
+        res = await handle_callback(service, code, state)
+        ok = bool(res.get("ok"))
+        msg = f"{service} 连接成功,可关闭本页" if ok else f"连接失败:{res.get('error')}"
+        html = (
+            "<!doctype html><meta charset='utf-8'><body style='font-family:system-ui;"
+            "background:#11131c;color:#eaf6ff;display:flex;align-items:center;"
+            "justify-content:center;height:100vh;margin:0'><div style='text-align:center'>"
+            f"<h2>{'✓' if ok else '✗'} {msg}</h2>"
+            "<p style='opacity:.6'>本窗口 3 秒后自动关闭</p></div>"
+            "<script>setTimeout(()=>window.close(),3000)</script></body>"
+        )
+        return HTMLResponse(html)
+
+    @router.post("/api/v1/connectors/{service}/disconnect")
+    async def connector_disconnect(service: str):
+        """断开连接(删本机 token)。"""
+        try:
+            from core.oauth_connectors import disconnect
+            return JSONResponse(disconnect(service))
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
 
     @router.get("/api/v1/nodes/legacy/filesystem")
     async def list_nodes_legacy_filesystem():

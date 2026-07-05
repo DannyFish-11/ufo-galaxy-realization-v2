@@ -1,0 +1,1194 @@
+{
+  "_comment": "由 scripts/gen_node_catalog.py 从全量节点审计生成;端口/状态运行时合并,勿手改。",
+  "type_labels": {
+    "core-runtime": "核心运行时",
+    "tool-integration": "工具集成",
+    "ai-cognition": "AI 认知",
+    "media": "媒体",
+    "device-automation": "设备自动化",
+    "memory-knowledge": "记忆知识",
+    "dev-code": "开发/代码",
+    "observability-ops": "可观测/运维",
+    "infra-adapter": "基础设施适配",
+    "data": "数据"
+  },
+  "count": 125,
+  "nodes": [
+    {
+      "num": 0,
+      "name": "StateMachine",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "中央全局状态机;所有状态同步汇聚于此"
+    },
+    {
+      "num": 1,
+      "name": "OneAPI",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "统一 API 网关,聚合下游服务",
+      "connector": {
+        "kind": "key",
+        "service": "Brave/OpenWeather/Pixverse"
+      }
+    },
+    {
+      "num": 2,
+      "name": "Tasker",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "任务调度/分发引擎"
+    },
+    {
+      "num": 3,
+      "name": "SecretVault",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "密钥/凭据保险库"
+    },
+    {
+      "num": 4,
+      "name": "Router",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "全局请求路由"
+    },
+    {
+      "num": 5,
+      "name": "Auth",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "鉴权/授权中心(OAuth2 流程)",
+      "connector": {
+        "kind": "oauth",
+        "service": "Auth"
+      }
+    },
+    {
+      "num": 6,
+      "name": "Filesystem",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "文件系统 MCP 访问服务"
+    },
+    {
+      "num": 7,
+      "name": "Git",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "本地 Git 版本控制操作"
+    },
+    {
+      "num": 8,
+      "name": "Fetch",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "通用 HTTP 抓取/请求服务"
+    },
+    {
+      "num": 9,
+      "name": "Sandbox",
+      "type": "dev-code",
+      "type_label": "开发/代码",
+      "runnable": true,
+      "purpose": "沙箱代码执行环境"
+    },
+    {
+      "num": 10,
+      "name": "Slack",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "Slack 集成",
+      "connector": {
+        "kind": "oauth",
+        "service": "Slack"
+      }
+    },
+    {
+      "num": 11,
+      "name": "GitHub",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "GitHub API 集成",
+      "connector": {
+        "kind": "oauth",
+        "service": "GitHub"
+      }
+    },
+    {
+      "num": 12,
+      "name": "Postgres",
+      "type": "data",
+      "type_label": "数据",
+      "runnable": true,
+      "purpose": "PostgreSQL 数据库服务"
+    },
+    {
+      "num": 13,
+      "name": "SQLite",
+      "type": "data",
+      "type_label": "数据",
+      "runnable": true,
+      "purpose": "SQLite 数据库服务"
+    },
+    {
+      "num": 14,
+      "name": "FFmpeg",
+      "type": "media",
+      "type_label": "媒体",
+      "runnable": true,
+      "purpose": "音视频处理(ffmpeg)"
+    },
+    {
+      "num": 15,
+      "name": "OCR",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "光学字符识别"
+    },
+    {
+      "num": 16,
+      "name": "Email",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "邮件收发(SMTP/IMAP,Gmail)",
+      "connector": {
+        "kind": "oauth",
+        "service": "Gmail"
+      }
+    },
+    {
+      "num": 17,
+      "name": "EdgeTTS",
+      "type": "media",
+      "type_label": "媒体",
+      "runnable": true,
+      "purpose": "文本转语音(Edge TTS)"
+    },
+    {
+      "num": 18,
+      "name": "DeepL",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "DeepL 翻译",
+      "connector": {
+        "kind": "key",
+        "service": "DeepL"
+      }
+    },
+    {
+      "num": 19,
+      "name": "Crypto",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "加解密工具"
+    },
+    {
+      "num": 20,
+      "name": "Qdrant",
+      "type": "memory-knowledge",
+      "type_label": "记忆知识",
+      "runnable": true,
+      "purpose": "Qdrant 向量数据库服务"
+    },
+    {
+      "num": 21,
+      "name": "Notion",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "Notion 集成",
+      "connector": {
+        "kind": "oauth",
+        "service": "Notion"
+      }
+    },
+    {
+      "num": 22,
+      "name": "BraveSearch",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "Brave 网页搜索",
+      "connector": {
+        "kind": "key",
+        "service": "Brave"
+      }
+    },
+    {
+      "num": 23,
+      "name": "Time",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "时间/时区服务"
+    },
+    {
+      "num": 24,
+      "name": "Weather",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "天气服务",
+      "connector": {
+        "kind": "key",
+        "service": "OpenWeather"
+      }
+    },
+    {
+      "num": 25,
+      "name": "GoogleSearch",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "Google 可编程搜索",
+      "connector": {
+        "kind": "key",
+        "service": "GoogleCSE"
+      }
+    },
+    {
+      "num": 26,
+      "name": "Discord",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "Discord 集成",
+      "connector": {
+        "kind": "oauth",
+        "service": "Discord"
+      }
+    },
+    {
+      "num": 27,
+      "name": "SmartHome",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "智能家居设备控制"
+    },
+    {
+      "num": 28,
+      "name": "PluginManager0",
+      "type": "infra-adapter",
+      "type_label": "基础设施适配",
+      "runnable": true,
+      "purpose": "插件管理节点"
+    },
+    {
+      "num": 29,
+      "name": "ExtensionRegistry",
+      "type": "infra-adapter",
+      "type_label": "基础设施适配",
+      "runnable": true,
+      "purpose": "扩展注册节点"
+    },
+    {
+      "num": 30,
+      "name": "Reserved30",
+      "type": "infra-adapter",
+      "type_label": "基础设施适配",
+      "runnable": false,
+      "purpose": "占位:插件框架 stub"
+    },
+    {
+      "num": 31,
+      "name": "Reserved31",
+      "type": "infra-adapter",
+      "type_label": "基础设施适配",
+      "runnable": false,
+      "purpose": "占位:插件框架 stub"
+    },
+    {
+      "num": 32,
+      "name": "Reserved32",
+      "type": "infra-adapter",
+      "type_label": "基础设施适配",
+      "runnable": false,
+      "purpose": "占位:插件框架 stub"
+    },
+    {
+      "num": 33,
+      "name": "ADB",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "Android Debug Bridge 控制"
+    },
+    {
+      "num": 34,
+      "name": "Scrcpy",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "Android 投屏/控制"
+    },
+    {
+      "num": 35,
+      "name": "AppleScript",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "macOS AppleScript 自动化"
+    },
+    {
+      "num": 36,
+      "name": "UIAWindows",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "Windows UI 自动化"
+    },
+    {
+      "num": 39,
+      "name": "SSH",
+      "type": "infra-adapter",
+      "type_label": "基础设施适配",
+      "runnable": true,
+      "purpose": "SSH 远程执行"
+    },
+    {
+      "num": 40,
+      "name": "SFTP",
+      "type": "infra-adapter",
+      "type_label": "基础设施适配",
+      "runnable": true,
+      "purpose": "SFTP 文件传输"
+    },
+    {
+      "num": 43,
+      "name": "MAVLink",
+      "type": "infra-adapter",
+      "type_label": "基础设施适配",
+      "runnable": true,
+      "purpose": "无人机/MAVLink 协议通信"
+    },
+    {
+      "num": 44,
+      "name": "NFC",
+      "type": "infra-adapter",
+      "type_label": "基础设施适配",
+      "runnable": true,
+      "purpose": "NFC 近场通信"
+    },
+    {
+      "num": 45,
+      "name": "DesktopAuto",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "桌面 GUI 自动化"
+    },
+    {
+      "num": 46,
+      "name": "Camera",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "摄像头采集/控制"
+    },
+    {
+      "num": 47,
+      "name": "Audio",
+      "type": "media",
+      "type_label": "媒体",
+      "runnable": true,
+      "purpose": "音频采集/播放控制"
+    },
+    {
+      "num": 49,
+      "name": "OctoPrint",
+      "type": "infra-adapter",
+      "type_label": "基础设施适配",
+      "runnable": true,
+      "purpose": "OctoPrint 3D 打印机控制"
+    },
+    {
+      "num": 50,
+      "name": "Transformer",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "Transformer 推理引擎",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 51,
+      "name": "QuantumDispatcher",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "量子计算分发器"
+    },
+    {
+      "num": 52,
+      "name": "QiskitSimulator",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "Qiskit 量子模拟器"
+    },
+    {
+      "num": 53,
+      "name": "GraphLogic",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "基于图的逻辑推理"
+    },
+    {
+      "num": 54,
+      "name": "SymbolicMath",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "符号数学计算"
+    },
+    {
+      "num": 55,
+      "name": "MultiModal",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "多模态处理",
+      "connector": {
+        "kind": "key",
+        "service": "HuggingFace"
+      }
+    },
+    {
+      "num": 56,
+      "name": "Planning",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "规划引擎"
+    },
+    {
+      "num": 57,
+      "name": "QuantumCloud",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "量子云服务"
+    },
+    {
+      "num": 58,
+      "name": "ModelRouter",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "跨供应商 LLM 模型路由",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 59,
+      "name": "CausalInference",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "因果推断"
+    },
+    {
+      "num": 60,
+      "name": "ReinforcementLearn",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "强化学习引擎"
+    },
+    {
+      "num": 61,
+      "name": "GeometricReasoning",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "几何推理"
+    },
+    {
+      "num": 62,
+      "name": "ProbabilisticProg",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "概率编程"
+    },
+    {
+      "num": 63,
+      "name": "FuzzyLogicEngine",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "模糊逻辑推理引擎"
+    },
+    {
+      "num": 64,
+      "name": "Telemetry",
+      "type": "observability-ops",
+      "type_label": "可观测/运维",
+      "runnable": true,
+      "purpose": "遥测数据采集"
+    },
+    {
+      "num": 65,
+      "name": "LoggerCentral",
+      "type": "observability-ops",
+      "type_label": "可观测/运维",
+      "runnable": true,
+      "purpose": "中央日志系统"
+    },
+    {
+      "num": 66,
+      "name": "ConfigManager",
+      "type": "observability-ops",
+      "type_label": "可观测/运维",
+      "runnable": true,
+      "purpose": "配置管理器"
+    },
+    {
+      "num": 67,
+      "name": "HealthMonitor",
+      "type": "observability-ops",
+      "type_label": "可观测/运维",
+      "runnable": true,
+      "purpose": "健康监控"
+    },
+    {
+      "num": 68,
+      "name": "Security",
+      "type": "observability-ops",
+      "type_label": "可观测/运维",
+      "runnable": true,
+      "purpose": "安全监控"
+    },
+    {
+      "num": 69,
+      "name": "BackupRestore",
+      "type": "observability-ops",
+      "type_label": "可观测/运维",
+      "runnable": true,
+      "purpose": "备份/恢复"
+    },
+    {
+      "num": 70,
+      "name": "AutonomousLearning",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "自主学习系统"
+    },
+    {
+      "num": 71,
+      "name": "MultiDeviceCoord",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "多设备协调"
+    },
+    {
+      "num": 72,
+      "name": "KnowledgeBase",
+      "type": "memory-knowledge",
+      "type_label": "记忆知识",
+      "runnable": true,
+      "purpose": "知识库系统"
+    },
+    {
+      "num": 73,
+      "name": "Learning",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "自学习系统"
+    },
+    {
+      "num": 74,
+      "name": "DigitalTwin",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "物理设备数字孪生"
+    },
+    {
+      "num": 75,
+      "name": "DataPipeline",
+      "type": "data",
+      "type_label": "数据",
+      "runnable": true,
+      "purpose": "数据处理流水线"
+    },
+    {
+      "num": 76,
+      "name": "AlertManager",
+      "type": "observability-ops",
+      "type_label": "可观测/运维",
+      "runnable": true,
+      "purpose": "告警管理器",
+      "connector": {
+        "kind": "key",
+        "service": "SMTP"
+      }
+    },
+    {
+      "num": 77,
+      "name": "TaskScheduler",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "任务调度器"
+    },
+    {
+      "num": 78,
+      "name": "DataValidator",
+      "type": "data",
+      "type_label": "数据",
+      "runnable": true,
+      "purpose": "数据校验服务"
+    },
+    {
+      "num": 79,
+      "name": "LocalLLM",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "本地 LLM 服务"
+    },
+    {
+      "num": 80,
+      "name": "MemorySystem",
+      "type": "memory-knowledge",
+      "type_label": "记忆知识",
+      "runnable": true,
+      "purpose": "记忆系统"
+    },
+    {
+      "num": 81,
+      "name": "Orchestrator",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "任务编排器"
+    },
+    {
+      "num": 82,
+      "name": "NetworkGuard",
+      "type": "observability-ops",
+      "type_label": "可观测/运维",
+      "runnable": true,
+      "purpose": "网络监控/防御"
+    },
+    {
+      "num": 83,
+      "name": "NewsAggregator",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "新闻聚合",
+      "connector": {
+        "kind": "key",
+        "service": "NewsFeed"
+      }
+    },
+    {
+      "num": 84,
+      "name": "StockTracker",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "股票追踪",
+      "connector": {
+        "kind": "key",
+        "service": "MarketData"
+      }
+    },
+    {
+      "num": 85,
+      "name": "PromptLibrary",
+      "type": "memory-knowledge",
+      "type_label": "记忆知识",
+      "runnable": true,
+      "purpose": "提示词库"
+    },
+    {
+      "num": 86,
+      "name": "SpeechProcessor",
+      "type": "media",
+      "type_label": "媒体",
+      "runnable": true,
+      "purpose": "语音处理(ASR/TTS)",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 87,
+      "name": "ImageAnalysis",
+      "type": "media",
+      "type_label": "媒体",
+      "runnable": true,
+      "purpose": "图像分析",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 88,
+      "name": "WorkflowEngine",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "工作流引擎"
+    },
+    {
+      "num": 89,
+      "name": "APIGateway",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "API 网关"
+    },
+    {
+      "num": 90,
+      "name": "MultimodalVision",
+      "type": "media",
+      "type_label": "媒体",
+      "runnable": true,
+      "purpose": "多模态视觉"
+    },
+    {
+      "num": 91,
+      "name": "MultimodalAgent",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "多模态 agent"
+    },
+    {
+      "num": 92,
+      "name": "AutoControl",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "Windows+Android 统一控制接口"
+    },
+    {
+      "num": 93,
+      "name": "VideoProcessor",
+      "type": "media",
+      "type_label": "媒体",
+      "runnable": true,
+      "purpose": "视频处理/分析",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 94,
+      "name": "AudioAnalysis",
+      "type": "media",
+      "type_label": "媒体",
+      "runnable": true,
+      "purpose": "音频分析/转写",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 95,
+      "name": "WebRTC_Receiver",
+      "type": "media",
+      "type_label": "媒体",
+      "runnable": true,
+      "purpose": "WebRTC 流接收"
+    },
+    {
+      "num": 96,
+      "name": "SmartTransportRtr",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "智能传输路由"
+    },
+    {
+      "num": 97,
+      "name": "AcademicSearch",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "学术论文搜索",
+      "connector": {
+        "kind": "key",
+        "service": "SerpAPI"
+      }
+    },
+    {
+      "num": 98,
+      "name": "MultimodalFusion",
+      "type": "media",
+      "type_label": "媒体",
+      "runnable": true,
+      "purpose": "多模态融合",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 99,
+      "name": "EmbeddingService",
+      "type": "memory-knowledge",
+      "type_label": "记忆知识",
+      "runnable": true,
+      "purpose": "嵌入向量服务",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 100,
+      "name": "MemorySystemV2",
+      "type": "memory-knowledge",
+      "type_label": "记忆知识",
+      "runnable": true,
+      "purpose": "记忆系统 v2",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 101,
+      "name": "CodeEngine",
+      "type": "dev-code",
+      "type_label": "开发/代码",
+      "runnable": true,
+      "purpose": "代码生成引擎",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 102,
+      "name": "DebugOptimize",
+      "type": "dev-code",
+      "type_label": "开发/代码",
+      "runnable": true,
+      "purpose": "调试/优化",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 103,
+      "name": "KnowledgeGraph",
+      "type": "memory-knowledge",
+      "type_label": "记忆知识",
+      "runnable": true,
+      "purpose": "知识图谱",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 104,
+      "name": "AgentCPM",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "AgentCPM 深搜/报告 agent"
+    },
+    {
+      "num": 105,
+      "name": "UnifiedKnowledgeB",
+      "type": "memory-knowledge",
+      "type_label": "记忆知识",
+      "runnable": true,
+      "purpose": "统一知识库",
+      "connector": {
+        "kind": "key",
+        "service": "HuggingFace"
+      }
+    },
+    {
+      "num": 106,
+      "name": "GitHubFlow",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "GitHub 工作流自动化",
+      "connector": {
+        "kind": "oauth",
+        "service": "GitHub"
+      }
+    },
+    {
+      "num": 107,
+      "name": "FunctionCalling",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "函数调用分发器",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 108,
+      "name": "MetaCognition",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "元认知系统",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 109,
+      "name": "ProactiveSensing",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "主动感知",
+      "connector": {
+        "kind": "key",
+        "service": "Brave"
+      }
+    },
+    {
+      "num": 110,
+      "name": "SmartOrchestrator",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "智能编排器"
+    },
+    {
+      "num": 111,
+      "name": "ContextManager",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "上下文管理器"
+    },
+    {
+      "num": 112,
+      "name": "SelfHealing",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "自愈系统"
+    },
+    {
+      "num": 113,
+      "name": "AndroidVLM",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "Android 视觉语言模型控制",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 114,
+      "name": "DocumentIntellig",
+      "type": "data",
+      "type_label": "数据",
+      "runnable": true,
+      "purpose": "文档解析/理解",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 115,
+      "name": "PluginManager",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "插件管理器"
+    },
+    {
+      "num": 116,
+      "name": "ExternalToolWrap",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "外部工具封装",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 117,
+      "name": "OpenCode",
+      "type": "dev-code",
+      "type_label": "开发/代码",
+      "runnable": true,
+      "purpose": "多语言代码执行/沙箱",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 118,
+      "name": "NodeFactory",
+      "type": "core-runtime",
+      "type_label": "核心运行时",
+      "runnable": true,
+      "purpose": "节点工厂(脚手架新节点)",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 119,
+      "name": "BenchmarkEval",
+      "type": "dev-code",
+      "type_label": "开发/代码",
+      "runnable": true,
+      "purpose": "基准/评测系统",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    },
+    {
+      "num": 120,
+      "name": "FileOperations",
+      "type": "dev-code",
+      "type_label": "开发/代码",
+      "runnable": true,
+      "purpose": "文件操作服务"
+    },
+    {
+      "num": 121,
+      "name": "WebOperations",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "Web 操作/代理"
+    },
+    {
+      "num": 122,
+      "name": "ShellExecutor",
+      "type": "dev-code",
+      "type_label": "开发/代码",
+      "runnable": true,
+      "purpose": "Shell 命令执行器"
+    },
+    {
+      "num": 123,
+      "name": "Calendar",
+      "type": "tool-integration",
+      "type_label": "工具集成",
+      "runnable": true,
+      "purpose": "日历服务",
+      "connector": {
+        "kind": "oauth",
+        "service": "Calendar"
+      }
+    },
+    {
+      "num": 124,
+      "name": "LinuxDesktopAuto",
+      "type": "device-automation",
+      "type_label": "设备自动化",
+      "runnable": true,
+      "purpose": "Linux 桌面自动化"
+    },
+    {
+      "num": 125,
+      "name": "MediaGen",
+      "type": "media",
+      "type_label": "媒体",
+      "runnable": true,
+      "purpose": "媒体生成(图/音/视频)",
+      "connector": {
+        "kind": "key",
+        "service": "Pixverse"
+      }
+    },
+    {
+      "num": 126,
+      "name": "AgentSwarm",
+      "type": "ai-cognition",
+      "type_label": "AI 认知",
+      "runnable": true,
+      "purpose": "agent 蜂群协调"
+    },
+    {
+      "num": 127,
+      "name": "BambuLab",
+      "type": "infra-adapter",
+      "type_label": "基础设施适配",
+      "runnable": true,
+      "purpose": "BambuLab 3D 打印机控制",
+      "connector": {
+        "kind": "key",
+        "service": "BambuCloud"
+      }
+    },
+    {
+      "num": 128,
+      "name": "MediaGenAsync",
+      "type": "media",
+      "type_label": "媒体",
+      "runnable": true,
+      "purpose": "媒体生成(异步任务,Pixverse)",
+      "connector": {
+        "kind": "key",
+        "service": "Pixverse"
+      }
+    },
+    {
+      "num": 130,
+      "name": "AutonomousCoding",
+      "type": "dev-code",
+      "type_label": "开发/代码",
+      "runnable": true,
+      "purpose": "自主编码引擎(门面→core)",
+      "connector": {
+        "kind": "llm",
+        "service": null
+      }
+    }
+  ]
+}

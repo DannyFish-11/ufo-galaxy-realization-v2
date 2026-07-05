@@ -228,7 +228,7 @@ class SystemOrchestrator:
 
     def _run_phase_1_load_config(self) -> PhaseResult:
         """Phase 1 — Load unified configuration baseline."""
-        logger.info("[Phase 1] Loading unified configuration …")
+        logger.info("[启动·配置] Loading unified configuration …")
         try:
             from core.unified_config import get_config
             cfg = get_config()
@@ -244,7 +244,7 @@ class SystemOrchestrator:
                 data={"config_loaded": True},
             )
         except Exception as exc:
-            logger.warning("[Phase 1] Config load degraded: %s", exc)
+            logger.warning("[启动·配置] Config load degraded: %s", exc)
             return PhaseResult(
                 phase=StartupPhase.LOAD_CONFIG,
                 status=PhaseStatus.DEGRADED,
@@ -254,7 +254,7 @@ class SystemOrchestrator:
     def _run_phase_2_resolve_mode(self) -> PhaseResult:
         """Phase 2 — Resolve current system mode."""
         import os
-        logger.info("[Phase 2] Resolving system mode …")
+        logger.info("[启动·模式] Resolving system mode …")
         mode = os.environ.get("GALAXY_SYSTEM_MODE", "desktop-local").strip() or "desktop-local"
         nats_enabled = os.environ.get("GALAXY_NATS_ENABLED", "").lower() in ("true", "1")
         cross_device = os.environ.get("GALAXY_CROSS_DEVICE_ENABLED", "").lower() in ("true", "1")
@@ -269,7 +269,7 @@ class SystemOrchestrator:
         if cross_device:
             mode = "desktop-cross-device"
         detail = f"mode={mode}, nats_enabled={nats_enabled}, cross_device={cross_device}"
-        logger.info("[Phase 2] %s", detail)
+        logger.info("[启动·模式] %s", detail)
         return PhaseResult(
             phase=StartupPhase.RESOLVE_MODE,
             status=PhaseStatus.OK,
@@ -286,7 +286,7 @@ class SystemOrchestrator:
         which will abort the startup sequence when ``continue_on_failure`` is
         ``False`` (the default).
         """
-        logger.info("[Phase 3] Running environment / bootstrap checks …")
+        logger.info("[启动·环境检查] Running environment / bootstrap checks …")
         issues: List[str] = []
         has_critical_failure = False
         try:
@@ -335,7 +335,7 @@ class SystemOrchestrator:
         low-cost, externally explainable checks that verify the runtime can route
         and execute through canonical surfaces.
         """
-        logger.info("[Phase 4] Verifying background subsystem readiness …")
+        logger.info("[启动·子系统] Verifying background subsystem readiness …")
         diagnostics: Dict[str, Any] = {
             "delegate": "unified_launcher.GalaxyUnified",
             "checks": {},
@@ -408,7 +408,7 @@ class SystemOrchestrator:
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
             diagnostics["checks"]["mesh_sessions_recovered"] = 0
-            logger.debug("[Phase 4] Multi-device session recovery skipped — %s", exc)
+            logger.debug("[启动·子系统] Multi-device session recovery skipped — %s", exc)
 
         # PR-RECOVERY: Run the canonical full startup recovery coordinator.
         # This wires RuntimeRestartRecoveryCoordinator into the production
@@ -460,7 +460,7 @@ class SystemOrchestrator:
             logger.debug("Fallback triggered: %s", exc)
             diagnostics["checks"]["startup_recovery_completed"] = False
             diagnostics["startup_recovery"] = {"error": str(exc)}
-            logger.warning("[Phase 4] Startup recovery skipped — %s", exc)
+            logger.warning("[启动·子系统] Startup recovery skipped — %s", exc)
 
         # PR-RECOVERY: Restore the in-memory task lifecycle registry from the
         # durable snapshot so that previously in-flight task records are
@@ -481,7 +481,7 @@ class SystemOrchestrator:
             logger.debug("Fallback triggered: %s", exc)
             diagnostics["checks"]["lifecycle_registry_restored"] = False
             diagnostics["lifecycle_registry_restored_count"] = 0
-            logger.debug("[Phase 4] Lifecycle registry restore skipped — %s", exc)
+            logger.debug("[启动·子系统] Lifecycle registry restore skipped — %s", exc)
 
         if hard_failures:
             parts: List[str] = []
@@ -517,7 +517,7 @@ class SystemOrchestrator:
         This phase confirms the subject authority chain is importable and
         will be activated during the async bring-up driven by Phase 4.
         """
-        logger.info("[Phase 5] Beginning runtime subject bring-up hooks …")
+        logger.info("[启动·运行时] Beginning runtime subject bring-up hooks …")
         issues: List[str] = []
         for mod_name, cls_name in [
             ("core.desktop_presence_runtime", "DesktopPresenceRuntime"),
@@ -554,7 +554,7 @@ class SystemOrchestrator:
         If Electron is not available (npm/node missing or electron dir absent)
         the phase returns DEGRADED and the system continues without the GUI.
         """
-        logger.info("[Phase 6] Desktop surface bring-up (Electron three-state GUI) ...")
+        logger.info("[启动·桌面壳] Desktop surface bring-up (Electron three-state GUI) ...")
 
         # PR-ELECTRON-DEDUP: 跨启动路径共享同一把 .electron.pid 锁——本 Phase 常常是
         # 最先发起桌面壳启动的路径(网关甚至还没开始监听端口),之前完全不检查/不写
@@ -588,7 +588,7 @@ class SystemOrchestrator:
 
         node_path = shutil.which("node")
         npm_path = shutil.which("npm")
-        logger.debug("[Phase 6] Node.js detection — node=%s, npm=%s", node_path, npm_path)
+        logger.debug("[启动·桌面壳] Node.js detection — node=%s, npm=%s", node_path, npm_path)
 
         if not node_path:
             return PhaseResult(
@@ -610,7 +610,7 @@ class SystemOrchestrator:
                     status=PhaseStatus.DEGRADED,
                     detail="Electron GUI skipped (npm not in PATH — Node.js installed but npm missing)",
                 )
-            logger.warning("[Phase 6] electron 依赖缺失或不完整 -- running npm install ...")
+            logger.warning("[启动·桌面壳] Electron 依赖缺失或不完整 -- running npm install ...")
             try:
                 npm_result = subprocess.run(
                     [npm_path, "install"],
@@ -665,7 +665,7 @@ class SystemOrchestrator:
                 name="ElectronOutputDrainer",
             ).start()
 
-            logger.info("[Phase 6] Electron GUI launched (pid=%d)", process.pid)
+            logger.info("[启动·桌面壳] Electron GUI launched (pid=%d)", process.pid)
             return PhaseResult(
                 phase=StartupPhase.DESKTOP_SURFACE,
                 status=PhaseStatus.OK,
@@ -714,13 +714,13 @@ class SystemOrchestrator:
         readiness layer** — and is **not** wired into per-request hot paths
         such as ``OpenClawd.process()`` or ``CommandRouter.route_envelope()``.
         """
-        logger.info("[Phase 7] Producing final readiness summary …")
+        logger.info("[启动·就绪汇总] Producing final readiness summary …")
         detail = (
             f"readiness={summary.readiness.value}, "
             f"phases_ok={sum(1 for r in summary.phase_results if r.ok)}/"
             f"{len(summary.phase_results)}"
         )
-        logger.info("[Phase 7] %s", detail)
+        logger.info("[启动·就绪汇总] %s", detail)
 
         # V6 center authority boundary integrity check — boundary / startup layer
         authority_boundary_status: str = "not_checked"
@@ -771,7 +771,7 @@ class SystemOrchestrator:
             logger.debug("Fallback triggered: %s", exc)
             authority_boundary_status = "error"
             authority_boundary_data = {"error": str(exc)}
-            logger.debug("[Phase 7] V6 center authority boundary check skipped — %s", exc)
+            logger.debug("[启动·就绪汇总] V6 center authority boundary check skipped — %s", exc)
 
         # PR-14V2 runtime extension: quasi-platform state integrity assertion.
         # Keep this in startup/readiness guard layer (not hot request path).

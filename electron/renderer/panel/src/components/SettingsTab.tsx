@@ -40,6 +40,69 @@ declare global {
   }
 }
 
+// ── 节点名单台(端口与节点页展示)────────────────────────────────────
+export interface RosterNode {
+  num: number;
+  name: string;
+  type: string;
+  type_label: string;
+  runnable: boolean;
+  purpose: string;
+  dir: string;
+  port: number | null;
+  status: string;
+  has_dockerfile: boolean;
+  connector?: { kind: string; service: string | null };
+}
+export interface NodeRoster {
+  count: number;
+  type_labels: Record<string, string>;
+  type_counts: Record<string, number>;
+  nodes: RosterNode[];
+}
+
+async function fetchRoster(): Promise<NodeRoster | null> {
+  try {
+    const r = await fetch(`${getBackendUrl()}/api/v1/nodes/roster`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+export interface ConnectorInfo {
+  service: string;
+  label: string;
+  status: 'needs_config' | 'disconnected' | 'connected';
+  account?: string | null;
+  redirect_uri: string;
+  create_app_url?: string;
+  create_hint?: string;
+  has_client_id: boolean;
+}
+async function fetchConnectors(): Promise<ConnectorInfo[] | null> {
+  try {
+    const r = await fetch(`${getBackendUrl()}/api/v1/connectors`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j.connectors ?? [];
+  } catch {
+    return null;
+  }
+}
+
+// 状态 → 中文 + 颜色类
+function statusMeta(s: string): { label: string; cls: string } {
+  const t = (s || '').toLowerCase();
+  if (t.includes('health') || t === 'running' || t === 'online') return { label: '运行中', cls: 'ok' };
+  if (t.includes('start')) return { label: '启动中', cls: 'warn' };
+  if (t.includes('degrad') || t.includes('unhealth')) return { label: '降级', cls: 'warn' };
+  if (t.includes('fail') || t.includes('error') || t.includes('offline') || t.includes('stop'))
+    return { label: '未运行', cls: 'off' };
+  return { label: '未知', cls: 'idle' };
+}
+
 // ── Category Definitions ────────────────────────────────────────────
 
 interface CategoryDef {
@@ -252,6 +315,15 @@ export default function SettingsTab() {
   const [probeResults, setProbeResults] = useState<
     Record<string, { loading: boolean; reachable?: boolean; latencyMs?: number | null; error?: string | null }>
   >({});
+  // 节点名单(端口与节点页顶部展示全部 125 个节点:分类+排序+状态)。
+  const [roster, setRoster] = useState<NodeRoster | null>(null);
+  // OAuth 连接器(自建 A 方案):外部账号 Gmail/GitHub/Notion/Slack/Discord。
+  const [connectors, setConnectors] = useState<ConnectorInfo[] | null>(null);
+  const [connCfg, setConnCfg] = useState<string | null>(null); // 正在配 client_id 的服务
+  const [cid, setCid] = useState('');
+  const [csecret, setCsecret] = useState('');
+  // 节点启停方式:子进程(默认,轻)或 容器(跑进所选 Docker/Podman,首次 build 慢)。
+  const [nodeMode, setNodeMode] = useState<'subprocess' | 'container'>('subprocess');
 
   // ── Load config on mount ─────────────────────────────────────────
 
@@ -273,6 +345,21 @@ export default function SettingsTab() {
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
+
+  // ── 拉节点名单 + 连接器状态(端口与节点页用);每 15s 刷新 ──
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      fetchRoster().then((r) => { if (alive && r) setRoster(r); });
+      fetchConnectors().then((c) => { if (alive && c) setConnectors(c); });
+    };
+    load();
+    const t = setInterval(load, 15000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  const refreshConnectors = useCallback(
+    () => fetchConnectors().then((c) => { if (c) setConnectors(c); }), []);
 
   // ── Listen for backend config updates ────────────────────────────
 
@@ -304,6 +391,27 @@ export default function SettingsTab() {
       setToast(null);
     }, 3000);
   }, []);
+
+  // ── OAuth 连接器操作(showToast 之后定义,避免前向引用)──
+  const connectService = useCallback((svc: string) => {
+    window.open(`${getBackendUrl()}/api/v1/connectors/${svc}/authorize`, '_blank', 'width=560,height=720');
+    setTimeout(refreshConnectors, 4000);
+  }, [refreshConnectors]);
+
+  const disconnectService = useCallback(async (svc: string) => {
+    await fetch(`${getBackendUrl()}/api/v1/connectors/${svc}/disconnect`, { method: 'POST' });
+    refreshConnectors();
+  }, [refreshConnectors]);
+
+  const saveConnCreds = useCallback(async (svc: string) => {
+    await fetch(`${getBackendUrl()}/api/v1/connectors/${svc}/credentials`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: cid.trim(), client_secret: csecret.trim() }),
+    });
+    setConnCfg(null); setCid(''); setCsecret('');
+    showToast(`${svc} 凭据已保存,可点连接授权`);
+    refreshConnectors();
+  }, [cid, csecret, refreshConnectors, showToast]);
 
   // ── Value change handler ─────────────────────────────────────────
 
@@ -511,9 +619,26 @@ export default function SettingsTab() {
 
     keys.forEach((key) => {
       const item = config[key];
-      if (!item) return;
-
       const label = formatLabel(key);
+
+      // 修复"tab 里啥都没有":后端 /api/config/all 没返回该 key 时,item 为空。此前
+      // 直接 return → 整个分类一条不渲染 = 看着全空。改为渲染一个【占位行】(显示
+      // key 名 + "未从后端加载"),让字段始终可见,而不是整条消失。
+      if (!item) {
+        items.push(
+          <div key={key} className="settings-item settings-item-missing">
+            <div className="settings-item-label">
+              <div className="settings-item-name">{label}</div>
+              <div className="settings-item-desc">未从后端加载(检查 /api/config/all)</div>
+            </div>
+            <div className="settings-item-control">
+              <span className="settings-missing-badge">—</span>
+            </div>
+          </div>
+        );
+        return;
+      }
+
       const isDirty = changed[key] !== undefined;
 
       items.push(
@@ -532,6 +657,159 @@ export default function SettingsTab() {
     });
 
     return items;
+  };
+
+  // 一键启停单个节点(阶段2a):POST /start|/stop → 刷新名单。
+  const toggleNode = useCallback(async (n: RosterNode, running: boolean) => {
+    try {
+      await fetch(
+        `${getBackendUrl()}/api/v1/nodes/${n.num}/${running ? 'stop' : 'start'}?mode=${nodeMode}`,
+        { method: 'POST' });
+      const via = nodeMode === 'container' ? '(容器)' : '';
+      showToast(`${running ? '停止' : '启动'}${via} #${n.num} ${n.name}…`);
+      // 容器首次要 build,给更久再刷新。
+      setTimeout(() => fetchRoster().then((r) => { if (r) setRoster(r); }),
+        nodeMode === 'container' ? 3000 : 1200);
+    } catch {
+      showToast(`操作 #${n.num} 失败`);
+    }
+  }, [showToast, nodeMode]);
+
+  // ── 外部账号一键连接(自建 OAuth,A 方案)────────────────────────────
+  const renderConnectors = () => {
+    if (!connectors || connectors.length === 0) return null;
+    const stMap: Record<string, { label: string; cls: string }> = {
+      connected: { label: '已连接', cls: 'ok' },
+      disconnected: { label: '未连接', cls: 'idle' },
+      needs_config: { label: '待配置', cls: 'warn' },
+    };
+    return (
+      <div className="connectors">
+        <div className="connectors-title">外部账号连接<span className="connectors-sub">一键 OAuth · token 存本机</span></div>
+        <div className="connector-grid">
+          {connectors.map((c) => {
+            const st = stMap[c.status] ?? stMap.disconnected;
+            return (
+              <div className="connector-card" key={c.service}>
+                <div className="connector-row">
+                  <span className="connector-name">{c.label}</span>
+                  <span className={`connector-status ${st.cls}`}>{st.label}</span>
+                </div>
+                <div className="connector-actions">
+                  {c.status === 'connected' ? (
+                    <button className="connector-btn off" onClick={() => disconnectService(c.service)}>断开</button>
+                  ) : c.status === 'disconnected' ? (
+                    <button className="connector-btn on" onClick={() => connectService(c.service)}>连接授权</button>
+                  ) : (
+                    <button className="connector-btn cfg" onClick={() => setConnCfg(connCfg === c.service ? null : c.service)}>
+                      {connCfg === c.service ? '收起' : '配置 App'}
+                    </button>
+                  )}
+                </div>
+                {connCfg === c.service && (
+                  <div className="connector-cfg">
+                    <div className="connector-cfg-hint">
+                      1. 去 <a href={c.create_app_url} target="_blank" rel="noreferrer">建 OAuth App</a>;{c.create_hint}
+                    </div>
+                    <div className="connector-cfg-redirect">
+                      回调地址(填进 App):<code>{c.redirect_uri}</code>
+                    </div>
+                    <input className="connector-input" placeholder="client_id" value={cid} onChange={(e) => setCid(e.target.value)} />
+                    <input className="connector-input" placeholder="client_secret" type="password" value={csecret} onChange={(e) => setCsecret(e.target.value)} />
+                    <button className="connector-btn on" onClick={() => saveConnCreds(c.service)}>保存凭据</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // ── 节点名单台(端口与节点页):125 个节点,按类型分组、编号排序、显示状态 ──
+  const renderNodeRoster = () => {
+    if (!roster) {
+      return <div className="node-roster-loading">节点名单加载中…</div>;
+    }
+    // 按类型分组,组内按编号排序;类型顺序按节点数从多到少。
+    const groups: Record<string, RosterNode[]> = {};
+    roster.nodes.forEach((n) => { (groups[n.type] ||= []).push(n); });
+    const typeOrder = Object.keys(groups).sort(
+      (a, b) => (roster.type_counts[b] ?? 0) - (roster.type_counts[a] ?? 0)
+    );
+    return (
+      <div className="node-roster">
+        <div className="node-roster-head">
+          <span className="node-roster-title">节点系统</span>
+          <span className="node-roster-sub">
+            共 {roster.count} 个 · {typeOrder.length} 类
+          </span>
+          <span className="node-mode-switch">
+            启停方式:
+            <button
+              className={`node-mode-btn ${nodeMode === 'subprocess' ? 'active' : ''}`}
+              onClick={() => setNodeMode('subprocess')}
+              title="以本机 Python 子进程启动(轻,默认)"
+            >子进程</button>
+            <button
+              className={`node-mode-btn ${nodeMode === 'container' ? 'active' : ''}`}
+              onClick={() => setNodeMode('container')}
+              title="跑进所选 Docker/Podman 容器(首次 build 慢,按需逐个起)"
+            >容器</button>
+          </span>
+        </div>
+        {typeOrder.map((type) => {
+          const list = groups[type].sort((a, b) => a.num - b.num);
+          const label = roster.type_labels[type] ?? type;
+          return (
+            <div className="node-group" key={type}>
+              <div className="node-group-title">
+                {label} <span className="node-group-count">{list.length}</span>
+              </div>
+              <div className="node-grid">
+                {list.map((n) => {
+                  const st = statusMeta(n.status);
+                  const running = st.cls === 'ok' || st.cls === 'warn';
+                  return (
+                    <div className="node-card" key={n.num} title={n.purpose}>
+                      <div className="node-card-top">
+                        <span className="node-num">#{n.num}</span>
+                        <span className="node-name">{n.name}</span>
+                        <span className={`node-status ${st.cls}`}>{st.label}</span>
+                        {n.runnable && (
+                          <button
+                            className={`node-toggle ${running ? 'stop' : 'start'}`}
+                            onClick={() => toggleNode(n, running)}
+                            title={running ? '停止该节点' : '启动该节点'}
+                          >
+                            {running ? '停止' : '启动'}
+                          </button>
+                        )}
+                      </div>
+                      <div className="node-card-meta">
+                        {n.port && <span className="node-port">:{n.port}</span>}
+                        {n.connector?.kind === 'oauth' && (
+                          <span className="node-conn oauth">连接 {n.connector.service}</span>
+                        )}
+                        {n.connector?.kind === 'key' && (
+                          <span className="node-conn key">需 Key {n.connector.service}</span>
+                        )}
+                        {!n.runnable && <span className="node-conn stub">占位</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        <div className="node-roster-note">
+          说明:名单来自全量审计(每个节点均为独立服务、皆可容器化)。一键启停 /
+          一键连接(Gmail/GitHub/Notion…)/ 按需跑在 Docker·Podman —— 后续阶段接入。
+        </div>
+      </div>
+    );
   };
 
   // ── Compute dirty state ──────────────────────────────────────────
@@ -582,6 +860,8 @@ export default function SettingsTab() {
                   {CONFIG_KEYS[activeCategory]?.length ?? 0} 项
                 </span>
               </h2>
+              {activeCategory === 'ports' && renderConnectors()}
+              {activeCategory === 'ports' && renderNodeRoster()}
               <div className="settings-list">{renderCategoryItems()}</div>
             </div>
 
