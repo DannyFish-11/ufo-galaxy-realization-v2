@@ -40,6 +40,48 @@ declare global {
   }
 }
 
+// ── 节点名单台(端口与节点页展示)────────────────────────────────────
+export interface RosterNode {
+  num: number;
+  name: string;
+  type: string;
+  type_label: string;
+  runnable: boolean;
+  purpose: string;
+  dir: string;
+  port: number | null;
+  status: string;
+  has_dockerfile: boolean;
+  connector?: { kind: string; service: string | null };
+}
+export interface NodeRoster {
+  count: number;
+  type_labels: Record<string, string>;
+  type_counts: Record<string, number>;
+  nodes: RosterNode[];
+}
+
+async function fetchRoster(): Promise<NodeRoster | null> {
+  try {
+    const r = await fetch(`${getBackendUrl()}/api/v1/nodes/roster`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+// 状态 → 中文 + 颜色类
+function statusMeta(s: string): { label: string; cls: string } {
+  const t = (s || '').toLowerCase();
+  if (t.includes('health') || t === 'running' || t === 'online') return { label: '运行中', cls: 'ok' };
+  if (t.includes('start')) return { label: '启动中', cls: 'warn' };
+  if (t.includes('degrad') || t.includes('unhealth')) return { label: '降级', cls: 'warn' };
+  if (t.includes('fail') || t.includes('error') || t.includes('offline') || t.includes('stop'))
+    return { label: '未运行', cls: 'off' };
+  return { label: '未知', cls: 'idle' };
+}
+
 // ── Category Definitions ────────────────────────────────────────────
 
 interface CategoryDef {
@@ -252,6 +294,8 @@ export default function SettingsTab() {
   const [probeResults, setProbeResults] = useState<
     Record<string, { loading: boolean; reachable?: boolean; latencyMs?: number | null; error?: string | null }>
   >({});
+  // 节点名单(端口与节点页顶部展示全部 125 个节点:分类+排序+状态)。
+  const [roster, setRoster] = useState<NodeRoster | null>(null);
 
   // ── Load config on mount ─────────────────────────────────────────
 
@@ -273,6 +317,15 @@ export default function SettingsTab() {
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
+
+  // ── 拉节点名单(端口与节点页用);每 15s 刷新一次状态 ──
+  useEffect(() => {
+    let alive = true;
+    const load = () => fetchRoster().then((r) => { if (alive && r) setRoster(r); });
+    load();
+    const t = setInterval(load, 15000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
 
   // ── Listen for backend config updates ────────────────────────────
 
@@ -511,9 +564,26 @@ export default function SettingsTab() {
 
     keys.forEach((key) => {
       const item = config[key];
-      if (!item) return;
-
       const label = formatLabel(key);
+
+      // 修复"tab 里啥都没有":后端 /api/config/all 没返回该 key 时,item 为空。此前
+      // 直接 return → 整个分类一条不渲染 = 看着全空。改为渲染一个【占位行】(显示
+      // key 名 + "未从后端加载"),让字段始终可见,而不是整条消失。
+      if (!item) {
+        items.push(
+          <div key={key} className="settings-item settings-item-missing">
+            <div className="settings-item-label">
+              <div className="settings-item-name">{label}</div>
+              <div className="settings-item-desc">未从后端加载(检查 /api/config/all)</div>
+            </div>
+            <div className="settings-item-control">
+              <span className="settings-missing-badge">—</span>
+            </div>
+          </div>
+        );
+        return;
+      }
+
       const isDirty = changed[key] !== undefined;
 
       items.push(
@@ -532,6 +602,68 @@ export default function SettingsTab() {
     });
 
     return items;
+  };
+
+  // ── 节点名单台(端口与节点页):125 个节点,按类型分组、编号排序、显示状态 ──
+  const renderNodeRoster = () => {
+    if (!roster) {
+      return <div className="node-roster-loading">节点名单加载中…</div>;
+    }
+    // 按类型分组,组内按编号排序;类型顺序按节点数从多到少。
+    const groups: Record<string, RosterNode[]> = {};
+    roster.nodes.forEach((n) => { (groups[n.type] ||= []).push(n); });
+    const typeOrder = Object.keys(groups).sort(
+      (a, b) => (roster.type_counts[b] ?? 0) - (roster.type_counts[a] ?? 0)
+    );
+    return (
+      <div className="node-roster">
+        <div className="node-roster-head">
+          <span className="node-roster-title">节点系统</span>
+          <span className="node-roster-sub">
+            共 {roster.count} 个 · {typeOrder.length} 类
+          </span>
+        </div>
+        {typeOrder.map((type) => {
+          const list = groups[type].sort((a, b) => a.num - b.num);
+          const label = roster.type_labels[type] ?? type;
+          return (
+            <div className="node-group" key={type}>
+              <div className="node-group-title">
+                {label} <span className="node-group-count">{list.length}</span>
+              </div>
+              <div className="node-grid">
+                {list.map((n) => {
+                  const st = statusMeta(n.status);
+                  return (
+                    <div className="node-card" key={n.num} title={n.purpose}>
+                      <div className="node-card-top">
+                        <span className="node-num">#{n.num}</span>
+                        <span className="node-name">{n.name}</span>
+                        <span className={`node-status ${st.cls}`}>{st.label}</span>
+                      </div>
+                      <div className="node-card-meta">
+                        {n.port && <span className="node-port">:{n.port}</span>}
+                        {n.connector?.kind === 'oauth' && (
+                          <span className="node-conn oauth">连接 {n.connector.service}</span>
+                        )}
+                        {n.connector?.kind === 'key' && (
+                          <span className="node-conn key">需 Key {n.connector.service}</span>
+                        )}
+                        {!n.runnable && <span className="node-conn stub">占位</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        <div className="node-roster-note">
+          说明:名单来自全量审计(每个节点均为独立服务、皆可容器化)。一键启停 /
+          一键连接(Gmail/GitHub/Notion…)/ 按需跑在 Docker·Podman —— 后续阶段接入。
+        </div>
+      </div>
+    );
   };
 
   // ── Compute dirty state ──────────────────────────────────────────
@@ -582,6 +714,7 @@ export default function SettingsTab() {
                   {CONFIG_KEYS[activeCategory]?.length ?? 0} 项
                 </span>
               </h2>
+              {activeCategory === 'ports' && renderNodeRoster()}
               <div className="settings-list">{renderCategoryItems()}</div>
             </div>
 
