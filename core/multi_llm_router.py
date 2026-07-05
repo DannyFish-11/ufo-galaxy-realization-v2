@@ -264,10 +264,10 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.FAST_RESPONSE: "gemma4:e4b",
         TaskType.CODING:        "gemma4:12b",
         TaskType.CREATIVE:      "gemma4:12b",
-        TaskType.ANALYSIS:      "gemma4:12b",
-        TaskType.PLANNING:      "gemma4:12b",
+        TaskType.ANALYSIS:      "gemma4:26b",
+        TaskType.PLANNING:      "gemma4:26b",
         TaskType.AGENT_CONTROL: "gemma4:12b",
-        TaskType.GENERAL:       "gemma4:12b",
+        TaskType.GENERAL:       "gemma4:e4b",
     },
     "hf_local": {
         TaskType.REASONING:     "Qwen/Qwen2.5-14B-Instruct",
