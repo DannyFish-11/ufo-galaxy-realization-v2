@@ -342,6 +342,25 @@ class ChatResponse(BaseModel):
 # Model Configuration
 # =============================================================================
 
+# "llama2"/"llama3"/"codellama"/"mistral" 在本文件里只是【内部路由/计费档位标
+# 识符】(该套 tag 实际从未被拉取过) —— 真正打 Ollama 时统一换成全系统唯一主脑
+# (OLLAMA_MODEL / core.model_selection)，见 _call_ollama() 里的别名替换。
+_LOCAL_OLLAMA_ALIASES = frozenset({"llama2", "llama3", "codellama", "mistral"})
+
+
+def _system_brain_tag() -> str:
+    env = os.getenv("OLLAMA_MODEL", "").strip()
+    if env:
+        return env
+    try:
+        from core.model_selection import load_choice, recommend
+        return load_choice() or recommend()
+    except Exception:
+        return "gemma4:e2b"
+
+
+LOCAL_OLLAMA_TAG = _system_brain_tag()
+
 MODEL_CONFIG = {
     # Local Models (Ollama)
     "llama2": {
@@ -874,11 +893,14 @@ class ModelRouter:
     
     async def _call_ollama(self, model: str, request: ChatRequest) -> tuple:
         """Call Ollama API."""
+        # model 可能是 MODEL_CONFIG 里的占位别名(llama2/llama3/...)——那套 tag
+        # 从未被真正拉取过；实际请求 Ollama 时换成本机真实已装的主脑。
+        real_model = LOCAL_OLLAMA_TAG if model in _LOCAL_OLLAMA_ALIASES else model
         try:
             response = await self.http_client.post(
                 f"{self.ollama_url}/api/chat",
                 json={
-                    "model": model,
+                    "model": real_model,
                     "messages": [{"role": "user", "content": request.prompt}],
                     "stream": False,
                     "options": {

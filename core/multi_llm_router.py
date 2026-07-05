@@ -938,6 +938,17 @@ class MultiLLMRouter:
             return val
         return os.environ.get(key_name.upper() if "_" in key_name else key_name, "")
 
+    @staticmethod
+    def _internal_hf_adapter_alive(base_url: str) -> bool:
+        """探测 hf_local 内部适配服务是否真的在监听(见 _discover_providers)。"""
+        try:
+            import httpx
+            root = base_url.split("/v1/")[0]
+            httpx.get(root, timeout=1.0)
+            return True
+        except Exception:
+            return False
+
     def _discover_providers(self):
         """从配置源自动发现并注册提供商（Dashboard > ENV > defaults）（PR86）"""
 
@@ -1204,7 +1215,7 @@ class MultiLLMRouter:
                         detected_models,
                         key=lambda m: 0 if (m == _main_brain or _norm(m) == _norm(_main_brain)) else 1,
                     )
-            _default_model = _main_brain or (detected_models[0] if detected_models else "llama3")
+            _default_model = _main_brain or (detected_models[0] if detected_models else "gemma4:e2b")
 
             cfg = ProviderConfig(
                 name="ollama", api_key="", base_url=ollama_url,
@@ -1234,13 +1245,19 @@ class MultiLLMRouter:
 
             hf_mgr = get_hf_model_manager()
             local_llm_models = hf_mgr.list_local_models(family=ModelFamily.LLM)
-            if local_llm_models:
+            hf_base_url = "http://localhost:16201/v1/hf"  # Galaxy internal API
+            # hf_local 排在偏好列表里紧跟 ollama 之后(见 PREFERRED_PROVIDER_ORDER)。
+            # 这个内部适配服务(:16201)从未被实现过 —— 若仍无条件注册,一旦真的
+            # 触发到 hf_local 兜底,连的是一个根本没监听的端口,只会拿到连接失败,
+            # 而不是继续往下一个 provider 退——静默变成"看似失败模型探测"。这里
+            # 先探一下这个内部端口是否真的活着,不活就不注册,让偏好列表自然跳过它。
+            if local_llm_models and self._internal_hf_adapter_alive(hf_base_url):
                 hf_model_ids = [m.model_id for m in local_llm_models]
                 hf_default = hf_model_ids[0] if hf_model_ids else ""
                 cfg = ProviderConfig(
                     name="hf_local",
                     api_key="",
-                    base_url="http://localhost:16201/v1/hf",  # Galaxy internal API
+                    base_url=hf_base_url,
                     models=hf_model_ids,
                     default_model=hf_default,
                     supports_tools=True,
@@ -1255,6 +1272,11 @@ class MultiLLMRouter:
                 self.adapters["hf_local"] = OpenAIAdapter(cfg)
                 logger.info(
                     "HF 本地模型提供商已注册: %d 个模型", len(hf_model_ids)
+                )
+            elif local_llm_models:
+                logger.debug(
+                    "跳过 hf_local 注册:内部适配服务(%s)未运行,避免偏好列表命中它时"
+                    "连接失败(而非正常跳到下一个 provider)", hf_base_url,
                 )
         except Exception as exc:
             logger.debug("HF 本地模型提供商注册失败 (非致命): %s", exc)

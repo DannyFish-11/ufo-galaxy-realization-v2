@@ -193,6 +193,18 @@ async def update_config(req: ConfigUpdateRequest):
     for key, value in req.config.items():
         os.environ[key] = str(value)
 
+    # OLLAMA_MODEL 有两个持久化存点:.env(本函数写)和 .galaxy_model
+    # (core.model_selection.save_choice() 写,resolve_main_brain() 在 env 变量
+    # 缺失时会退回读它)。这里只写了前者,两处会静默分叉——若以后 .env 里的
+    # OLLAMA_MODEL 被清空,resolve_main_brain() 就会退回 .galaxy_model 里那个
+    # 更早、已经过时的选择,而不是用户刚在面板上选的这个。同步一下避免分叉。
+    if "OLLAMA_MODEL" in req.config:
+        try:
+            from core.model_selection import save_choice
+            save_choice(req.config["OLLAMA_MODEL"])
+        except Exception:
+            pass
+
     # 修复:_write_env_file() 之前完全没有 try/except——Windows 上 .env 若被
     # 杀毒软件/编辑器占用锁定,或所在目录权限不足,write_text() 会抛
     # PermissionError,FastAPI 缺省转成裸 500、无任何 detail,前端只能显示

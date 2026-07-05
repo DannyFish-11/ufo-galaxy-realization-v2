@@ -184,48 +184,35 @@ def select_model_auto(args) -> str:
 
 
 def _load_model_choice() -> str:
-    """从 .galaxy_config 读取用户上次选择的模型。"""
-    config_file = PROJECT_ROOT / ".galaxy_model"
-    if config_file.exists():
-        return config_file.read_text().strip()
-    return ""
+    """读取用户上次选择的模型 —— 委托 core.model_selection(单一实现，见其
+    .galaxy_model 持久化),不再自己重复实现一份读文件逻辑。"""
+    return _ms.load_choice()
 
 
 def _save_model_choice(model: str):
-    """保存用户选择的模型到 .galaxy_model。"""
-    config_file = PROJECT_ROOT / ".galaxy_model"
-    config_file.write_text(model)
+    """保存用户选择的模型 —— 委托 core.model_selection.save_choice()
+    (同时写 .galaxy_model 和 os.environ["OLLAMA_MODEL"])。"""
+    _ms.save_choice(model)
 
 
 def download_model_background(model: str):
-    """后台线程下载模型，不阻塞启动流程。"""
+    """后台下载模型，不阻塞启动流程 —— 委托 core.model_selection.background_pull()。
+
+    之前这里自己重新实现了一份更弱的下载逻辑:没有 /api/show 二次核实
+    (只信 /api/tags 里出现了名字，可能是拉取失败留下的残缺 manifest)、
+    没有 Ollama 版本过旧诊断(gemma4 系列需要较新版本，见
+    core.model_selection.MIN_OLLAMA_VERSION_FOR_GEMMA4)、也没有 HuggingFace
+    回退。与 core/model_selection.py 里更完整的实现是两套不同代码，用
+    `python launch_desktop.py`(文档里的推荐启动方式)的用户享受不到那些
+    诊断/回退。统一委托给同一个实现，不再维护第二套。
+    """
     if not model or model.strip() == "":
         logger.debug("[模型下载] 空模型名，跳过下载")
         return None
-    def _download():
-        logger.info("[模型下载] 开始在后台下载 %s ...", model)
-        logger.info("[模型下载] 大小约 %s，可能需要几分钟", AVAILABLE_MODELS.get(model, {}).get("size", "未知"))
-        try:
-            result = subprocess.run(
-                ["ollama", "pull", model],
-                capture_output=True, text=True, timeout=1800,  # 30分钟超时
-            )
-            if result.returncode == 0:
-                logger.info("[模型下载] ✅ %s 下载完成！", model)
-                _save_model_choice(model)
-            else:
-                logger.warning("[模型下载] ⚠️ 下载失败: %s", result.stderr[:200] if result.stderr else "未知错误")
-                logger.info("[模型下载] 可稍后手动执行: ollama pull %s", model)
-        except subprocess.TimeoutExpired:
-            logger.warning("[模型下载] ⏱️ 下载超时(30分钟)，仍在继续后台下载...")
-            logger.info("[模型下载] 可稍后手动执行: ollama pull %s", model)
-        except Exception as e:
-            logger.warning("[模型下载] ❌ 异常: %s", str(e)[:200])
-            logger.info("[模型下载] 可稍后手动执行: ollama pull %s", model)
-    
-    thread = threading.Thread(target=_download, daemon=True, name=f"ModelDownload-{model}")
-    thread.start()
-    return thread
+    logger.info("[模型下载] 开始在后台下载 %s ...", model)
+    logger.info("[模型下载] 大小约 %s，可能需要几分钟", AVAILABLE_MODELS.get(model, {}).get("size", "未知"))
+    _ms.background_pull(model)
+    return None
 
 
 # ───────────────────────────────────────────────────────────────────────────
