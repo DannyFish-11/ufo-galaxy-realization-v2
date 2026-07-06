@@ -3,6 +3,7 @@ Node 109 - ProactiveSensing (主动感知节点)
 提供环境感知、事件检测和主动信息收集能力
 """
 import os
+import sys
 import json
 import asyncio
 import logging
@@ -233,20 +234,72 @@ class ProactiveSensingEngine:
         return (0, None, 0.5)
     
     async def _read_network_sensor(self, sensor: Sensor) -> tuple:
-        """读取网络传感器"""
-        import random
+        """读取网络传感器。
+
+        修复:net_connectivity 之前无条件返回 (True, "bool", 1.0)——不管网络
+        实际通不通，永远自信地报"已连接"。net_latency 也是纯 random，不是
+        真实测量。这里换成真实的 TCP 连接探测(连一个常年在线的公网地址，
+        量出真实耗时)，测不通时老实报 False/低置信度，而不是硬编码乐观值。
+        """
+        import socket
+        import time as _time
+
+        def _probe(host: str, port: int, timeout: float = 2.0) -> Optional[float]:
+            start = _time.monotonic()
+            try:
+                with socket.create_connection((host, port), timeout=timeout):
+                    return (_time.monotonic() - start) * 1000.0
+            except OSError:
+                return None
+
+        latency_ms = await asyncio.to_thread(_probe, "1.1.1.1", 443)
         if sensor.sensor_id == "net_connectivity":
-            return (True, "bool", 1.0)
+            return (latency_ms is not None, "bool", 0.95)
         elif sensor.sensor_id == "net_latency":
-            return (random.uniform(10, 100), "ms", 0.9)
+            if latency_ms is not None:
+                return (latency_ms, "ms", 0.9)
+            return (None, "ms", 0.1)
         return (None, None, 0.5)
-    
+
     async def _read_user_sensor(self, sensor: Sensor) -> tuple:
-        """读取用户传感器"""
-        # 模拟用户活动
-        import random
-        activity_level = random.choice(["idle", "active", "busy"])
-        return (activity_level, "status", 0.7)
+        """读取用户传感器。
+
+        修复:之前不管平台/环境,一律 random.choice(["idle","active","busy"])——
+        一个"主动感知"节点的用户活动信号,如果永远是随机噪声，下游任何基于
+        它做的决策(比如"用户很忙,先不打扰")都是在赌硬币,而返回的置信度
+        (0.7)却显得像是有真实依据。这里换成真实的系统级"距上次键盘/鼠标
+        输入过了多久"(Windows 上用 ctypes 标准库的 GetLastInputInfo,不需要
+        额外依赖)；拿不到真实信号的平台上老实返回 "unknown" + 低置信度，
+        不再编造一个自信的假状态。
+        """
+        idle_seconds = await asyncio.to_thread(self._get_system_idle_seconds)
+        if idle_seconds is None:
+            return ("unknown", "status", 0.1)
+        if idle_seconds < 30:
+            return ("active", "status", 0.9)
+        if idle_seconds < 300:
+            return ("idle", "status", 0.8)
+        return ("away", "status", 0.85)
+
+    @staticmethod
+    def _get_system_idle_seconds() -> Optional[float]:
+        """尽力获取系统级用户闲置秒数;拿不到就返回 None,不假装有信号。"""
+        if sys.platform != "win32":
+            return None
+        try:
+            import ctypes
+
+            class _LASTINPUTINFO(ctypes.Structure):
+                _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
+            info = _LASTINPUTINFO()
+            info.cbSize = ctypes.sizeof(_LASTINPUTINFO)
+            if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
+                return None
+            millis = ctypes.windll.kernel32.GetTickCount() - info.dwTime
+            return max(0.0, millis / 1000.0)
+        except Exception:
+            return None
     
     async def _read_environment_sensor(self, sensor: Sensor) -> tuple:
         """读取环境传感器"""
