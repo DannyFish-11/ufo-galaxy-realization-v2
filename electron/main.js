@@ -213,15 +213,19 @@ function createWindow() {
     mainWindow.webContents.on('console-message', (_e, _lvl, message, line, sourceId) =>
         console.log(`[Overlay:renderer] ${message} (${sourceId}:${line})`));
 
-    // 窗口级 F12 兜底(第二层):globalShortcut 是 OS 级钩子，理论上不管哪个窗口
-    // 聚焦都该生效——但在虚拟机/远程桌面/浏览器全屏等环境下，F12 常常在到达
+    // 窗口级 F12/F10 兜底(第二层):globalShortcut 是 OS 级钩子，理论上不管哪个
+    // 窗口聚焦都该生效——但在虚拟机/远程桌面/浏览器全屏等环境下，F12 常常在到达
     // Electron 之前就被上一层(RDP 客户端、noVNC、宿主机)截走，globalShortcut
     // 永远收不到按键，注册本身却显示"成功"，用户看不到任何报错。mainWindow
     // (三态覆盖层)几乎全程常驻显示且 focusable，只要它恰好持有键盘焦点，这里
-    // 就能兜底截到 F12。同时放宽匹配(key 或 code 任一命中 F12)，兼容部分
-    // 远程输入法/虚拟键盘只回报 code 不回报 key 的情况。
+    // 就能兜底截到按键。同时放宽匹配(key 或 code 任一命中)，兼容部分远程输入法/
+    // 虚拟键盘只回报 code 不回报 key 的情况。F10 作为 F12 之外的第二候选键——
+    // 真机反馈过"不管怎么点 F12 都没用"(远程桌面/虚拟机场景下 F12 在到达应用
+    // 前就被截获，正是本注释描述的已知问题)，F10 在这类环境里更少被上一层拦
+    // 截，两个键都认，命中任一个即可。
     mainWindow.webContents.on('before-input-event', (event, input) => {
-        if (input.type === 'keyDown' && (input.key === 'F12' || input.code === 'F12')) {
+        if (input.type === 'keyDown' &&
+            (input.key === 'F12' || input.code === 'F12' || input.key === 'F10' || input.code === 'F10')) {
             event.preventDefault();
             togglePanel();
         }
@@ -376,8 +380,11 @@ app.whenReady().then(async () => {
 
     // Toggle AI Control Panel (Colorless Lens)
     // F12 在很多环境会被开发者工具/输入法/其他应用占用，因此注册一组候选
-    // 快捷键：任意一个成功即可开关面板，避免"按了没反应"。
-    const PANEL_SHORTCUTS = ['F12', 'CommandOrControl+F12', 'Alt+F12', 'CommandOrControl+Shift+P'];
+    // 快捷键：任意一个成功即可开关面板，避免"按了没反应"。F10 是加的新候选——
+    // 真机反馈"不管怎么点 F12 都没用"，多半是远程桌面/虚拟机把 F12 在到达
+    // Electron 前就截走了(见上面 before-input-event 那段注释)，F10 在这类
+    // 环境里更少被截获。
+    const PANEL_SHORTCUTS = ['F12', 'F10', 'CommandOrControl+F12', 'Alt+F12', 'CommandOrControl+Shift+P'];
     const registeredShortcuts = PANEL_SHORTCUTS.filter((accel) => {
         try {
             return globalShortcut.register(accel, () => togglePanel());
@@ -493,12 +500,14 @@ function createPanelWindow() {
     // 现在：把渲染层日志/加载失败打到 logs/electron.log，并在彻底加载失败时回退到一张
     // 不透明的提示页，保证窗口「看得见」而不是一片空白。
     const wc = panelWindow.webContents;
-    // 窗口级 F12 兜底:globalShortcut 在部分环境会被 OS/其它应用/输入法吞掉(用户
-    // 反复反馈「F12 唤不出也关不掉」)。当【面板窗口本身聚焦】时,直接在这里拦 F12
-    // keydown → togglePanel,并 preventDefault 阻止 F12 打开 DevTools。这样至少
-    // 「面板已开时按 F12 关闭」永远有效,与 globalShortcut 双保险。
+    // 窗口级 F12/F10 兜底:globalShortcut 在部分环境会被 OS/其它应用/输入法吞掉
+    // (用户反复反馈「F12 唤不出也关不掉」，多半是远程桌面/虚拟机场景)。当
+    // 【面板窗口本身聚焦】时,直接在这里拦 F12/F10 keydown → togglePanel,并
+    // preventDefault 阻止 F12 打开 DevTools。这样至少「面板已开时按 F12/F10
+    // 关闭」永远有效,与 globalShortcut 双保险。
     wc.on('before-input-event', (event, input) => {
-        if (input.type === 'keyDown' && (input.key === 'F12' || input.code === 'F12')) {
+        if (input.type === 'keyDown' &&
+            (input.key === 'F12' || input.code === 'F12' || input.key === 'F10' || input.code === 'F10')) {
             event.preventDefault();
             togglePanel();
         }
@@ -731,42 +740,72 @@ async function fetchWithRetry(url, options, { retries = 24, delayMs = 2500 } = {
     throw lastErr;
 }
 
-// 从 Python 后端获取配置(精简版 —— 模型 tab 消费)
-async function fetchConfigFromBackend() {
-    try {
-        const response = await fetchWithRetry(`${GATEWAY_BASE}/api/config`);
-        if (response.ok) {
-            configCache = await response.json();
-            return configCache;
+// ── 后台刷新(不阻塞 IPC 调用本身)──
+// 之前 galaxy:get-config / galaxy:get-settings 的 ipcMain.handle 直接
+// await fetchWithRetry(...)——renderer 端 window.galaxyAPI.getConfig() 这个
+// Promise 要挂到内部重试预算跑完(最长 ~60s)才会 resolve,「模型」/「设置」
+// tab 打开后就跟着卡住转圈那么久,填不进 API Key。真机反馈"每次打开都要
+// 等它半天"根因就在这里,不是渲染层的 loading 判断问题。
+// 现在:IPC 调用立即返回当前已知缓存(哪怕是空对象/上一次的旧值),真正的
+// 网络请求(含重试预算)转入后台异步进行；拿到新数据后通过
+// galaxy:config-ready 广播给所有窗口,渲染层(useConfigCache 的 invalidate())
+// 收到后就地重新取一次(此时缓存已是最新值,近乎瞬时),不需要用户手动切走
+// 再切回来。用 in-flight 标记去重,避免同一时间起多条重试链。
+let configRefreshInFlight = false;
+let settingsRefreshInFlight = false;
+
+function broadcastConfigReady(kind) {
+    BrowserWindow.getAllWindows().forEach((w) => {
+        if (!w.isDestroyed()) w.webContents.send('galaxy:config-ready', kind);
+    });
+}
+
+function scheduleConfigRefresh() {
+    if (configRefreshInFlight) return;
+    configRefreshInFlight = true;
+    (async () => {
+        try {
+            const response = await fetchWithRetry(`${GATEWAY_BASE}/api/config`);
+            if (response.ok) {
+                configCache = await response.json();
+                broadcastConfigReady('config');
+            }
+        } catch (e) {
+            console.error('[Main] 配置后台刷新仍失败(后端可能还没起来):', e.message);
+        } finally {
+            configRefreshInFlight = false;
         }
-    } catch (e) {
-        console.error('[Main] Failed to fetch config (已重试仍失败，后端可能还没起来):', e.message);
-    }
+    })();
+}
+
+function scheduleSettingsRefresh() {
+    if (settingsRefreshInFlight) return;
+    settingsRefreshInFlight = true;
+    (async () => {
+        try {
+            const response = await fetchWithRetry(`${GATEWAY_BASE}/api/config/all`);
+            if (response.ok) {
+                settingsCache = await response.json();
+                broadcastConfigReady('settings');
+            }
+        } catch (e) {
+            console.error('[Main] 设置明细后台刷新仍失败(后端可能还没起来):', e.message);
+        } finally {
+            settingsRefreshInFlight = false;
+        }
+    })();
+}
+
+// GET 配置(精简版 —— 模型 tab):立即返回当前缓存,后台异步刷新。
+ipcMain.handle('galaxy:get-config', () => {
+    scheduleConfigRefresh();
     return configCache;
-}
-
-// 从 Python 后端获取完整配置明细(设置 tab 消费,与精简版不同路径,避免路由遮蔽)
-async function fetchSettingsFromBackend() {
-    try {
-        const response = await fetchWithRetry(`${GATEWAY_BASE}/api/config/all`);
-        if (response.ok) {
-            settingsCache = await response.json();
-            return settingsCache;
-        }
-    } catch (e) {
-        console.error('[Main] Failed to fetch settings (已重试仍失败，后端可能还没起来):', e.message);
-    }
-    return settingsCache;
-}
-
-// GET 配置(精简版 —— 模型 tab)
-ipcMain.handle('galaxy:get-config', async () => {
-    return await fetchConfigFromBackend();
 });
 
-// GET 配置(完整明细 —— 设置 tab)
-ipcMain.handle('galaxy:get-settings', async () => {
-    return await fetchSettingsFromBackend();
+// GET 配置(完整明细 —— 设置 tab):立即返回当前缓存,后台异步刷新。
+ipcMain.handle('galaxy:get-settings', () => {
+    scheduleSettingsRefresh();
+    return settingsCache;
 });
 
 // SET 配置（批量更新）
