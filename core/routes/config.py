@@ -227,6 +227,18 @@ async def update_config(req: ConfigUpdateRequest):
             detail=f"写入 .env 失败: {exc}(检查文件是否被占用/只读，或目录权限）",
         ) from exc
 
+    # UnifiedConfig 是进程启动时读一次 .env 就不再变的单例("Dashboard 优先级"
+    # 那一层实际读的是它)——本函数只写了 os.environ/.env,从没告诉过它内容
+    # 变了。同一进程内一直没炸,纯粹是因为 _get_key() 的兜底第三层直接读
+    # os.environ 生效了；但 UnifiedConfig 自己上报的值会一直是启动时的旧值，
+    # 直到进程重启。这里保存后顺手 reload 一下，让它也反映最新内容，不再是
+    # 一个"名义最高优先级、实际全程失效"的摆设。
+    try:
+        from core.unified_config import config as _unified_cfg
+        _unified_cfg.reload()
+    except Exception:
+        pass
+
     # 若改动涉及模型 API（llm 类），热刷新 LLM 路由器，让新填的 key 即时生效（无需重启）。
     refreshed = None
     if any(CONFIG_SCHEMA.get(k, {}).get("category") == "llm" for k in req.config):

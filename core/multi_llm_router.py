@@ -72,6 +72,24 @@ class ProviderConfig:
     success_count: int = 0
     last_error: Optional[str] = None
     last_used: float = 0.0
+    down_since: float = 0.0  # 标记为 DOWN 的时刻(见 is_available())
+
+    def is_available(self, recovery_seconds: float = 60.0) -> bool:
+        """该 provider 现在是否该被当作候选。
+
+        修复:status 字段一旦被打成 DOWN(连续 5 次失败),此前【没有任何自愈
+        路径】——route()/route_multimodal_first()/route_with_cost_policy() 等
+        十几处候选筛选全部一律排除 DOWN,而重新变回候选的唯一办法是成功调用
+        一次；但 DOWN 的 provider 永远不会被选为候选,自然也永远没机会成功调用，
+        于是一旦 DOWN 就【整个进程生命周期】卡死,除非手动触发 refresh_llm_router()
+        (保存一次 llm 类配置)或重启——同一个类里的断路器(ProviderCircuitBreaker)
+        反而设计对了(OPEN 到期自动进 HALF_OPEN 重新试探)，两套健康判断互相矛盾。
+        这里让 DOWN 状态也按同样的冷却窗口自动过期，恢复候选资格，真正出问题时
+        断路器仍会在 chat() 调用前再拦一道。
+        """
+        if self.status != ProviderStatus.DOWN:
+            return True
+        return bool(self.down_since) and (time.time() - self.down_since) >= recovery_seconds
 
 
 @dataclass
@@ -830,7 +848,7 @@ class StepAdapter(OpenAIAdapter):
 
 
 class MiMoAdapter(OpenAIAdapter):
-    """小米 MiMo via OpenAI-compatible API (api.mimo.ai)"""
+    """小米 MiMo via OpenAI-compatible API (api.xiaomimimo.com)"""
     pass
 
 
@@ -1136,7 +1154,10 @@ class MultiLLMRouter:
         if key and not key.startswith("your-"):
             cfg = ProviderConfig(
                 name="mimo", api_key=key,
-                base_url="https://api.mimo.ai/v1",
+                # 联网核实:小米 MiMo 官方 OpenAI 兼容端点是 api.xiaomimimo.com，
+                # 不是 api.mimo.ai(后者不解析/不是小米的域名)——key 填得再对，
+                # 域名错了也是每次都连接失败，跟没配 key 看起来一模一样。
+                base_url="https://api.xiaomimimo.com/v1",
                 models=["mimo-v2.5-pro", "mimo-v2.5-standard", "mimo-v2.5-lite"],
                 default_model="mimo-v2.5-pro",
                 cost_per_1k_input=0.00002, cost_per_1k_output=0.00008,
@@ -1567,7 +1588,7 @@ class MultiLLMRouter:
             # 检查 Ollama 是否健康可用
             if "ollama" in self.providers:
                 ollama_prov = self.providers["ollama"]
-                if ollama_prov.status != ProviderStatus.DOWN:
+                if ollama_prov.is_available():
                     model = self.select_model_by_complexity("ollama", task_type, complexity_score)
                     return RoutingDecision(
                         provider="ollama", model=model,
@@ -1576,13 +1597,13 @@ class MultiLLMRouter:
                             f"{name}:{self.select_model_by_complexity(name, task_type, complexity_score)}"
                             for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
                             if name in self.providers and name != "ollama"
-                            and self.providers[name].status != ProviderStatus.DOWN
+                            and self.providers[name].is_available()
                         ],
                     )
             # 检查 HF 本地模型是否可用
             if "hf_local" in self.providers:
                 hf_prov = self.providers["hf_local"]
-                if hf_prov.status != ProviderStatus.DOWN and hf_prov.models:
+                if hf_prov.is_available() and hf_prov.models:
                     model = self.select_model_by_complexity("hf_local", task_type, complexity_score)
                     if not model or model not in hf_prov.models:
                         model = hf_prov.default_model or hf_prov.models[0]
@@ -1593,13 +1614,13 @@ class MultiLLMRouter:
                             f"{name}:{self.select_model_by_complexity(name, task_type, complexity_score)}"
                             for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
                             if name in self.providers and name != "hf_local"
-                            and self.providers[name].status != ProviderStatus.DOWN
+                            and self.providers[name].is_available()
                         ],
                     )
 
         if preferred_provider and preferred_provider in self.providers:
             prov = self.providers[preferred_provider]
-            if prov.status != ProviderStatus.DOWN:
+            if prov.is_available():
                 model = self.select_model_by_complexity(
                     preferred_provider, task_type, complexity_score
                 )
@@ -1620,7 +1641,7 @@ class MultiLLMRouter:
             if provider_name not in self.providers:
                 continue
             prov = self.providers[provider_name]
-            if prov.status == ProviderStatus.DOWN:
+            if (not prov.is_available()):
                 continue
 
             model = self.select_model_by_complexity(
@@ -1639,7 +1660,7 @@ class MultiLLMRouter:
 
         # fallback: 选择任意可用提供商
         for name, prov in self.providers.items():
-            if prov.status != ProviderStatus.DOWN:
+            if prov.is_available():
                 return RoutingDecision(
                     provider=name, model=prov.default_model,
                     reason=f"Fallback: 唯一可用提供商 {name}",
@@ -1682,7 +1703,7 @@ class MultiLLMRouter:
         # ── 候选 = 已填 key + 健康 + 有 adapter（没填的天然不在 providers）──
         candidates = [
             name for name, cfg in self.providers.items()
-            if cfg.status != ProviderStatus.DOWN and self.adapters.get(name) is not None
+            if cfg.is_available() and self.adapters.get(name) is not None
         ]
         # ── 模态硬过滤 ──
         if has_multimodal:
@@ -1781,7 +1802,7 @@ class MultiLLMRouter:
         def _avail(name: str) -> bool:
             return (
                 name in self.providers
-                and self.providers[name].status != ProviderStatus.DOWN
+                and self.providers[name].is_available()
                 and self.adapters.get(name) is not None
             )
 
@@ -1835,14 +1856,14 @@ class MultiLLMRouter:
         # 2. 检查 Ollama 本地主脑
         if "ollama" in self.providers:
             ollama_prov = self.providers["ollama"]
-            if ollama_prov.status != ProviderStatus.DOWN:
+            if ollama_prov.is_available():
                 model = self.select_model_by_complexity("ollama", task_type, complexity)
                 # 收集云端后备方案
                 cloud_fallbacks = [
                     f"{name}:{self.select_model_by_complexity(name, task_type, complexity)}"
                     for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
                     if name in self.providers and name != "ollama"
-                    and self.providers[name].status != ProviderStatus.DOWN
+                    and self.providers[name].is_available()
                 ]
                 return RoutingDecision(
                     provider="ollama",
@@ -1857,7 +1878,7 @@ class MultiLLMRouter:
         # 3. 检查 HuggingFace 本地模型 (hf_local)
         if "hf_local" in self.providers:
             hf_prov = self.providers["hf_local"]
-            if hf_prov.status != ProviderStatus.DOWN and hf_prov.models:
+            if hf_prov.is_available() and hf_prov.models:
                 model = self.select_model_by_complexity("hf_local", task_type, complexity)
                 # Use the first available HF local model as default
                 if not model or model not in hf_prov.models:
@@ -1866,7 +1887,7 @@ class MultiLLMRouter:
                     f"{name}:{self.select_model_by_complexity(name, task_type, complexity)}"
                     for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
                     if name in self.providers and name != "hf_local"
-                    and self.providers[name].status != ProviderStatus.DOWN
+                    and self.providers[name].is_available()
                 ]
                 return RoutingDecision(
                     provider="hf_local",
@@ -1881,7 +1902,7 @@ class MultiLLMRouter:
         # 4. 检查 HF 本地模型（通过 oneapi 或直连）
         if "oneapi" in self.providers:
             oneapi_prov = self.providers["oneapi"]
-            if oneapi_prov.status != ProviderStatus.DOWN:
+            if oneapi_prov.is_available():
                 model = self.select_model_by_complexity("oneapi", task_type, complexity)
                 return RoutingDecision(
                     provider="oneapi",
@@ -1897,7 +1918,7 @@ class MultiLLMRouter:
         # Ollama / 模型 tag（最常见是模型未 pull 或 tag 名不对），便于排查
         # "看着配了本地原生多模态、实际一直走云端" 的情况。
         _local_present = any(
-            p in self.providers and self.providers[p].status != ProviderStatus.DOWN
+            p in self.providers and self.providers[p].is_available()
             for p in ("ollama", "hf_local")
         )
         if not _local_present:
@@ -1966,7 +1987,7 @@ class MultiLLMRouter:
         # ── Tier 1: native multimodal-capable providers ──────────────────────
         mm_candidates: List[RoutingDecision] = []
         for name, prov in self.providers.items():
-            if prov.status == ProviderStatus.DOWN:
+            if (not prov.is_available()):
                 continue
             if not prov.multimodal:
                 continue
@@ -2055,7 +2076,7 @@ class MultiLLMRouter:
             if provider_name not in self.providers:
                 continue
             prov = self.providers[provider_name]
-            if prov.status == ProviderStatus.DOWN:
+            if (not prov.is_available()):
                 continue
 
             model = self.select_model_by_complexity(provider_name, task_type, complexity_score)
@@ -2247,8 +2268,13 @@ class MultiLLMRouter:
                     self.providers[prov_name].latency_avg_ms * 0.8
                     + response.latency_ms * 0.2
                 )
-                if self.providers[prov_name].status == ProviderStatus.DEGRADED:
+                if self.providers[prov_name].status in (ProviderStatus.DEGRADED, ProviderStatus.DOWN):
+                    # DOWN 也要能被调用成功后清回 HEALTHY(冷却期过后 is_available()
+                    # 已经放行让它重新当候选，调用真的成功了就该把状态本身也纠正过来，
+                    # 而不是让 get_status()/面板一直显示"down"，直到进程重启为止)。
                     self.providers[prov_name].status = ProviderStatus.HEALTHY
+                    self.providers[prov_name].error_count = 0
+                    self.providers[prov_name].down_since = 0.0
                 if cb:
                     cb.record_success()
 
@@ -2311,6 +2337,7 @@ class MultiLLMRouter:
                     cb.record_failure()
                 if self.providers[prov_name].error_count >= 5:
                     self.providers[prov_name].status = ProviderStatus.DOWN
+                    self.providers[prov_name].down_since = time.time()
                 else:
                     self.providers[prov_name].status = ProviderStatus.DEGRADED
 
@@ -2413,6 +2440,7 @@ class MultiLLMRouter:
                 logger.debug("Fallback triggered: %s", e)
                 results[name] = f"error: {e}"
                 self.providers[name].status = ProviderStatus.DOWN
+                self.providers[name].down_since = time.time()
         return results
 
     # ───────── LLMManager 兼容接口 ─────────
@@ -2439,8 +2467,8 @@ class MultiLLMRouter:
                 "model": prov.default_model,
                 "models": prov.models,
                 "source": "env/vault",
-                "active": prov.status != ProviderStatus.DOWN,
-                "available": prov.status != ProviderStatus.DOWN,
+                "active": prov.is_available(),
+                "available": prov.is_available(),
                 "supports_tools": prov.supports_tools,
                 "multimodal": prov.multimodal,
                 "env_key": prov.env_key,
