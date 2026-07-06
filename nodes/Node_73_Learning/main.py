@@ -44,6 +44,8 @@ except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
     CORS_ORIGINS = ["*"]
 
+MODEL_DIR = os.getenv("NODE_73_MODEL_DIR", os.path.join(os.path.dirname(__file__), "trained_models"))
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -130,7 +132,36 @@ class LearningService:
         self._jobs: Dict[str, TrainingJob] = {}
         self._results: List[InferenceResult] = []
         self._max_results = 100  # keep last 100 inference results
+        self._estimators: Dict[str, Any] = {}  # model_name -> fitted sklearn estimator
+        os.makedirs(MODEL_DIR, exist_ok=True)
         logger.info("LearningService 初始化完成")
+
+    @staticmethod
+    def _build_estimator(model_type: str, hyperparams: Dict[str, Any]):
+        """按模型类型构建真实 sklearn 估计器（无匹配类型则抛错，不臆造）。"""
+        mt = model_type.lower()
+        if mt == "classification":
+            from sklearn.ensemble import RandomForestClassifier
+            return RandomForestClassifier(
+                n_estimators=int(hyperparams.get("n_estimators", 100)),
+                max_depth=hyperparams.get("max_depth"),
+                random_state=hyperparams.get("random_state", 42),
+            )
+        elif mt == "regression":
+            from sklearn.ensemble import RandomForestRegressor
+            return RandomForestRegressor(
+                n_estimators=int(hyperparams.get("n_estimators", 100)),
+                max_depth=hyperparams.get("max_depth"),
+                random_state=hyperparams.get("random_state", 42),
+            )
+        elif mt == "clustering":
+            from sklearn.cluster import KMeans
+            return KMeans(
+                n_clusters=int(hyperparams.get("n_clusters", 3)),
+                random_state=hyperparams.get("random_state", 42),
+                n_init="auto",
+            )
+        raise ValueError(f"不支持的 model_type: {model_type}（支持: classification/regression/clustering）")
 
     # -- model management ----------------------------------------------------
 
@@ -157,23 +188,43 @@ class LearningService:
         return job
 
     async def _run_training(self, job: TrainingJob):
-        """模拟训练过程"""
+        """真实训练：用 scikit-learn 在提交的数据集上拟合模型，产出真实指标。
+
+        dataset 期望形状: {"X": [[float, ...], ...], "y": [...]}（clustering 可省略 y）。
+        """
         try:
             job.status = TaskStatus.TRAINING
             logger.info(f"开始训练任务 {job.job_id} (model={job.model_name})")
-            # Simulate training delay
-            await asyncio.sleep(5)
+
+            model_info = self._models.get(job.model_name)
+            if not model_info:
+                raise ValueError(f"模型未注册: {job.model_name}")
+
+            if not isinstance(job.dataset, dict) or "X" not in job.dataset:
+                raise ValueError('dataset 必须是 {"X": [[...], ...], "y": [...]} 形状')
+            X = job.dataset["X"]
+            y = job.dataset.get("y")
+            if not isinstance(X, list) or not X:
+                raise ValueError("dataset.X 必须是非空的特征向量列表")
+
+            mt = model_info.model_type.lower()
+            if mt != "clustering" and y is None:
+                raise ValueError(f"model_type={mt} 需要提供 dataset.y")
+
+            estimator = await asyncio.to_thread(self._fit_estimator, mt, job.hyperparams, X, y)
+
+            model_path = os.path.join(MODEL_DIR, f"{job.model_name}.joblib")
+            import joblib
+            await asyncio.to_thread(joblib.dump, estimator, model_path)
+            self._estimators[job.model_name] = estimator
+
+            job.result = self._score_estimator(mt, estimator, X, y)
             job.status = TaskStatus.COMPLETED
             job.completed_at = datetime.utcnow().isoformat()
-            job.result = {
-                "accuracy": round(0.85 + len(job.model_name) % 10 * 0.01, 4),
-                "loss": round(0.15 - len(job.model_name) % 10 * 0.005, 4),
-                "epochs": job.hyperparams.get("epochs", 10),
-            }
-            # Update model status if it exists
-            if job.model_name in self._models:
-                self._models[job.model_name].status = "trained"
-            logger.info(f"训练任务 {job.job_id} 完成")
+
+            model_info.status = "trained"
+            model_info.path = model_path
+            logger.info(f"训练任务 {job.job_id} 完成: {job.result}")
         except asyncio.CancelledError:
             job.status = TaskStatus.FAILED
             job.error = "任务被取消"
@@ -182,6 +233,43 @@ class LearningService:
             job.status = TaskStatus.FAILED
             job.error = str(e)
             logger.error(f"训练任务 {job.job_id} 失败: {e}")
+
+    @staticmethod
+    def _fit_estimator(model_type: str, hyperparams: Dict[str, Any], X: List[List[float]], y: Optional[List[Any]]):
+        estimator = LearningService._build_estimator(model_type, hyperparams)
+        if model_type == "clustering":
+            estimator.fit(X)
+        else:
+            estimator.fit(X, y)
+        return estimator
+
+    @staticmethod
+    def _score_estimator(model_type: str, estimator, X: List[List[float]], y: Optional[List[Any]]) -> Dict[str, Any]:
+        """在训练集上计算真实指标（无留出测试集时如实标注 in_sample）。"""
+        if model_type == "classification":
+            from sklearn.metrics import accuracy_score, f1_score
+            preds = estimator.predict(X)
+            return {
+                "accuracy": round(float(accuracy_score(y, preds)), 4),
+                "f1_weighted": round(float(f1_score(y, preds, average="weighted", zero_division=0)), 4),
+                "n_samples": len(X),
+                "metric_scope": "in_sample",
+            }
+        elif model_type == "regression":
+            from sklearn.metrics import mean_squared_error, r2_score
+            preds = estimator.predict(X)
+            return {
+                "r2": round(float(r2_score(y, preds)), 4),
+                "mse": round(float(mean_squared_error(y, preds)), 4),
+                "n_samples": len(X),
+                "metric_scope": "in_sample",
+            }
+        else:  # clustering
+            return {
+                "inertia": round(float(estimator.inertia_), 4),
+                "n_clusters": int(estimator.n_clusters),
+                "n_samples": len(X),
+            }
 
     def get_training_job(self, job_id: str) -> Optional[TrainingJob]:
         return self._jobs.get(job_id)
@@ -200,24 +288,47 @@ class LearningService:
         return result
 
     async def _run_inference_task(self, result: InferenceResult):
-        """模拟推理过程"""
+        """真实推理：用已训练好的 sklearn 估计器对输入特征向量做预测。"""
         try:
             result.status = TaskStatus.INFERENCING
             logger.info(f"开始推理 {result.result_id} (model={result.model_name})")
-            if result.model_name not in self._models:
+            model_info = self._models.get(result.model_name)
+            if not model_info:
                 raise ValueError(f"模型未注册: {result.model_name}")
-            await asyncio.sleep(1)  # simulate inference latency
-            model = self._models[result.model_name]
-            mt = model.model_type.lower()
+
+            estimator = self._estimators.get(result.model_name)
+            if estimator is None and model_info.path and os.path.exists(model_info.path):
+                import joblib
+                estimator = await asyncio.to_thread(joblib.load, model_info.path)
+                self._estimators[result.model_name] = estimator
+            if estimator is None:
+                raise ValueError(f"模型尚未训练，无可用估计器: {result.model_name}")
+
+            if not isinstance(result.input_data, list):
+                raise ValueError("input_data 必须是特征向量（数值列表）")
+
+            mt = model_info.model_type.lower()
+            X = [result.input_data]
+            prediction = await asyncio.to_thread(estimator.predict, X)
+
+            # sklearn predictions are numpy scalars - convert to native
+            # Python types so the FastAPI/dataclass JSON response doesn't
+            # choke on non-serializable numpy int64/float64 values.
+            def _native(v):
+                return v.item() if hasattr(v, "item") else v
+
             if mt == "classification":
-                result.prediction = {"label": "positive", "confidence": 0.92}
+                result.prediction = {"label": _native(prediction[0])}
+                if hasattr(estimator, "predict_proba"):
+                    proba = await asyncio.to_thread(estimator.predict_proba, X)
+                    result.confidence = round(float(max(proba[0])), 4)
             elif mt == "regression":
-                result.prediction = {"value": round(42.0 + hash(str(result.input_data)) % 100 * 0.1, 4)}
+                result.prediction = {"value": round(float(prediction[0]), 4)}
             elif mt == "clustering":
-                result.prediction = {"cluster": hash(str(result.input_data)) % 5}
+                result.prediction = {"cluster": int(prediction[0])}
             else:
-                result.prediction = {"output": str(result.input_data)}
-            result.confidence = 0.92
+                result.prediction = {"output": _native(prediction[0]) if hasattr(prediction, "__getitem__") else prediction}
+
             result.status = TaskStatus.COMPLETED
             result.completed_at = datetime.utcnow().isoformat()
             logger.info(f"推理 {result.result_id} 完成")
