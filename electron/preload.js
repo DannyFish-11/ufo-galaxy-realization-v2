@@ -43,6 +43,15 @@ contextBridge.exposeInMainWorld('galaxyAPI', {
     ipcRenderer.on('galaxy:config-update', handler);
     return () => ipcRenderer.removeListener('galaxy:config-update', handler);
   },
+  // 后端从"未就绪"变为"就绪"是异步的:getConfig/getSettings 立即返回当前
+  // 缓存(可能是空的),真正的网络请求在 main.js 后台进行,拿到结果后广播
+  // 'galaxy:config-ready'(kind: 'config'|'settings')。渲染层收到后自行
+  // invalidate() 重新取一次即可,不需要用户手动切走再切回来。
+  onConfigReady: (callback) => {
+    const handler = (_, kind) => callback(kind);
+    ipcRenderer.on('galaxy:config-ready', handler);
+    return () => ipcRenderer.removeListener('galaxy:config-ready', handler);
+  },
   saveConfig: () => ipcRenderer.invoke('galaxy:save-config'),
 });
 

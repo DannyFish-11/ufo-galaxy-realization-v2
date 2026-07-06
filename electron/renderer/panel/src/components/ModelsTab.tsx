@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useConfigCache } from '@/hooks/useConfigCache';
 import './ModelsTab.css';
 
@@ -184,7 +184,17 @@ export default function ModelsTab() {
     error,
     reload: load,
     invalidate,
-  } = useConfigCache(fetchConfig, []);
+  } = useConfigCache('models-config', fetchConfig);
+
+  // 后端从「未就绪」变为「就绪」是异步的(Electron 主进程在后台重试,不再
+  // 阻塞 IPC 调用本身——见 main.js galaxy:get-config)。收到就绪通知后主动
+  // 失效缓存重新拉一次,而不是要求用户手动切走再切回来才能看到真实数据。
+  useEffect(() => {
+    if (!window.galaxyAPI?.onConfigReady) return undefined;
+    return window.galaxyAPI.onConfigReady((kind) => {
+      if (kind === 'config') invalidate();
+    });
+  }, [invalidate]);
 
   const configured = cfg?.configured ?? {};
   const values = cfg?.values ?? {};
@@ -239,17 +249,13 @@ export default function ModelsTab() {
   const localOn = isConfigured('OLLAMA_URL') || isSet(get('OLLAMA_MODEL'));
   const currentBrain = get('OLLAMA_MODEL') || 'gemma4:e2b';
 
-  if (loading) {
-    return <div className="mt-state-screen">正在读取模型配置…</div>;
-  }
-  if (error) {
-    return (
-      <div className="mt-state-screen">
-        <div className="mt-err">{error}</div>
-        <button className="mt-btn" onClick={load}>重试</button>
-      </div>
-    );
-  }
+  // 界面本体始终渲染,不再用 loading/error 整屏遮挡——后端(尤其是启动期的
+  // Ollama)可能要几十秒甚至几分钟才响应,之前"loading 就整屏转圈"会让用户
+  // 在这几分钟内完全没法点进来填 API Key。改为:表单始终可交互(未加载到的
+  // 项就是"未配置"的默认态),只在标题栏放一个不打断操作的小提示,真实数据
+  // 到达后(或用户手动点重试)自动补上,不用重开这个 tab。
+  const syncing = loading && !cfg;
+  const offline = Boolean(error) && !cfg;
 
   return (
     <div className="models-tab">
@@ -260,6 +266,13 @@ export default function ModelsTab() {
             <p className="mt-sub">本地原生多模态为基座，开源 API 为主力，专有为兜底</p>
           </div>
           <div className="mt-summary">
+            {syncing && <span className="mt-sync-badge" title="正在后台读取模型配置…">● 同步中</span>}
+            {offline && (
+              <span className="mt-sync-badge mt-sync-badge-err" title={error ?? ''}>
+                ⚠ 暂未连接后端 · 自动重试中
+                <button className="mt-sync-retry" onClick={load} type="button">重试</button>
+              </span>
+            )}
             <span><b>{localOn ? 1 : 0}</b> 本地</span>
             <span className="mt-sep" />
             <span><b>{connectedCount}</b> 已连接</span>

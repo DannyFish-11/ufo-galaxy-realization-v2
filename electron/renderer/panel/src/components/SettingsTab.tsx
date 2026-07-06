@@ -24,6 +24,10 @@ interface GalaxyAPI {
   // (system.py 精简版先注册、抢占同路径)导致这里永远读不到任何一项内容。
   getSettings?: () => Promise<Record<string, ConfigItem>>;
   onConfigUpdate: (callback: (changed: Record<string, string>) => void) => () => void;
+  // 后端从"未就绪"变为"就绪"是异步的(main.js 在后台重试,不再阻塞
+  // getConfig/getSettings 本身)。收到通知的一方(kind 区分是精简版还是完整
+  // 明细)据此失效自己的缓存重新拉一次,而不是要求用户手动切走再切回来。
+  onConfigReady?: (callback: (kind: 'config' | 'settings') => void) => () => void;
   saveConfig: () => Promise<{ success: boolean }>;
 }
 
@@ -289,17 +293,6 @@ function NumberControl({
   );
 }
 
-// ── Loading Spinner ─────────────────────────────────────────────────
-
-function LoadingSpinner() {
-  return (
-    <div className="settings-loading">
-      <div className="settings-spinner" />
-      <span className="settings-loading-text">正在读取配置…</span>
-    </div>
-  );
-}
-
 // ── Main Component ──────────────────────────────────────────────────
 
 export default function SettingsTab() {
@@ -334,11 +327,19 @@ export default function SettingsTab() {
     error: cacheError,
     reload: loadConfig,
     invalidate,
-  } = useConfigCache(fetchSettings, []);
+  } = useConfigCache('settings-config', fetchSettings);
 
   // 同步 loading/error 状态
   useEffect(() => { setLoading(cacheLoading); }, [cacheLoading]);
   useEffect(() => { setError(cacheError); }, [cacheError]);
+
+  // 后端后台就绪通知 → 主动失效缓存重新拉取(见 useConfigCache 顶部注释)。
+  useEffect(() => {
+    if (!window.galaxyAPI?.onConfigReady) return undefined;
+    return window.galaxyAPI.onConfigReady((kind) => {
+      if (kind === 'settings') invalidate();
+    });
+  }, [invalidate]);
 
   // 当 cache 数据加载/刷新时，同步到本地 config
   useEffect(() => {
@@ -855,55 +856,54 @@ export default function SettingsTab() {
       </nav>
 
       {/* ── Right Content ── */}
+      {/* 界面本体始终渲染,不再用 loading/error 整屏遮挡——后端可能要几十秒
+          到几分钟才响应(尤其是启动期的 Ollama),之前"loading 就整屏转圈"
+          会让用户完全没法看/改任何一项设置。缺项时 renderCategoryItems()
+          本就会渲染"未从后端加载"的占位行,真实数据到达后原地补上。 */}
       <div className="settings-content">
-        {loading ? (
-          <LoadingSpinner />
-        ) : error ? (
-          <div className="settings-error">
-            <div className="settings-error-icon">⚠️</div>
-            <div className="settings-error-text">{error}</div>
-            <button className="settings-btn settings-btn-retry" onClick={loadConfig}>
+        {error && !Object.keys(config).length && (
+          <div className="settings-sync-banner">
+            <span>⚠ 暂未连接后端 · 后台自动重试中（{error}）</span>
+            <button className="settings-btn-retry-inline" onClick={loadConfig} type="button">
               重试
             </button>
           </div>
-        ) : (
-          <>
-            <div className="settings-scroll">
-              <h2 className="settings-group-title">
-                {activeLabel}
-                <span className="settings-count">
-                  {CONFIG_KEYS[activeCategory]?.length ?? 0} 项
-                </span>
-              </h2>
-              {activeCategory === 'ports' && renderConnectors()}
-              {activeCategory === 'ports' && renderNodeRoster()}
-              <div className="settings-list">{renderCategoryItems()}</div>
-            </div>
-
-            {/* ── Footer ── */}
-            <div className="settings-footer">
-              <button
-                className="settings-btn settings-btn-cancel"
-                onClick={handleCancel}
-                disabled={!isDirty}
-              >
-                放弃
-              </button>
-              <button
-                className={`settings-btn settings-btn-save ${isDirty ? 'dirty' : ''}`}
-                onClick={handleSave}
-                disabled={!isDirty}
-              >
-                保存
-                {isDirty && (
-                  <span className="settings-dirty-badge">
-                    {Object.keys(changed).length}
-                  </span>
-                )}
-              </button>
-            </div>
-          </>
         )}
+        <div className="settings-scroll">
+          <h2 className="settings-group-title">
+            {activeLabel}
+            <span className="settings-count">
+              {CONFIG_KEYS[activeCategory]?.length ?? 0} 项
+            </span>
+            {loading && <span className="settings-sync-dot" title="正在后台同步…" />}
+          </h2>
+          {activeCategory === 'ports' && renderConnectors()}
+          {activeCategory === 'ports' && renderNodeRoster()}
+          <div className="settings-list">{renderCategoryItems()}</div>
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="settings-footer">
+          <button
+            className="settings-btn settings-btn-cancel"
+            onClick={handleCancel}
+            disabled={!isDirty}
+          >
+            放弃
+          </button>
+          <button
+            className={`settings-btn settings-btn-save ${isDirty ? 'dirty' : ''}`}
+            onClick={handleSave}
+            disabled={!isDirty}
+          >
+            保存
+            {isDirty && (
+              <span className="settings-dirty-badge">
+                {Object.keys(changed).length}
+              </span>
+            )}
+          </button>
+        </div>
 
         {/* ── Toast ── */}
         {toast && <div className="settings-toast">{toast}</div>}

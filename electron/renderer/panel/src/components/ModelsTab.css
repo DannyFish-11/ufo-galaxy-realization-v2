@@ -53,6 +53,30 @@
   height: 14px;
   background: var(--border-strong);
 }
+.mt-sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--xs);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+}
+.mt-sync-badge-err {
+  color: var(--danger);
+  border-color: rgba(255, 90, 90, 0.25);
+}
+.mt-sync-retry {
+  font-size: 11px;
+  color: inherit;
+  background: transparent;
+  border: none;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
 
 /* ── 分组卡片 ── */
 .mt-card {
