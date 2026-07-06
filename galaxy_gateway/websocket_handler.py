@@ -484,6 +484,8 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
             await handle_wake_event(connection_id, aip_msg)
         elif event.kind == IngressEventKind.DEVICE_PERCEPTION_EMISSION:
             await handle_device_perception_emission(connection_id, aip_msg)
+        elif event.kind == IngressEventKind.DEVICE_DISCONNECT:
+            await handle_device_unregister(connection_id, aip_msg, websocket)
         else:
             # SESSION_MIGRATE and any future transport-class kinds are handled here
             # by falling through to per-type checks using MessageType for backward
@@ -929,6 +931,26 @@ async def handle_status(connection_id: str, aip_msg):
 
     except Exception as e:
         logger.error(f"❌ 处理状态查询失败: {e}")
+
+
+async def handle_device_unregister(connection_id: str, aip_msg, websocket: WebSocket):
+    """处理设备主动注销（DEVICE_UNREGISTER —— 优雅下线，区别于连接掉线）。
+
+    复用 GatewayWSManager.disconnect() 里已经验证过的真实清理路径
+    (UDM write-through、UCM 注销、device_router.unregister_device、
+    registered_devices 镜像同步)，而不是重复实现一遍；这里只是一个
+    由显式协议消息触发、而非连接断开触发的入口。
+    """
+    try:
+        device_id = aip_msg.device_id
+        logger.info(f"设备主动注销: {device_id}")
+        await connection_manager.disconnect(connection_id)
+        try:
+            await websocket.close()
+        except Exception as _close_err:
+            logger.debug("websocket.close() after unregister failed (non-fatal): %s", _close_err)
+    except Exception as e:
+        logger.error(f"❌ 处理设备注销失败: {e}")
 
 
 async def push_command_result(request_id: str, status: str, results: Dict):
