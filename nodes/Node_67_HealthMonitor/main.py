@@ -211,14 +211,27 @@ class HealthMonitor:
         self.degraded_mode = False
         self.non_essential_disabled: List[str] = []
         
-        # Known node endpoints
-        self.node_endpoints: Dict[str, str] = {
-            "Node_00_StateMachine": f"http://localhost:{get_node_port('Node_00_StateMachine')}",
-            "Node_50_Transformer": f"http://localhost:{get_node_port('Node_50_Transformer')}",
-            "Node_58_ModelRouter": f"http://localhost:{get_node_port('Node_58_ModelRouter')}",
-            "Node_33_ADB": f"http://localhost:{get_node_port('Node_33_ADB')}",
-            "Node_64_Telemetry": f"http://localhost:{get_node_port('Node_64_Telemetry')}",
-        }
+        # Known node endpoints —— 之前写死只覆盖 5 个节点(00/50/58/33/64),
+        # 其余 120 个节点这个"健康监控"节点根本看不到、也就永远不会被巡检/
+        # 自愈。改成从节点名单(core.node_catalog,这次会话新建的、全量 125
+        # 个节点的分类+端口来源)动态取全部可运行节点，覆盖不到再退回原来
+        # 那 5 个,不让这一步的失败影响启动。
+        self.node_endpoints: Dict[str, str] = {}
+        try:
+            from core.node_catalog import get_node_roster
+            for entry in get_node_roster().get("nodes", []):
+                if entry.get("runnable") and entry.get("port"):
+                    self.node_endpoints[entry["dir"]] = f"http://localhost:{entry['port']}"
+        except Exception as exc:
+            logger.warning("动态节点名单不可用，退回内置的 5 个(非致命): %s", exc)
+        if not self.node_endpoints:
+            self.node_endpoints = {
+                "Node_00_StateMachine": f"http://localhost:{get_node_port('Node_00_StateMachine')}",
+                "Node_50_Transformer": f"http://localhost:{get_node_port('Node_50_Transformer')}",
+                "Node_58_ModelRouter": f"http://localhost:{get_node_port('Node_58_ModelRouter')}",
+                "Node_33_ADB": f"http://localhost:{get_node_port('Node_33_ADB')}",
+                "Node_64_Telemetry": f"http://localhost:{get_node_port('Node_64_Telemetry')}",
+            }
     
     async def check_node(self, node_id: str) -> NodeHealth:
         """Check health of a single node."""
@@ -368,15 +381,30 @@ class HealthMonitor:
     async def _execute_recovery(self, node_id: str, action: RecoveryAction) -> bool:
         """Execute a recovery action."""
         logger.info(f"Executing {action.value} for {node_id}")
-        
-        # Simulate recovery actions
-        # In production, these would be actual recovery procedures
-        
+
+        # 以下动作大多仍是模拟(见各分支注释)——生产环境要接真实的恢复流程。
+        # RESTART 是个例外:这次会话已经建好了真实的单节点一键启停后端
+        # (core.node_lifecycle,供面板"端口与节点"页用),这里直接复用同一套,
+        # 不再只是 sleep + 掷骰子。
+
         if action == RecoveryAction.RESTART:
-            # Simulate restart
-            await asyncio.sleep(0.5)
-            return random.random() > 0.3  # 70% success rate
-        
+            try:
+                from core import node_lifecycle
+                stop_result = await asyncio.to_thread(node_lifecycle.stop_node, node_id)
+                await asyncio.sleep(0.5)
+                start_result = await asyncio.to_thread(node_lifecycle.start_node, node_id)
+                if not start_result.get("ok"):
+                    logger.warning(
+                        "RESTART %s 失败: stop=%s start=%s", node_id, stop_result, start_result
+                    )
+                    return False
+                await asyncio.sleep(1.0)  # 给进程一点真正起来的时间
+                running, why = await asyncio.to_thread(node_lifecycle.is_running, node_id)
+                return running
+            except Exception as exc:
+                logger.error("RESTART %s 执行异常(非模拟路径的真实失败): %s", node_id, exc)
+                return False
+
         elif action == RecoveryAction.CLEAR_CACHE:
             await asyncio.sleep(0.2)
             return random.random() > 0.2  # 80% success rate

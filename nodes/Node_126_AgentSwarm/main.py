@@ -117,27 +117,27 @@ class DebateResult(BaseModel):
 
 class ReasoningAgent(ABC):
     """Base class for reasoning agents."""
-    
+
     def __init__(self, agent_id: str, strategy: ReasoningStrategy):
         self.agent_id = agent_id
         self.strategy = strategy
         self.history: List[AgentProposal] = []
-    
+
     @abstractmethod
     async def propose(self, problem: str, context: Dict[str, Any]) -> AgentProposal:
         """Generate a proposal for the problem."""
         pass
-    
+
     @abstractmethod
     async def critique(self, proposal: AgentProposal) -> Critique:
         """Critique another agent's proposal."""
         pass
-    
+
     @abstractmethod
     async def defend(self, critiques: List[Critique]) -> AgentProposal:
         """Defend and refine proposal based on critiques."""
         pass
-    
+
     def _calculate_confidence(self, reasoning_steps: int, has_evidence: bool) -> float:
         """Calculate confidence score."""
         base = 0.5
@@ -145,431 +145,227 @@ class ReasoningAgent(ABC):
         evidence_bonus = 0.2 if has_evidence else 0
         return min(base + step_bonus + evidence_bonus, 0.95)
 
-class ChainOfThoughtAgent(ReasoningAgent):
+
+async def _llm_complete(prompt: str, max_tokens: int = 700) -> str:
+    """Real LLM call via Node_58_ModelRouter's /chat, used by every reasoning agent."""
+    async with httpx.AsyncClient(timeout=DEBATE_TIMEOUT) as client:
+        resp = await client.post(
+            f"{MODEL_ROUTER_URL}/chat",
+            json={"prompt": prompt, "max_tokens": max_tokens, "temperature": 0.7},
+        )
+        resp.raise_for_status()
+        return resp.json()["response"]
+
+
+def _parse_steps_and_solution(text: str) -> Tuple[List[str], str]:
+    """Parse a STEP:/SOLUTION: formatted LLM response into (reasoning steps, solution).
+
+    Falls back to treating the whole response as the solution with no
+    structured steps if the model didn't follow the requested format -
+    real model output can't be guaranteed to be perfectly formatted.
+    """
+    steps: List[str] = []
+    solution = ""
+    for line in text.splitlines():
+        line = line.strip()
+        if line.upper().startswith("STEP:"):
+            steps.append(line.split(":", 1)[1].strip())
+        elif line.upper().startswith("SOLUTION:"):
+            solution = line.split(":", 1)[1].strip()
+    if not solution:
+        solution = text.strip()
+    return steps, solution
+
+
+def _parse_critique(text: str) -> Tuple[List[str], str, Optional[str]]:
+    """Parse a POINT:/SEVERITY:/FIX: formatted LLM response."""
+    points: List[str] = []
+    severity = "minor"
+    fix: Optional[str] = None
+    for line in text.splitlines():
+        line = line.strip()
+        if line.upper().startswith("POINT:"):
+            points.append(line.split(":", 1)[1].strip())
+        elif line.upper().startswith("SEVERITY:"):
+            candidate = line.split(":", 1)[1].strip().lower()
+            if candidate in ("minor", "major", "critical"):
+                severity = candidate
+        elif line.upper().startswith("FIX:"):
+            value = line.split(":", 1)[1].strip()
+            if value and value.lower() != "none":
+                fix = value
+    if not points:
+        points = ["No significant issues found"]
+    return points, severity, fix
+
+
+# Per-strategy instructions that give each agent a genuinely different
+# reasoning approach to the same problem, rather than just a different label.
+_STRATEGY_INSTRUCTIONS: Dict[ReasoningStrategy, str] = {
+    ReasoningStrategy.COT: (
+        "Solve this using explicit step-by-step chain-of-thought reasoning. "
+        "Work through the problem logically, one step at a time."
+    ),
+    ReasoningStrategy.TOT: (
+        "Solve this using tree-of-thought reasoning: consider at least 3 distinct "
+        "solution approaches (branches), briefly evaluate each, then commit to the "
+        "best one. Show each branch as its own step."
+    ),
+    ReasoningStrategy.PAL: (
+        "Solve this using program-aided reasoning: express your solution as actual "
+        "working code (a real function/algorithm), and use each step to explain a "
+        "piece of that code's logic."
+    ),
+    ReasoningStrategy.CRITIQUE: (
+        "Solve this using self-critique: first draft a solution, then critique your "
+        "own draft for weaknesses, then produce a refined final solution. Show the "
+        "draft, the self-critique, and the revision as separate steps."
+    ),
+    ReasoningStrategy.RETRIEVAL: (
+        "Solve this using knowledge retrieval: first state what relevant background "
+        "knowledge/facts/techniques apply to this problem (as steps), then use them "
+        "to construct your solution."
+    ),
+}
+
+_RESPONSE_FORMAT = (
+    'Respond ONLY in this exact format (one line per step):\n'
+    "STEP: <reasoning step>\n"
+    "STEP: <reasoning step>\n"
+    "...\n"
+    "SOLUTION: <your final solution, self-contained>"
+)
+
+
+class LLMReasoningAgent(ReasoningAgent):
+    """Reasoning agent whose propose/critique/defend are real LLM calls
+    (via Node_58_ModelRouter), differentiated per strategy by
+    _STRATEGY_INSTRUCTIONS. Concrete strategy subclasses below just fix
+    the strategy passed to __init__.
+    """
+
+    def __init__(self, agent_id: str, strategy: ReasoningStrategy):
+        super().__init__(agent_id, strategy)
+        self._last_problem: str = ""
+
+    async def propose(self, problem: str, context: Dict[str, Any]) -> AgentProposal:
+        self._last_problem = problem
+        instruction = _STRATEGY_INSTRUCTIONS[self.strategy]
+        context_note = f"\nAdditional context: {context}" if context else ""
+        prompt = f"{instruction}\n\nProblem: {problem}{context_note}\n\n{_RESPONSE_FORMAT}"
+
+        response = await _llm_complete(prompt)
+        steps, solution = _parse_steps_and_solution(response)
+        confidence = self._calculate_confidence(len(steps), bool(steps))
+
+        proposal = AgentProposal(
+            agent_id=self.agent_id,
+            strategy=self.strategy,
+            solution=solution,
+            reasoning=steps,
+            confidence=confidence,
+        )
+        self.history.append(proposal)
+        return proposal
+
+    async def critique(self, proposal: AgentProposal) -> Critique:
+        prompt = (
+            f"You are reviewing another AI agent's proposed solution to this problem:\n"
+            f"Problem: {self._last_problem or '(unknown - reviewing in isolation)'}\n\n"
+            f"Their solution: {proposal.solution}\n"
+            f"Their reasoning steps:\n" + "\n".join(f"- {s}" for s in proposal.reasoning) + "\n\n"
+            "Critique it critically and constructively. Respond ONLY in this format:\n"
+            "POINT: <specific issue>\n"
+            "POINT: <specific issue>\n"
+            "...\n"
+            "SEVERITY: minor|major|critical\n"
+            "FIX: <concrete suggested fix, or 'none' if no fix needed>"
+        )
+        response = await _llm_complete(prompt, max_tokens=400)
+        points, severity, fix = _parse_critique(response)
+
+        return Critique(
+            critic_id=self.agent_id,
+            target_id=proposal.agent_id,
+            points=points,
+            severity=severity,
+            suggested_fix=fix,
+        )
+
+    async def defend(self, critiques: List[Critique]) -> AgentProposal:
+        if not self.history:
+            raise ValueError("No previous proposal to defend")
+        last_proposal = self.history[-1]
+
+        if critiques:
+            critique_text = "\n".join(
+                f"- ({c.severity}) {point}" + (f" Suggested fix: {c.suggested_fix}" if c.suggested_fix else "")
+                for c in critiques for point in c.points
+            )
+            prompt = (
+                f"Problem: {self._last_problem}\n\n"
+                f"Your previous solution: {last_proposal.solution}\n"
+                f"Your previous reasoning:\n" + "\n".join(f"- {s}" for s in last_proposal.reasoning) + "\n\n"
+                f"Other agents raised these critiques:\n{critique_text}\n\n"
+                "Revise and improve your solution to address these critiques. "
+                f"{_RESPONSE_FORMAT}"
+            )
+        else:
+            prompt = (
+                f"Problem: {self._last_problem}\n\n"
+                f"Your previous solution: {last_proposal.solution}\n"
+                "No critiques were raised. Refine and strengthen your solution further if possible. "
+                f"{_RESPONSE_FORMAT}"
+            )
+
+        response = await _llm_complete(prompt)
+        steps, solution = _parse_steps_and_solution(response)
+        confidence = self._calculate_confidence(len(steps), bool(steps))
+
+        new_proposal = AgentProposal(
+            agent_id=self.agent_id,
+            strategy=self.strategy,
+            solution=solution,
+            reasoning=steps or last_proposal.reasoning,
+            confidence=max(confidence, last_proposal.confidence),
+        )
+        self.history.append(new_proposal)
+        return new_proposal
+
+
+class ChainOfThoughtAgent(LLMReasoningAgent):
     """Agent using Chain-of-Thought reasoning."""
-    
+
     def __init__(self, agent_id: str):
         super().__init__(agent_id, ReasoningStrategy.COT)
-    
-    async def propose(self, problem: str, context: Dict[str, Any]) -> AgentProposal:
-        """Generate step-by-step reasoning."""
-        steps = []
-        
-        # Step 1: Understand the problem
-        steps.append(f"Understanding: The problem asks about '{problem[:50]}...'")
-        
-        # Step 2: Identify key components
-        keywords = self._extract_keywords(problem)
-        steps.append(f"Key components: {', '.join(keywords[:5])}")
-        
-        # Step 3: Apply reasoning
-        steps.append("Applying logical reasoning to connect components")
-        
-        # Step 4: Derive solution
-        solution = self._derive_solution(problem, keywords)
-        steps.append(f"Conclusion: {solution}")
-        
-        confidence = self._calculate_confidence(len(steps), bool(context))
-        
-        proposal = AgentProposal(
-            agent_id=self.agent_id,
-            strategy=self.strategy,
-            solution=solution,
-            reasoning=steps,
-            confidence=confidence
-        )
-        self.history.append(proposal)
-        return proposal
-    
-    async def critique(self, proposal: AgentProposal) -> Critique:
-        """Critique using logical analysis."""
-        points = []
-        severity = "minor"
-        
-        # Check reasoning chain
-        if len(proposal.reasoning) < 3:
-            points.append("Insufficient reasoning steps")
-            severity = "major"
-        
-        # Check confidence
-        if proposal.confidence > 0.9:
-            points.append("Overconfident without strong evidence")
-        
-        # Check solution specificity
-        if len(proposal.solution) < 20:
-            points.append("Solution lacks detail")
-            severity = "major" if severity == "minor" else severity
-        
-        return Critique(
-            critic_id=self.agent_id,
-            target_id=proposal.agent_id,
-            points=points if points else ["No significant issues found"],
-            severity=severity
-        )
-    
-    async def defend(self, critiques: List[Critique]) -> AgentProposal:
-        """Refine proposal based on critiques."""
-        if not self.history:
-            raise ValueError("No previous proposal to defend")
-        
-        last_proposal = self.history[-1]
-        new_steps = last_proposal.reasoning.copy()
-        
-        # Address critiques
-        for critique in critiques:
-            for point in critique.points:
-                new_steps.append(f"Addressing: {point}")
-        
-        new_steps.append("Refined solution after considering critiques")
-        
-        new_proposal = AgentProposal(
-            agent_id=self.agent_id,
-            strategy=self.strategy,
-            solution=last_proposal.solution + " (refined)",
-            reasoning=new_steps,
-            confidence=min(last_proposal.confidence + 0.05, 0.95)
-        )
-        self.history.append(new_proposal)
-        return new_proposal
-    
-    def _extract_keywords(self, text: str) -> List[str]:
-        """Extract keywords from text."""
-        words = text.lower().split()
-        stopwords = {"the", "a", "an", "is", "are", "was", "were", "to", "of", "and", "or", "in", "on", "at"}
-        return [w for w in words if w not in stopwords and len(w) > 3][:10]
-    
-    def _derive_solution(self, problem: str, keywords: List[str]) -> str:
-        """Derive a solution based on problem and keywords."""
-        if "optimize" in problem.lower() or "best" in problem.lower():
-            return f"Optimal approach considering {', '.join(keywords[:3])}"
-        elif "explain" in problem.lower():
-            return f"Explanation based on analysis of {', '.join(keywords[:3])}"
-        elif "calculate" in problem.lower() or "compute" in problem.lower():
-            return f"Computed result using {', '.join(keywords[:3])}"
-        else:
-            return f"Solution addressing {', '.join(keywords[:3])}"
 
-class TreeOfThoughtAgent(ReasoningAgent):
+
+class TreeOfThoughtAgent(LLMReasoningAgent):
     """Agent using Tree-of-Thought reasoning."""
-    
+
     def __init__(self, agent_id: str):
         super().__init__(agent_id, ReasoningStrategy.TOT)
-    
-    async def propose(self, problem: str, context: Dict[str, Any]) -> AgentProposal:
-        """Generate branching exploration."""
-        steps = []
-        
-        # Generate multiple branches
-        branches = self._generate_branches(problem)
-        steps.append(f"Exploring {len(branches)} possible approaches")
-        
-        for i, branch in enumerate(branches[:3]):
-            steps.append(f"Branch {i+1}: {branch}")
-        
-        # Evaluate branches
-        best_branch = self._evaluate_branches(branches)
-        steps.append(f"Best approach: {best_branch}")
-        
-        solution = f"Selected approach: {best_branch}"
-        confidence = self._calculate_confidence(len(steps), len(branches) > 2)
-        
-        proposal = AgentProposal(
-            agent_id=self.agent_id,
-            strategy=self.strategy,
-            solution=solution,
-            reasoning=steps,
-            confidence=confidence
-        )
-        self.history.append(proposal)
-        return proposal
-    
-    async def critique(self, proposal: AgentProposal) -> Critique:
-        """Critique by exploring alternative branches."""
-        points = []
-        severity = "minor"
-        
-        # Check if alternatives were considered
-        if "branch" not in str(proposal.reasoning).lower():
-            points.append("Did not explore alternative approaches")
-            severity = "major"
-        
-        # Suggest alternative
-        suggested = "Consider exploring additional solution paths"
-        
-        return Critique(
-            critic_id=self.agent_id,
-            target_id=proposal.agent_id,
-            points=points if points else ["Approach seems reasonable"],
-            severity=severity,
-            suggested_fix=suggested
-        )
-    
-    async def defend(self, critiques: List[Critique]) -> AgentProposal:
-        """Expand exploration based on critiques."""
-        if not self.history:
-            raise ValueError("No previous proposal to defend")
-        
-        last_proposal = self.history[-1]
-        new_steps = last_proposal.reasoning.copy()
-        
-        # Add new branches based on critiques
-        new_steps.append("Expanding exploration based on feedback")
-        
-        new_proposal = AgentProposal(
-            agent_id=self.agent_id,
-            strategy=self.strategy,
-            solution=last_proposal.solution + " (expanded)",
-            reasoning=new_steps,
-            confidence=min(last_proposal.confidence + 0.03, 0.95)
-        )
-        self.history.append(new_proposal)
-        return new_proposal
-    
-    def _generate_branches(self, problem: str) -> List[str]:
-        """Generate possible solution branches."""
-        base_approaches = [
-            "Direct analytical approach",
-            "Decomposition into sub-problems",
-            "Pattern matching with known solutions",
-            "Iterative refinement",
-            "Constraint-based reasoning"
-        ]
-        return random.sample(base_approaches, min(3, len(base_approaches)))
-    
-    def _evaluate_branches(self, branches: List[str]) -> str:
-        """Evaluate and select best branch."""
-        return branches[0] if branches else "Default approach"
 
-class ProgramAidedAgent(ReasoningAgent):
+
+class ProgramAidedAgent(LLMReasoningAgent):
     """Agent using Program-Aided Language reasoning."""
-    
+
     def __init__(self, agent_id: str):
         super().__init__(agent_id, ReasoningStrategy.PAL)
-    
-    async def propose(self, problem: str, context: Dict[str, Any]) -> AgentProposal:
-        """Generate code-based reasoning."""
-        steps = []
-        
-        # Translate to pseudo-code
-        steps.append("Translating problem to computational form")
-        
-        # Generate algorithm
-        algorithm = self._generate_algorithm(problem)
-        steps.append(f"Algorithm: {algorithm}")
-        
-        # Execute (simulate)
-        result = self._simulate_execution(algorithm)
-        steps.append(f"Execution result: {result}")
-        
-        solution = f"Programmatic solution: {result}"
-        confidence = self._calculate_confidence(len(steps), True)
-        
-        proposal = AgentProposal(
-            agent_id=self.agent_id,
-            strategy=self.strategy,
-            solution=solution,
-            reasoning=steps,
-            confidence=confidence
-        )
-        self.history.append(proposal)
-        return proposal
-    
-    async def critique(self, proposal: AgentProposal) -> Critique:
-        """Critique by checking computational validity."""
-        points = []
-        severity = "minor"
-        
-        # Check for computational approach
-        if "algorithm" not in str(proposal.reasoning).lower() and "code" not in str(proposal.reasoning).lower():
-            points.append("Could benefit from computational verification")
-        
-        return Critique(
-            critic_id=self.agent_id,
-            target_id=proposal.agent_id,
-            points=points if points else ["Computationally sound"],
-            severity=severity
-        )
-    
-    async def defend(self, critiques: List[Critique]) -> AgentProposal:
-        """Add computational verification."""
-        if not self.history:
-            raise ValueError("No previous proposal to defend")
-        
-        last_proposal = self.history[-1]
-        new_steps = last_proposal.reasoning.copy()
-        new_steps.append("Added computational verification")
-        
-        new_proposal = AgentProposal(
-            agent_id=self.agent_id,
-            strategy=self.strategy,
-            solution=last_proposal.solution + " (verified)",
-            reasoning=new_steps,
-            confidence=min(last_proposal.confidence + 0.05, 0.95)
-        )
-        self.history.append(new_proposal)
-        return new_proposal
-    
-    def _generate_algorithm(self, problem: str) -> str:
-        """Generate pseudo-algorithm."""
-        return "def solve(input): return process(analyze(input))"
-    
-    def _simulate_execution(self, algorithm: str) -> str:
-        """Simulate algorithm execution."""
-        return "Computed result"
 
-class SelfCritiqueAgent(ReasoningAgent):
+
+class SelfCritiqueAgent(LLMReasoningAgent):
     """Agent using Self-Critique and Revision."""
-    
+
     def __init__(self, agent_id: str):
         super().__init__(agent_id, ReasoningStrategy.CRITIQUE)
-    
-    async def propose(self, problem: str, context: Dict[str, Any]) -> AgentProposal:
-        """Generate self-critiqued solution."""
-        steps = []
-        
-        # Initial attempt
-        steps.append("Initial solution attempt")
-        
-        # Self-critique
-        steps.append("Self-critique: checking for weaknesses")
-        
-        # Revision
-        steps.append("Revised solution after self-critique")
-        
-        solution = "Self-refined solution"
-        confidence = self._calculate_confidence(len(steps), True)
-        
-        proposal = AgentProposal(
-            agent_id=self.agent_id,
-            strategy=self.strategy,
-            solution=solution,
-            reasoning=steps,
-            confidence=confidence
-        )
-        self.history.append(proposal)
-        return proposal
-    
-    async def critique(self, proposal: AgentProposal) -> Critique:
-        """Deep critique with constructive feedback."""
-        points = []
-        severity = "minor"
-        
-        # Thorough analysis
-        if proposal.confidence > 0.8:
-            points.append("High confidence may indicate blind spots")
-        
-        if len(proposal.reasoning) < 4:
-            points.append("Could benefit from more thorough analysis")
-            severity = "major"
-        
-        return Critique(
-            critic_id=self.agent_id,
-            target_id=proposal.agent_id,
-            points=points if points else ["Well-reasoned approach"],
-            severity=severity,
-            suggested_fix="Consider additional self-critique iterations"
-        )
-    
-    async def defend(self, critiques: List[Critique]) -> AgentProposal:
-        """Incorporate critiques into refined solution."""
-        if not self.history:
-            raise ValueError("No previous proposal to defend")
-        
-        last_proposal = self.history[-1]
-        new_steps = last_proposal.reasoning.copy()
-        
-        for critique in critiques:
-            new_steps.append(f"Incorporated feedback: {critique.points[0] if critique.points else 'general'}")
-        
-        new_proposal = AgentProposal(
-            agent_id=self.agent_id,
-            strategy=self.strategy,
-            solution=last_proposal.solution + " (self-revised)",
-            reasoning=new_steps,
-            confidence=min(last_proposal.confidence + 0.07, 0.95)
-        )
-        self.history.append(new_proposal)
-        return new_proposal
 
-class KnowledgeRetrievalAgent(ReasoningAgent):
+
+class KnowledgeRetrievalAgent(LLMReasoningAgent):
     """Agent using External Knowledge Retrieval."""
-    
+
     def __init__(self, agent_id: str):
         super().__init__(agent_id, ReasoningStrategy.RETRIEVAL)
-        self.knowledge_base = {
-            "optimization": "Use gradient descent or evolutionary algorithms",
-            "search": "Apply binary search or hash tables for efficiency",
-            "classification": "Consider decision trees or neural networks",
-            "prediction": "Use regression or time series analysis",
-        }
-    
-    async def propose(self, problem: str, context: Dict[str, Any]) -> AgentProposal:
-        """Generate knowledge-backed solution."""
-        steps = []
-        
-        # Retrieve relevant knowledge
-        knowledge = self._retrieve_knowledge(problem)
-        steps.append(f"Retrieved knowledge: {knowledge}")
-        
-        # Apply knowledge
-        steps.append("Applying domain knowledge to problem")
-        
-        # Synthesize solution
-        solution = f"Knowledge-based solution: {knowledge}"
-        confidence = self._calculate_confidence(len(steps), bool(knowledge))
-        
-        proposal = AgentProposal(
-            agent_id=self.agent_id,
-            strategy=self.strategy,
-            solution=solution,
-            reasoning=steps,
-            confidence=confidence
-        )
-        self.history.append(proposal)
-        return proposal
-    
-    async def critique(self, proposal: AgentProposal) -> Critique:
-        """Critique based on knowledge gaps."""
-        points = []
-        severity = "minor"
-        
-        # Check for knowledge backing
-        if "knowledge" not in str(proposal.reasoning).lower() and "evidence" not in str(proposal.reasoning).lower():
-            points.append("Could benefit from external knowledge verification")
-        
-        return Critique(
-            critic_id=self.agent_id,
-            target_id=proposal.agent_id,
-            points=points if points else ["Well-supported by knowledge"],
-            severity=severity
-        )
-    
-    async def defend(self, critiques: List[Critique]) -> AgentProposal:
-        """Add additional knowledge support."""
-        if not self.history:
-            raise ValueError("No previous proposal to defend")
-        
-        last_proposal = self.history[-1]
-        new_steps = last_proposal.reasoning.copy()
-        new_steps.append("Added additional knowledge references")
-        
-        new_proposal = AgentProposal(
-            agent_id=self.agent_id,
-            strategy=self.strategy,
-            solution=last_proposal.solution + " (knowledge-enhanced)",
-            reasoning=new_steps,
-            confidence=min(last_proposal.confidence + 0.05, 0.95)
-        )
-        self.history.append(new_proposal)
-        return new_proposal
-    
-    def _retrieve_knowledge(self, problem: str) -> str:
-        """Retrieve relevant knowledge."""
-        problem_lower = problem.lower()
-        for key, value in self.knowledge_base.items():
-            if key in problem_lower:
-                return value
-        return "General problem-solving heuristics apply"
 
 # =============================================================================
 # Debate Orchestrator

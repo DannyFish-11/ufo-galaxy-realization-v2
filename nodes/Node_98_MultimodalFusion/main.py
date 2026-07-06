@@ -104,6 +104,15 @@ async def _openai_chat(messages: List[Dict[str, Any]], *, max_tokens: int = 1024
         return resp.json()["choices"][0]["message"]["content"]
 
 
+def _image_content_part(image: str) -> Dict[str, Any]:
+    """Build an OpenAI vision `image_url` content part from a base64 image.
+
+    Accepts either a raw base64 string or an already-prefixed data URI.
+    """
+    url = image if image.startswith("data:") else f"data:image/jpeg;base64,{image}"
+    return {"type": "image_url", "image_url": {"url": url}}
+
+
 def _build_fusion_prompt(
     texts: List[str],
     images: List[str],
@@ -114,7 +123,7 @@ def _build_fusion_prompt(
     """Build the OpenAI messages payload for a multimodal fusion task."""
     system_msg = (
         "You are a multimodal AI assistant. You receive content from multiple "
-        "modalities (text, image descriptions, audio transcripts) and produce a "
+        "modalities (text, images, audio transcripts) and produce a "
         "unified, coherent response for the requested task."
     )
     user_parts: List[str] = []
@@ -122,11 +131,7 @@ def _build_fusion_prompt(
     if texts:
         user_parts.append("## Text inputs\n" + "\n---\n".join(texts))
     if images:
-        user_parts.append(
-            f"## Image inputs ({len(images)} image(s) provided as base64)\n"
-            "[Images are available but rendered as placeholders in this prompt; "
-            "describe and reason about them based on context.]"
-        )
+        user_parts.append(f"## Image inputs\n{len(images)} image(s) attached below.")
     if audio_transcripts:
         user_parts.append("## Audio transcripts\n" + "\n---\n".join(audio_transcripts))
 
@@ -137,9 +142,18 @@ def _build_fusion_prompt(
     }
     user_parts.append(task_instructions.get(task, f"Task: {task}"))
 
+    if images:
+        # Vision models (e.g. gpt-4o-mini) expect the actual image bytes as
+        # image_url content parts, not a text placeholder - forward them for
+        # real, rather than asking the model to guess at images it never saw.
+        user_content: Any = [{"type": "text", "text": "\n\n".join(user_parts)}]
+        user_content.extend(_image_content_part(img) for img in images)
+    else:
+        user_content = "\n\n".join(user_parts)
+
     return [
         {"role": "system", "content": system_msg},
-        {"role": "user", "content": "\n\n".join(user_parts)},
+        {"role": "user", "content": user_content},
     ]
 
 # ---------------------------------------------------------------------------
@@ -222,20 +236,27 @@ async def embed_multimodal(req: EmbedMultimodalRequest):
     system_msg = (
         "You are a multimodal embedding assistant. Given inputs from multiple "
         "modalities, produce a single dense textual description that captures all "
-        "semantically important information. This description will be vectorised."
+        "semantically important information, including what is visible in any "
+        "attached images. This description will be vectorised."
     )
     user_parts: List[str] = []
     if texts:
         user_parts.append("Texts:\n" + "\n".join(f"- {t}" for t in texts))
     if images:
-        user_parts.append(f"Images: {len(images)} image(s) provided (base64 encoded).")
+        user_parts.append(f"Images: {len(images)} image(s) attached below.")
     if audio_transcripts:
         user_parts.append("Audio transcripts:\n" + "\n".join(f"- {a}" for a in audio_transcripts))
     user_parts.append("Produce the unified description now:")
 
+    if images:
+        user_content: Any = [{"type": "text", "text": "\n\n".join(user_parts)}]
+        user_content.extend(_image_content_part(img) for img in images)
+    else:
+        user_content = "\n\n".join(user_parts)
+
     messages = [
         {"role": "system", "content": system_msg},
-        {"role": "user", "content": "\n\n".join(user_parts)},
+        {"role": "user", "content": user_content},
     ]
     description = await _openai_chat(messages, max_tokens=512)
 
