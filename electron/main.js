@@ -692,16 +692,40 @@ let _perceptionFailLogAt = 0;
 let configCache = {};      // 精简版(模型 tab):{api_base_url, ws_url, status, configured, values}
 let settingsCache = {};    // 完整明细(设置 tab):{KEY: {value, default, type, category, description}}
 
+// ── 后端就绪前的启动竞态 ──
+// 真机复现过:Python 后端首次启动(尤其要下语音模型)可能要 1~2 分钟才真正监听
+// 端口,但 Electron 面板几乎立刻就能打开、可交互。用户这段时间内点「保存」，
+// fetch() 直接 ECONNREFUSED，之前【不重试】就直接判失败——用户看到的是一句
+// 干巴巴的"fetch failed"，会以为"所有 API 保存都不管用"，其实只是后端还没
+// 起来。这里给 GET/POST 都加一层重试(短间隔、有限次数)，把这类纯粹的启动期
+// 时序问题吸收掉，不再让用户在这个窗口内的操作直接判死。
+// 真机复现过首次启动光下载语音模型就要 1~2 分钟，重试预算按此设(约 60s 封顶)——
+// 短了盖不住真实的首次启动窗口，长了会让用户的一次点击卡住看起来像"没反应"。
+async function fetchWithRetry(url, options, { retries = 24, delayMs = 2500 } = {}) {
+    let lastErr;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            return await fetch(url, options);
+        } catch (e) {
+            lastErr = e;
+            if (attempt < retries) {
+                await new Promise((r) => setTimeout(r, delayMs));
+            }
+        }
+    }
+    throw lastErr;
+}
+
 // 从 Python 后端获取配置(精简版 —— 模型 tab 消费)
 async function fetchConfigFromBackend() {
     try {
-        const response = await fetch(`${GATEWAY_BASE}/api/config`);
+        const response = await fetchWithRetry(`${GATEWAY_BASE}/api/config`);
         if (response.ok) {
             configCache = await response.json();
             return configCache;
         }
     } catch (e) {
-        console.error('[Main] Failed to fetch config:', e.message);
+        console.error('[Main] Failed to fetch config (已重试仍失败，后端可能还没起来):', e.message);
     }
     return configCache;
 }
@@ -709,13 +733,13 @@ async function fetchConfigFromBackend() {
 // 从 Python 后端获取完整配置明细(设置 tab 消费,与精简版不同路径,避免路由遮蔽)
 async function fetchSettingsFromBackend() {
     try {
-        const response = await fetch(`${GATEWAY_BASE}/api/config/all`);
+        const response = await fetchWithRetry(`${GATEWAY_BASE}/api/config/all`);
         if (response.ok) {
             settingsCache = await response.json();
             return settingsCache;
         }
     } catch (e) {
-        console.error('[Main] Failed to fetch settings:', e.message);
+        console.error('[Main] Failed to fetch settings (已重试仍失败，后端可能还没起来):', e.message);
     }
     return settingsCache;
 }
@@ -731,9 +755,13 @@ ipcMain.handle('galaxy:get-settings', async () => {
 });
 
 // SET 配置（批量更新）
+// 真机复现过:用户在后端刚起步(下载语音模型等)那 1~2 分钟内点保存 API Key，
+// fetch 直接连接被拒——不重试的话，用户这次操作会被判定为彻底失败，会
+// 误以为"这个 Key 存不进去/这套东西坏了"，实际上只是碰上了启动期的窗口，
+// 稍后重试本该就能成功。这里跟 GET 一样加重试，把这类瞬时不可达吸收掉。
 ipcMain.handle('galaxy:set-config', async (_, config) => {
     try {
-        const response = await fetch(`${GATEWAY_BASE}/api/config`, {
+        const response = await fetchWithRetry(`${GATEWAY_BASE}/api/config`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             // 后端 ConfigUpdateRequest 要求 {config: {...}} 形状，不能直接发裸对象
@@ -766,19 +794,19 @@ ipcMain.handle('galaxy:set-config', async (_, config) => {
         }
         return { success: false, error: detail };
     } catch (e) {
-        console.error('[Main] Failed to set config:', e.message);
-        return { success: false, error: e.message };
+        console.error('[Main] Failed to set config (已重试仍失败):', e.message);
+        return { success: false, error: `无法连接后端(已重试多次)：${e.message} —— 后端可能仍在启动中，请稍后重试` };
     }
 });
 
 // 保存配置到文件
 ipcMain.handle('galaxy:save-config', async () => {
     try {
-        const response = await fetch(`${GATEWAY_BASE}/api/config/save`, {
+        const response = await fetchWithRetry(`${GATEWAY_BASE}/api/config/save`, {
             method: 'POST',
         });
         return { success: response.ok };
     } catch (e) {
-        return { success: false, error: e.message };
+        return { success: false, error: `无法连接后端(已重试多次)：${e.message}` };
     }
 });
