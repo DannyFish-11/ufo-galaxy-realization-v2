@@ -264,6 +264,40 @@ def ai_brain_readiness(
     return status, model_installed, label
 
 
+async def _recheck_ai_brain_phase(brain, phases_state: list, ai_brain_phase_idx: int) -> None:
+    """在总结卡打印前，重新探测一次 AI 大脑真实状态，好转了就更新对应条目。
+
+    真机复现过:"AI 大脑"这一行的状态是在 select_and_start_brain() 刚返回那一刻
+    算出来、写死进 phases_state 的——但 background_pull() 是故意不阻塞启动的
+    后台线程，那一刻很可能还没跑完(甚至 Ollama 服务本身当时都还在冷启动，没
+    来得及在 _ensure_ollama_running() 的等待窗口内响应)。等到节点系统、L4
+    模块、Electron、托盘、语音这些阶段都跑完、真正要打总结卡时，Ollama 大概率
+    已经起来、模型也大概率已经拉好了，但总结卡"降级"栏用的还是那份过时快照，
+    导致用户看到"AI 大脑 → 未安装(拉取失败/未完成)"，实际上模型已经真的装好
+    可用——这是过期状态展示的问题，不是模型真的没装好。
+
+    只在这里把状态往"更好"的方向纠正(never downgrade)，且只在探测到真实证据
+    (ping 通 + 模型列表刷新)时才改，不主观放宽判定标准。
+    """
+    try:
+        if brain is None or not (0 <= ai_brain_phase_idx < len(phases_state)):
+            return
+        healthy2 = bool(getattr(brain, "_healthy", False)) or await brain._ping_ollama()
+        if healthy2:
+            brain._healthy = True
+            await brain._refresh_model_list()
+        bm2 = getattr(brain, "brain_model", None) or os.environ.get("OLLAMA_MODEL", "") or "未选择"
+        avail2 = list(getattr(brain, "available_models", []) or [])
+        st2, model_installed2, label2 = ai_brain_readiness(bm2, avail2, healthy2)
+        name0, status0, _hint0 = phases_state[ai_brain_phase_idx]
+        if status0 != "ok" and st2 != status0:
+            phases_state[ai_brain_phase_idx] = (
+                name0, st2, (None if model_installed2 else label2)
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("AI 大脑状态复核跳过(非致命): %s", exc)
+
+
 # ============================================================================
 # Launcher sub-module imports
 # (Enums, config, service management, core/node/health/shutdown)
@@ -1330,6 +1364,7 @@ class GalaxyUnified:
             # 打 ✓、显示"就绪",用户看着一片绿实际上一句话都问不出来(每次调用都
             # 404)。ai_brain_readiness() 额外核实选中模型是否真的在已安装列表里。
             st, model_installed, model_status_label = ai_brain_readiness(bm, avail, healthy)
+            ai_brain_phase_idx = len(phases_state)
             _emit("AI 大脑", f"{bm}  ·  {hw}" + ("" if model_installed else "  ⚠ 模型未就绪"), st,
                   hint=(None if model_installed else model_status_label), details=[
                 ("Ollama 推理服务", "就绪" if healthy else "未就绪（检查 ollama 是否运行）",
@@ -1339,6 +1374,7 @@ class GalaxyUnified:
                 ("硬件", hw, "ok"),
             ])
         except Exception as exc:
+            ai_brain_phase_idx = len(phases_state)
             _emit("AI 大脑", "启动失败", "fail")
             logger.error(f"Local brain: {exc}")
 
@@ -1439,6 +1475,19 @@ class GalaxyUnified:
              else "未启用（详见上方日志；GALAXY_VOICE=0 永久关闭）"),
             "ok" if voice_ok else "warn",
         )
+
+        # ── AI 大脑状态复核（总结卡打印前）──
+        # 真机复现过:"AI 大脑"这一行的状态是在 select_and_start_brain() 刚返回
+        # 那一刻算出来、写死进 phases_state 的——但 background_pull() 是故意
+        # 不阻塞启动的后台线程，此时很可能还没跑完(甚至 Ollama 服务本身当时都
+        # 还在冷启动、没来得及在 _ensure_ollama_running() 的等待窗口内响应)。
+        # 等到节点系统、L4 模块、Electron、托盘、语音这些阶段都跑完、真正要打
+        # 总结卡的这一刻，Ollama 大概率已经起来、模型也大概率已经拉好了，但
+        # 总结卡的"降级"栏之前一直用的是那个过时快照，导致用户看到"AI 大脑 →
+        # 未安装(拉取失败/未完成)"，实际上模型已经真的装好可用——这是过期状态
+        # 展示的问题，不是模型真的没装好。这里在打印总结卡前重新探测一次真实
+        # 状态，好转了就更新对应条目，不去猜、不主观放宽判定标准。
+        await _recheck_ai_brain_phase(getattr(self, "_brain", None), phases_state, ai_brain_phase_idx)
 
         # ── 总结卡：状态 + 关键入口 + 降级项 + 下一步 ──
         ok_n = sum(1 for _, s, _h in phases_state if s == "ok")
