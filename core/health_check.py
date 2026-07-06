@@ -36,11 +36,21 @@ def get_system_metrics() -> Dict[str, Any]:
         },
     }
 
-    # 优先尝试 SystemLoadMonitor
+    # 优先尝试 SystemLoadMonitor（读共享单例的后台采样缓存，绝不现算）
+    #
+    # 真机复现过:这里之前每次都 `SystemLoadMonitor()` 现 new 一个全新实例、
+    # 直接调用 get_system_load() —— 它内部要枚举全部进程(psutil.process_iter)，
+    # Windows 上单次就要 2-5 秒，而这个函数是从 /metrics、/health/deep 两个
+    # async 路由里同步直接调用的，每次命中都会把整个事件循环卡住 2-5 秒。
+    # 现在改用真正共享、由 core.startup.bootstrap_subsystems 启动了后台采样
+    # 循环的单例，只读它的缓存；缓存还没有(刚启动的一瞬间)才落到下面更便宜的
+    # 直接采集分支，而不是现算一次昂贵的完整负载。
     try:
-        from core.system_load_monitor import SystemLoadMonitor
-        monitor = SystemLoadMonitor()
-        load = monitor.get_system_load()
+        from core.system_load_monitor import get_monitor
+        monitor = get_monitor()
+        load = monitor.get_cached_load()
+        if load is None:
+            raise LookupError("no cached load sample yet")
         metrics["memory"] = {
             "total_mb": round(load.memory.total_bytes / 1024 / 1024, 1),
             "available_mb": round(load.memory.available_bytes / 1024 / 1024, 1),

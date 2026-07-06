@@ -1148,15 +1148,30 @@ class GalaxyUnified:
             return False
 
     async def select_and_start_brain(self):
-        """Phase 5：先选主脑（硬件推荐 + 手动选，放第 5 步而非开头），再启动本地大脑。"""
+        """Phase 5：先选主脑（硬件推荐 + 手动选，放第 5 步而非开头），
+        再确保 Ollama 服务本身真的起来了，最后才后台拉取模型。
+
+        修复:之前 background_pull() 在 start_local_brain() 之前就立即触发——
+        它开的后台线程第一件事就是探测 Ollama 是否可达，那时 Ollama 服务本身
+        可能压根还没起来(尤其 Windows 首次冷启动，GPU/驱动探测、杀毒软件扫描
+        exe 都会拖慢 ollama serve 绑定 11434 端口的时间)。start_local_brain()
+        内部(LocalBrainManager._ensure_ollama_running)已经有专门等 Ollama
+        就绪的重试逻辑(最长约 40 秒)，但 background_pull() 走的是完全独立的
+        一次性尝试、连不上就直接判定失败退出，不会重试、也不会等 Ollama
+        追上来——真机反馈"不管是重新启动还是手动重试，模型拉取都失败"，
+        根因就是这个顺序颠倒的竞态:每次启动都在 Ollama 真正就绪前就已经
+        打完这一枪、后台线程退出，直到下次重启又原样重演同一个竞态，
+        看起来像是"怎么修都没用"。这里把 start_local_brain() 挪到
+        background_pull() 之前，确保后台拉取真正开始时 Ollama 已确认可达。
+        """
         import asyncio as _asyncio
+        chosen = ""
         # 选择主脑：交互 input 放线程，避免阻塞事件循环。env(OLLAMA_MODEL)/已保存优先，
         # 否则按硬件推荐 + 让用户手动选（见 core.model_selection）。
         try:
             from core import model_selection as ms
             chosen = await _asyncio.to_thread(ms.resolve_main_brain, True)
             if chosen:
-                ms.background_pull(chosen)  # 本地缺失则后台 ollama pull
                 # 证据链：把主脑选型（最终模型 + 硬件 + 候选 + 推荐理由）落进启动会话，
                 # 以后能回答「这次为什么选了它、是按什么硬件推荐的」。best-effort。
                 try:
@@ -1177,8 +1192,14 @@ class GalaxyUnified:
                     pass
         except Exception as exc:  # noqa: BLE001
             logger.warning("主脑选择跳过(非致命): %s", exc)
-        # 启动本地大脑（LocalBrainManager 读 OLLAMA_MODEL 作主脑）
+
+        # 启动本地大脑（LocalBrainManager 读 OLLAMA_MODEL 作主脑，确认 Ollama
+        # 服务本身已就绪）—— 必须先于下面的后台拉取执行。
         await self.start_local_brain()
+
+        if chosen:
+            from core import model_selection as ms
+            ms.background_pull(chosen)  # 本地缺失则后台 ollama pull（Ollama 此时已确认可达）
 
     async def launch_web_ui(self):
         """启动 Web UI / API 网关。"""

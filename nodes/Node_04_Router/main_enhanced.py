@@ -24,7 +24,12 @@ app = FastAPI(title="Node 04: Enhanced Global Router")
 
 from core.port_config import get_service_port
 
-ONEAPI_URL = os.getenv("ONEAPI_URL", f"http://localhost:{get_service_port('oneapi_web')}/v1/chat/completions")
+_oneapi_url_raw = os.getenv("ONEAPI_URL", "").strip()
+ONEAPI_URL = (
+    (_oneapi_url_raw if _oneapi_url_raw.startswith(("http://", "https://")) else f"http://{_oneapi_url_raw}")
+    if _oneapi_url_raw
+    else f"http://localhost:{get_service_port('oneapi_web')}/v1/chat/completions"
+)
 ONEAPI_KEY = os.getenv("ONEAPI_API_KEY", "")
 PROTOCOL_PATH = os.getenv("PROTOCOL_PATH", "/app/config/tool_discovery_protocol.yaml")
 

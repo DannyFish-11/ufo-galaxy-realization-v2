@@ -99,6 +99,21 @@ class LocalBrainManager:
         "vicuna:7b": 4500,
     }
 
+    @staticmethod
+    def _normalize_ollama_url(raw: str) -> str:
+        """确保 URL 带 http(s):// 协议头。
+
+        真机复现过:用户在面板「模型」tab 填 OLLAMA_URL 时只填了 host:port
+        (如 "localhost:11434"),没带协议头。这里不做兜底的话,值会原样存进
+        self.ollama_url,直到真的发起 httpx 请求时才炸
+        "Request URL is missing an 'http://' or 'https://' protocol."——
+        和 core.multi_llm_router._normalize_base_url 同一处理方式。
+        """
+        raw = (raw or "").strip()
+        if raw and not raw.startswith(("http://", "https://")):
+            raw = f"http://{raw}"
+        return raw
+
     def __init__(self, backend: str = "auto", ollama_url: Optional[str] = None):
         """
         Args:
@@ -107,8 +122,9 @@ class LocalBrainManager:
         """
         self.backend_name = backend
         self._backend = None  # LocalModelBackend instance
-        _raw = ollama_url or os.environ.get("OLLAMA_URL", self.OLLAMA_DEFAULT_URL)
-        self.ollama_url = _raw if not _raw or _raw.startswith(("http://", "https://")) else f"http://{_raw}"
+        self.ollama_url = self._normalize_ollama_url(
+            ollama_url or os.environ.get("OLLAMA_URL", self.OLLAMA_DEFAULT_URL)
+        )
         self.available_models: List[str] = []
         # 主脑模型：优先用启动时选定的 OLLAMA_MODEL（见 core.model_selection / Phase 5），
         # 未选时回退 Gemma 4 12B —— 让"第 5 步选的主脑"真正驱动本地大脑加载。
