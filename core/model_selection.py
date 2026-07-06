@@ -33,7 +33,7 @@ _LABELS: Dict[str, Tuple[str, str]] = {
     "gemma4:12b":            ("Google Gemma 4 12B", "文本 + 视觉 + 原生音频(听) + 工具调用，128K"),
     "openbmb/minicpm-o4.5":  ("MiniCPM-o 4.5 (9B)", "全模态：看 + 听 + 说，全双工(需显卡)"),
     "gemma4:e4b":            ("Google Gemma 4 E4B", "文本 + 视觉 + 原生音频(听)，中等显存"),
-    "gemma4:e2b":            ("Google Gemma 4 E2B", "文本 + 视觉 + 原生音频(听)，小显存/轻量"),
+    "gemma4:e2b":            ("Google Gemma 4 E2B", "文本 + 视觉 + 原生音频(听)，轻量"),
 }
 _SMALLEST_FALLBACK = "gemma4:e2b"
 
@@ -243,7 +243,8 @@ def background_pull(tag: str) -> None:
     def _pull() -> None:
         try:
             import httpx
-            base = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+            _raw = os.environ.get("OLLAMA_URL", "http://localhost:11434").strip()
+            base = (_raw if _raw.startswith(("http://", "https://")) else f"http://{_raw}").rstrip("/")
             have: List[str] = []
             try:
                 r = httpx.get(f"{base}/api/tags", timeout=3.0)
