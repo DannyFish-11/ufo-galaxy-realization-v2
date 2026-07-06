@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useConfigCache } from '@/hooks/useConfigCache';
 import { getBackendUrl } from '@/lib/api';
 import './SettingsTab.css';
 
@@ -325,26 +326,27 @@ export default function SettingsTab() {
   // 节点启停方式:子进程(默认,轻)或 容器(跑进所选 Docker/Podman,首次 build 慢)。
   const [nodeMode, setNodeMode] = useState<'subprocess' | 'container'>('subprocess');
 
-  // ── Load config on mount ─────────────────────────────────────────
+  // ── Load config via shared cache ─────────────────────────────────
 
-  const loadConfig = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchSettings();
-      setConfig(data);
-      setChanged({});
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '加载配置失败';
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const {
+    data: cacheData,
+    loading: cacheLoading,
+    error: cacheError,
+    reload: loadConfig,
+    invalidate,
+  } = useConfigCache(fetchSettings, []);
 
+  // 同步 loading/error 状态
+  useEffect(() => { setLoading(cacheLoading); }, [cacheLoading]);
+  useEffect(() => { setError(cacheError); }, [cacheError]);
+
+  // 当 cache 数据加载/刷新时，同步到本地 config
   useEffect(() => {
-    loadConfig();
-  }, [loadConfig]);
+    if (cacheData) {
+      setConfig(cacheData);
+      setChanged({});
+    }
+  }, [cacheData]);
 
   // ── 拉节点名单 + 连接器状态(端口与节点页用);每 15s 刷新 ──
   useEffect(() => {
@@ -460,15 +462,8 @@ export default function SettingsTab() {
             return { success: false, error: detail };
           })();
       if (result.success) {
-        setConfig((prev) => {
-          const updated = { ...prev };
-          Object.entries(changed).forEach(([k, v]) => {
-            if (updated[k]) {
-              updated[k] = { ...updated[k], value: v };
-            }
-          });
-          return updated;
-        });
+        // 保存成功后使缓存失效，确保读到服务端真值
+        invalidate();
         setChanged({});
         showToast('已保存并即时生效');
       } else {
@@ -480,7 +475,7 @@ export default function SettingsTab() {
       const msg = err instanceof Error ? err.message : '';
       showToast(`保存出错：${msg}`);
     }
-  }, [changed, showToast]);
+  }, [changed, invalidate, showToast]);
 
   // ── Cancel handler ───────────────────────────────────────────────
 
