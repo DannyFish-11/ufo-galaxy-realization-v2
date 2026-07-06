@@ -1,6 +1,6 @@
 # Galaxy — 桌面原生 AI 助手系统
 
-> **官方文档 v10.0** | **更新日期**: 2026-05-31 | **代码规模**: ~74万行 Python (1,683 文件) | **节点**: 133 个
+> **官方文档 v10.0** | **更新日期**: 2026-05-31 | **代码规模**: ~74万行 Python (1,683 文件) | **节点**: 125 个
 
 ---
 
@@ -35,7 +35,7 @@ Galaxy 是一个**桌面原生 AI 助手操作系统**，通过 Electron 三态�
 | **三态交互** | SILENT (静默) → LIMINAL (处理中) → MANIFEST (结果展示) |
 | **远程服务器** | SSH 远程操作，支持华为云/阿里云等任意 Linux 服务器 |
 | **沙箱安全** | 危险命令黑名单 + PolicyGate 应用白名单 |
-| **133 个节点** | 覆盖数据库、搜索、媒体、智能家居、物理设备等 |
+| **125 个节点** | 覆盖数据库、搜索、媒体、智能家居、物理设备等 |
 | **Skill 系统** | 动态加载自定义技能包 |
 | **DAG 编排** | StarSplit + 预测性调度 + 不变量验证 |
 
@@ -45,7 +45,7 @@ Galaxy 是一个**桌面原生 AI 助手操作系统**，通过 Electron 三态�
 |------|------|
 | 核心代码 (core+gateway+nodes+enhancements+skills+launcher) | ~663,105 行 (1,530 文件) |
 | **Android 客户端** | **~283,378 行 Kotlin (200+ 文件)** |
-| 节点数量 | 133 个 |
+| 节点数量 | 125 个 |
 | 路由端点总数 | ~300+ 个 |
 | 文档数量 | 206 个 Markdown |
 | Docker 服务 | 17 个 |
@@ -58,11 +58,12 @@ Galaxy 是一个**桌面原生 AI 助手操作系统**，通过 Electron 三态�
 | 前端 | Electron + Three.js + WebGL (CRT 扫描线效果) |
 | 后端 | FastAPI + Uvicorn + WebSocket |
 | AI 模型 | Google Gemma 4 / DeepSeek / OpenRouter / Groq |
-| 数据库 | PostgreSQL + SQLite + Qdrant (向量) + Neo4j (图) + MongoDB |
+| 数据库 | SQLite(各节点本地持久化,广泛使用) + Qdrant(向量,已接入) |
+| 数据库(已置备,代码未接入实际读写) | PostgreSQL + Neo4j(图) + MongoDB —— docker-compose 提供容器,依赖检测存在,但业务代码没有真正的客户端读写路径 |
 | 缓存 | Redis |
 | 消息队列 | NATS JetStream |
 | 容器 | Docker + Docker Compose |
-| 工作流 | Temporal |
+| 工作流 | Temporal(可选,真实接入)——`core/temporal_workflows.py` 定义了真实的 workflow(代码执行/多设备任务/工具发现),由 `core/master_brain.py` 启动;需要 `temporalio` 包(已在 requirements.txt)+ 可达的 Temporal 服务(docker-compose 提供)才会真正激活,否则优雅降级为不可用 |
 | 监控 | Grafana |
 
 ---
@@ -109,7 +110,7 @@ Galaxy 是一个**桌面原生 AI 助手操作系统**，通过 Electron 三态�
                     │                             │
                     │  ┌─────────────────────┐    │
                     │  │   能力注册中心        │    │
-                    │  │   (133 个节点)       │    │
+                    │  │   (125 个节点)       │    │
                     │  └─────────────────────┘    │
                     └──────────┬──────────────────┘
                                │
@@ -227,7 +228,7 @@ ufo-galaxy/
 │           ├── glass_panel_bg.png  # 雨滴背景
 │           └── assets/              # 编译产物
 │
-├── nodes/                           # 133 个节点
+├── nodes/                           # 125 个节点
 │   ├── Node_Linux_Agent/           # [新增]远程Linux
 │   ├── Node_Tavily_Search/         # [新增]AI搜索
 │   ├── Node_80_KnowledgeBase/      # [新增]混合知识库
@@ -249,7 +250,7 @@ ufo-galaxy/
 │   ├── Node_112_SelfHealing/       # 自愈
 │   ├── Node_113_AndroidVLM/        # AndroidVLM
 │   ├── Node_118_NodeFactory/       # 节点工厂
-│   └── ... (133个)
+│   └── ... (125个)
 │
 ├── skills/                          # Skill系统
 │   └── examples/                    # 示例Skill
@@ -298,7 +299,7 @@ OpenClawd 是系统的认知和执行核心，采用 Continuum 编排模式：
 
 ### 3.3 能力注册中心
 
-133 个节点通过统一能力注册中心自动发现和调用：
+125 个节点通过统一能力注册中心自动发现和调用：
 
 ```
 能力注册 → 能力发现 → 状态跟踪 → 持久化存储
@@ -355,7 +356,7 @@ config/    名称/分类    在线/离线   capabilities.json
 
 ### 4.1 节点分类
 
-系统包含 **133 个节点**，按功能分类：
+系统包含 **125 个节点**，按功能分类：
 
 #### 基础服务 (0-9)
 
