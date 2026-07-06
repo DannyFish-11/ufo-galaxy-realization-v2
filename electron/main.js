@@ -377,7 +377,7 @@ app.whenReady().then(async () => {
     // Toggle AI Control Panel (Colorless Lens)
     // F12 在很多环境会被开发者工具/输入法/其他应用占用，因此注册一组候选
     // 快捷键：任意一个成功即可开关面板，避免"按了没反应"。
-    const PANEL_SHORTCUTS = ['F12', 'CommandOrControl+F12', 'CommandOrControl+Shift+P'];
+    const PANEL_SHORTCUTS = ['F12', 'CommandOrControl+F12', 'Alt+F12', 'CommandOrControl+Shift+P'];
     const registeredShortcuts = PANEL_SHORTCUTS.filter((accel) => {
         try {
             return globalShortcut.register(accel, () => togglePanel());
@@ -594,6 +594,21 @@ function togglePanel() {
         win.focus();
         isPanelVisible = true;
         console.log('[Panel] Created & Shown (F12)');
+    } else {
+        // 修复:createPanelWindow() 找不到面板构建产物时返回 null，之前这里
+        // 什么反馈都没有——用户按 F12/走托盘，看起来"完全没反应"，只有翻
+        // logs/electron.log 才能看到那行"panel build not found"。现在弹一个
+        // 看得见的提示，不再是纯粹的静默失败。
+        console.error('[Panel] 面板窗口创建失败(构建产物缺失或加载异常)');
+        try {
+            dialog.showMessageBox({
+                type: 'error',
+                title: 'Galaxy 控制面板',
+                message: '面板打不开',
+                detail: '面板构建产物缺失或加载失败。请在 electron/renderer/panel 目录下运行：\n' +
+                    'npm install && npm run build\n然后重启应用。详情见 logs/electron.log。',
+            });
+        } catch (e) { /* 忽略弹窗失败 */ }
     }
 }
 
