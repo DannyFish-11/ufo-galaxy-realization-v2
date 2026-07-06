@@ -243,7 +243,12 @@ def background_pull(tag: str) -> None:
     def _pull() -> None:
         try:
             import httpx
-            base = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+            # 修复: os.environ.get("OLLAMA_URL", DEFAULT) 在 key 存在但值为空字符串时
+            # 返回 "" 而非 DEFAULT —— httpx 随后尝试用相对 URL (如 '/api/tags') 请求，
+            # 抛 InvalidURL。改为先取 env 值、strip 后判断，空值才走 DEFAULT，
+            # 与 local_brain_manager 中的修复保持一致。
+            _env_ollama_url = os.environ.get("OLLAMA_URL", "")
+            base = (_env_ollama_url.strip() or "http://localhost:11434").rstrip("/")
             have: List[str] = []
             try:
                 r = httpx.get(f"{base}/api/tags", timeout=3.0)
