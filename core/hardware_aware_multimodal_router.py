@@ -445,7 +445,11 @@ class HardwareAwareMultimodalRouter:
         if self._ollama_available:
             try:
                 import httpx
-                resp = httpx.get("http://localhost:11434/api/tags", timeout=3.0)
+                # 修复:原来硬编码 http://localhost:11434，未使用 _ollama_base_url() 兜底。
+                # 用户自定义 OLLAMA_URL（尤其只填 host:port 无协议头）时，同步路径永远
+                # 探测不到 Ollama，导致本地模型列表为空、路由直接落到 API。
+                base = _ollama_base_url()
+                resp = httpx.get(f"{base}/api/tags", timeout=3.0)
                 if resp.status_code == 200:
                     for m in resp.json().get("models", []):
                         models["llm"].append({

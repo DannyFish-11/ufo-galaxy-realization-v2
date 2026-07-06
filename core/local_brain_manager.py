@@ -1,22 +1,3 @@
-"""
-本地主脑管理器 (Local Brain Manager)
-====================================
-
-负责管理本地 LLM 主脑（Ollama），确保其常驻运行，
-管理本地模型（下载/切换/卸载），健康检查，
-并向路由器报告可用性。
-
-架构定位：
-- 本地主脑优先策略的执行层
-- MultiLLMRouter 的辅助组件
-- 在 unified_launcher 启动序列中优先启动
-
-LOCAL-BRAIN-FIRST:
-- Ollama 作为默认主脑处理所有请求
-- 超出本地能力时才调用云端 API
-- 云端结果回流本地主脑整合
-"""
-
 import os
 import sys
 import json
@@ -126,7 +107,8 @@ class LocalBrainManager:
         """
         self.backend_name = backend
         self._backend = None  # LocalModelBackend instance
-        self.ollama_url = ollama_url or os.environ.get("OLLAMA_URL", self.OLLAMA_DEFAULT_URL)
+        _raw = ollama_url or os.environ.get("OLLAMA_URL", self.OLLAMA_DEFAULT_URL)
+        self.ollama_url = _raw if not _raw or _raw.startswith(("http://", "https://")) else f"http://{_raw}"
         self.available_models: List[str] = []
         # 主脑模型：优先用启动时选定的 OLLAMA_MODEL（见 core.model_selection / Phase 5），
         # 未选时回退 Gemma 4 12B —— 让"第 5 步选的主脑"真正驱动本地大脑加载。

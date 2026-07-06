@@ -473,9 +473,11 @@ class SystemLoadMonitor:
     
     async def _monitor_loop(self):
         """监控循环"""
+        loop = asyncio.get_running_loop()
         while self._running:
             try:
-                self.get_system_load()
+                # offload 到线程池避免 psutil.process_iter 阻塞事件循环
+                await loop.run_in_executor(None, self.get_system_load)
                 await asyncio.sleep(self.sample_interval)
             except asyncio.CancelledError:
                 break

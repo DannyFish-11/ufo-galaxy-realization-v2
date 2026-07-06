@@ -71,18 +71,18 @@ function App() {
         <div className="view-slot" style={{ display: activeTab === 0 ? 'flex' : 'none' }}>
           <ConversationView onStreamPhase={setStreamPhase} />
         </div>
-        {activeTab === 1 && <MeshView data={panelData} />}
-        {activeTab === 2 && <CapabilitiesView data={panelData} />}
-        {activeTab === 3 && (
-          <div className="view-slot">
-            <ModelsTab />
-          </div>
-        )}
-        {activeTab === 4 && (
-          <div className="view-slot">
-            <SettingsTab />
-          </div>
-        )}
+        <div className="view-slot" style={{ display: activeTab === 1 ? 'flex' : 'none' }}>
+          <MeshView data={panelData} />
+        </div>
+        <div className="view-slot" style={{ display: activeTab === 2 ? 'flex' : 'none' }}>
+          <CapabilitiesView data={panelData} />
+        </div>
+        <div className="view-slot" style={{ display: activeTab === 3 ? 'flex' : 'none' }}>
+          <ModelsTab />
+        </div>
+        <div className="view-slot" style={{ display: activeTab === 4 ? 'flex' : 'none' }}>
+          <SettingsTab />
+        </div>
       </main>
 
       <PresencePanel

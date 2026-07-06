@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { useConfigCache } from '@/hooks/useConfigCache';
 import './ModelsTab.css';
 
 /**
@@ -173,29 +174,20 @@ function ProviderRow({
 }
 
 export default function ModelsTab() {
-  const [configured, setConfigured] = useState<Record<string, boolean>>({});
-  const [values, setValues] = useState<Record<string, string>>({});
   const [changed, setChanged] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
-    try {
-      const cfg = await fetchConfig();
-      setConfigured(cfg.configured ?? {});
-      setValues(cfg.values ?? {});
-      setChanged({});
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '加载配置失败');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const {
+    data: cfg,
+    loading,
+    error,
+    reload: load,
+    invalidate,
+  } = useConfigCache(fetchConfig, []);
 
-  useEffect(() => { load(); }, [load]);
+  const configured = cfg?.configured ?? {};
+  const values = cfg?.values ?? {};
 
   // 输入框显示值:用户改过取改动值,否则取后端回填的非敏感值(密钥无回填→空)
   const get = useCallback(
@@ -228,8 +220,8 @@ export default function ModelsTab() {
     try {
       const result = await saveConfig(changed);
       if (result.success) {
-        // 保存成功后回读服务端真值(configured/values 刷新),而非本地臆测。
-        await load();
+        // 保存成功后使缓存失效并重新加载，回读服务端真值
+        invalidate();
         flash('已保存并即时生效');
       } else {
         // 修复:之前不管真实原因是什么,一律显示"保存失败"四个字。现在把
@@ -239,7 +231,7 @@ export default function ModelsTab() {
     } catch (e) {
       flash(`保存出错：${e instanceof Error ? e.message : ''}`);
     }
-  }, [changed, flash, load]);
+  }, [changed, flash, invalidate]);
 
   // 状态统计
   const allProviders = [...OPEN_CLOUD, ...PROPRIETARY, ...AGGREGATE];
