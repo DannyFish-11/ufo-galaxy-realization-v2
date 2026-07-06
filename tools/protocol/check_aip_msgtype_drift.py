@@ -74,6 +74,9 @@ CLIENT_ONLY_EXTENSIONS: Set[str] = {
     "event",           # 客户端通用 UI 事件
     "liquid_event",    # 灵动岛/液态玻璃动效事件(client 内部)
     "decision_request",  # HITL 人类决策请求(wearos 本地渲染用)
+    "unknown",         # Android 反序列化失败时的本地哨兵值,仅用于读路径
+                       # (GalaxyWebSocketClient/MessageRouter 的 msgType == null 分支),
+                       # 从不作为 wire 值真正发给 server —— 见 2026-07 排查。
 }
 
 
@@ -154,14 +157,26 @@ def main() -> int:
             os.path.join(args.android, "shared-protocol", "src", "main", "java",
                          "com", "ufo", "galaxy", "shared", "protocol", "MsgType.kt"),
         ),
-        "wearos": _first_existing(
-            os.path.join(args.wearos, "app", "src", "main", "java",
-                         "com", "galaxy", "wear", "data", "MsgType.kt"),
-        ),
+        # WearOS no longer keeps its own copy - settings.gradle.kts includes
+        # Android's :shared-protocol module directly (project(":shared-protocol")
+        # points at ../ufo-galaxy-android/shared-protocol), so it uses the
+        # exact same MsgType.kt as Android. Checking a wearos-local data/MsgType.kt
+        # here would be checking a file that was deliberately deleted, not a
+        # missing checkout.
+        "wearos": None,
     }
 
     any_unknown = False
     for name, path in clients.items():
+        if name == "wearos":
+            wearos_settings = os.path.join(args.wearos, "settings.gradle.kts")
+            if os.path.isfile(wearos_settings) and "shared-protocol" in open(wearos_settings, encoding="utf-8").read():
+                print(f"[{name}] 复用 android 的 :shared-protocol 模块(settings.gradle.kts 里 project(\":shared-protocol\") "
+                      f"指向 ../ufo-galaxy-android/shared-protocol),wire 值与上面的 android 检查结果完全一致,跳过重复检查。")
+            else:
+                print(f"[{name}] 未找到 MsgType.kt 也未复用 android 的 shared-protocol 模块(仓库未 checkout 或已改变依赖方式),跳过。")
+            print()
+            continue
         if not path:
             print(f"[{name}] 未找到 MsgType.kt(仓库未 checkout),跳过。")
             continue
