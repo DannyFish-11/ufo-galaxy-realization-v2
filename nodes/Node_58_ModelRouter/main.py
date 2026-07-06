@@ -40,7 +40,16 @@ NODE_ID = os.getenv("NODE_ID", "58")
 NODE_NAME = os.getenv("NODE_NAME", "ModelRouter")
 STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", f"http://localhost:{get_service_port('state_machine')}")
 TRANSFORMER_URL = os.getenv("TRANSFORMER_URL", f"http://localhost:{get_node_port('Node_50_Transformer')}")
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+def _normalize_ollama_url(raw: str) -> str:
+    """兜底补协议头:用户在面板只填 host:port 时,os.getenv 的默认值不会生效
+    (key 已存在),原样传给 httpx 会在真正请求时炸 missing protocol。"""
+    raw = (raw or "").strip()
+    if not raw:
+        return "http://localhost:11434"
+    return raw if raw.startswith(("http://", "https://")) else f"http://{raw}"
+
+
+OLLAMA_URL = _normalize_ollama_url(os.getenv("OLLAMA_URL", ""))
 ONEAPI_URL = os.getenv("ONEAPI_URL", f"http://localhost:{get_service_port('oneapi_web')}")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "data", "router.db"))

@@ -191,7 +191,17 @@ async def update_config(req: ConfigUpdateRequest):
         )
 
     for key, value in req.config.items():
-        os.environ[key] = str(value)
+        value = str(value)
+        # 真机复现过:用户在面板填 url 类字段(OLLAMA_URL/ONEAPI_URL 等)时只填了
+        # host:port(如 "localhost:11434"),没带协议头。这个值原样落进 .env,
+        # 直到真正发起请求时 httpx 才会炸「missing 'http://' or 'https://'
+        # protocol」——用户看到的只是笼统的"LLM 调用失败"。在写入这一步就
+        # 补全协议头,而不是指望每个读它的消费端都记得自己校验。
+        if CONFIG_SCHEMA[key]["type"] == "url":
+            stripped = value.strip()
+            if stripped and not stripped.startswith(("http://", "https://")):
+                value = f"http://{stripped}"
+        os.environ[key] = value
 
     # OLLAMA_MODEL 有两个持久化存点:.env(本函数写)和 .galaxy_model
     # (core.model_selection.save_choice() 写,resolve_main_brain() 在 env 变量

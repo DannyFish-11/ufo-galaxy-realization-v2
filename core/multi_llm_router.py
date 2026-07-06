@@ -939,6 +939,23 @@ class MultiLLMRouter:
         return os.environ.get(key_name.upper() if "_" in key_name else key_name, "")
 
     @staticmethod
+    def _normalize_base_url(raw: str) -> str:
+        """确保 URL 带 http(s):// 协议头。
+
+        真机复现过:用户在面板「模型」tab 填 OLLAMA_URL/ONEAPI_URL 时只填了
+        host:port(如 "localhost:11434"),没带协议头。这个值不做任何校验就被
+        原样存进 base_url,直到实际发起请求时 httpx 才会炸
+        ``InvalidURL: Request URL is missing an 'http://' or 'https://' protocol.``——
+        用户看到的只是一句"LLM 调用失败",完全不知道是哪个字段少打了几个字符。
+        这里在读到手动配置的 URL 时统一兜底补全协议头，而不是要求每个调用点
+        都自己记得判断。
+        """
+        raw = (raw or "").strip()
+        if raw and not raw.startswith(("http://", "https://")):
+            raw = f"http://{raw}"
+        return raw
+
+    @staticmethod
     def _internal_hf_adapter_alive(base_url: str) -> bool:
         """探测 hf_local 内部适配服务是否真的在监听(见 _discover_providers)。"""
         try:
@@ -1177,9 +1194,9 @@ class MultiLLMRouter:
             self.adapters["groq"] = GroqAdapter(cfg)
 
         # Ollama (local) — PR-HA: upgraded to first-class multimodal-capable local provider
-        ollama_url = self._get_key("ollama")
+        ollama_url = self._normalize_base_url(self._get_key("ollama"))
         if not ollama_url:
-            ollama_url = os.environ.get("OLLAMA_URL", "")
+            ollama_url = self._normalize_base_url(os.environ.get("OLLAMA_URL", ""))
         ollama_default_url = "http://localhost:11434"
         if not ollama_url:
             # 尝试默认地址
@@ -1285,9 +1302,9 @@ class MultiLLMRouter:
         oneapi_key = self._get_key("oneapi")
         if not oneapi_key:
             oneapi_key = os.environ.get("ONEAPI_API_KEY", "")
-        oneapi_url = self._get_key("oneapi_url")
+        oneapi_url = self._normalize_base_url(self._get_key("oneapi_url"))
         if not oneapi_url:
-            oneapi_url = os.environ.get("ONEAPI_URL", "")
+            oneapi_url = self._normalize_base_url(os.environ.get("ONEAPI_URL", ""))
         if oneapi_key and not oneapi_key.startswith("your-") and oneapi_url:
             models = self._discover_oneapi_models(oneapi_url, oneapi_key)
             cfg = ProviderConfig(

@@ -36,6 +36,23 @@ from typing import Any, Dict, List, Optional, Tuple
 logger = logging.getLogger("Galaxy.HAMRouter")
 
 
+def _ollama_base_url() -> str:
+    """读 OLLAMA_URL 并兜底补全协议头。
+
+    真机复现过:用户在面板只填 host:port(如 "localhost:11434"),没带协议头。
+    原来这里直接 ``os.environ.get("OLLAMA_URL", "http://localhost:11434")``——
+    该写法的默认值只在 key 完全不存在时生效,key 存在但是"localhost:11434"
+    这种没有协议头的值会原样传给 httpx,实际发起请求时炸
+    ``InvalidURL: ... missing ... protocol``。这里统一兜底补全。
+    """
+    raw = os.environ.get("OLLAMA_URL", "").strip()
+    if not raw:
+        return "http://localhost:11434"
+    if not raw.startswith(("http://", "https://")):
+        raw = f"http://{raw}"
+    return raw.rstrip("/")
+
+
 # ---------------------------------------------------------------------------
 # Source Type — 模型来源类型
 # ---------------------------------------------------------------------------
@@ -166,7 +183,7 @@ class HardwareAwareMultimodalRouter:
         """检查 Ollama 是否可用"""
         try:
             import httpx
-            base = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+            base = _ollama_base_url()
             resp = httpx.get(f"{base}/api/tags", timeout=2.0)
             return resp.status_code == 200
         except Exception as exc:
@@ -348,7 +365,7 @@ class HardwareAwareMultimodalRouter:
         if self._ollama_available:
             try:
                 import httpx
-                base = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+                base = _ollama_base_url()
                 resp = httpx.get(f"{base}/api/tags", timeout=3.0)
                 if resp.status_code == 200:
                     for m in resp.json().get("models", []):
