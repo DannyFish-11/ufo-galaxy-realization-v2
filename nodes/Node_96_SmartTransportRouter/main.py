@@ -117,36 +117,47 @@ class BaseTransport:
 
 # HTTP 传输实现
 class HttpTransport(BaseTransport):
-    """HTTP 协议传输实现（模拟）"""
+    """HTTP 协议传输实现。
+
+    修复:之前整个 send() 就是 sleep + random.random() < 0.95 掷骰子决定
+    "成功"，从未真的发过一个字节——这个节点叫"智能传输路由"，调用方拿到
+    return True 只会以为数据真的送到了。httpx 本来就是这个仓库到处在用的
+    依赖，这里直接实现真实的 POST。
+    """
     def __init__(self):
         super().__init__(Protocol.HTTP)
 
     async def send(self, endpoint: str, data: Dict[str, Any]) -> bool:
-        logger.info(f"【模拟】使用 HTTP 发送数据到 {endpoint}")
+        logger.info(f"使用 HTTP 发送数据到 {endpoint}")
         try:
-            # 在实际应用中，这里会使用 aiohttp 或 httpx 库
-            await asyncio.sleep(random.uniform(0.1, 0.3))  # 模拟网络延迟
-            if random.random() < 0.95: # 模拟 95% 的成功率
-                logger.info(f"HTTP 发送成功: {json.dumps(data, ensure_ascii=False)}")
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(endpoint, json=data)
+            if resp.status_code < 400:
+                logger.info(f"HTTP 发送成功({resp.status_code}): {json.dumps(data, ensure_ascii=False)}")
                 return True
-            else:
-                logger.error("HTTP 发送失败: 模拟网络错误")
-                return False
+            logger.error(f"HTTP 发送失败: status={resp.status_code} body={resp.text[:200]}")
+            return False
         except Exception as e:
             logger.error(f"HTTP 传输异常: {e}")
             return False
 
 # WebSocket 传输实现
 class WebSocketTransport(BaseTransport):
-    """WebSocket 协议传输实现（模拟）"""
+    """WebSocket 协议传输实现。
+
+    修复:之前只 sleep 一下就无条件 return True，从没真的连过。改为真实的
+    一次性连接→发送→关闭(websockets 库已在 requirements.txt 里)。
+    """
     def __init__(self):
         super().__init__(Protocol.WEBSOCKET)
 
     async def send(self, endpoint: str, data: Dict[str, Any]) -> bool:
-        logger.info(f"【模拟】使用 WebSocket 发送数据到 {endpoint}")
+        logger.info(f"使用 WebSocket 发送数据到 {endpoint}")
         try:
-            # 在实际应用中，这里会使用 websockets 库
-            await asyncio.sleep(random.uniform(0.05, 0.15)) # 模拟更低的网络延迟
+            import websockets
+            async with websockets.connect(endpoint, open_timeout=10) as ws:
+                await ws.send(json.dumps(data, ensure_ascii=False))
             logger.info(f"WebSocket 发送成功: {json.dumps(data, ensure_ascii=False)}")
             return True
         except Exception as e:
@@ -155,21 +166,23 @@ class WebSocketTransport(BaseTransport):
 
 # MQTT 传输实现
 class MqttTransport(BaseTransport):
-    """MQTT 协议传输实现（模拟）"""
+    """MQTT 协议传输实现。
+
+    尚未接真实的 paho-mqtt 客户端(MQTT 连接/发布语义跟本文件里 HTTP/WS 的
+    一次性请求模型不一样，需要先确定连接复用策略，不在这轮盲目实现)——
+    诚实地报"未实现"并返回失败，而不是像之前那样 sleep 一下就假装发布
+    成功，让调用方误以为消息真的送到了 broker。
+    """
     def __init__(self):
         super().__init__(Protocol.MQTT)
 
     async def send(self, endpoint: str, data: Dict[str, Any]) -> bool:
         topic = endpoint  # 在 MQTT 中，endpoint 通常是 topic
-        logger.info(f"【模拟】使用 MQTT 发布消息到 Topic '{topic}'")
-        try:
-            # 在实际应用中，这里会使用 gmqtt 或 paho-mqtt 库
-            await asyncio.sleep(random.uniform(0.1, 0.2))
-            logger.info(f"MQTT 发布成功: {json.dumps(data, ensure_ascii=False)}")
-            return True
-        except Exception as e:
-            logger.error(f"MQTT 传输异常: {e}")
-            return False
+        logger.error(
+            f"MQTT 传输尚未实现真实客户端(topic='{topic}')——拒绝假装发布成功，"
+            "如需使用请先接入 paho-mqtt。"
+        )
+        return False
 
 
 # --- 5. 主服务类 ---
