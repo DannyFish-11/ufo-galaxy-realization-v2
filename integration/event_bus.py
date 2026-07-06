@@ -256,11 +256,12 @@ class EventBus:
             event: 要发布的事件
             async_dispatch: 是否异步分发
         """
-        # 记录事件历史
+        # 记录事件历史 —— deque(maxlen=self._max_history) 已经在 append 时自动
+        # 淘汰最老的一条，不需要（也不能）手动再切片一次:deque 不支持 slice
+        # 索引，这里之前的手动裁剪一旦触发就会炸
+        # "TypeError: sequence index must be integer, not 'slice'"。
         self._event_history.append(event)
-        if len(self._event_history) > self._max_history:
-            self._event_history = self._event_history[-self._max_history:]
-        
+
         if async_dispatch and self._running:
             # 异步分发
             try:
@@ -285,10 +286,18 @@ class EventBus:
         )
         self.publish(event)
     
-    def get_event_history(self, event_type: Optional[EventType] = None, 
+    def get_event_history(self, event_type: Optional[EventType] = None,
                           limit: int = 100) -> List[UIGalaxyEvent]:
-        """获取事件历史"""
-        events = self._event_history
+        """获取事件历史
+
+        真机复现过一个每 5 分钟必炸一次的
+        "Exception suppressed: sequence index must be integer, not 'slice'"：
+        self._event_history 是 deque，不支持 slice 索引。之前 event_type 为
+        None(默认值,大多数调用方都是这么调的)时 events 直接就是这个 deque
+        本体、从未被转成 list，下面的 events[-limit:] 必炸。这里统一先转
+        list 再做后续过滤/切片。
+        """
+        events: List[UIGalaxyEvent] = list(self._event_history)
         if event_type:
             events = [e for e in events if e.event_type == event_type]
         return events[-limit:]

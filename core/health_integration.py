@@ -133,12 +133,20 @@ class UnifiedHealthManager:
                 logger.error(f"同步循环异常: {e}")
 
     def _sync_load_metrics(self):
-        """将 SystemLoadMonitor 数据灌入 MetricsCollector"""
+        """将 SystemLoadMonitor 数据灌入 MetricsCollector
+
+        真机复现过:这里每 15 秒调用一次 get_system_load()，而它内部要枚举全部
+        进程(psutil.process_iter)，Windows 上单次就要 2-5 秒，且是在 _sync_loop
+        这个 async 循环里直接同步调用、没有 offload 到线程池 —— 会话内所有并发
+        请求都会被这 15 秒一次的阻塞连累。改读后台采样循环(见
+        core.startup.bootstrap_subsystems 里的 start_monitoring())维护的缓存,
+        没有缓存(刚启动那一瞬间)才现算一次。
+        """
         if not self._load_monitor or not self._monitoring:
             return
 
         try:
-            load = self._load_monitor.get_system_load()
+            load = self._load_monitor.get_cached_load() or self._load_monitor.get_system_load()
             mc = self._monitoring.metrics
 
             mc.record("load.cpu_percent", load.cpu.usage_percent)

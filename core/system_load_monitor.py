@@ -441,9 +441,25 @@ class SystemLoadMonitor:
         
         return load
     
+    def get_cached_load(self) -> Optional[SystemLoad]:
+        """返回最近一次由后台 _monitor_loop 采样的结果，不触发新采集。
+
+        真机排查过一次"到处都在卡 2-5 秒"：根因是 get_system_load() 内部要
+        枚举全部进程（psutil.process_iter），Windows 上单次就要 2-5 秒。虽然
+        _monitor_loop() 本身已经 offload 到线程池，但 health_check.py /
+        health_integration.py 里另外好几处（/metrics、/health/deep、15 秒一次
+        的 _sync_load_metrics、健康检查回调）各自直接调用 get_system_load()，
+        完全没走线程池，在事件循环里同步阻塞——而且是各自 new 一个
+        SystemLoadMonitor()，从不共享、也从不真的启动过 start_monitoring()，
+        所以这个方法之前即使加了也没人能用上缓存。
+        调用方应优先用这个方法读最近一次采样，只有在还没采过一次(启动瞬间)
+        时才回退到真正调用 get_system_load()。
+        """
+        return self._load_history[-1] if self._load_history else None
+
     def get_load_score(self) -> float:
-        """获取当前负载分数 (0-1)"""
-        load = self.get_system_load()
+        """获取当前负载分数 (0-1)。优先读后台采样缓存,没采样过(刚启动)才现算一次。"""
+        load = self.get_cached_load() or self.get_system_load()
         return load.overall_load_score()
     
     def get_average_load(self, samples: int = 10) -> float:
@@ -486,8 +502,8 @@ class SystemLoadMonitor:
                 await asyncio.sleep(self.sample_interval)
     
     def export_stats(self) -> Dict[str, Any]:
-        """导出统计信息"""
-        load = self.get_system_load()
+        """导出统计信息。优先读后台采样缓存,没采样过(刚启动)才现算一次。"""
+        load = self.get_cached_load() or self.get_system_load()
         return {
             'timestamp': load.timestamp.isoformat(),
             'overall_load_score': load.overall_load_score(),

@@ -786,8 +786,19 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             discovery=discovery,
         )
         await uhm.start()
+
+        # 真机复现过:/metrics、/health/deep 每次命中都要卡 2-5 秒——根因是
+        # get_system_load() 要枚举全部进程(psutil.process_iter),Windows 上
+        # 单次就要这么久，而这个共享单例的后台采样循环从来没人启动过，导致
+        # health_check.py/health_integration.py 里每个消费点都在各自的请求
+        # 路径上同步触发一次全新采集。这里把循环真正跑起来，采样间隔放宽到
+        # 10 秒(默认 1 秒对这种耗时的扫描没必要),后续消费点改读
+        # get_cached_load() 就不再需要现算。
+        load_monitor.sample_interval = max(load_monitor.sample_interval, 10.0)
+        await load_monitor.start_monitoring()
+
         results["health_integration"] = {"status": "ok"}
-        logger.info("健康检查整合层已启动")
+        logger.info("健康检查整合层已启动（含系统负载后台采样）")
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)
         results["health_integration"] = {"status": "degraded", "error": str(e)}
@@ -1107,6 +1118,13 @@ async def shutdown_subsystems():
         await _shutdown_with_timeout("健康检查整合层", uhm.stop())
     except Exception as e:
         logger.warning(f"健康检查整合层停止失败: {e}")
+
+    # 0a-1. 系统负载后台采样循环（bootstrap_subsystems 里启动，uhm.stop() 不管它）
+    try:
+        from core.system_load_monitor import get_monitor as get_load_monitor
+        await _shutdown_with_timeout("系统负载采样循环", get_load_monitor().stop_monitoring())
+    except Exception as e:
+        logger.warning(f"系统负载采样循环停止失败: {e}")
 
     # 0b. 节点发现服务
     try:
