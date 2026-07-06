@@ -166,6 +166,37 @@ class DeviceNodeResolver:
 
         return results
 
+    def resolve_by_node_id(self, node_id: str) -> Optional[Dict[str, Any]]:
+        """按实现节点 ID 反查映射(Golden Path 本地门面用)。
+
+        背景:core/node_facade_local.py 的 LocalNodeFacade.invoke() 一直在
+        调用本方法,但它此前从未被实现——每次调用都抛 AttributeError,被
+        上层 except 吞成 "resolver_error" fallback:Golden Path(节点本地
+        直调门面)对【所有】节点都从未真正生效,全部静默走了 legacy 路径,
+        而日志层面完全看不出来。返回形状与 node_facade_local 的消费方式
+        对齐(dict,含 "node" 键);未映射的节点返回 None(交由 legacy
+        fusion_entry 路径处理,这是预期行为,不是错误)。
+        """
+        if not node_id:
+            return None
+        self._ensure_loaded()
+        for m in self._mappings:
+            impl = m.get("implementation", {}) or {}
+            node = impl.get("node", "")
+            if not node:
+                continue
+            # 精确匹配,或短 ID 前缀匹配("Node_33" ↔ "Node_33_ADB"),
+            # 用 "_" 边界防止 "Node_1" 误配 "Node_112_..."。
+            if (
+                node == node_id
+                or node.startswith(node_id + "_")
+                or node_id.startswith(node + "_")
+            ):
+                out = dict(impl)
+                out["node"] = node
+                return out
+        return None
+
     def list_supported_device_types(self) -> List[str]:
         """Return all device types that have explicit mappings."""
         self._ensure_loaded()

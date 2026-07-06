@@ -348,8 +348,16 @@ class AutoFixer:
         """调用 AutonomousCoder 生成代码修复"""
         timestamp = datetime.now().isoformat()
         try:
-            from enhancements.reasoning.autonomous_coder import AutonomousCoder, CodingTask
-            coder = AutonomousCoder()
+            from enhancements.reasoning.autonomous_coder import (
+                AutonomousCoder,
+                CodingTask,
+                GalaxyRouterClient,
+            )
+            # 必须传入真实 LLM 客户端:之前裸构造 AutonomousCoder()(llm_client=None),
+            # "根据报错优化代码"那步会 short-circuit 返回原代码、初始生成落回静态
+            # 模板——迭代循环照转,但自愈的"愈"是假的。GalaxyRouterClient 接的是
+            # 系统统一模型路由(本地主脑优先、云端兜底),与全系统同一套模型选择。
+            coder = AutonomousCoder(llm_client=GalaxyRouterClient())
             task = CodingTask(
                 requirement=diagnosis.recommendation,
                 language="python",

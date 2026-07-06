@@ -85,6 +85,56 @@ class LLMClient(ABC):
         pass
 
 
+class GalaxyRouterClient(LLMClient):
+    """把系统统一 LLM 路由(MultiLLMRouter, 异步)适配成本模块要求的同步 LLMClient。
+
+    背景:AutonomousCoder 的"生成→执行→喂报错→再生成"闭环里,LLM 是唯一的
+    修复来源——但生产里唯一的调用方(Node_112_SelfHealing)一直用
+    AutonomousCoder() 裸构造,llm_client=None,导致 _optimize_code 直接
+    short-circuit 返回原代码、_generate_code_with_llm 落回静态模板:循环
+    照转 3 轮,但"根据报错修代码"这一步是假的。本适配器让闭环接上系统
+    自己的模型路由(本地 Ollama 主脑优先、云端兜底),与全系统同一套模型
+    选择,不需要单独配 OPENAI_API_KEY。
+    """
+
+    def __init__(self) -> None:
+        self._router = None
+
+    def _get_router(self):
+        if self._router is None:
+            from core.multi_llm_router import get_llm_router
+            self._router = get_llm_router()
+        return self._router
+
+    @staticmethod
+    def _run(coro):
+        """同步桥接异步路由。本类的调用方(generate_and_execute)是同步代码,
+        通常跑在 FastAPI 的线程池线程里(无事件循环,asyncio.run 即可);
+        若被误从事件循环线程内同步调用,换一个独立线程跑,避免死锁。"""
+        import asyncio
+        import concurrent.futures
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
+
+    def generate(self, prompt: str, temperature: float = 0.7, max_tokens: int = 2000) -> str:
+        resp = self._run(self._get_router().chat(
+            [{"role": "user", "content": prompt}],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ))
+        return resp.content
+
+    def chat(self, messages: List[Dict[str, str]], temperature: float = 0.7) -> str:
+        resp = self._run(self._get_router().chat(
+            list(messages), temperature=temperature,
+        ))
+        return resp.content
+
+
 class OpenAIClient(LLMClient):
     """OpenAI GPT-4客户端"""
     
