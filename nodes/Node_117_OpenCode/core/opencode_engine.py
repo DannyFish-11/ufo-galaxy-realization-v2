@@ -265,27 +265,47 @@ class OpenCodeEngine:
     def install(self) -> Dict[str, Any]:
         """
         安装 OpenCode
-        
+
         Returns:
             Dict: 安装结果
         """
-        # 简化实现：模拟安装
-        # 实际应该执行真实的安装命令
-        
+        # 修复:之前这里真实的 subprocess.run 调用整段被注释掉,换成
+        # "模拟成功"——不管机器上有没有装,is_installed 都会被设成 True、
+        # 路径写死成 /usr/local/bin/opencode,调用方拿到 success:True 却
+        # 可能根本没有这个二进制。现在真的跑安装命令,并且用 --version
+        # 核实二进制确实能跑起来,而不是只信退出码。
         install_command = "curl -fsSL https://opencode.dev/install.sh | bash"
-        
+
         try:
-            # 模拟安装（实际环境中应执行真实命令）
-            # result = subprocess.run(install_command, shell=True, capture_output=True, timeout=300)
-            
-            # 模拟成功
+            result = subprocess.run(
+                install_command, shell=True, capture_output=True,
+                text=True, timeout=300,
+            )
+            if result.returncode != 0:
+                return {
+                    "success": False,
+                    "error": (result.stderr or result.stdout or "安装脚本返回非零退出码").strip()[:500],
+                }
+
+            candidate_path = "/usr/local/bin/opencode"
+            verify = subprocess.run(
+                [candidate_path, "--version"], capture_output=True, text=True, timeout=10,
+            )
+            if verify.returncode != 0:
+                return {
+                    "success": False,
+                    "error": f"安装脚本执行完毕但 {candidate_path} --version 校验失败: "
+                             f"{(verify.stderr or verify.stdout).strip()[:300]}",
+                }
+
             self.is_installed = True
-            self.opencode_path = "/usr/local/bin/opencode"
-            
+            self.opencode_path = candidate_path
+
             return {
                 "success": True,
                 "message": "OpenCode installed successfully",
-                "path": self.opencode_path
+                "path": self.opencode_path,
+                "version": verify.stdout.strip(),
             }
         except Exception as e:
             return {

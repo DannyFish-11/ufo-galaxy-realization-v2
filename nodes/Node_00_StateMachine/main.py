@@ -353,6 +353,31 @@ async def get_nodes():
     nodes = await store.get_nodes()
     return {"nodes": nodes, "count": len(nodes)}
 
+@app.get("/state/export")
+async def export_state():
+    """Export all state key-values (used by Node_69_BackupRestore).
+
+    Registered before /state/{key} - FastAPI matches path routes in
+    registration order, so this must come first or "/state/export" would
+    be swallowed by the {key} wildcard below.
+    """
+    async with store._lock:
+        state_copy = dict(store.state)
+    return {"state": state_copy, "timestamp": datetime.now().isoformat()}
+
+@app.post("/state/import")
+async def import_state(payload: Dict[str, Any]):
+    """Restore state key-values from a backup (used by Node_69_BackupRestore).
+
+    Must also be registered before /state/{key} for the same reason.
+    """
+    state_data = payload.get("state", {})
+    if not isinstance(state_data, dict):
+        raise HTTPException(status_code=400, detail="'state' must be an object")
+    async with store._lock:
+        store.state.update(state_data)
+    return {"success": True, "restored_keys": len(state_data)}
+
 @app.get("/state/{key}")
 async def get_state(key: str):
     """Get a state value."""

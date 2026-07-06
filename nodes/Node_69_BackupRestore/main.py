@@ -72,6 +72,7 @@ class RestoreStatus(str, Enum):
     VALIDATING = "validating"
     RESTORING = "restoring"
     COMPLETED = "completed"
+    PARTIAL = "partial"  # some target nodes have no real restore endpoint
     FAILED = "failed"
 
 @dataclass
@@ -98,6 +99,7 @@ class RestorePoint:
     target_nodes: List[str]
     duration_seconds: float = 0
     error: Optional[str] = None
+    node_results: Dict[str, str] = field(default_factory=dict)
 
 class BackupRequest(BaseModel):
     backup_type: BackupType = BackupType.FULL
@@ -153,6 +155,7 @@ class BackupStorage:
                     target_nodes TEXT,
                     duration_seconds REAL,
                     error TEXT,
+                    node_results TEXT,
                     created_at REAL DEFAULT (strftime('%s', 'now'))
                 )
             """)
@@ -252,8 +255,8 @@ class BackupStorage:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
                 INSERT INTO restores (
-                    restore_id, backup_id, timestamp, status, target_nodes, duration_seconds, error
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    restore_id, backup_id, timestamp, status, target_nodes, duration_seconds, error, node_results
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 restore_point.restore_id,
                 restore_point.backup_id,
@@ -261,7 +264,8 @@ class BackupStorage:
                 restore_point.status.value,
                 json.dumps(restore_point.target_nodes),
                 restore_point.duration_seconds,
-                restore_point.error
+                restore_point.error,
+                json.dumps(restore_point.node_results)
             ))
             conn.commit()
     
@@ -323,11 +327,26 @@ class BackupService:
         self.backup_dir = Path(backup_dir)
         self.http_client = httpx.AsyncClient(timeout=30)
         
-        # Known nodes and their data endpoints
+        # Known nodes and how to collect/restore their data. "restore" is
+        # only set for nodes that expose a genuine write-back endpoint -
+        # everything else is backup-only and _restore_node_data() reports
+        # that honestly instead of pretending to have restored it.
         self.node_data_endpoints = {
-            "Node_00_StateMachine": f"http://localhost:{get_node_port('Node_00_StateMachine')}/state/export",
-            "Node_58_ModelRouter": f"http://localhost:{get_node_port('Node_58_ModelRouter')}/history",
-            "Node_65_LoggerCentral": f"http://localhost:{get_node_port('Node_65_LoggerCentral')}/export",
+            "Node_00_StateMachine": {
+                "collect_url": f"http://localhost:{get_node_port('Node_00_StateMachine')}/state/export",
+                "collect_method": "GET",
+                "restore_url": f"http://localhost:{get_node_port('Node_00_StateMachine')}/state/import",
+            },
+            "Node_65_LoggerCentral": {
+                # /export is a POST that takes a LogQuery body, not a GET.
+                "collect_url": f"http://localhost:{get_node_port('Node_65_LoggerCentral')}/export",
+                "collect_method": "POST",
+                "collect_body": {"limit": 1000, "offset": 0},
+                # Logs are an immutable Merkle-chained audit trail - there is
+                # no write-back endpoint and restoring history in place
+                # wouldn't be semantically sound, so this is backup-only.
+                "restore_url": None,
+            },
         }
     
     def _generate_backup_id(self) -> str:
@@ -434,17 +453,26 @@ class BackupService:
     
     async def _collect_node_data(self, node_id: str) -> Dict[str, Any]:
         """Collect data from a node."""
-        endpoint = self.node_data_endpoints.get(node_id)
-        
-        if not endpoint:
+        node_config = self.node_data_endpoints.get(node_id)
+
+        if not node_config:
             # Return mock data for nodes without export endpoints
             return {
                 "status": "no_export_endpoint",
                 "timestamp": datetime.utcnow().isoformat()
             }
-        
+
+        endpoint = node_config["collect_url"]
+        method = node_config.get("collect_method", "GET")
+
         try:
-            response = await self.http_client.get(endpoint)
+            if method == "POST":
+                response = await self.http_client.post(
+                    endpoint, json=node_config.get("collect_body", {})
+                )
+            else:
+                response = await self.http_client.get(endpoint)
+
             if response.status_code == 200:
                 return response.json()
             else:
@@ -515,22 +543,38 @@ class BackupService:
             
             # Restore data to nodes
             self.storage.update_restore_status(restore_id, RestoreStatus.RESTORING)
-            
+
+            node_results: Dict[str, str] = {}
             for node_id in target_nodes:
                 if node_id in backup_data.get("nodes", {}):
-                    await self._restore_node_data(node_id, backup_data["nodes"][node_id])
-            
-            # Complete restore
+                    node_results[node_id] = await self._restore_node_data(
+                        node_id, backup_data["nodes"][node_id]
+                    )
+                else:
+                    node_results[node_id] = "no_backup_data"
+
+            # Determine overall status honestly from per-node outcomes -
+            # never blanket-report COMPLETED if some nodes weren't
+            # actually restored.
+            if any(r == "failed" for r in node_results.values()):
+                overall_status = RestoreStatus.FAILED
+            elif any(r != "restored" for r in node_results.values()):
+                overall_status = RestoreStatus.PARTIAL
+            else:
+                overall_status = RestoreStatus.COMPLETED
+
             duration = time.time() - start_time
-            restore_point.status = RestoreStatus.COMPLETED
+            restore_point.status = overall_status
             restore_point.duration_seconds = duration
-            
+            restore_point.node_results = node_results
+
             self.storage.update_restore_status(
                 restore_id,
-                RestoreStatus.COMPLETED,
-                duration_seconds=duration
+                overall_status,
+                duration_seconds=duration,
+                node_results=json.dumps(node_results)
             )
-            
+
             return restore_point
             
         except Exception as e:
@@ -546,11 +590,35 @@ class BackupService:
             
             return restore_point
     
-    async def _restore_node_data(self, node_id: str, data: Dict[str, Any]):
-        """Restore data to a node."""
-        # In production, this would send data to node's restore endpoint
-        logger.info(f"Restoring data to {node_id}")
-        await asyncio.sleep(0.1)  # Simulate restore
+    async def _restore_node_data(self, node_id: str, data: Dict[str, Any]) -> str:
+        """Restore data to a node.
+
+        Returns one of "restored" / "not_supported" / "failed" - callers
+        must not assume success just because this didn't raise.
+        """
+        node_config = self.node_data_endpoints.get(node_id)
+        restore_url = node_config.get("restore_url") if node_config else None
+
+        if not restore_url:
+            logger.info(f"No restore endpoint for {node_id}, skipping (backup-only)")
+            return "not_supported"
+
+        if not isinstance(data, dict) or data.get("status") in (
+            "error", "unreachable", "no_export_endpoint"
+        ):
+            logger.warning(f"Backup data for {node_id} was never collected successfully, skipping restore")
+            return "not_supported"
+
+        try:
+            response = await self.http_client.post(restore_url, json=data)
+            if response.status_code == 200:
+                logger.info(f"Restored data to {node_id}")
+                return "restored"
+            logger.error(f"Restore to {node_id} failed: HTTP {response.status_code}")
+            return "failed"
+        except Exception as e:
+            logger.error(f"Restore to {node_id} failed: {e}")
+            return "failed"
     
     def verify_backup(self, backup_id: str) -> Dict[str, Any]:
         """Verify backup integrity."""
@@ -678,7 +746,8 @@ async def restore_backup(request: RestoreRequest):
         "status": restore_point.status.value,
         "target_nodes": restore_point.target_nodes,
         "duration_seconds": restore_point.duration_seconds,
-        "error": restore_point.error
+        "error": restore_point.error,
+        "node_results": restore_point.node_results
     }
 
 @app.get("/backups")

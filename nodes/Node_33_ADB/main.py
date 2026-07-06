@@ -36,6 +36,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+class ADBNotAvailableError(Exception):
+    """adb 二进制在本机不存在——上层应该路由到诚实标注 mock:True 的兜底,
+    而不是假装命令真的发到了设备。"""
+    pass
+
+
 # =============================================================================
 # Models
 # =============================================================================
@@ -171,9 +178,15 @@ class ADBController:
         except asyncio.TimeoutError:
             raise Exception("ADB command timed out")
         except FileNotFoundError:
-            # ADB not installed, return mock response
-            logger.warning("ADB not found, returning mock response")
-            return "mock_response"
+            # 修复:之前这里静默返回字符串 "mock_response"，调用方
+            # (_tap/_swipe/_input_text/_keyevent)完全不检查这个返回值，
+            # 无条件拼 {"success": True} 返回——设备可能根本没收到指令
+            # (adb 都不在),调用者却拿到一个看起来完全正常的"成功"。
+            # 改成抛出专门的异常,让上层路由到本文件里已经存在的、诚实
+            # 标注 mock:True 的 _mock_execute() 路径(和 _screenshot 已经
+            # 在用的兜底方式一致),而不是悄悄伪装成真的执行了。
+            logger.warning("ADB not found (adb binary missing)")
+            raise ADBNotAvailableError("adb binary not found on this host")
     
     async def execute(self, action: str, params: Dict) -> Dict:
         """Execute an ADB action."""
@@ -212,16 +225,19 @@ class ADBController:
         """Tap at coordinates."""
         x = params.get("x", 0)
         y = params.get("y", 0)
-        
-        await self._run_adb(["shell", "input", "tap", str(x), str(y)], device)
-        
+
+        try:
+            await self._run_adb(["shell", "input", "tap", str(x), str(y)], device)
+        except ADBNotAvailableError:
+            return await self._mock_execute("tap", params)
+
         return {
             "action": "tap",
             "coordinates": {"x": x, "y": y},
             "device": device,
             "success": True
         }
-    
+
     async def _swipe(self, device: str, params: Dict) -> Dict:
         """Swipe between coordinates."""
         x1 = params.get("x1", 0)
@@ -229,12 +245,15 @@ class ADBController:
         x2 = params.get("x2", 0)
         y2 = params.get("y2", 0)
         duration = params.get("duration", 300)
-        
-        await self._run_adb([
-            "shell", "input", "swipe",
-            str(x1), str(y1), str(x2), str(y2), str(duration)
-        ], device)
-        
+
+        try:
+            await self._run_adb([
+                "shell", "input", "swipe",
+                str(x1), str(y1), str(x2), str(y2), str(duration)
+            ], device)
+        except ADBNotAvailableError:
+            return await self._mock_execute("swipe", params)
+
         return {
             "action": "swipe",
             "from": {"x": x1, "y": y1},
@@ -243,18 +262,21 @@ class ADBController:
             "device": device,
             "success": True
         }
-    
+
     async def _shell(self, device: str, params: Dict) -> Dict:
         """Execute shell command."""
         command = params.get("command", "echo 'hello'")
-        
+
         # Security: Block dangerous commands
         dangerous = ["rm -rf", "mkfs", "dd if=", "reboot", "shutdown"]
         if any(d in command.lower() for d in dangerous):
             raise ValueError("Dangerous command blocked")
-        
-        result = await self._run_adb(["shell", command], device)
-        
+
+        try:
+            result = await self._run_adb(["shell", command], device)
+        except ADBNotAvailableError:
+            return await self._mock_execute("shell", params)
+
         return {
             "action": "shell",
             "command": command,
@@ -309,25 +331,31 @@ class ADBController:
     async def _input_text(self, device: str, params: Dict) -> Dict:
         """Input text."""
         text = params.get("text", "")
-        
+
         # Escape special characters
         escaped = text.replace(" ", "%s").replace("'", "\\'")
-        
-        await self._run_adb(["shell", "input", "text", escaped], device)
-        
+
+        try:
+            await self._run_adb(["shell", "input", "text", escaped], device)
+        except ADBNotAvailableError:
+            return await self._mock_execute("input", params)
+
         return {
             "action": "input",
             "text": text,
             "device": device,
             "success": True
         }
-    
+
     async def _keyevent(self, device: str, params: Dict) -> Dict:
         """Send key event."""
         keycode = params.get("keycode", 4)  # Default: BACK
-        
-        await self._run_adb(["shell", "input", "keyevent", str(keycode)], device)
-        
+
+        try:
+            await self._run_adb(["shell", "input", "keyevent", str(keycode)], device)
+        except ADBNotAvailableError:
+            return await self._mock_execute("keyevent", params)
+
         return {
             "action": "keyevent",
             "keycode": keycode,
