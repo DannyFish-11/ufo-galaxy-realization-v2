@@ -671,10 +671,10 @@ class SelfHealingEngine:
             for action in plan.actions:
                 success = await self._execute_recovery_action(action, fault)
                 execution.actions_executed.append(f"{action.value}:{success}")
-                
+
                 if success:
                     # 验证恢复是否成功
-                    if await self._verify_recovery(fault):
+                    if await self._verify_recovery(fault, action):
                         fault.is_resolved = True
                         fault.resolved_at = datetime.now()
                         execution.success = True
@@ -730,35 +730,91 @@ class SelfHealingEngine:
         return False
     
     async def _default_restart(self, fault: Fault) -> bool:
-        """默认重启处理"""
+        """默认重启处理 - 通过 core.node_lifecycle 真实停止/启动目标节点"""
         logger.info(f"Attempting restart for {fault.target}")
-        await asyncio.sleep(1)  # 模拟重启
-        return True
-    
+        try:
+            from core import node_lifecycle
+        except Exception as e:
+            logger.error(f"node_lifecycle unavailable, cannot restart {fault.target}: {e}")
+            return False
+
+        node_lifecycle.stop_node(fault.target)
+        await asyncio.sleep(0.5)
+        start_result = node_lifecycle.start_node(fault.target)
+        if not start_result.get("ok"):
+            logger.error(f"Restart failed for {fault.target}: {start_result.get('error')}")
+            return False
+        await asyncio.sleep(1.0)
+        running, why = node_lifecycle.is_running(fault.target)
+        if not running:
+            logger.error(f"Restart command succeeded but {fault.target} is not running ({why})")
+        return running
+
     async def _default_reconnect(self, fault: Fault) -> bool:
-        """默认重连处理"""
+        """默认重连处理 - 对目标发起真实 TCP 探测，多次重试"""
         logger.info(f"Attempting reconnect for {fault.target}")
-        await asyncio.sleep(0.5)  # 模拟重连
-        return True
-    
+        check = next((c for c in self.health_checks.values() if c.target == fault.target), None)
+        host = check.metadata.get("host", fault.target) if check else fault.target
+        port = check.metadata.get("port") if check else None
+        if port is None:
+            logger.warning(f"No known port for {fault.target}, cannot attempt real reconnect")
+            return False
+
+        for attempt in range(3):
+            try:
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(host, port), timeout=5
+                )
+                writer.close()
+                await writer.wait_closed()
+                return True
+            except (OSError, asyncio.TimeoutError) as e:
+                logger.warning(f"Reconnect attempt {attempt + 1}/3 to {host}:{port} failed: {e}")
+                await asyncio.sleep(1)
+        return False
+
     async def _default_notify(self, fault: Fault) -> bool:
-        """默认通知处理"""
+        """默认通知处理 - 通过 Node_76_AlertManager 发送真实通知"""
         logger.info(f"Sending notification for fault: {fault.fault_id}")
-        return True
-    
+        try:
+            import httpx
+            from core.port_config import get_node_port
+            url = f"http://localhost:{get_node_port('Node_76_AlertManager')}/notify"
+            payload = {
+                "channel": "webhook",
+                "message": f"[SelfHealing] Fault {fault.fault_id} on {fault.target}: {fault.description}",
+                "subject": f"Galaxy self-healing: {fault.fault_type.value}",
+            }
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(url, json=payload)
+                result = resp.json()
+                if not result.get("success"):
+                    logger.warning(f"Notification not delivered: {result.get('error')}")
+                return bool(result.get("success"))
+        except Exception as e:
+            logger.error(f"Failed to send notification via Node_76_AlertManager: {e}")
+            return False
+
     async def _default_scale(self, fault: Fault) -> bool:
-        """默认扩容处理"""
-        logger.info(f"Attempting scale for {fault.target}")
-        return True
-    
-    async def _verify_recovery(self, fault: Fault) -> bool:
+        """默认扩容处理 - 系统当前没有接入任何编排器，如实报告未实现"""
+        logger.warning(f"Scale action requested for {fault.target} but no orchestrator is wired up - not implemented")
+        return False
+
+    async def _verify_recovery(self, fault: Fault, action: Optional["RecoveryAction"] = None) -> bool:
         """验证恢复是否成功"""
         # 查找相关的健康检查
         for check in self.health_checks.values():
             if check.target == fault.target:
                 status = await self.run_health_check(check.check_id)
                 return status in [HealthStatus.HEALTHY, HealthStatus.DEGRADED]
-        return True  # 如果没有健康检查，假设成功
+
+        # 没有注册健康检查时，无法确认目标是否真的恢复。NOTIFY 动作本身
+        # 就是"结果"（消息是否送达由 handler 自己的返回值体现），可以信任
+        # 其返回值；其它动作缺少验证依据时，如实返回 False 而不是假定成功。
+        if action == RecoveryAction.NOTIFY:
+            return True
+        logger.warning(f"No health check registered for {fault.target}, cannot verify recovery")
+        return False
     
     async def start(self):
         """启动自愈引擎"""
