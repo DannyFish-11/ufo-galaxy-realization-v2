@@ -213,6 +213,20 @@ function createWindow() {
     mainWindow.webContents.on('console-message', (_e, _lvl, message, line, sourceId) =>
         console.log(`[Overlay:renderer] ${message} (${sourceId}:${line})`));
 
+    // 窗口级 F12 兜底(第二层):globalShortcut 是 OS 级钩子，理论上不管哪个窗口
+    // 聚焦都该生效——但在虚拟机/远程桌面/浏览器全屏等环境下，F12 常常在到达
+    // Electron 之前就被上一层(RDP 客户端、noVNC、宿主机)截走，globalShortcut
+    // 永远收不到按键，注册本身却显示"成功"，用户看不到任何报错。mainWindow
+    // (三态覆盖层)几乎全程常驻显示且 focusable，只要它恰好持有键盘焦点，这里
+    // 就能兜底截到 F12。同时放宽匹配(key 或 code 任一命中 F12)，兼容部分
+    // 远程输入法/虚拟键盘只回报 code 不回报 key 的情况。
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.type === 'keyDown' && (input.key === 'F12' || input.code === 'F12')) {
+            event.preventDefault();
+            togglePanel();
+        }
+    });
+
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
@@ -484,7 +498,7 @@ function createPanelWindow() {
     // keydown → togglePanel,并 preventDefault 阻止 F12 打开 DevTools。这样至少
     // 「面板已开时按 F12 关闭」永远有效,与 globalShortcut 双保险。
     wc.on('before-input-event', (event, input) => {
-        if (input.type === 'keyDown' && input.key === 'F12') {
+        if (input.type === 'keyDown' && (input.key === 'F12' || input.code === 'F12')) {
             event.preventDefault();
             togglePanel();
         }
