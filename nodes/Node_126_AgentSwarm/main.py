@@ -460,61 +460,57 @@ class DebateOrchestrator:
         problem: str,
         context: Dict[str, Any]
     ) -> DebateRound:
-        """Run proposal round."""
-        proposals = []
-        for agent in agents:
-            proposal = await agent.propose(problem, context)
-            proposals.append(proposal)
-        
+        """Run proposal round.
+
+        每个 agent 的 propose() 是一次独立的 LLM 调用(真实 httpx 请求打到
+        Node_58),彼此互不依赖——之前用 for + await 顺序跑,N 个 agent 就是
+        N 倍单次调用延迟,不是最慢那个 agent 的延迟。改用 asyncio.gather 真正
+        并发,这才是这层"多智能体"名副其实的地方:agent 数量增加不再线性
+        拉长这一轮耗时。
+        """
+        proposals = list(await asyncio.gather(
+            *(agent.propose(problem, context) for agent in agents)
+        ))
+
         return DebateRound(
             round_number=1,
             phase=DebatePhase.PROPOSAL,
             proposals=proposals
         )
-    
+
     async def _run_critique_round(
         self,
         agents: List[ReasoningAgent],
         proposals: List[AgentProposal]
     ) -> DebateRound:
-        """Run critique round."""
-        critiques = []
-        
+        """Run critique round(同上:每个 agent 对目标的 critique 调用互相独立,并发跑)。"""
+        tasks = []
         for agent in agents:
             # Each agent critiques 2 others
             other_proposals = [p for p in proposals if p.agent_id != agent.agent_id]
             targets = random.sample(other_proposals, min(2, len(other_proposals)))
-            
-            for target in targets:
-                critique = await agent.critique(target)
-                critiques.append(critique)
-        
+            tasks.extend(agent.critique(target) for target in targets)
+
+        critiques = list(await asyncio.gather(*tasks)) if tasks else []
+
         return DebateRound(
             round_number=2,
             phase=DebatePhase.CRITIQUE,
             critiques=critiques
         )
-    
+
     async def _run_defense_round(
         self,
         agents: List[ReasoningAgent],
         critiques: List[Critique]
     ) -> DebateRound:
-        """Run defense round."""
-        proposals = []
-        
-        for agent in agents:
-            # Get critiques targeting this agent
+        """Run defense round(同上:每个 agent 的辩护调用互相独立,并发跑)。"""
+        async def _defend(agent: ReasoningAgent) -> AgentProposal:
             agent_critiques = [c for c in critiques if c.target_id == agent.agent_id]
-            
-            if agent_critiques:
-                proposal = await agent.defend(agent_critiques)
-            else:
-                # No critiques, just refine
-                proposal = await agent.defend([])
-            
-            proposals.append(proposal)
-        
+            return await agent.defend(agent_critiques)
+
+        proposals = list(await asyncio.gather(*(_defend(agent) for agent in agents)))
+
         return DebateRound(
             round_number=3,
             phase=DebatePhase.DEFENSE,
