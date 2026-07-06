@@ -37,10 +37,16 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "STEP_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "StepFun API Key"},
     "ONEAPI_URL": {"default": "", "type": "url", "category": "llm", "description": "OneAPI Base URL"},
     "ONEAPI_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "OneAPI Key"},
+    "OPENROUTER_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "OpenRouter API Key"},
+    "DEEPSEEK_OCR2_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "DeepSeek OCR API Key"},
+    "OPENAI_API_BASE": {"default": "", "type": "url", "category": "llm", "description": "OpenAI-compatible Base URL (代理/中转)"},
+    "SONAR_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Perplexity Sonar API Key (alias)"},
+    "VLLM_URL": {"default": "", "type": "url", "category": "llm", "description": "vLLM URL (alias)"},
     "LOCAL_VLLM_URL": {"default": "", "type": "url", "category": "llm", "description": "Local vLLM URL"},
+    "OLLAMA_MODEL": {"default": "", "type": "select", "category": "llm", "description": "本地主脑模型（原生多模态）", "options": ["gemma4:12b", "openbmb/minicpm-o4.5", "gemma4:e4b", "gemma4:e2b"]},
 
     # --- Service Ports & Nodes ---
-    "GATEWAY_PORT": {"default": "9229", "type": "number", "category": "ports", "description": "Galaxy Gateway Port"},
+    "GATEWAY_PORT": {"default": "9000", "type": "number", "category": "ports", "description": "Galaxy Gateway Port"},
     "UFO_NODE_HOST": {"default": "localhost", "type": "string", "category": "ports", "description": "Node Host"},
     "NODE_92_URL": {"default": "http://localhost:8092", "type": "url", "category": "ports", "description": "Device Control Service"},
     "NODE_45_URL": {"default": "http://localhost:8045", "type": "url", "category": "ports", "description": "Desktop Endpoint"},
@@ -146,9 +152,15 @@ class ConfigUpdateRequest(BaseModel):
     config: Dict[str, str]
 
 
-@router.get("")
+@router.get("/all")
 async def get_config():
-    """获取当前所有配置项（从环境变量 + 默认值合并）"""
+    """获取当前所有配置项（从环境变量 + 默认值合并）— 供「设置」tab 使用的完整明细。
+
+    注意:不是挂在裸路径 GET /api/config —— core/routes/system.py 的精简版
+    (仅 api_base_url/ws_url/status)先于本路由注册,会遮蔽同路径同方法的路由,
+    导致「设置」tab 拿到的永远是精简版、按 key 查不到任何一项 → 只见左侧分类
+    标签、右侧内容空白。故完整明细改挂 /api/config/all,与精简版共存不冲突。
+    """
     result = {}
     for key, meta in CONFIG_SCHEMA.items():
         result[key] = {
@@ -165,41 +177,78 @@ async def get_config():
 
 @router.post("")
 async def update_config(req: ConfigUpdateRequest):
-    """批量更新配置（写入环境变量 + .env 文件 + 刷新 LLM 路由器）"""
-    llm_keys_updated = False
+    """批量更新配置（写入环境变量 + .env 文件）"""
+    # 修复:之前是"边校验边写 os.environ",遇到批次里某个未知 key 时半途
+    # raise——已经处理过的合法 key 已经写进 os.environ(内存态生效),但因为
+    # 异常发生在 _write_env_file() 之前,这些改动从未落盘到 .env,重启即丢失,
+    # 前端只看到笼统的 400。这里先做一遍完整性校验,全部合法才动手写,
+    # 避免"部分生效、部分丢失"的诡异中间态。
+    unknown_keys = [k for k in req.config if k not in CONFIG_SCHEMA]
+    if unknown_keys:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown config key(s): {', '.join(unknown_keys)}",
+        )
+
     for key, value in req.config.items():
-        if key not in CONFIG_SCHEMA:
-            raise HTTPException(status_code=400, detail=f"Unknown config key: {key}")
-        os.environ[key] = str(value)
-        if CONFIG_SCHEMA[key]["category"] == "llm":
-            llm_keys_updated = True
+        value = str(value)
+        # 真机复现过:用户在面板填 url 类字段(OLLAMA_URL/ONEAPI_URL 等)时只填了
+        # host:port(如 "localhost:11434"),没带协议头。这个值原样落进 .env,
+        # 直到真正发起请求时 httpx 才会炸「missing 'http://' or 'https://'
+        # protocol」——用户看到的只是笼统的"LLM 调用失败"。在写入这一步就
+        # 补全协议头,而不是指望每个读它的消费端都记得自己校验。
+        if CONFIG_SCHEMA[key]["type"] == "url":
+            stripped = value.strip()
+            if stripped and not stripped.startswith(("http://", "https://")):
+                value = f"http://{stripped}"
+        os.environ[key] = value
 
-    # 同步写入 .env 文件
-    _write_env_file()
+    # OLLAMA_MODEL 有两个持久化存点:.env(本函数写)和 .galaxy_model
+    # (core.model_selection.save_choice() 写,resolve_main_brain() 在 env 变量
+    # 缺失时会退回读它)。这里只写了前者,两处会静默分叉——若以后 .env 里的
+    # OLLAMA_MODEL 被清空,resolve_main_brain() 就会退回 .galaxy_model 里那个
+    # 更早、已经过时的选择,而不是用户刚在面板上选的这个。同步一下避免分叉。
+    if "OLLAMA_MODEL" in req.config:
+        try:
+            from core.model_selection import save_choice
+            save_choice(req.config["OLLAMA_MODEL"])
+        except Exception:
+            pass
 
-    # 如果 LLM API Key 有更新，刷新路由器 providers
-    if llm_keys_updated:
-        _refresh_llm_providers()
-
-    return {"success": True, "updated": list(req.config.keys())}
-
-
-@router.post("/reload")
-async def reload_config():
-    """从 .env 文件重新加载所有配置（用于外部 .env 更新后刷新）"""
-    reloaded = _load_env_file()
-    _refresh_llm_providers()
-    return {"success": True, "reloaded": reloaded}
-
-
-def _refresh_llm_providers():
-    """刷新 LLM 路由器的 providers（API Key 变更后调用）"""
+    # 修复:_write_env_file() 之前完全没有 try/except——Windows 上 .env 若被
+    # 杀毒软件/编辑器占用锁定,或所在目录权限不足,write_text() 会抛
+    # PermissionError,FastAPI 缺省转成裸 500、无任何 detail,前端只能显示
+    # "保存失败"四个字,排查全靠猜。这里显式捕获并把真实原因透传出去。
     try:
-        from core.multi_llm_router import MultiLLMRouter
-        router = MultiLLMRouter.get_instance()
-        router._discover_providers()
-    except Exception as e:
-        pass  # 路由器可能尚未初始化，静默处理
+        _write_env_file()
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"写入 .env 失败: {exc}(检查文件是否被占用/只读，或目录权限）",
+        ) from exc
+
+    # UnifiedConfig 是进程启动时读一次 .env 就不再变的单例("Dashboard 优先级"
+    # 那一层实际读的是它)——本函数只写了 os.environ/.env,从没告诉过它内容
+    # 变了。同一进程内一直没炸,纯粹是因为 _get_key() 的兜底第三层直接读
+    # os.environ 生效了；但 UnifiedConfig 自己上报的值会一直是启动时的旧值，
+    # 直到进程重启。这里保存后顺手 reload 一下，让它也反映最新内容，不再是
+    # 一个"名义最高优先级、实际全程失效"的摆设。
+    try:
+        from core.unified_config import config as _unified_cfg
+        _unified_cfg.reload()
+    except Exception:
+        pass
+
+    # 若改动涉及模型 API（llm 类），热刷新 LLM 路由器，让新填的 key 即时生效（无需重启）。
+    refreshed = None
+    if any(CONFIG_SCHEMA.get(k, {}).get("category") == "llm" for k in req.config):
+        try:
+            from core.multi_llm_router import refresh_llm_router
+            refreshed = await refresh_llm_router()
+        except Exception:
+            refreshed = None
+
+    return {"success": True, "updated": list(req.config.keys()), "router_refreshed": refreshed}
 
 
 @router.post("/save")
@@ -209,33 +258,103 @@ async def save_config():
     return {"success": True}
 
 
+class ProbeRequest(BaseModel):
+    keys: list[str]
+
+
+def _probe_one(raw: str) -> Dict[str, Any]:
+    """对单个地址做同步 TCP 连接探测(在线程池里跑,不阻塞事件循环)。"""
+    import socket
+    import time as _time
+    from urllib.parse import urlsplit
+
+    raw = raw.strip()
+    if not raw:
+        return {"reachable": False, "latency_ms": None, "error": "未配置"}
+
+    # 补默认 scheme,方便 urlsplit 解析出 host/port(例如 "localhost:4222"
+    # 这种没写 scheme 的值)。
+    parseable = raw if "://" in raw else f"tcp://{raw}"
+    parsed = urlsplit(parseable)
+    host = parsed.hostname
+    port = parsed.port or {"http": 80, "https": 443, "redis": 6379, "nats": 4222}.get(parsed.scheme)
+
+    if not host or not port:
+        return {"reachable": False, "latency_ms": None, "error": f"无法解析地址: {raw}"}
+
+    start = _time.monotonic()
+    try:
+        with socket.create_connection((host, port), timeout=1.5):
+            latency_ms = round((_time.monotonic() - start) * 1000, 1)
+            return {"reachable": True, "latency_ms": latency_ms, "error": None}
+    except OSError as exc:
+        return {"reachable": False, "latency_ms": None, "error": str(exc)}
+
+
+@router.post("/probe")
+async def probe_config_urls(req: ProbeRequest):
+    """对「设置」tab 里 type=url 的项做真实连通性探测(TCP 连接,不识别协议)。
+
+    背景:「端口与节点」「网络」「组网」这几个分类之前只是纯文本配置编辑器——
+    值本身是真实的(读写 os.environ/.env),但用户在设置页完全看不到"这个地址
+    现在到底通不通"，被误认为"没有接真实数据"。这里补一个真正的、非伪造的
+    连通性探测:对每个 key 解析出 host:port，尝试建立 TCP 连接(1.5s 超时)，
+    成功即视为"可达"，不需要认识每种协议(NATS/Redis/HTTP 等)的具体握手。
+    多个 key 用 asyncio.to_thread 并发探测,避免阻塞事件循环、也避免用户等待
+    N 个地址依次超时的总时长。
+    """
+    import asyncio as _asyncio
+
+    to_probe: Dict[str, str] = {}
+    results: Dict[str, Dict[str, Any]] = {}
+    for key in req.keys:
+        meta = CONFIG_SCHEMA.get(key)
+        if meta is None or meta.get("type") != "url":
+            results[key] = {"reachable": False, "latency_ms": None, "error": "not a url-type key"}
+            continue
+        to_probe[key] = os.environ.get(key, meta["default"])
+
+    if to_probe:
+        probed = await _asyncio.gather(
+            *(_asyncio.to_thread(_probe_one, raw) for raw in to_probe.values())
+        )
+        results.update(zip(to_probe.keys(), probed))
+
+    return {"results": results}
+
+
 def _write_env_file():
-    """将所有配置写入 .env 文件"""
+    """将所有【非空】配置写入 .env 文件。
+
+    关键修复:之前把全部 schema 键(含空值)统统写成 ``KEY=`` 行。空字符串
+    一旦被 .env 加载进 os.environ,就会把代码里的默认值顶掉——
+    ``os.environ.get("OLLAMA_URL", "http://localhost:11434")`` 在
+    ``OLLAMA_URL=""`` 存在时返回 ""，不是默认值。真机复现过的一整串症状都
+    源于此:LocalBrainManager 拿空 URL ping Ollama(明明在跑却判"服务未响应/
+    模型未就绪")、Redis "must specify scheme"、NATS "invalid hostname"。
+    现在空值不写入(视同未配置),下次保存时旧 .env 里的空值行也会随全量
+    重写被清掉。
+    """
     lines = ["# Galaxy Configuration - Auto-generated by Settings Panel\n"]
 
     # 按类别分组
     current_category = ""
     for key, meta in sorted(CONFIG_SCHEMA.items(), key=lambda x: x[1]["category"]):
+        value = os.environ.get(key, meta["default"])
+        if not str(value).strip():
+            continue  # 空值不落盘——否则会把代码默认值顶掉
         if meta["category"] != current_category:
             current_category = meta["category"]
             lines.append(f"\n# --- {current_category.upper()} ---\n")
 
-        value = os.environ.get(key, meta["default"])
         desc = meta["description"]
         lines.append(f"# {desc}\n{key}={value}\n")
 
     ENV_FILE.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _load_env_file():
-    """启动时从 .env 加载配置到环境变量"""
-    if not ENV_FILE.exists():
-        return
-    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        if key and key not in os.environ:
-            os.environ[key] = value.strip()
+# 注:曾经这里有一个 _load_env_file()——但全仓库排查确认它从未被任何地方调用过,
+# 是一段死代码(容易让人误以为"config.py 会自己加载 .env"从而误删/误改
+# main.py 顶部真正生效的 dotenv.load_dotenv() 那段逻辑,造成隐蔽回归)。
+# .env → os.environ 的真正加载点在 main.py / unified_launcher.py 顶部
+# 的 load_dotenv() 调用,已删除此处死代码。

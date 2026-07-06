@@ -394,8 +394,26 @@ export default function SettingsTab() {
 
   // ── OAuth 连接器操作(showToast 之后定义,避免前向引用)──
   const connectService = useCallback((svc: string) => {
-    window.open(`${getBackendUrl()}/api/v1/connectors/${svc}/authorize`, '_blank', 'width=560,height=720');
-    setTimeout(refreshConnectors, 4000);
+    const popup = window.open(
+      `${getBackendUrl()}/api/v1/connectors/${svc}/authorize`, '_blank', 'width=560,height=720',
+    );
+    // 授权页(用户在弹窗里登录、同意授权)耗时因人而异——之前固定 4 秒后刷新
+    // 一次,手慢一点(读同意页/输密码)就赶不上,状态卡在"未连接"直到用户自己
+    // 手动切走再切回来。改成轮询弹窗是否关闭(回调页成功后 3 秒自动
+    // window.close(),见 core/routes/nodes.py 的 connector_callback):关闭即
+    // 说明流程走完(成功或用户主动关掉),立刻刷新一次拿到真实状态/账号名。
+    if (popup) {
+      const poll = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(poll);
+          refreshConnectors();
+        }
+      }, 800);
+      // 兜底:弹窗被拦截识别不到关闭事件、或用户异常操作时,别永远轮询下去。
+      setTimeout(() => clearInterval(poll), 5 * 60 * 1000);
+    } else {
+      setTimeout(refreshConnectors, 4000);
+    }
   }, [refreshConnectors]);
 
   const disconnectService = useCallback(async (svc: string) => {
@@ -693,7 +711,9 @@ export default function SettingsTab() {
               <div className="connector-card" key={c.service}>
                 <div className="connector-row">
                   <span className="connector-name">{c.label}</span>
-                  <span className={`connector-status ${st.cls}`}>{st.label}</span>
+                  <span className={`connector-status ${st.cls}`}>
+                    {st.label}{c.status === 'connected' && c.account ? ` · ${c.account}` : ''}
+                  </span>
                 </div>
                 <div className="connector-actions">
                   {c.status === 'connected' ? (

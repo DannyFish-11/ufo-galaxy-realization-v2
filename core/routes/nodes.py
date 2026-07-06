@@ -237,7 +237,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         from core.oauth_connectors import handle_callback
         res = await handle_callback(service, code, state)
         ok = bool(res.get("ok"))
-        msg = f"{service} 连接成功,可关闭本页" if ok else f"连接失败:{res.get('error')}"
+        account = res.get("account")
+        if ok:
+            msg = f"{service} 已连接（{account}），可关闭本页" if account else f"{service} 连接成功,可关闭本页"
+        else:
+            msg = f"连接失败:{res.get('error')}"
         html = (
             "<!doctype html><meta charset='utf-8'><body style='font-family:system-ui;"
             "background:#11131c;color:#eaf6ff;display:flex;align-items:center;"

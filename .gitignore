@@ -113,6 +113,7 @@ data/_verify_clip_mock/
 data/clip_memory/
 data/clap_memory/
 chroma_db/
+chroma/
 
 # Local unified configuration authority (PR-3)
 # Real operator config and secrets must not be committed.

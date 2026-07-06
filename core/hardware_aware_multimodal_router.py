@@ -27,12 +27,30 @@ core.hardware_aware_multimodal_router — 硬件感知多模态优先路由器
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.HAMRouter")
+
+
+def _ollama_base_url() -> str:
+    """读 OLLAMA_URL 并兜底补全协议头。
+
+    真机复现过:用户在面板只填 host:port(如 "localhost:11434"),没带协议头。
+    原来这里直接 ``os.environ.get("OLLAMA_URL", "http://localhost:11434")``——
+    该写法的默认值只在 key 完全不存在时生效,key 存在但是"localhost:11434"
+    这种没有协议头的值会原样传给 httpx,实际发起请求时炸
+    ``InvalidURL: ... missing ... protocol``。这里统一兜底补全。
+    """
+    raw = os.environ.get("OLLAMA_URL", "").strip()
+    if not raw:
+        return "http://localhost:11434"
+    if not raw.startswith(("http://", "https://")):
+        raw = f"http://{raw}"
+    return raw.rstrip("/")
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +183,8 @@ class HardwareAwareMultimodalRouter:
         """检查 Ollama 是否可用"""
         try:
             import httpx
-            resp = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
+            base = _ollama_base_url()
+            resp = httpx.get(f"{base}/api/tags", timeout=2.0)
             return resp.status_code == 200
         except Exception as exc:
             return False
@@ -334,13 +353,20 @@ class HardwareAwareMultimodalRouter:
         if now - self._last_refresh < 60 and self._local_models:
             return self._local_models
 
+        # _ollama_available 只在 __init__ 探测一次:若路由器在 Ollama 完全起
+        # 来之前就被实例化(单例、启动早期常见),之后就会【永久】判定 Ollama
+        # 不可用,整个进程生命周期都跳过本地、直接落到 HF/API —— 这里跟着同一
+        # 60s 缓存周期一起刷新,而不是只信构造时那一次性探测。
+        self._ollama_available = self._check_ollama()
+
         models: Dict[str, List[Dict]] = {"llm": [], "vlm": [], "asr": [], "embedding": []}
 
         # 扫描 Ollama 模型
         if self._ollama_available:
             try:
                 import httpx
-                resp = httpx.get("http://localhost:11434/api/tags", timeout=3.0)
+                base = _ollama_base_url()
+                resp = httpx.get(f"{base}/api/tags", timeout=3.0)
                 if resp.status_code == 200:
                     for m in resp.json().get("models", []):
                         models["llm"].append({
@@ -371,7 +397,12 @@ class HardwareAwareMultimodalRouter:
 
     @staticmethod
     def _select_ollama_model(task_type: str, profile: Optional[Any]) -> str:
-        """根据任务类型和硬件选择 Ollama 模型 (Gemma 4 系列)"""
+        """选 Ollama 模型:优先用户在克隆界面已选定/已拉取的主脑(OLLAMA_MODEL)，
+        不按硬件重新猜——猜出的 tag 很可能从未被下载过(如猜 12b 但用户机器只
+        拉了 e2b),一猜就 404。只有从未选过主脑(env 为空)时才退回硬件推荐。"""
+        env_model = os.environ.get("OLLAMA_MODEL", "").strip()
+        if env_model:
+            return env_model
         if profile:
             if profile.max_model_size_mb > 8000:
                 # 大显存 (8GB+) → Gemma 4 12B

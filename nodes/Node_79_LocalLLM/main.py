@@ -48,21 +48,44 @@ NODE_NAME = os.getenv("NODE_NAME", "LocalLLM")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # Ollama 配置
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+def _normalize_ollama_url(raw: str) -> str:
+    """兜底补协议头:用户在面板只填 host:port 时,os.getenv 的默认值不会生效
+    (key 已存在),原样传给 httpx 会在真正请求时炸 missing protocol。"""
+    raw = (raw or "").strip()
+    if not raw:
+        return "http://localhost:11434"
+    return raw if raw.startswith(("http://", "https://")) else f"http://{raw}"
+
+
+OLLAMA_URL = _normalize_ollama_url(os.getenv("OLLAMA_URL", ""))
 
 # Fallback 配置（云端 LLM）
 FALLBACK_ENABLED = os.getenv("FALLBACK_ENABLED", "true").lower() == "true"
 FALLBACK_URL = os.getenv("FALLBACK_URL", "http://localhost:8001")  # Node 01 (OneAPI)
 
-# 模型配置
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen2.5:7b-instruct-q4_K_M")
+# 模型配置 —— 默认取全系统唯一主脑(OLLAMA_MODEL / core.model_selection),
+# 而不是本节点独立写死的 qwen2.5/deepseek-coder(那套模型从未被实际拉取过，
+# 命中就 404)。仍支持按 task_type 用环境变量单独覆盖到别的已装模型。
+def _system_brain_tag() -> str:
+    env = os.getenv("OLLAMA_MODEL", "").strip()
+    if env:
+        return env
+    try:
+        from core.model_selection import load_choice, recommend
+        return load_choice() or recommend()
+    except Exception:
+        return "gemma4:e2b"
 
-# 多模型支持
+
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "") or _system_brain_tag()
+
+# 多模型支持(可选):未显式配置时，全部回落到同一个已装的本地主脑，
+# 避免又拉起一套从未下载过的 qwen2.5/deepseek-coder 全家桶。
 MODEL_MAPPING = {
-    "code": os.getenv("CODE_MODEL", "deepseek-coder:6.7b-instruct-q4_K_M"),
-    "complex": os.getenv("COMPLEX_MODEL", "qwen2.5:14b-instruct-q4_K_M"),
-    "normal": os.getenv("NORMAL_MODEL", "qwen2.5:7b-instruct-q4_K_M"),
-    "simple": os.getenv("SIMPLE_MODEL", "qwen2.5:3b-instruct-q4_K_M"),
+    "code": os.getenv("CODE_MODEL", DEFAULT_MODEL),
+    "complex": os.getenv("COMPLEX_MODEL", DEFAULT_MODEL),
+    "normal": os.getenv("NORMAL_MODEL", DEFAULT_MODEL),
+    "simple": os.getenv("SIMPLE_MODEL", DEFAULT_MODEL),
 }
 
 # 任务类型关键词

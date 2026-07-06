@@ -72,6 +72,24 @@ class ProviderConfig:
     success_count: int = 0
     last_error: Optional[str] = None
     last_used: float = 0.0
+    down_since: float = 0.0  # 标记为 DOWN 的时刻(见 is_available())
+
+    def is_available(self, recovery_seconds: float = 60.0) -> bool:
+        """该 provider 现在是否该被当作候选。
+
+        修复:status 字段一旦被打成 DOWN(连续 5 次失败),此前【没有任何自愈
+        路径】——route()/route_multimodal_first()/route_with_cost_policy() 等
+        十几处候选筛选全部一律排除 DOWN,而重新变回候选的唯一办法是成功调用
+        一次；但 DOWN 的 provider 永远不会被选为候选,自然也永远没机会成功调用，
+        于是一旦 DOWN 就【整个进程生命周期】卡死,除非手动触发 refresh_llm_router()
+        (保存一次 llm 类配置)或重启——同一个类里的断路器(ProviderCircuitBreaker)
+        反而设计对了(OPEN 到期自动进 HALF_OPEN 重新试探)，两套健康判断互相矛盾。
+        这里让 DOWN 状态也按同样的冷却窗口自动过期，恢复候选资格，真正出问题时
+        断路器仍会在 chat() 调用前再拦一道。
+        """
+        if self.status != ProviderStatus.DOWN:
+            return True
+        return bool(self.down_since) and (time.time() - self.down_since) >= recovery_seconds
 
 
 @dataclass
@@ -117,6 +135,37 @@ LOCAL_LLM_PROVIDER_ROLE: str = (
     "NOT governed by this router.  Closes PR-3 local-provider role clarity."
 )
 
+# _get_key() 短 provider 名 → 真实 .env / os.environ 长名的映射。
+#
+# 关键背景:_get_key() 在 _discover_providers() 里全部按短名调用(如
+# self._get_key("deepseek")),但 .env / os.environ / UnifiedConfig._load_env()
+# 存的都是长名(如 DEEPSEEK_API_KEY，小写存成 deepseek_api_key)——短名
+# "deepseek" 从未真正命中过 unified_config 或 os.environ 里的任何一层，
+# _get_key() 事实上只有 CredentialVault(层 2)显式按短名写入时才会命中，
+# ENV/.env(层 1 的 flat 兜底 + 层 3)从未真正生效过。真机复现过:「模型」tab
+# 存的任何 API Key(DeepSeek/OpenAI/Anthropic/……全部受影响，不止某一家)
+# 保存当次生效(setConfig 同步写了 os.environ)，但重启新进程后一律读不回来。
+_PROVIDER_ENV_KEY_MAP: Dict[str, str] = {
+    "openai": "OPENAI_API_KEY",
+    "openai_base": "OPENAI_API_BASE",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "xai": "XAI_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "qwen": "QWEN_API_KEY",
+    "zhipu": "ZHIPU_API_KEY",
+    "minimax": "MINIMAX_API_KEY",
+    "step": "STEP_API_KEY",
+    "mimo": "MIMO_API_KEY",
+    "moonshot": "MOONSHOT_API_KEY",
+    "perplexity": "PERPLEXITY_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "ollama": "OLLAMA_URL",
+    "oneapi": "ONEAPI_API_KEY",
+    "oneapi_url": "ONEAPI_URL",
+}
+
 # 任务类型 → 提供商优先级
 # LOCAL-BRAIN-FIRST: Ollama 被移到第一位作为本地主脑优先策略。
 # 只有本地模型不可用或能力不足时才回退到云端 API。
@@ -134,6 +183,101 @@ TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
     TaskType.AGENT_CONTROL:  ["ollama", "hf_local", "anthropic", "openai", "deepseek", "minimax", "step"],
     TaskType.GENERAL:        ["ollama", "hf_local", "openai", "anthropic", "deepseek", "google", "qwen", "zhipu", "minimax", "step", "mimo"],
 }
+
+# ───────────────────────────────────────────────────────────────────────────
+# 开源优先策略（OPEN-SOURCE-FIRST）
+# ───────────────────────────────────────────────────────────────────────────
+# 用户设计：以开源模型为主。本地原生多模态主脑(ollama/hf_local)是基座；
+# 云端调用也优先开源模型 API（DeepSeek/Qwen/GLM/Llama-via-groq 等），
+# 专有模型(OpenAI/Anthropic/Google/xAI)作为可选高端兜底，排在最后。
+#
+# 当 GALAXY_OPENSOURCE_FIRST != "false"（默认开启）时，route() 会把开源
+# 提供商整体提到专有提供商之前，同时严格保持各自原有的任务偏好相对顺序。
+OPEN_SOURCE_PROVIDERS: set = {
+    "ollama",      # 本地原生多模态主脑（Gemma4 / MiniCPM-o）
+    "hf_local",    # 本地 HuggingFace 模型
+    "deepseek",    # DeepSeek（开源权重）
+    "qwen",        # 通义千问（开源权重）
+    "zhipu",       # 智谱 GLM（开源权重）
+    "groq",        # Groq 托管 Llama 等开源模型
+    "minimax",     # MiniMax（部分开源）
+    "step",        # 阶跃 StepFun
+    "mimo",        # 小米 MiMo（开源）
+    "moonshot",    # Kimi / Moonshot（Kimi-K2 开源）
+    "mistral",     # Mistral（开源权重）
+    "oneapi",      # OneAPI 聚合层（通常聚合开源模型）
+}
+
+# 专有闭源提供商（仅作高端兜底，开源优先时排最后）
+PROPRIETARY_PROVIDERS: set = {
+    "openai", "anthropic", "google", "xai", "perplexity",
+}
+
+
+def reorder_open_source_first(provider_order: List[str]) -> List[str]:
+    """把开源提供商整体前移到专有提供商之前，保持各自原相对顺序（稳定排序）。
+
+    纯函数、无副作用，便于单测。未知提供商按"开源"处理（更符合本仓库以开源
+    自托管/聚合为主的现状），不会被错误地降级到专有兜底之后。
+    """
+    open_src = [p for p in provider_order if p not in PROPRIETARY_PROVIDERS]
+    proprietary = [p for p in provider_order if p in PROPRIETARY_PROVIDERS]
+    return open_src + proprietary
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# 角色 → 脑 绑定（大小模型配合的执行层映射）
+# ───────────────────────────────────────────────────────────────────────────
+# Octo 式多 Agent 协作里，每个角色绑定"最便宜够用"的脑：
+#   - 执行/感知类角色 → 本地小模型优先（便宜、私密、够用）
+#   - 审核/推理/协调类角色 → 开源大模型 API 优先（更强、攻坚/把关）
+# 返回值由 select_brain_for_role() 解析为具体 (provider, model)。
+ROLE_BRAIN_HINTS: Dict[str, Dict[str, Any]] = {
+    # 重角色：需要强推理 / 质量把关 → 倾向云端开源大模型
+    "critic":      {"prefer_local": False, "task_type": TaskType.REASONING, "min_complexity": 0.7},
+    "reviewer":    {"prefer_local": False, "task_type": TaskType.REASONING, "min_complexity": 0.7},
+    "reasoner":    {"prefer_local": False, "task_type": TaskType.REASONING, "min_complexity": 0.7},
+    "coordinator": {"prefer_local": False, "task_type": TaskType.PLANNING,  "min_complexity": 0.6},
+    "planner":     {"prefer_local": False, "task_type": TaskType.PLANNING,  "min_complexity": 0.6},
+    "analyst":     {"prefer_local": False, "task_type": TaskType.ANALYSIS,  "min_complexity": 0.6},
+    # 轻角色：执行/产出/感知 → 倾向本地小模型
+    "executor":    {"prefer_local": True,  "task_type": TaskType.FAST_RESPONSE, "min_complexity": 0.0},
+    "worker":      {"prefer_local": True,  "task_type": TaskType.GENERAL,       "min_complexity": 0.0},
+    "researcher":  {"prefer_local": True,  "task_type": TaskType.GENERAL,       "min_complexity": 0.0},
+    "coder":       {"prefer_local": True,  "task_type": TaskType.CODING,        "min_complexity": 0.3},
+    "writer":      {"prefer_local": True,  "task_type": TaskType.CREATIVE,      "min_complexity": 0.0},
+}
+
+# ───────────────────────────────────────────────────────────────────────────
+# 做任务的"按实际情况选模型"——能力质量分层（粗粒度，可经 env 覆盖）
+# ───────────────────────────────────────────────────────────────────────────
+# 用户规则：做任务时【能力最强优先】，适度看 token，按需看延迟。
+# 这里给每个提供商一个粗略"能力档"（3=前沿/最强, 2=强, 1=本地轻量）。
+# 注意：这是质量导向，区别于 TASK_ROUTING_PREFERENCES（那是交流基座的本地/开源优先）。
+# DeepSeek/Qwen/GLM 等强开源模型同列 tier 3，确保"以开源为主"也能拿到最强档。
+PROVIDER_QUALITY_TIER: Dict[str, int] = {
+    # tier 3 —— 前沿能力（含强开源大模型）
+    "anthropic": 3, "openai": 3, "google": 3, "xai": 3,
+    "deepseek": 3, "qwen": 3, "zhipu": 3,
+    # tier 2 —— 强
+    "minimax": 2, "step": 2, "moonshot": 2, "mistral": 2,
+    "groq": 2, "mimo": 2, "perplexity": 2, "oneapi": 2,
+    # tier 1 —— 本地轻量（无 GPU 笔电主脑）
+    "ollama": 1, "hf_local": 1,
+}
+
+
+def _provider_quality_tier(name: str) -> int:
+    """读提供商能力档；支持 env 覆盖 GALAXY_QUALITY_TIER_<PROVIDER>=N。"""
+    import os as _os
+    ov = _os.environ.get(f"GALAXY_QUALITY_TIER_{name.upper()}")
+    if ov:
+        try:
+            return int(ov)
+        except ValueError:
+            pass
+    return PROVIDER_QUALITY_TIER.get(name, 2)
+
 
 # 提供商 → 推荐模型 (2026-05-29 全面更新)
 PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
@@ -583,12 +727,56 @@ class GroqAdapter(OpenAIAdapter):
 class OllamaAdapter(BaseProviderAdapter):
     """Ollama local model adapter"""
 
+    @staticmethod
+    def _to_ollama_messages(messages):
+        """把消息规范成 Ollama 原生格式，让本地多模态模型(Gemma4/MiniCPM-o)真正"看到"图像。
+
+        Ollama /api/chat 的图像约定：在 message 上挂 ``images: ["<base64>", ...]``（纯 base64，
+        不含 data: 前缀）。上游可能用 OpenAI 风格的 ``content: [{type:"text"...},
+        {type:"image_url", image_url:{url:"data:image/..;base64,XXXX"}}]``，也可能已带 ``images``。
+        这里统一抽取：文本部分拼回 content 字符串，图像部分收进 images 数组。无图则原样返回。
+        """
+        out = []
+        for m in messages:
+            if not isinstance(m, dict):
+                out.append(m)
+                continue
+            content = m.get("content")
+            imgs = list(m.get("images") or [])
+            if isinstance(content, list):
+                text_parts = []
+                for part in content:
+                    if not isinstance(part, dict):
+                        text_parts.append(str(part))
+                        continue
+                    ptype = part.get("type")
+                    if ptype == "text":
+                        text_parts.append(part.get("text", ""))
+                    elif ptype in ("image_url", "image"):
+                        url = ""
+                        if isinstance(part.get("image_url"), dict):
+                            url = part["image_url"].get("url", "")
+                        else:
+                            url = part.get("image_url") or part.get("data") or part.get("image", "")
+                        if isinstance(url, str) and url:
+                            # 去掉 data:image/...;base64, 前缀
+                            imgs.append(url.split(",", 1)[1] if url.startswith("data:") else url)
+                new_m = {**m, "content": "\n".join(t for t in text_parts if t)}
+            else:
+                new_m = {**m}
+            if imgs:
+                new_m["images"] = imgs
+            elif "images" in new_m and not new_m["images"]:
+                new_m.pop("images", None)
+            out.append(new_m)
+        return out
+
     async def chat(self, messages, model, tools=None,
                    temperature=0.7, max_tokens=4096,
                    response_format=None, **kwargs) -> LLMResponse:
         body = {
             "model": model,
-            "messages": messages,
+            "messages": self._to_ollama_messages(messages),
             "stream": False,
             "options": {"temperature": temperature, "num_predict": max_tokens},
         }
@@ -660,7 +848,7 @@ class StepAdapter(OpenAIAdapter):
 
 
 class MiMoAdapter(OpenAIAdapter):
-    """小米 MiMo via OpenAI-compatible API (api.mimo.ai)"""
+    """小米 MiMo via OpenAI-compatible API (api.xiaomimimo.com)"""
     pass
 
 
@@ -729,23 +917,15 @@ class MultiLLMRouter:
             self.circuit_breakers[name] = ProviderCircuitBreaker(name)
 
     def _get_key(self, key_name: str) -> str:
-        """配置优先级: Dashboard > CredentialVault > ENV > .env 文件（PR86）"""
-        # 0. 先从 .env 文件刷新（Settings 面板写入后实时生效）
-        try:
-            env_path = os.environ.get("GALAXY_ENV_FILE", ".env")
-            if os.path.exists(env_path):
-                with open(env_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith("#") or "=" not in line:
-                            continue
-                        k, _, v = line.partition("=")
-                        k = k.strip()
-                        if k and k not in os.environ:
-                            os.environ[k] = v.strip()
-        except Exception:
-            pass
+        """配置优先级: Dashboard > CredentialVault > ENV（PR86）
 
+        key_name 是内部短 provider 名(如 "deepseek")，与 .env/os.environ 里的
+        真实长名(如 "DEEPSEEK_API_KEY")不是一回事——见模块级
+        _PROVIDER_ENV_KEY_MAP 顶部注释：之前三层查找全部只按短名查，从未真正
+        从 .env/环境变量取到过值。这里同时尝试短名(保留，兼容任何显式按短名
+        写入 Dashboard/Vault 的历史数据)和真实长名(修复 .env/环境变量这条路)。
+        """
+        real_env_key = _PROVIDER_ENV_KEY_MAP.get(key_name, key_name)
         # 1. Dashboard 配置（最高优先级）— 通过 UnifiedConfig 获取
         try:
             from core.unified_config import config as _cfg
@@ -753,6 +933,10 @@ class MultiLLMRouter:
             val = _cfg.get(f"llm.providers.{key_name}.api_key", "")
             if not val:
                 val = _cfg.get(f"api_keys.{key_name}", "")
+            if not val and real_env_key != key_name:
+                # 修复:.env/UnifiedConfig._load_env() 按真实长名(小写)存储，
+                # 短名从未命中过——补上按长名查询。
+                val = _cfg.get(f"api_keys.{real_env_key}", "")
             if val and not str(val).startswith("your-"):
                 return str(val)
         except Exception as exc:
@@ -765,8 +949,40 @@ class MultiLLMRouter:
                 return val
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
-        # 3. 环境变量（兜底）
+        # 3. 环境变量（兜底）—— 修复:优先用真实长名查(.env/系统环境变量都是
+        # 这个约定)，短名查询保留作最后兜底(不改变既有行为)。
+        val = os.environ.get(real_env_key, "")
+        if val:
+            return val
         return os.environ.get(key_name.upper() if "_" in key_name else key_name, "")
+
+    @staticmethod
+    def _normalize_base_url(raw: str) -> str:
+        """确保 URL 带 http(s):// 协议头。
+
+        真机复现过:用户在面板「模型」tab 填 OLLAMA_URL/ONEAPI_URL 时只填了
+        host:port(如 "localhost:11434"),没带协议头。这个值不做任何校验就被
+        原样存进 base_url,直到实际发起请求时 httpx 才会炸
+        ``InvalidURL: Request URL is missing an 'http://' or 'https://' protocol.``——
+        用户看到的只是一句"LLM 调用失败",完全不知道是哪个字段少打了几个字符。
+        这里在读到手动配置的 URL 时统一兜底补全协议头，而不是要求每个调用点
+        都自己记得判断。
+        """
+        raw = (raw or "").strip()
+        if raw and not raw.startswith(("http://", "https://")):
+            raw = f"http://{raw}"
+        return raw
+
+    @staticmethod
+    def _internal_hf_adapter_alive(base_url: str) -> bool:
+        """探测 hf_local 内部适配服务是否真的在监听(见 _discover_providers)。"""
+        try:
+            import httpx
+            root = base_url.split("/v1/")[0]
+            httpx.get(root, timeout=1.0)
+            return True
+        except Exception:
+            return False
 
     def _discover_providers(self):
         """从配置源自动发现并注册提供商（Dashboard > ENV > defaults）（PR86）"""
@@ -938,7 +1154,10 @@ class MultiLLMRouter:
         if key and not key.startswith("your-"):
             cfg = ProviderConfig(
                 name="mimo", api_key=key,
-                base_url="https://api.mimo.ai/v1",
+                # 联网核实:小米 MiMo 官方 OpenAI 兼容端点是 api.xiaomimimo.com，
+                # 不是 api.mimo.ai(后者不解析/不是小米的域名)——key 填得再对，
+                # 域名错了也是每次都连接失败，跟没配 key 看起来一模一样。
+                base_url="https://api.xiaomimimo.com/v1",
                 models=["mimo-v2.5-pro", "mimo-v2.5-standard", "mimo-v2.5-lite"],
                 default_model="mimo-v2.5-pro",
                 cost_per_1k_input=0.00002, cost_per_1k_output=0.00008,
@@ -996,9 +1215,9 @@ class MultiLLMRouter:
             self.adapters["groq"] = GroqAdapter(cfg)
 
         # Ollama (local) — PR-HA: upgraded to first-class multimodal-capable local provider
-        ollama_url = self._get_key("ollama")
+        ollama_url = self._normalize_base_url(self._get_key("ollama"))
         if not ollama_url:
-            ollama_url = os.environ.get("OLLAMA_URL", "")
+            ollama_url = self._normalize_base_url(os.environ.get("OLLAMA_URL", ""))
         ollama_default_url = "http://localhost:11434"
         if not ollama_url:
             # 尝试默认地址
@@ -1022,10 +1241,24 @@ class MultiLLMRouter:
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
 
+            # AI 主脑：用户在启动时选定的模型(OLLAMA_MODEL，见 core.model_selection)作为默认主脑。
+            # 把它提到 models 列表最前并设为 default_model；未设置则回退第一个已安装模型。
+            _main_brain = os.environ.get("OLLAMA_MODEL", "").strip()
+            if _main_brain:
+                _norm = lambda s: s.split(":")[0]  # noqa: E731
+                if not any(m == _main_brain or _norm(m) == _norm(_main_brain) for m in detected_models):
+                    detected_models = [_main_brain] + detected_models
+                else:
+                    detected_models = sorted(
+                        detected_models,
+                        key=lambda m: 0 if (m == _main_brain or _norm(m) == _norm(_main_brain)) else 1,
+                    )
+            _default_model = _main_brain or (detected_models[0] if detected_models else "gemma4:e2b")
+
             cfg = ProviderConfig(
                 name="ollama", api_key="", base_url=ollama_url,
                 models=detected_models,
-                default_model=detected_models[0] if detected_models else "llama3",
+                default_model=_default_model,
                 supports_tools=True, supports_json_mode=True,
                 multimodal=True,  # PR-HA: Ollama now marked multimodal-capable
                 env_key="OLLAMA_URL",
@@ -1050,13 +1283,19 @@ class MultiLLMRouter:
 
             hf_mgr = get_hf_model_manager()
             local_llm_models = hf_mgr.list_local_models(family=ModelFamily.LLM)
-            if local_llm_models:
+            hf_base_url = "http://localhost:16201/v1/hf"  # Galaxy internal API
+            # hf_local 排在偏好列表里紧跟 ollama 之后(见 PREFERRED_PROVIDER_ORDER)。
+            # 这个内部适配服务(:16201)从未被实现过 —— 若仍无条件注册,一旦真的
+            # 触发到 hf_local 兜底,连的是一个根本没监听的端口,只会拿到连接失败,
+            # 而不是继续往下一个 provider 退——静默变成"看似失败模型探测"。这里
+            # 先探一下这个内部端口是否真的活着,不活就不注册,让偏好列表自然跳过它。
+            if local_llm_models and self._internal_hf_adapter_alive(hf_base_url):
                 hf_model_ids = [m.model_id for m in local_llm_models]
                 hf_default = hf_model_ids[0] if hf_model_ids else ""
                 cfg = ProviderConfig(
                     name="hf_local",
                     api_key="",
-                    base_url="http://localhost:16201/v1/hf",  # Galaxy internal API
+                    base_url=hf_base_url,
                     models=hf_model_ids,
                     default_model=hf_default,
                     supports_tools=True,
@@ -1072,6 +1311,11 @@ class MultiLLMRouter:
                 logger.info(
                     "HF 本地模型提供商已注册: %d 个模型", len(hf_model_ids)
                 )
+            elif local_llm_models:
+                logger.debug(
+                    "跳过 hf_local 注册:内部适配服务(%s)未运行,避免偏好列表命中它时"
+                    "连接失败(而非正常跳到下一个 provider)", hf_base_url,
+                )
         except Exception as exc:
             logger.debug("HF 本地模型提供商注册失败 (非致命): %s", exc)
 
@@ -1079,9 +1323,9 @@ class MultiLLMRouter:
         oneapi_key = self._get_key("oneapi")
         if not oneapi_key:
             oneapi_key = os.environ.get("ONEAPI_API_KEY", "")
-        oneapi_url = self._get_key("oneapi_url")
+        oneapi_url = self._normalize_base_url(self._get_key("oneapi_url"))
         if not oneapi_url:
-            oneapi_url = os.environ.get("ONEAPI_URL", "")
+            oneapi_url = self._normalize_base_url(os.environ.get("ONEAPI_URL", ""))
         if oneapi_key and not oneapi_key.startswith("your-") and oneapi_url:
             models = self._discover_oneapi_models(oneapi_url, oneapi_key)
             cfg = ProviderConfig(
@@ -1303,6 +1547,14 @@ class MultiLLMRouter:
         provider_models = PROVIDER_MODEL_MAP.get(provider_name, {})
         default = self.providers[provider_name].default_model
 
+        # 本地单主脑(ollama/hf_local):用户启动时只选/只拉了一个模型
+        # (OLLAMA_MODEL → default_model)。静态 per-task 映射假设装了 12b/e4b 全家桶,
+        # 但本地通常只装了所选那一个 → 若按映射去调用未安装的 tag 会 404
+        # (实测:选了 e2b,却按映射调 gemma4:12b → 404 全部失败)。
+        # 故本地主脑一律用所选模型,不按复杂度在不存在的 tag 间换挡。
+        if provider_name in ("ollama", "hf_local") and default:
+            return default
+
         if complexity < 0.3:
             # LIGHT — 优先选快速/轻量模型
             return provider_models.get(TaskType.FAST_RESPONSE, default)
@@ -1336,7 +1588,7 @@ class MultiLLMRouter:
             # 检查 Ollama 是否健康可用
             if "ollama" in self.providers:
                 ollama_prov = self.providers["ollama"]
-                if ollama_prov.status != ProviderStatus.DOWN:
+                if ollama_prov.is_available():
                     model = self.select_model_by_complexity("ollama", task_type, complexity_score)
                     return RoutingDecision(
                         provider="ollama", model=model,
@@ -1345,13 +1597,13 @@ class MultiLLMRouter:
                             f"{name}:{self.select_model_by_complexity(name, task_type, complexity_score)}"
                             for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
                             if name in self.providers and name != "ollama"
-                            and self.providers[name].status != ProviderStatus.DOWN
+                            and self.providers[name].is_available()
                         ],
                     )
             # 检查 HF 本地模型是否可用
             if "hf_local" in self.providers:
                 hf_prov = self.providers["hf_local"]
-                if hf_prov.status != ProviderStatus.DOWN and hf_prov.models:
+                if hf_prov.is_available() and hf_prov.models:
                     model = self.select_model_by_complexity("hf_local", task_type, complexity_score)
                     if not model or model not in hf_prov.models:
                         model = hf_prov.default_model or hf_prov.models[0]
@@ -1362,13 +1614,13 @@ class MultiLLMRouter:
                             f"{name}:{self.select_model_by_complexity(name, task_type, complexity_score)}"
                             for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
                             if name in self.providers and name != "hf_local"
-                            and self.providers[name].status != ProviderStatus.DOWN
+                            and self.providers[name].is_available()
                         ],
                     )
 
         if preferred_provider and preferred_provider in self.providers:
             prov = self.providers[preferred_provider]
-            if prov.status != ProviderStatus.DOWN:
+            if prov.is_available():
                 model = self.select_model_by_complexity(
                     preferred_provider, task_type, complexity_score
                 )
@@ -1379,13 +1631,17 @@ class MultiLLMRouter:
 
         # 按任务偏好排序
         preferred_order = TASK_ROUTING_PREFERENCES.get(task_type, [])
+        # 开源优先（默认开启）：把开源提供商整体提到专有之前，保持原相对顺序。
+        # 本地 ollama/hf_local 本就在偏好表最前，因此本地优先不受影响。
+        if os.environ.get("GALAXY_OPENSOURCE_FIRST", "true").lower() != "false":
+            preferred_order = reorder_open_source_first(list(preferred_order))
         alternatives = []
 
         for provider_name in preferred_order:
             if provider_name not in self.providers:
                 continue
             prov = self.providers[provider_name]
-            if prov.status == ProviderStatus.DOWN:
+            if (not prov.is_available()):
                 continue
 
             model = self.select_model_by_complexity(
@@ -1404,7 +1660,7 @@ class MultiLLMRouter:
 
         # fallback: 选择任意可用提供商
         for name, prov in self.providers.items():
-            if prov.status != ProviderStatus.DOWN:
+            if prov.is_available():
                 return RoutingDecision(
                     provider=name, model=prov.default_model,
                     reason=f"Fallback: 唯一可用提供商 {name}",
@@ -1416,6 +1672,161 @@ class MultiLLMRouter:
             provider="none", model="none",
             reason="无可用提供商，请在 Dashboard 配置 API Key",
         )
+
+    # ───────── 做任务：按实际情况选模型（fit-based） ─────────
+
+    def select_brain_for_task(
+        self,
+        task_type: TaskType,
+        complexity_score: float = 0.5,
+        *,
+        has_multimodal: bool = False,
+        needs_timely: bool = False,
+        prefer_local: bool = False,
+    ) -> RoutingDecision:
+        """做任务时的"按实际情况"选模型（区别于交流基座的开源/本地优先）。
+
+        用户规则（优先级）：
+          1. 主    — 完成质量/能力最强优先（quality tier × 复杂度）
+          2. 次    — 适度看 token 成本（同档次内便宜优先）
+          3. 条件  — 仅当任务需要及时响应(needs_timely)才把延迟纳入
+        硬约束：
+          - 只在【已填 key 且健康】的提供商里选（没填的不在 self.providers）
+          - 有多模态输入 → 只在多模态可用的提供商里选
+          - 同档次平局：开源/本地优先（平局打破，而非无脑前移）
+
+        Returns:
+            RoutingDecision(provider, model, reason)；无候选时 provider="none"。
+        """
+        import os as _os
+
+        # ── 候选 = 已填 key + 健康 + 有 adapter（没填的天然不在 providers）──
+        candidates = [
+            name for name, cfg in self.providers.items()
+            if cfg.is_available() and self.adapters.get(name) is not None
+        ]
+        # ── 模态硬过滤 ──
+        if has_multimodal:
+            mm = [n for n in candidates if getattr(self.providers[n], "multimodal", False)]
+            if mm:
+                candidates = mm
+        if not candidates:
+            return RoutingDecision(provider="none", model="none", reason="无已配置可用提供商")
+
+        # 权重（可经 env 微调）
+        try:
+            token_weight = float(_os.environ.get("GALAXY_ROUTE_TOKEN_WEIGHT", "0.6"))
+        except ValueError:
+            token_weight = 0.6
+        try:
+            latency_weight = float(_os.environ.get("GALAXY_ROUTE_LATENCY_WEIGHT", "0.5"))
+        except ValueError:
+            latency_weight = 0.5
+
+        task_pref = TASK_ROUTING_PREFERENCES.get(task_type, [])
+        # 成本/延迟归一化基准（避免量纲压过质量）
+        max_cost = max(
+            (self.providers[n].cost_per_1k_output for n in candidates), default=0.0
+        ) or 1.0
+        max_lat = max(
+            (self.providers[n].latency_avg_ms for n in candidates), default=0.0
+        ) or 1.0
+
+        def _score(name: str) -> float:
+            cfg = self.providers[name]
+            quality = _provider_quality_tier(name)             # 1..3
+            # 任务相关度：在该任务偏好表里 = 更贴合
+            task_fit = 1.0 if name in task_pref else 0.6
+            # 主：质量 × (0.5+复杂度) —— 越难越看重质量
+            score = quality * (0.5 + complexity_score) * task_fit
+            # 次：适度 token（同档次便宜优先）
+            score -= token_weight * (cfg.cost_per_1k_output / max_cost)
+            # 条件：仅任务需要及时响应时计入延迟
+            if needs_timely:
+                score -= latency_weight * (cfg.latency_avg_ms / max_lat)
+            # 平局打破：开源/本地 + 显式本地偏好
+            if name in OPEN_SOURCE_PROVIDERS:
+                score += 0.15
+            if prefer_local and name in ("ollama", "hf_local"):
+                score += 0.5
+            return score
+
+        best = max(candidates, key=_score)
+        model = self.select_model_by_complexity(best, task_type, complexity_score)
+        if best == "hf_local" and (not model or model not in self.providers[best].models):
+            model = self.providers[best].default_model or (
+                self.providers[best].models[0] if self.providers[best].models else model
+            )
+        return RoutingDecision(
+            provider=best, model=model,
+            reason=(
+                f"fit-based: {best}:{model} quality={_provider_quality_tier(best)} "
+                f"task={task_type.value} complexity={complexity_score:.2f} "
+                f"mm={has_multimodal} timely={needs_timely}"
+            ),
+        )
+
+    # ───────── 角色 → 脑 绑定（大小模型配合） ─────────
+
+    def select_brain_for_role(
+        self,
+        role: str,
+        complexity_score: float = 0.5,
+        task_type: Optional[TaskType] = None,
+    ) -> RoutingDecision:
+        """为一个协作角色选择"最便宜够用"的脑（provider + model）。
+
+        实现"大小模型配合"的执行层：
+          - 轻角色(executor/worker/researcher...) → 本地小模型优先；
+          - 重角色(critic/reviewer/reasoner/coordinator...) → 开源大模型 API 优先。
+
+        Args:
+            role: 角色名（见 ROLE_BRAIN_HINTS），未知角色按 GENERAL/本地优先处理。
+            complexity_score: 任务复杂度，影响同一 provider 内的模型大小选择。
+            task_type: 显式任务类型；为 None 时用角色提示里的默认 task_type。
+
+        Returns:
+            RoutingDecision(provider, model, reason)；无可用提供商时 provider="none"。
+        """
+        hint = ROLE_BRAIN_HINTS.get(
+            role, {"prefer_local": True, "task_type": TaskType.GENERAL, "min_complexity": 0.0}
+        )
+        eff_task = task_type or hint["task_type"]
+        # 重角色用 max(任务复杂度, 角色最低复杂度) 确保选到足够强的模型
+        eff_complexity = max(complexity_score, hint.get("min_complexity", 0.0))
+
+        # 大小模型配合：
+        #   - 轻角色(executor/worker...) → 本地小模型【硬】优先（这是设计意图：本地做，
+        #     云端审；不让云端强模型抢走 executor），无本地时才 fit-based。
+        #   - 重角色(critic/reviewer...) → fit-based 质量优先。
+        def _avail(name: str) -> bool:
+            return (
+                name in self.providers
+                and self.providers[name].is_available()
+                and self.adapters.get(name) is not None
+            )
+
+        if hint["prefer_local"]:
+            for local in ("ollama", "hf_local"):
+                if _avail(local):
+                    model = self.select_model_by_complexity(local, eff_task, eff_complexity)
+                    if local == "hf_local" and (not model or model not in self.providers[local].models):
+                        model = self.providers[local].default_model or (
+                            self.providers[local].models[0] if self.providers[local].models else model
+                        )
+                    return RoutingDecision(
+                        provider=local, model=model,
+                        reason=f"角色[{role}] 轻角色(本地小模型优先): {local}:{model} task={eff_task.value}",
+                    )
+
+        decision = self.select_brain_for_task(eff_task, complexity_score=eff_complexity)
+        if decision.provider != "none":
+            role_kind = "轻角色(无本地→fit)" if hint["prefer_local"] else "重角色(质量优先)"
+            decision.reason = f"角色[{role}] {role_kind} → {decision.reason}"
+            return decision
+
+        # 无候选 → 退回通用 route()
+        return self.route(eff_task, complexity_score=eff_complexity)
 
     # ───────── 本地主脑优先路由 ─────────
 
@@ -1445,14 +1856,14 @@ class MultiLLMRouter:
         # 2. 检查 Ollama 本地主脑
         if "ollama" in self.providers:
             ollama_prov = self.providers["ollama"]
-            if ollama_prov.status != ProviderStatus.DOWN:
+            if ollama_prov.is_available():
                 model = self.select_model_by_complexity("ollama", task_type, complexity)
                 # 收集云端后备方案
                 cloud_fallbacks = [
                     f"{name}:{self.select_model_by_complexity(name, task_type, complexity)}"
                     for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
                     if name in self.providers and name != "ollama"
-                    and self.providers[name].status != ProviderStatus.DOWN
+                    and self.providers[name].is_available()
                 ]
                 return RoutingDecision(
                     provider="ollama",
@@ -1467,7 +1878,7 @@ class MultiLLMRouter:
         # 3. 检查 HuggingFace 本地模型 (hf_local)
         if "hf_local" in self.providers:
             hf_prov = self.providers["hf_local"]
-            if hf_prov.status != ProviderStatus.DOWN and hf_prov.models:
+            if hf_prov.is_available() and hf_prov.models:
                 model = self.select_model_by_complexity("hf_local", task_type, complexity)
                 # Use the first available HF local model as default
                 if not model or model not in hf_prov.models:
@@ -1476,7 +1887,7 @@ class MultiLLMRouter:
                     f"{name}:{self.select_model_by_complexity(name, task_type, complexity)}"
                     for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
                     if name in self.providers and name != "hf_local"
-                    and self.providers[name].status != ProviderStatus.DOWN
+                    and self.providers[name].is_available()
                 ]
                 return RoutingDecision(
                     provider="hf_local",
@@ -1491,7 +1902,7 @@ class MultiLLMRouter:
         # 4. 检查 HF 本地模型（通过 oneapi 或直连）
         if "oneapi" in self.providers:
             oneapi_prov = self.providers["oneapi"]
-            if oneapi_prov.status != ProviderStatus.DOWN:
+            if oneapi_prov.is_available():
                 model = self.select_model_by_complexity("oneapi", task_type, complexity)
                 return RoutingDecision(
                     provider="oneapi",
@@ -1503,6 +1914,20 @@ class MultiLLMRouter:
                 )
 
         # 4. 本地主脑不可用 → 升级到云端
+        # 明确告警（而非静默回落）：本地主脑预期可用却未就绪时，提示用户检查
+        # Ollama / 模型 tag（最常见是模型未 pull 或 tag 名不对），便于排查
+        # "看着配了本地原生多模态、实际一直走云端" 的情况。
+        _local_present = any(
+            p in self.providers and self.providers[p].is_available()
+            for p in ("ollama", "hf_local")
+        )
+        if not _local_present:
+            logger.warning(
+                "LOCAL-BRAIN-FIRST: 本地主脑不可用(ollama/hf_local 未就绪)，本次回落云端。"
+                "请检查 `ollama list` 是否含所需模型(如 gemma4:12b / openbmb/minicpm-o4.5)、"
+                "Ollama 是否在 %s 运行。",
+                getattr(self, "ollama_url", "localhost:11434"),
+            )
         # 如果有多模态输入，先尝试多模态路由
         if has_multimodal:
             decision = self.route_multimodal_first(
@@ -1562,7 +1987,7 @@ class MultiLLMRouter:
         # ── Tier 1: native multimodal-capable providers ──────────────────────
         mm_candidates: List[RoutingDecision] = []
         for name, prov in self.providers.items():
-            if prov.status == ProviderStatus.DOWN:
+            if (not prov.is_available()):
                 continue
             if not prov.multimodal:
                 continue
@@ -1651,7 +2076,7 @@ class MultiLLMRouter:
             if provider_name not in self.providers:
                 continue
             prov = self.providers[provider_name]
-            if prov.status == ProviderStatus.DOWN:
+            if (not prov.is_available()):
                 continue
 
             model = self.select_model_by_complexity(provider_name, task_type, complexity_score)
@@ -1734,107 +2159,6 @@ class MultiLLMRouter:
             reason=reason,
             alternatives=alternatives,
         )
-
-    # ───────── 本地主脑优先路由 ─────────
-
-    async def route_local_brain_first(self, task_type: TaskType, messages: List[Dict],
-                                      has_multimodal: bool = False) -> RoutingDecision:
-        """本地主脑优先路由
-
-        路由策略：
-        1. 检查 Ollama 是否可用（健康 + 有模型）
-        2. 检查 Hugging Face 本地模型是否可用
-        3. 硬件画像评估（VRAM 够不够运行目标模型）
-        4. 本地可用 → 选本地主脑
-        5. 本地不可用 / 能力不足 → 升级到云端 API
-        6. 云端结果回流本地主脑整合（由调用方处理）
-
-        Args:
-            task_type: 任务类型
-            messages: 消息列表（用于复杂度评估）
-            has_multimodal: 是否包含多模态输入
-
-        Returns:
-            RoutingDecision: 路由决策，本地优先
-        """
-        # 1. 计算复杂度
-        complexity = self._compute_complexity_score(messages)
-
-        # 2. 检查 Ollama 本地主脑
-        if "ollama" in self.providers:
-            ollama_prov = self.providers["ollama"]
-            if ollama_prov.status != ProviderStatus.DOWN:
-                model = self.select_model_by_complexity("ollama", task_type, complexity)
-                # 收集云端后备方案
-                cloud_fallbacks = [
-                    f"{name}:{self.select_model_by_complexity(name, task_type, complexity)}"
-                    for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
-                    if name in self.providers and name != "ollama"
-                    and self.providers[name].status != ProviderStatus.DOWN
-                ]
-                return RoutingDecision(
-                    provider="ollama",
-                    model=model,
-                    reason=(
-                        f"本地主脑优先路由: Ollama 本地模型 [{model}] "
-                        f"任务类型 [{task_type.value}] 复杂度 {complexity:.2f}"
-                    ),
-                    alternatives=cloud_fallbacks,
-                )
-
-        # 3. 检查 HuggingFace 本地模型 (hf_local)
-        if "hf_local" in self.providers:
-            hf_prov = self.providers["hf_local"]
-            if hf_prov.status != ProviderStatus.DOWN and hf_prov.models:
-                model = self.select_model_by_complexity("hf_local", task_type, complexity)
-                # Use the first available HF local model as default
-                if not model or model not in hf_prov.models:
-                    model = hf_prov.default_model or hf_prov.models[0]
-                cloud_fallbacks = [
-                    f"{name}:{self.select_model_by_complexity(name, task_type, complexity)}"
-                    for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
-                    if name in self.providers and name != "hf_local"
-                    and self.providers[name].status != ProviderStatus.DOWN
-                ]
-                return RoutingDecision(
-                    provider="hf_local",
-                    model=model,
-                    reason=(
-                        f"本地主脑优先路由: HuggingFace 本地模型 [{model}] "
-                        f"任务类型 [{task_type.value}] 复杂度 {complexity:.2f}"
-                    ),
-                    alternatives=cloud_fallbacks,
-                )
-
-        # 4. 检查 HF 本地模型（通过 oneapi 或直连）
-        if "oneapi" in self.providers:
-            oneapi_prov = self.providers["oneapi"]
-            if oneapi_prov.status != ProviderStatus.DOWN:
-                model = self.select_model_by_complexity("oneapi", task_type, complexity)
-                return RoutingDecision(
-                    provider="oneapi",
-                    model=model,
-                    reason=(
-                        f"本地主脑优先路由: OneAPI 本地模型 [{model}] "
-                        f"任务类型 [{task_type.value}] 复杂度 {complexity:.2f}"
-                    ),
-                )
-
-        # 4. 本地主脑不可用 → 升级到云端
-        # 如果有多模态输入，先尝试多模态路由
-        if has_multimodal:
-            decision = self.route_multimodal_first(
-                active_modalities=["image"], task_type=task_type, complexity_score=complexity
-            )
-            if decision.provider != "none":
-                decision.reason = f"本地主脑优先: 本地不可用，升级到云端多模态 → {decision.reason}"
-                return decision
-
-        # 5. 标准云端路由
-        decision = self.route(task_type, complexity_score=complexity)
-        if decision.provider != "none":
-            decision.reason = f"本地主脑优先: 本地不可用，升级到云端 → {decision.reason}"
-        return decision
 
     # ───────── Identity injection helper ─────────
 
@@ -1944,8 +2268,13 @@ class MultiLLMRouter:
                     self.providers[prov_name].latency_avg_ms * 0.8
                     + response.latency_ms * 0.2
                 )
-                if self.providers[prov_name].status == ProviderStatus.DEGRADED:
+                if self.providers[prov_name].status in (ProviderStatus.DEGRADED, ProviderStatus.DOWN):
+                    # DOWN 也要能被调用成功后清回 HEALTHY(冷却期过后 is_available()
+                    # 已经放行让它重新当候选，调用真的成功了就该把状态本身也纠正过来，
+                    # 而不是让 get_status()/面板一直显示"down"，直到进程重启为止)。
                     self.providers[prov_name].status = ProviderStatus.HEALTHY
+                    self.providers[prov_name].error_count = 0
+                    self.providers[prov_name].down_since = 0.0
                 if cb:
                     cb.record_success()
 
@@ -2008,6 +2337,7 @@ class MultiLLMRouter:
                     cb.record_failure()
                 if self.providers[prov_name].error_count >= 5:
                     self.providers[prov_name].status = ProviderStatus.DOWN
+                    self.providers[prov_name].down_since = time.time()
                 else:
                     self.providers[prov_name].status = ProviderStatus.DEGRADED
 
@@ -2110,6 +2440,7 @@ class MultiLLMRouter:
                 logger.debug("Fallback triggered: %s", e)
                 results[name] = f"error: {e}"
                 self.providers[name].status = ProviderStatus.DOWN
+                self.providers[name].down_since = time.time()
         return results
 
     # ───────── LLMManager 兼容接口 ─────────
@@ -2136,8 +2467,8 @@ class MultiLLMRouter:
                 "model": prov.default_model,
                 "models": prov.models,
                 "source": "env/vault",
-                "active": prov.status != ProviderStatus.DOWN,
-                "available": prov.status != ProviderStatus.DOWN,
+                "active": prov.is_available(),
+                "available": prov.is_available(),
                 "supports_tools": prov.supports_tools,
                 "multimodal": prov.multimodal,
                 "env_key": prov.env_key,
@@ -2238,8 +2569,13 @@ class MultiLLMRouter:
         self.adapters.clear()
         self.circuit_breakers.clear()
 
-        # 重新发现
-        self._discover_providers()
+        # 重新发现——_discover_providers() 是同步方法,内部对 Ollama/OneAPI 等
+        # 做阻塞 httpx.get(timeout=2~5s) 网络探测。refresh_providers() 本身是
+        # async 方法,若直接同步调用,会在探测耗时的整个窗口内冻结共享事件循环，
+        # 期间任何其它并发请求(包括完全无关的轻量端点)都会被阻塞排队——这正是
+        # "保存模型 API Key 后其它请求集体卡几秒"的根因。offload 到线程,不阻塞
+        # 事件循环。
+        await asyncio.to_thread(self._discover_providers)
 
         # 为新发现的提供商创建断路器
         for name in self.providers:

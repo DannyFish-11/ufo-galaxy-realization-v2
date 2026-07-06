@@ -72,6 +72,10 @@ CONNECTORS: Dict[str, Dict[str, Any]] = {
         "extra_authorize": {"owner": "user"},
         "create_app_url": "https://www.notion.so/my-integrations",
         "create_hint": "New integration(Public);Redirect URI 填下方 redirect_uri",
+        # Notion 的 token 端点跟其余四家不一样:不接受 body 里带 client_id/secret,
+        # 要求 HTTP Basic(client_id:client_secret)+ JSON body。按标准 OAuth2
+        # form-encoded 发会被判无效凭证,换 token 必然失败——见 handle_callback()。
+        "token_auth": "basic_json",
     },
     "discord": {
         "label": "Discord",
@@ -82,6 +86,47 @@ CONNECTORS: Dict[str, Dict[str, Any]] = {
         "create_hint": "New Application → OAuth2;Redirects 填下方 redirect_uri",
     },
 }
+
+# 服务 → 用户信息接口(拿真实账号名用于面板展示;为空表示账号名直接从 token
+# 响应本身取,见 _extract_account())。github/discord 的 token 响应里不含
+# 用户信息，需要额外一次 Bearer 请求。
+_USERINFO_URL: Dict[str, str] = {
+    "github": "https://api.github.com/user",
+    "google": "https://www.googleapis.com/oauth2/v3/userinfo",
+    "discord": "https://discord.com/api/users/@me",
+}
+
+
+def _extract_account(service: str, tok: Dict[str, Any], userinfo: Optional[Dict[str, Any]]) -> Optional[str]:
+    """从 token 响应本身或额外的 userinfo 请求里提取一个人类可读账号名。
+
+    每家 OAuth 服务的字段形状都不一样(核实过官方文档/真实响应体):
+      - github:  token 响应无用户信息 → userinfo 是 /user，取 login
+      - google:  token 响应无用户信息 → userinfo 是 /userinfo，取 email
+      - slack:   token 响应自带 team.name(+ authed_user.id)，无需额外请求
+      - notion:  token 响应自带 workspace_name，无需额外请求
+      - discord: token 响应无用户信息 → userinfo 是 /users/@me，取 global_name/username
+    取不到就返回 None(不影响连接成功——账号名只是展示用)。
+    """
+    try:
+        if service == "github" and userinfo:
+            return userinfo.get("login")
+        if service == "google" and userinfo:
+            return userinfo.get("email")
+        if service == "slack":
+            team = tok.get("team") or {}
+            return team.get("name") or (tok.get("authed_user") or {}).get("id")
+        if service == "notion":
+            return tok.get("workspace_name")
+        if service == "discord" and userinfo:
+            name = userinfo.get("global_name") or userinfo.get("username")
+            discrim = userinfo.get("discriminator")
+            if name and discrim and discrim != "0":
+                return f"{name}#{discrim}"
+            return name
+    except Exception:  # noqa: BLE001
+        pass
+    return None
 
 # 节点编号 → 连接器服务(供前端在节点卡上显示「连接」)。
 NODE_TO_SERVICE: Dict[int, str] = {
@@ -194,30 +239,65 @@ async def handle_callback(service: str, code: str, state: str) -> Dict[str, Any]
         return {"ok": False, "error": "state 校验失败(可能是过期或 CSRF)"}
     try:
         import httpx
-        payload = {
-            "client_id": entry.get("client_id"),
-            "client_secret": entry.get("client_secret"),
-            "code": code,
-            "redirect_uri": redirect_uri(service),
-            "grant_type": "authorization_code",
-        }
         headers = {"Accept": "application/json"}
         async with httpx.AsyncClient(timeout=20.0) as client:
-            r = await client.post(meta["token_url"], data=payload, headers=headers)
+            if meta.get("token_auth") == "basic_json":
+                # Notion: 凭证走 HTTP Basic,body 是 JSON(不是 form)——见 CONNECTORS 里的注释。
+                r = await client.post(
+                    meta["token_url"],
+                    json={
+                        "grant_type": "authorization_code",
+                        "code": code,
+                        "redirect_uri": redirect_uri(service),
+                    },
+                    headers=headers,
+                    auth=httpx.BasicAuth(entry.get("client_id", ""), entry.get("client_secret", "")),
+                )
+            else:
+                payload = {
+                    "client_id": entry.get("client_id"),
+                    "client_secret": entry.get("client_secret"),
+                    "code": code,
+                    "redirect_uri": redirect_uri(service),
+                    "grant_type": "authorization_code",
+                }
+                r = await client.post(meta["token_url"], data=payload, headers=headers)
             tok = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-        access = tok.get("access_token")
-        if not access:
-            return {"ok": False, "error": f"换取 token 失败: {tok.get('error') or r.text[:120]}"}
-        entry["access_token"] = access
-        if tok.get("refresh_token"):
-            entry["refresh_token"] = tok["refresh_token"]
-        entry.pop("_state", None)
-        # 尽力记录账号名(不同服务字段不同;失败无所谓)。
-        entry["account"] = tok.get("account", {}).get("label") if isinstance(tok.get("account"), dict) else None
+
+            access = tok.get("access_token")
+            if not access:
+                return {"ok": False, "error": f"换取 token 失败: {tok.get('error') or r.text[:120]}"}
+            entry["access_token"] = access
+            if tok.get("refresh_token"):
+                entry["refresh_token"] = tok["refresh_token"]
+            entry.pop("_state", None)
+
+            # 拿真实账号名(不同服务字段不同,见 _extract_account 的文档注释)。
+            userinfo: Optional[Dict[str, Any]] = None
+            userinfo_url = _USERINFO_URL.get(service)
+            if userinfo_url:
+                try:
+                    ur = await client.get(
+                        userinfo_url,
+                        headers={
+                            "Authorization": f"Bearer {access}",
+                            "Accept": "application/json",
+                            # GitHub 要求带 User-Agent，否则部分端点拒绝匿名 UA。
+                            "User-Agent": "Galaxy-OAuth-Connector",
+                        },
+                    )
+                    if ur.status_code == 200:
+                        userinfo = ur.json()
+                    else:
+                        logger.debug("获取 %s 用户信息失败(status=%s)——不影响连接本身", service, ur.status_code)
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("获取 %s 用户信息异常(非致命): %s", service, exc)
+            entry["account"] = _extract_account(service, tok, userinfo)
+
         data[service] = entry
         _save(data)
-        logger.info("OAuth 连接成功: %s", service)
-        return {"ok": True, "service": service}
+        logger.info("OAuth 连接成功: %s (账号=%s)", service, entry.get("account") or "未知")
+        return {"ok": True, "service": service, "account": entry.get("account")}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)}
 

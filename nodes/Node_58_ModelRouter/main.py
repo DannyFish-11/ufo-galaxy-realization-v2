@@ -40,7 +40,16 @@ NODE_ID = os.getenv("NODE_ID", "58")
 NODE_NAME = os.getenv("NODE_NAME", "ModelRouter")
 STATE_MACHINE_URL = os.getenv("STATE_MACHINE_URL", f"http://localhost:{get_service_port('state_machine')}")
 TRANSFORMER_URL = os.getenv("TRANSFORMER_URL", f"http://localhost:{get_node_port('Node_50_Transformer')}")
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+def _normalize_ollama_url(raw: str) -> str:
+    """兜底补协议头:用户在面板只填 host:port 时,os.getenv 的默认值不会生效
+    (key 已存在),原样传给 httpx 会在真正请求时炸 missing protocol。"""
+    raw = (raw or "").strip()
+    if not raw:
+        return "http://localhost:11434"
+    return raw if raw.startswith(("http://", "https://")) else f"http://{raw}"
+
+
+OLLAMA_URL = _normalize_ollama_url(os.getenv("OLLAMA_URL", ""))
 ONEAPI_URL = os.getenv("ONEAPI_URL", f"http://localhost:{get_service_port('oneapi_web')}")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "data", "router.db"))
@@ -341,6 +350,25 @@ class ChatResponse(BaseModel):
 # =============================================================================
 # Model Configuration
 # =============================================================================
+
+# "llama2"/"llama3"/"codellama"/"mistral" 在本文件里只是【内部路由/计费档位标
+# 识符】(该套 tag 实际从未被拉取过) —— 真正打 Ollama 时统一换成全系统唯一主脑
+# (OLLAMA_MODEL / core.model_selection)，见 _call_ollama() 里的别名替换。
+_LOCAL_OLLAMA_ALIASES = frozenset({"llama2", "llama3", "codellama", "mistral"})
+
+
+def _system_brain_tag() -> str:
+    env = os.getenv("OLLAMA_MODEL", "").strip()
+    if env:
+        return env
+    try:
+        from core.model_selection import load_choice, recommend
+        return load_choice() or recommend()
+    except Exception:
+        return "gemma4:e2b"
+
+
+LOCAL_OLLAMA_TAG = _system_brain_tag()
 
 MODEL_CONFIG = {
     # Local Models (Ollama)
@@ -874,11 +902,14 @@ class ModelRouter:
     
     async def _call_ollama(self, model: str, request: ChatRequest) -> tuple:
         """Call Ollama API."""
+        # model 可能是 MODEL_CONFIG 里的占位别名(llama2/llama3/...)——那套 tag
+        # 从未被真正拉取过；实际请求 Ollama 时换成本机真实已装的主脑。
+        real_model = LOCAL_OLLAMA_TAG if model in _LOCAL_OLLAMA_ALIASES else model
         try:
             response = await self.http_client.post(
                 f"{self.ollama_url}/api/chat",
                 json={
-                    "model": model,
+                    "model": real_model,
                     "messages": [{"role": "user", "content": request.prompt}],
                     "stream": False,
                     "options": {
