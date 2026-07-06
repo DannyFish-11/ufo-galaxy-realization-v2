@@ -126,7 +126,14 @@ class LocalBrainManager:
         """
         self.backend_name = backend
         self._backend = None  # LocalModelBackend instance
-        self.ollama_url = ollama_url or os.environ.get("OLLAMA_URL", self.OLLAMA_DEFAULT_URL)
+        # 修复: os.environ.get("OLLAMA_URL", DEFAULT) 在 key 存在但值为空字符串时
+        # 返回 "" 而非 DEFAULT —— 空字符串是 falsy，or 链断裂，self.ollama_url 变成 ""。
+        # 这会导致 _ping_ollama()/_refresh_model_list()/_pull_model()/_warm_up_ollama_model()
+        # 全部使用相对 URL (如 '/api/tags')，httpx 抛 InvalidURL，Ollama 被静默标记不可用。
+        # 改为先取 env 值、strip 后判断，空值才走 DEFAULT —— 与 _warm_up_ollama_model() 中
+        # 已有的 (self.ollama_url or DEFAULT) 兜底保持一致。
+        _env_ollama_url = os.environ.get("OLLAMA_URL", "")
+        self.ollama_url = ollama_url or (_env_ollama_url.strip() if _env_ollama_url.strip() else self.OLLAMA_DEFAULT_URL)
         self.available_models: List[str] = []
         # 主脑模型：优先用启动时选定的 OLLAMA_MODEL（见 core.model_selection / Phase 5），
         # 未选时回退 Gemma 4 12B —— 让"第 5 步选的主脑"真正驱动本地大脑加载。
@@ -405,7 +412,7 @@ class LocalBrainManager:
         # 对着一台明明已经装了 Ollama、只是服务启动慢的机器打印"not found"
         # 并尝试"自动安装"，白白浪费时间还产生误导性日志。命令已存在时，
         # 真实问题是"服务没起来"，不是"没装"，应该直接进入下面的失败分支，
-        # 给出准确、可操作的提示，而不是去下载一个本来就不需要的安装包。
+        # 给出准确、可操作的提示，而不是去下载一个根本就不需要的安装包。
         if not ollama_cmd_found:
             logger.info("未检测到 ollama 命令，尝试自动安装...")
             installed = await self._auto_install_ollama()
