@@ -381,50 +381,106 @@ class LongTermMemory:
 # =============================================================================
 
 class SemanticMemory:
-    """语义记忆 - ChromaDB (简化版，不依赖 chromadb 库)"""
-    
+    """语义记忆 - ChromaDB 向量存储 + 关键词匹配兜底
+
+    真实持久化 + 真实向量相关度打分。仅当 chromadb 不可用（未安装/初始化异常）
+    时才退化为进程内关键词匹配，并在 metadata 里如实标出 degraded=True，
+    而不是让调用方误以为拿到的是真实向量检索结果。
+    """
+
     def __init__(self, chroma_path: str, collection_name: str):
         self.chroma_path = chroma_path
         self.collection_name = collection_name
-        self.memories: Dict[str, Dict] = {}  # 简单的内存存储
-    
+        self.collection = None
+        self._fallback_memories: Dict[str, Dict] = {}
+        self._degraded = False
+
     async def initialize(self):
         """初始化"""
         os.makedirs(self.chroma_path, exist_ok=True)
-        logger.info("Initialized semantic memory (simplified)")
-    
+        try:
+            import chromadb
+            client = chromadb.PersistentClient(path=self.chroma_path)
+            self.collection = client.get_or_create_collection(self.collection_name)
+            logger.info(f"Initialized semantic memory (chromadb, collection={self.collection_name})")
+        except Exception as e:
+            self._degraded = True
+            logger.warning(f"chromadb unavailable ({e}), falling back to in-memory keyword matching")
+
     async def save(self, content: str, metadata: Dict = None) -> str:
         """保存语义记忆"""
         memory_id = hashlib.md5(f"{content}:{datetime.now().isoformat()}".encode()).hexdigest()
-        
-        self.memories[memory_id] = {
-            "content": content,
-            "metadata": metadata or {},
-            "created_at": datetime.now().isoformat()
-        }
-        
+        created_at = datetime.now().isoformat()
+
+        if self.collection is not None:
+            # chromadb metadata values must be str/int/float/bool - flatten
+            # the caller's metadata dict and stash created_at alongside it.
+            flat_metadata = {
+                k: v for k, v in (metadata or {}).items()
+                if isinstance(v, (str, int, float, bool))
+            }
+            flat_metadata["created_at"] = created_at
+            self.collection.add(
+                documents=[content],
+                ids=[memory_id],
+                metadatas=[flat_metadata]
+            )
+        else:
+            self._fallback_memories[memory_id] = {
+                "content": content,
+                "metadata": metadata or {},
+                "created_at": created_at
+            }
+
         logger.info(f"Saved semantic memory: {memory_id}")
         return memory_id
-    
+
     async def recall(self, query: str, limit: int = 5) -> List[Memory]:
-        """回忆语义记忆（简单关键词匹配）"""
+        """回忆语义记忆"""
+        if self.collection is not None:
+            result = self.collection.query(query_texts=[query], n_results=limit)
+            ids = result.get("ids", [[]])[0]
+            documents = result.get("documents", [[]])[0]
+            metadatas = result.get("metadatas", [[]])[0]
+            distances = result.get("distances", [[]])[0]
+
+            matched = []
+            for mem_id, doc, meta, distance in zip(ids, documents, metadatas, distances):
+                meta = dict(meta or {})
+                created_at = meta.pop("created_at", datetime.now().isoformat())
+                # Chroma returns L2 distance (smaller = more similar); convert
+                # to a bounded 0-1 relevance score for consistency with the
+                # other memory backends' relevance_score field.
+                relevance = 1.0 / (1.0 + max(distance, 0.0))
+                matched.append(Memory(
+                    id=mem_id,
+                    content=doc,
+                    memory_type=MemoryType.SEMANTIC,
+                    tags=[],
+                    metadata=meta,
+                    created_at=created_at,
+                    relevance_score=relevance
+                ))
+            return matched
+
+        # Degraded fallback: plain keyword matching, explicitly flagged.
         query_lower = query.lower()
         matched = []
-        
-        for mem_id, mem_data in self.memories.items():
+        for mem_id, mem_data in self._fallback_memories.items():
             if query_lower in mem_data["content"].lower():
+                meta = dict(mem_data["metadata"])
+                meta["degraded"] = True
                 matched.append(Memory(
                     id=mem_id,
                     content=mem_data["content"],
                     memory_type=MemoryType.SEMANTIC,
                     tags=[],
-                    metadata=mem_data["metadata"],
+                    metadata=meta,
                     created_at=mem_data["created_at"],
-                    relevance_score=0.8
+                    relevance_score=0.5
                 ))
-        
         return matched[:limit]
-    
+
     async def close(self):
         """关闭"""
         pass
