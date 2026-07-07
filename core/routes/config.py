@@ -130,12 +130,14 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_MAX_CONTEXT_TOKENS": {"default": "100000", "type": "number", "category": "dev", "description": "Max Context Tokens"},
     "GALAXY_MAX_MESSAGE_SIZE": {"default": "10485760", "type": "number", "category": "dev", "description": "Max Message Size (bytes)"},
 
-    # --- Ambient Attention Loop (自发在场) ---
-    # 常驻注意力循环:持续消费桌面感知,主脑三选一(SPEAK/SILENT/DELEGATE)。
-    # 默认关闭,不破坏既有行为;开启后系统从"对话驱动"升级为"在场主体"。
-    "GALAXY_AMBIENT_LOOP": {"default": "false", "type": "boolean", "category": "dev", "description": "常驻注意力循环(自发在场,默认关)"},
-    "GALAXY_AMBIENT_INTERVAL_S": {"default": "2.0", "type": "number", "category": "dev", "description": "注意力循环节拍(秒)"},
-    "GALAXY_AMBIENT_COOLDOWN_S": {"default": "20.0", "type": "number", "category": "dev", "description": "开口/委托后冷却(秒,防话痨)"},
+    # --- 行为 / 在场 (面板"行为"区直接开关，无需改环境变量) ---
+    # 这些是面向用户的行为开关，面板上以明确的开关呈现:说/流式/自发在场/原生音频。
+    "GALAXY_SPEAK": {"default": "true", "type": "boolean", "category": "behavior", "description": "朗读回复（说 · 默认开）"},
+    "GALAXY_TTS_STREAMING": {"default": "true", "type": "boolean", "category": "behavior", "description": "分句流式朗读（边生成边说 · 默认开）"},
+    "GALAXY_AMBIENT_LOOP": {"default": "false", "type": "boolean", "category": "behavior", "description": "自发在场（持续看/听、自己判断何时开口 · 需桌面感知）"},
+    "GALAXY_NATIVE_AUDIO": {"default": "false", "type": "boolean", "category": "behavior", "description": "原生音频输入（模型直接听音频，需全模态服务；关则走 ASR 转文字）"},
+    "GALAXY_AMBIENT_INTERVAL_S": {"default": "2.0", "type": "number", "category": "behavior", "description": "自发在场节拍(秒)"},
+    "GALAXY_AMBIENT_COOLDOWN_S": {"default": "20.0", "type": "number", "category": "behavior", "description": "开口/委托后冷却(秒,防话痨)"},
 
     # --- WebRTC & Network ---
     "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL": {"default": "false", "type": "boolean", "category": "network", "description": "WebRTC Data Channel"},
@@ -244,6 +246,20 @@ async def update_config(req: ConfigUpdateRequest):
             _mc.save_tier(_mc.infer_tier_from_model(_tag), main_brain=_tag)
         except Exception:
             pass
+
+    # 自发在场开关改动 → 立刻生效(启动/停止常驻循环),不必重启。GALAXY_SPEAK/
+    # TTS_STREAMING/NATIVE_AUDIO 都是每次用时现读 os.environ,上面已写入即时生效,
+    # 唯独 ambient 循环是常驻后台任务,需在这里显式拉起/收起。
+    if "GALAXY_AMBIENT_LOOP" in req.config:
+        try:
+            from core.ambient_attention_loop import get_ambient_loop, ambient_loop_enabled
+            _loop = get_ambient_loop()
+            if ambient_loop_enabled() and not _loop.running:
+                await _loop.start()
+            elif not ambient_loop_enabled() and _loop.running:
+                await _loop.stop()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("ambient 循环即时开关失败(非致命): %s", exc)
 
     # 修复:_write_env_file() 之前完全没有 try/except——Windows 上 .env 若被
     # 杀毒软件/编辑器占用锁定,或所在目录权限不足,write_text() 会抛

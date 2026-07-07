@@ -68,7 +68,10 @@ export interface NodeRoster {
 
 async function fetchRoster(): Promise<NodeRoster | null> {
   try {
-    const r = await fetch(`${getBackendUrl()}/api/v1/nodes/roster`);
+    // getBackendUrl() 是 async(返回 Promise)——之前直接插进模板字符串,URL 会变成
+    // "http://[object Promise]/..." 导致请求必失败,节点名单永远卡在"加载中…"。
+    const base = await getBackendUrl();
+    const r = await fetch(`${base}/api/v1/nodes/roster`);
     if (!r.ok) return null;
     return await r.json();
   } catch {
@@ -88,7 +91,8 @@ export interface ConnectorInfo {
 }
 async function fetchConnectors(): Promise<ConnectorInfo[] | null> {
   try {
-    const r = await fetch(`${getBackendUrl()}/api/v1/connectors`);
+    const base = await getBackendUrl();
+    const r = await fetch(`${base}/api/v1/connectors`);
     if (!r.ok) return null;
     const j = await r.json();
     return j.connectors ?? [];
@@ -118,7 +122,10 @@ interface CategoryDef {
 }
 
 // 注：模型 API（llm 类）已迁到专门的「模型」tab（ModelsTab），此处不再重复。
+// 「行为 · 在场」放在最前并作默认分类——这些是最常调的面向用户开关(说/流式/
+// 自发在场/原生音频),用户无需再去设置环境变量,打开设置即见、一键切换。
 const CATEGORIES: CategoryDef[] = [
+  { key: 'behavior', label: '行为 · 在场', icon: '✨', count: 6 },
   { key: 'ports', label: '端口与节点', icon: '🔌', count: 16 },
   { key: 'auth', label: '鉴权', icon: '🔒', count: 12 },
   { key: 'mesh', label: '组网', icon: '🕸️', count: 11 },
@@ -132,6 +139,10 @@ const CATEGORIES: CategoryDef[] = [
 // ── Config Key Registry (105 items) ─────────────────────────────────
 
 const CONFIG_KEYS: Record<string, string[]> = {
+  behavior: [
+    'GALAXY_SPEAK', 'GALAXY_TTS_STREAMING', 'GALAXY_AMBIENT_LOOP',
+    'GALAXY_NATIVE_AUDIO', 'GALAXY_AMBIENT_INTERVAL_S', 'GALAXY_AMBIENT_COOLDOWN_S',
+  ],
   ports: [
     'GATEWAY_PORT', 'UFO_NODE_HOST', 'NODE_92_URL', 'NODE_45_URL', 'NODE_33_URL',
     'NODE_71_URL', 'NODE_71_HOST', 'NODE_95_URL', 'NODE_97_URL', 'NODE09_SANDBOX_URL',
@@ -298,7 +309,7 @@ function NumberControl({
 export default function SettingsTab() {
   const [config, setConfig] = useState<Record<string, ConfigItem>>({});
   const [changed, setChanged] = useState<Record<string, string>>({});
-  const [activeCategory, setActiveCategory] = useState<string>('ports');
+  const [activeCategory, setActiveCategory] = useState<string>('behavior');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -396,9 +407,10 @@ export default function SettingsTab() {
   }, []);
 
   // ── OAuth 连接器操作(showToast 之后定义,避免前向引用)──
-  const connectService = useCallback((svc: string) => {
+  const connectService = useCallback(async (svc: string) => {
+    const base = await getBackendUrl();
     const popup = window.open(
-      `${getBackendUrl()}/api/v1/connectors/${svc}/authorize`, '_blank', 'width=560,height=720',
+      `${base}/api/v1/connectors/${svc}/authorize`, '_blank', 'width=560,height=720',
     );
     // 授权页(用户在弹窗里登录、同意授权)耗时因人而异——之前固定 4 秒后刷新
     // 一次,手慢一点(读同意页/输密码)就赶不上,状态卡在"未连接"直到用户自己
@@ -420,12 +432,14 @@ export default function SettingsTab() {
   }, [refreshConnectors]);
 
   const disconnectService = useCallback(async (svc: string) => {
-    await fetch(`${getBackendUrl()}/api/v1/connectors/${svc}/disconnect`, { method: 'POST' });
+    const base = await getBackendUrl();
+    await fetch(`${base}/api/v1/connectors/${svc}/disconnect`, { method: 'POST' });
     refreshConnectors();
   }, [refreshConnectors]);
 
   const saveConnCreds = useCallback(async (svc: string) => {
-    await fetch(`${getBackendUrl()}/api/v1/connectors/${svc}/credentials`, {
+    const base = await getBackendUrl();
+    await fetch(`${base}/api/v1/connectors/${svc}/credentials`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ client_id: cid.trim(), client_secret: csecret.trim() }),
     });
@@ -676,8 +690,9 @@ export default function SettingsTab() {
   // 一键启停单个节点(阶段2a):POST /start|/stop → 刷新名单。
   const toggleNode = useCallback(async (n: RosterNode, running: boolean) => {
     try {
+      const base = await getBackendUrl();
       await fetch(
-        `${getBackendUrl()}/api/v1/nodes/${n.num}/${running ? 'stop' : 'start'}?mode=${nodeMode}`,
+        `${base}/api/v1/nodes/${n.num}/${running ? 'stop' : 'start'}?mode=${nodeMode}`,
         { method: 'POST' });
       const via = nodeMode === 'container' ? '(容器)' : '';
       showToast(`${running ? '停止' : '启动'}${via} #${n.num} ${n.name}…`);

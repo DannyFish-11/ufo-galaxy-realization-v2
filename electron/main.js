@@ -379,12 +379,21 @@ app.whenReady().then(async () => {
     // 也避免与 Python 侧重复启动出现两个托盘图标。此处不再 spawn。
 
     // Toggle AI Control Panel (Colorless Lens)
-    // F12 在很多环境会被开发者工具/输入法/其他应用占用，因此注册一组候选
-    // 快捷键：任意一个成功即可开关面板，避免"按了没反应"。F10 是加的新候选——
-    // 真机反馈"不管怎么点 F12 都没用"，多半是远程桌面/虚拟机把 F12 在到达
-    // Electron 前就截走了(见上面 before-input-event 那段注释)，F10 在这类
-    // 环境里更少被截获。
-    const PANEL_SHORTCUTS = ['F12', 'F10', 'CommandOrControl+F12', 'Alt+F12', 'CommandOrControl+Shift+P'];
+    // 根因(真机反复反馈"F12/F10 都没用"):globalShortcut.register('F12') 可能
+    // 返回 true(Electron 以为占到了 F12),但按键实际被浏览器开发者工具/输入法/
+    // 虚拟机在到达 Electron 前就截走——注册"成功"却永不触发。此时后面的候选键
+    // (如 Ctrl+Shift+P)其实也注册上了,但用户不知道、只会一直按已经失灵的 F12。
+    // 覆盖层自己的 before-input-event 兜底也帮不上:它是点击穿透窗口,几乎从不
+    // 持有键盘焦点。
+    // 故这里:①候选键里放几个浏览器/VM 很少抢的组合键;②注册后【把真正生效的
+    // 快捷键用系统通知告诉用户】,不再让用户对着失灵的 F12 猜。
+    // 顺序即优先级:组合键更可靠、排在功能键前,让"首个生效键"尽量是可靠的那个。
+    const PANEL_SHORTCUTS = [
+        'CommandOrControl+Shift+P', 'CommandOrControl+Alt+P',
+        'CommandOrControl+Shift+G', 'CommandOrControl+Alt+G',
+        'F12', 'F10', 'F9', 'F8',
+        'CommandOrControl+F12', 'Alt+F12',
+    ];
     const registeredShortcuts = PANEL_SHORTCUTS.filter((accel) => {
         try {
             return globalShortcut.register(accel, () => togglePanel());
@@ -392,21 +401,29 @@ app.whenReady().then(async () => {
             return false;
         }
     });
-    if (registeredShortcuts.length === 0) {
-        // 一个都没注册上：给出可见反馈，而不是只在控制台里 warn。
-        console.warn('[Main] 面板快捷键全部注册失败，可能被系统或其他应用占用');
+
+    // 把真正生效的快捷键（或"全部失败→用托盘"）用一条系统通知明确告诉用户。
+    // 用 Notification 而非模态 dialog:非阻塞、不打断,但保证用户看得见——这才是
+    // "F12 为什么不行"的正解:用户终于知道该按哪个键(或点托盘)。
+    const _notifyShortcut = () => {
         try {
-            dialog.showMessageBox(mainWindow, {
-                type: 'warning',
-                title: 'Galaxy 控制面板',
-                message: '面板快捷键注册失败',
-                detail: `尝试过：${PANEL_SHORTCUTS.join(' / ')}。\n` +
-                    '可能被系统或其他应用占用。可关闭占用 F12 的程序后重启，或通过托盘菜单打开面板。',
-            });
-        } catch (e) { /* 无窗口时忽略 */ }
+            const { Notification } = require('electron');
+            if (!Notification || !Notification.isSupported()) return;
+            const body = registeredShortcuts.length
+                ? `打开/收起控制面板：${registeredShortcuts[0]}` +
+                  (registeredShortcuts.length > 1 ? `（或 ${registeredShortcuts.slice(1, 3).join(' / ')}）` : '') +
+                  '，也可点系统托盘图标。'
+                : '快捷键都被占用；请点右下角系统托盘的 Galaxy 图标打开控制面板。';
+            new Notification({ title: 'Galaxy 控制面板', body, icon: ICON_PATH, silent: true }).show();
+        } catch (e) { /* 通知不可用时忽略 */ }
+    };
+
+    if (registeredShortcuts.length === 0) {
+        console.warn('[Main] 面板快捷键全部注册失败，可能被系统或其他应用占用');
     } else {
-        console.log(`[Main] 面板快捷键已注册: ${registeredShortcuts.join(', ')}`);
+        console.log(`[Main] 面板快捷键已注册(首选 ${registeredShortcuts[0]}): ${registeredShortcuts.join(', ')}`);
     }
+    _notifyShortcut();
 
     // ── 三态覆盖层「唤醒/隐藏」全局快捷键 ──
     // 之前没有任何唤醒快捷键被真正注册（启动横幅写的 Ctrl+Space 是假的），而且
