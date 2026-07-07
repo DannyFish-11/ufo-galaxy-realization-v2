@@ -107,7 +107,7 @@ class AmbientObservation:
 
 
 # ---------------------------------------------------------------------------
-# 决策脑接口（可插拔：档位 A 用系统主脑；档位 B 换京东 JoyAI 容器，循环不改）
+# 决策脑接口（可插拔：档位 A 用 Gemma 系主脑；档位 B 换 MiniCPM-o 全模态，循环不改）
 # ---------------------------------------------------------------------------
 class AmbientDecider(Protocol):
     async def decide(self, obs: AmbientObservation) -> AmbientDecision:  # pragma: no cover - 协议

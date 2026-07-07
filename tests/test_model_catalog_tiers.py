@@ -28,8 +28,8 @@ def _clean_env(tmp_path, monkeypatch):
 
 
 class TestCatalogStructure:
-    def test_three_tiers_abc(self):
-        assert [t.key for t in mc.all_tiers()] == ["A", "B", "C"]
+    def test_two_tiers_ab(self):
+        assert [t.key for t in mc.all_tiers()] == ["A", "B"]
 
     def test_tier_A_is_gemma_single(self):
         t = mc.get_tier("A")
@@ -41,11 +41,9 @@ class TestCatalogStructure:
         assert t.kind == "single"
         assert t.model_tags == ["openbmb/minicpm-o4.5"]
 
-    def test_tier_C_is_composite_joyai_plus_minicpm(self):
-        t = mc.get_tier("C")
-        assert t.kind == "composite"
-        assert "joyai-vl-interaction" in t.model_tags
-        assert "openbmb/minicpm-o4.5" in t.model_tags
+    def test_no_container_models_remain(self):
+        # C 档(京东 JoyAI 容器模型)已删除；目录里不应再有 container 源模型
+        assert all(m.source != "container" for m in mc.all_models())
 
     def test_size_from_local_brain_manager_ssot(self):
         # 尺寸取自 LocalBrainManager，不是本模块自带
@@ -64,16 +62,12 @@ class TestCapabilityDrivenIO:
         io = mc.tier_effective_io("B")
         assert io.audio_in == "native" and io.audio_out == "native"
 
-    def test_C_all_native_via_minicpm(self):
-        io = mc.tier_effective_io("C")
-        assert io.audio_out == "native"  # MiniCPM-o 覆盖说
-
     def test_effective_io_takes_union_of_models(self):
-        # 复合档：任一模型有该能力即 native
-        io = mc.effective_io(["joyai-vl-interaction", "openbmb/minicpm-o4.5"])
-        assert io.audio_out == "native"   # 来自 minicpm
-        # 仅 JoyAI（无原生音频）→ 说要走桥
-        io2 = mc.effective_io(["joyai-vl-interaction"])
+        # 多模型集合：任一模型有该能力即 native
+        io = mc.effective_io(["gemma4:e2b", "openbmb/minicpm-o4.5"])
+        assert io.audio_out == "native"   # 来自 minicpm（gemma 不原生说）
+        # 仅 Gemma（不原生说）→ 说要走桥
+        io2 = mc.effective_io(["gemma4:e2b"])
         assert io2.audio_out == "tts_bridge"
 
 
@@ -90,9 +84,9 @@ class TestUnifiedNoHardcode:
         assert CONFIG_SCHEMA["OLLAMA_MODEL"]["options"] == []
         assert local_choice_options() == mc.choice_order()
 
-    def test_choice_order_excludes_container_models(self):
-        # JoyAI 是容器决策头，不进"本地主脑单选"清单
-        assert "joyai-vl-interaction" not in mc.choice_order()
+    def test_choice_order_is_local_tags_only(self):
+        # choice_order 只含本地(Ollama 可拉)模型；无容器模型
+        assert mc.choice_order() == ["gemma4:e2b", "gemma4:e4b", "gemma4:12b", "openbmb/minicpm-o4.5"]
 
 
 class TestTierPersistence:
@@ -108,11 +102,6 @@ class TestTierPersistence:
     def test_single_tier_honors_requested_brain(self):
         chosen = mc.save_tier("A", main_brain="gemma4:e4b")
         assert chosen == "gemma4:e4b"
-
-    def test_composite_tier_picks_local_conversation_model(self):
-        # C 档主脑取第一个本地对话模型（MiniCPM-o），不是 JoyAI（容器决策头）
-        chosen = mc.save_tier("C")
-        assert chosen == "openbmb/minicpm-o4.5"
 
     def test_infer_tier_from_model(self):
         assert mc.infer_tier_from_model("gemma4:12b") == "A"
@@ -153,8 +142,8 @@ class TestModelsAPI:
     def test_catalog_endpoint_shape(self):
         from core.routes.models import get_catalog
         snap = asyncio.run(get_catalog())
-        assert snap["current_tier"] in ("A", "B", "C")
-        assert len(snap["tiers"]) == 3
+        assert snap["current_tier"] in ("A", "B")
+        assert len(snap["tiers"]) == 2
         for t in snap["tiers"]:
             assert "effective_io" in t and "models" in t
 

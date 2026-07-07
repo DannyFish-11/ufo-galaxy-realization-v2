@@ -6,8 +6,8 @@ import './ModelsTab.css';
 /**
  * ModelsTab — 模型管理（温润高级感 / 硬件设置式）
  *
- * 本地主脑：ABC 三档切换（A=Gemma 系 · B=MiniCPM-o 全模态 · C=京东 JoyAI+MiniCPM
- * 复合顶配）。档位、模型清单、能力全部来自后端 /api/v1/models/catalog（单一真相
+ * 本地主脑：AB 两档切换（A=Gemma 系 · B=MiniCPM-o 全模态）。
+ * 档位、模型清单、能力全部来自后端 /api/v1/models/catalog（单一真相
  * 源 core.model_catalog），前端【不再硬编码】；安装/拉取状态后台静默轮询。
  * 云端 API 密钥沿用 /api/config（与 SettingsTab 同一套存储）。
  */
