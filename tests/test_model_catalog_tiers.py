@@ -1,12 +1,12 @@
 """tests/test_model_catalog_tiers.py
 =======================================
 
-模型目录 SSOT + ABC 档位 + 能力驱动 IO + 三份硬编码统一 + API + 档位选择。
+模型目录 SSOT + AB 档位 + 能力驱动 IO + 三份硬编码统一 + API + 档位选择。
 
 核心不变量：
   - 面板(ModelsTab)/config(OLLAMA_MODEL.options)/CLI(model_selection) 三处清单
     统一派生自 core.model_catalog —— 证明不再各存一份会漂移的硬编码。
-  - 能力驱动：A 档说走 TTS 桥、B/C 档全原生；服务门控关时不自欺（声明原生也走桥）。
+  - 能力驱动：A 档说走 TTS 桥、B 档全原生；服务门控关时不自欺（声明原生也走桥）。
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ class TestCatalogStructure:
         assert t.model_tags == ["openbmb/minicpm-o4.5"]
 
     def test_no_container_models_remain(self):
-        # C 档(京东 JoyAI 容器模型)已删除；目录里不应再有 container 源模型
+        # 容器复合档已删除；目录里不应再有 container 源模型
         assert all(m.source != "container" for m in mc.all_models())
 
     def test_size_from_local_brain_manager_ssot(self):

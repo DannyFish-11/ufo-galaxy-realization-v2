@@ -185,7 +185,7 @@ function capText(caps: CatalogModel['caps']): string {
   return parts.join(' · ');
 }
 
-// ── 本地主脑：ABC 三档切换（动态、去硬编码、实时状态、后台刷新）───────────────
+// ── 本地主脑：档位切换（动态、去硬编码、实时状态、后台刷新）───────────────
 function LocalBrainTiers() {
   const { catalog, status, error, selectTier } = useModelCatalog();
   const [busy, setBusy] = useState<string | null>(null);
@@ -198,7 +198,7 @@ function LocalBrainTiers() {
   return (
     <section className="mt-card mt-hero">
       <div className="mt-card-top">
-        <span className="mt-card-label">本地主脑 · ABC 档位</span>
+        <span className="mt-card-label">本地主脑 · 档位</span>
         {catalog
           ? <span className="mt-pill on">当前 {catalog.current_tier} 档</span>
           : <span className="mt-pill" title={error ?? ''}>{error ? '目录暂不可达' : '加载中…'}</span>}
@@ -351,7 +351,7 @@ export default function ModelsTab() {
           </div>
         </header>
 
-        {/* ── 本地主脑：ABC 三档切换（动态目录 + 实时状态 + 后台刷新）── */}
+        {/* ── 本地主脑：档位切换（动态目录 + 实时状态 + 后台刷新）── */}
         <LocalBrainTiers />
 
         {/* Ollama 地址（沿用 /api/config 存储） */}

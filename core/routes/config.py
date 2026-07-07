@@ -237,7 +237,7 @@ async def update_config(req: ConfigUpdateRequest):
             pass
         # 档位联动:设置页/模型页改了 OLLAMA_MODEL 后,必须把档位(.galaxy_tier)也
         # 推到该模型所属档。否则档位与主脑会分叉——active_effective_io() 读的是
-        # 档位,若档位停在旧的(如 C 档 全原生)、主脑却换成了 Gemma(不原生说),
+        # 档位,若档位停在旧的(如 B 档 全原生)、主脑却换成了 Gemma(不原生说),
         # modality_bridge 在 GALAXY_NATIVE_AUDIO 开启时会误判"原生说"→不接 TTS 桥
         # → AI 变哑巴。按模型反推档位并联动持久化,消除这个静默分叉。
         try:

@@ -178,7 +178,7 @@ def tier_models(key: str) -> List[ModelSpec]:
 
 # ── 兼容旧接口：扁平候选清单（model_selection 派生用）──────────────────────────
 def choice_order() -> List[str]:
-    """所有本地可选主脑 tag，按档位 A→B→C、档内顺序展开、去重。
+    """所有本地可选主脑 tag，按档位 A→B、档内顺序展开、去重。
 
     取代 model_selection._CHOICE_ORDER 的硬编码。只含 source=local（Ollama 能
     直接 pull 的）；container 源(若将来再引入)不进"主脑单选"清单。
