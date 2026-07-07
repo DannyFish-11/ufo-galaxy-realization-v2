@@ -133,6 +133,27 @@ export default function PresencePanel({ phase, streaming, data, turns = [], spea
         </div>
       </div>
 
+      {/* 自发注意力：它此刻在看/在听什么、刚才为何开口或沉默（常驻在场循环推送） */}
+      {data.ambient && (data.ambient.ts > 0 || data.ambient.seeing || data.ambient.hearing) && (
+        <div className="presence-section">
+          <div className="section-header">自发在场 · AMBIENT</div>
+          <div className="ambient-senses">
+            <span className={`ambient-sense ${data.ambient.seeing ? 'on' : ''}`}>👁 看</span>
+            <span className={`ambient-sense ${data.ambient.hearing ? 'on' : ''}`}>👂 听</span>
+            {data.ambient.action && (
+              <span className={`ambient-act act-${data.ambient.action}`}>
+                {data.ambient.action === 'speak' ? '开口'
+                  : data.ambient.action === 'delegate' ? '委托'
+                  : data.ambient.action === 'silent' ? '沉默' : data.ambient.action}
+              </span>
+            )}
+          </div>
+          {data.ambient.rationale && (
+            <div className="ambient-rationale">{data.ambient.rationale}</div>
+          )}
+        </div>
+      )}
+
       <div className="presence-section">
         <div className="section-header">主脑 · BRAIN</div>
         <Metric label="模型" value={model} />
