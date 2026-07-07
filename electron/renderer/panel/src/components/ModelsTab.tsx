@@ -1,22 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useConfigCache } from '@/hooks/useConfigCache';
+import { useModelCatalog, type CatalogModel, type StatusEntry } from '@/hooks/useModelCatalog';
 import './ModelsTab.css';
 
 /**
  * ModelsTab — 模型管理（温润高级感 / 硬件设置式）
  *
- * 复用后端 /api/config（与 SettingsTab 同一套存储），按"脑"的角色分组呈现：
- *   本地主脑（原生多模态） · 云端·开源优先 · 云端·专有 · 接入与聚合
- * 不新建后端、不重复存储；只是把"填 API + 选主脑 + 看状态"做成一个专门的页。
+ * 本地主脑：ABC 三档切换（A=Gemma 系 · B=MiniCPM-o 全模态 · C=京东 JoyAI+MiniCPM
+ * 复合顶配）。档位、模型清单、能力全部来自后端 /api/v1/models/catalog（单一真相
+ * 源 core.model_catalog），前端【不再硬编码】；安装/拉取状态后台静默轮询。
+ * 云端 API 密钥沿用 /api/config（与 SettingsTab 同一套存储）。
  */
-
-// ── 本地主脑可选模型（与 core/model_selection.py 一致）────────────────
-const LOCAL_BRAINS: { tag: string; name: string; modal: string }[] = [
-  { tag: 'gemma4:12b', name: 'Gemma 4 · 12B', modal: '视觉 · 听觉 · 工具 · 128K' },
-  { tag: 'openbmb/minicpm-o4.5', name: 'MiniCPM-o 4.5', modal: '全模态 看/听/说（需显卡）' },
-  { tag: 'gemma4:e4b', name: 'Gemma 4 · E4B', modal: '视觉 · 听觉 · 中等显存' },
-  { tag: 'gemma4:e2b', name: 'Gemma 4 · E2B', modal: '视觉 · 听觉 · 轻量' },
-];
 
 // ── 提供商分组（name=中文主名, latin=拉丁副名, key=主配置项）──────────
 interface Provider {
@@ -173,6 +167,85 @@ function ProviderRow({
   );
 }
 
+// ── 单个模型的实时状态徽标 ────────────────────────────────────────────────
+function StatusBadge({ st }: { st?: StatusEntry }) {
+  if (!st) return <span className="mt-mstatus idle" title="状态未知">…</span>;
+  if (!st.ollama_reachable) return <span className="mt-mstatus idle" title="Ollama 未连接">离线</span>;
+  if (st.status === 'installed') return <span className="mt-mstatus on" title="已安装且可用">已就绪</span>;
+  if (st.status === 'broken') return <span className="mt-mstatus err" title="列表有但打不开,将重拉">需修复</span>;
+  return <span className="mt-mstatus pull" title="未安装,选此档会后台拉取">未安装</span>;
+}
+
+function capText(caps: CatalogModel['caps']): string {
+  const parts: string[] = [];
+  if (caps.vision) parts.push('看');
+  if (caps.audio_in) parts.push('听');
+  if (caps.audio_out) parts.push('说');
+  if (caps.tools) parts.push('工具');
+  return parts.join(' · ');
+}
+
+// ── 本地主脑：ABC 三档切换（动态、去硬编码、实时状态、后台刷新）───────────────
+function LocalBrainTiers() {
+  const { catalog, status, error, selectTier } = useModelCatalog();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const onPick = useCallback(async (tier: string) => {
+    setBusy(tier);
+    try { await selectTier(tier); } finally { setBusy(null); }
+  }, [selectTier]);
+
+  return (
+    <section className="mt-card mt-hero">
+      <div className="mt-card-top">
+        <span className="mt-card-label">本地主脑 · ABC 档位</span>
+        {catalog
+          ? <span className="mt-pill on">当前 {catalog.current_tier} 档</span>
+          : <span className="mt-pill" title={error ?? ''}>{error ? '目录暂不可达' : '加载中…'}</span>}
+      </div>
+
+      {/* 目录未到位也先渲染骨架，不整页阻塞（要求：界面常在） */}
+      <div className="mt-tiers">
+        {(catalog?.tiers ?? []).map((t) => {
+          const isCurrent = catalog?.current_tier === t.key;
+          const io = t.effective_io;
+          return (
+            <button
+              key={t.key}
+              className={`mt-tier ${isCurrent ? 'active' : ''}`}
+              onClick={() => onPick(t.key)}
+              disabled={busy !== null}
+              title={t.desc}
+            >
+              <div className="mt-tier-head">
+                <span className="mt-tier-key">{t.key}</span>
+                <span className="mt-tier-label">{t.label}</span>
+                {isCurrent && <span className="mt-tier-check" aria-hidden>✓</span>}
+                {busy === t.key && <span className="mt-tier-busy" aria-hidden>切换中…</span>}
+              </div>
+              <div className="mt-tier-io">
+                看:{io.vision === 'native' ? '原生' : '—'} · 听:{io.audio_in === 'native' ? '原生' : 'ASR桥'} · 说:{io.audio_out === 'native' ? '原生' : 'TTS桥'}
+              </div>
+              <div className="mt-tier-models">
+                {t.models.map((m) => (
+                  <div className="mt-tier-model" key={m.tag}>
+                    <span className="mt-tier-model-name">{m.name}</span>
+                    <span className="mt-tier-model-cap">{capText(m.caps)}{m.size_mb ? ` · ${(m.size_mb / 1000).toFixed(1)}G` : ''}</span>
+                    {m.source === 'local'
+                      ? <StatusBadge st={status[m.tag]} />
+                      : <span className="mt-mstatus idle" title="容器模型(vLLM),不经 Ollama">容器</span>}
+                  </div>
+                ))}
+              </div>
+            </button>
+          );
+        })}
+        {!catalog && !error && <div className="mt-tier-skel">正在读取档位目录…</div>}
+      </div>
+    </section>
+  );
+}
+
 export default function ModelsTab() {
   const [changed, setChanged] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<string | null>(null);
@@ -247,7 +320,6 @@ export default function ModelsTab() {
   const allProviders = [...OPEN_CLOUD, ...PROPRIETARY, ...AGGREGATE];
   const connectedCount = allProviders.filter((p) => isConfigured(p.key)).length;
   const localOn = isConfigured('OLLAMA_URL') || isSet(get('OLLAMA_MODEL'));
-  const currentBrain = get('OLLAMA_MODEL') || 'gemma4:e2b';
 
   // 界面本体始终渲染,不再用 loading/error 整屏遮挡——后端(尤其是启动期的
   // Ollama)可能要几十秒甚至几分钟才响应,之前"loading 就整屏转圈"会让用户
@@ -279,28 +351,11 @@ export default function ModelsTab() {
           </div>
         </header>
 
-        {/* ── 本地主脑 ── */}
-        <section className="mt-card mt-hero">
-          <div className="mt-card-top">
-            <span className="mt-card-label">本地主脑 · 原生多模态</span>
-            <span className={`mt-pill ${localOn ? 'on' : ''}`}>{localOn ? '已就绪' : '未启用'}</span>
-          </div>
-          <div className="mt-brains">
-            {LOCAL_BRAINS.map((b) => {
-              const active = currentBrain === b.tag;
-              return (
-                <button
-                  key={b.tag}
-                  className={`mt-brain ${active ? 'active' : ''}`}
-                  onClick={() => set('OLLAMA_MODEL', b.tag)}
-                >
-                  <span className="mt-brain-name">{b.name}</span>
-                  <span className="mt-brain-modal">{b.modal}</span>
-                  {active && <span className="mt-brain-check" aria-hidden>✓</span>}
-                </button>
-              );
-            })}
-          </div>
+        {/* ── 本地主脑：ABC 三档切换（动态目录 + 实时状态 + 后台刷新）── */}
+        <LocalBrainTiers />
+
+        {/* Ollama 地址（沿用 /api/config 存储） */}
+        <section className="mt-card">
           <div className="mt-local-url">
             <label>Ollama 地址</label>
             <input
