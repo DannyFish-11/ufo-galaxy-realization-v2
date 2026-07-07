@@ -405,7 +405,7 @@
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* ── ABC 档位选择 ── */
+/* ── 档位选择 ── */
 .mt-tiers {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

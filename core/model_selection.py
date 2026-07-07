@@ -180,16 +180,13 @@ def save_choice(tag: str) -> None:
 
 
 def recommend_tier(has_gpu: Optional[bool] = None, max_mb: Optional[int] = None) -> str:
-    """按硬件推荐档位：无独显→A；有显卡且够跑全模态单模型→B;显存充裕→C。"""
+    """按硬件推荐档位：无独显→A；有显卡且够跑全模态单模型(MiniCPM-o 约 6GB)→B。"""
     if has_gpu is None or max_mb is None:
         _mb, _gpu, _ = get_compute_summary()
         max_mb = _mb if max_mb is None else max_mb
         has_gpu = _gpu if has_gpu is None else has_gpu
     if not has_gpu:
         return "A"
-    # C 档双模型（JoyAI 8B + MiniCPM-o 9B）都要，显存需求高，保守取 ~14GB 门槛。
-    if max_mb and max_mb >= 14000:
-        return "C"
     # B 档 MiniCPM-o 4.5 约 6GB。
     if max_mb and max_mb >= 6000:
         return "B"
@@ -197,11 +194,11 @@ def recommend_tier(has_gpu: Optional[bool] = None, max_mb: Optional[int] = None)
 
 
 def interactive_select() -> str:
-    """ABC 三档选择（克隆界面 / 启动时）。返回最终生效的主脑 tag（"" = 跳过）。
+    """AB 两档选择（克隆界面 / 启动时）。返回最终生效的主脑 tag（"" = 跳过）。
 
-    A 档 Gemma 系（单选，档内按硬件再挑一个）· B 档 MiniCPM-o 全模态（单）·
-    C 档 京东 JoyAI + MiniCPM-o 复合顶配。选定后经 model_catalog.save_tier
-    持久化档位并联动 OLLAMA_MODEL。非交互终端返回推荐档位的主脑，不阻塞。
+    A 档 Gemma 系（单选，档内按硬件再挑一个）· B 档 MiniCPM-o 全模态（单）。
+    选定后经 model_catalog.save_tier 持久化档位并联动 OLLAMA_MODEL。
+    非交互终端返回推荐档位的主脑，不阻塞。
     """
     from core import cli_render as r
     from core.ascii_art import Colors
@@ -238,7 +235,7 @@ def interactive_select() -> str:
 
     print()
     print("  " + _c("选择 AI 主脑档位", Colors.BOLD + Colors.CYAN)
-          + _c("  (ABC 三档 · 本地原生多模态)", Colors.DIM))
+          + _c("  (AB 两档 · 本地原生多模态)", Colors.DIM))
     r.rule()
     r.phase("硬件", hw, "info")
     r.phase("推荐", f"{rec_tier} 档  ←（按你的实际硬件）", "ok")

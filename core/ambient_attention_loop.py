@@ -8,7 +8,7 @@
 就躺在 ``DesktopPerceptionStore`` 缓存里没人看。本模块补上设计承诺却缺失的
 那个器官——**自发注意力**:给 SILENT→LIMINAL 一个由感知自身驱动的入口。
 
-架构（京东 JoyAI-VL-Interaction 验证过的形态,抄架构不抄模型）::
+架构（自发注意力的通用形态,与具体模型无关）::
 
     持续感知(已有,不新建采集)
        │  DesktopPerceptionStore（Electron 每 2s 推帧/音频）
@@ -107,7 +107,7 @@ class AmbientObservation:
 
 
 # ---------------------------------------------------------------------------
-# 决策脑接口（可插拔：档位 A 用系统主脑；档位 B 换京东 JoyAI 容器，循环不改）
+# 决策脑接口（可插拔：档位 A 用 Gemma 系主脑；档位 B 换 MiniCPM-o 全模态，循环不改）
 # ---------------------------------------------------------------------------
 class AmbientDecider(Protocol):
     async def decide(self, obs: AmbientObservation) -> AmbientDecision:  # pragma: no cover - 协议

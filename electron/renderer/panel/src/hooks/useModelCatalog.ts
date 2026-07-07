@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getBackendUrl } from '@/lib/api';
 
 /**
- * useModelCatalog — ABC 档位模型目录 + 实时状态（去硬编码，单一真相源）
+ * useModelCatalog — 档位模型目录 + 实时状态（去硬编码，单一真相源）
  *
  * 目录(tiers/models/能力)从后端 /api/v1/models/catalog 一次性取（派生自
  * core.model_catalog，前端不再硬编码 LOCAL_BRAINS）。安装/拉取状态从
