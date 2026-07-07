@@ -349,6 +349,40 @@ html, body, #root {
   flex-direction: column;
 }
 
+/* 自发在场（ambient）——它此刻在看/听什么、刚才为何开口/沉默 */
+.ambient-senses {
+  display: flex;
+  align-items: center;
+  gap: var(--sm);
+  margin-bottom: var(--xs);
+}
+.ambient-sense {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.45;
+  transition: opacity var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.ambient-sense.on {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+.ambient-act {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+}
+.ambient-act.act-speak { color: var(--accent); border-color: rgba(255, 235, 151, 0.35); }
+.ambient-act.act-delegate { color: var(--text-secondary); }
+.ambient-rationale {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  opacity: 0.85;
+}
+
 /* 进度条 */
 .bar-row {
   display: flex;

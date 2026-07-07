@@ -1,0 +1,650 @@
+"""core/ambient_attention_loop.py — 常驻注意力循环（自发在场）
+==============================================================
+
+设计哲学（见项目总体设计定稿）
+------------------------------
+三态里的 SILENT 不是"睡着",而是"在场但不表达"——眼睛耳朵持续开着,只是
+不说话。系统此前的唯一缺陷是:一切都由对话驱动,用户不开口,持续采集的帧
+就躺在 ``DesktopPerceptionStore`` 缓存里没人看。本模块补上设计承诺却缺失的
+那个器官——**自发注意力**:给 SILENT→LIMINAL 一个由感知自身驱动的入口。
+
+架构（京东 JoyAI-VL-Interaction 验证过的形态,抄架构不抄模型）::
+
+    持续感知(已有,不新建采集)
+       │  DesktopPerceptionStore（Electron 每 2s 推帧/音频）
+       ▼
+    门控层(零模型开销): 帧差检测 + 音频新鲜度 + 冷却 + 场景去重
+       │  画面没变 / 冷却期内 → 这一拍免费跳过,不惊动模型
+       ▼
+    决策 tick(注意力头): 帧+音频+最近记忆 → 主脑三选一(严格格式)
+       │  决策脑可插拔(AmbientDecider);默认走系统统一 LLM 路由,
+       │  与你在面板/克隆界面选好的主脑一致 —— 循环本身模型无关。
+       ▼
+    三选一路由:
+       SPEAK    → speak_response（与 handle_request 同一条 canonical TTS 路径）
+       DELEGATE → handle_request(source="ambient") 正门 → LIMINAL 执行分支
+                  （OpenClawd 内部可调用 Node_107 工具链）
+       SILENT   → 只记录理由,不打扰（无请求进门,主体留在 SILENT）
+       ▼
+    观察+决策写回记忆（选择性摄入,不全存）:
+       工作记忆(WorkingMemory, ambient 专用会话) —— 喂面板/下次决策/对话注入
+       终身记忆(UnifiedMemory, 仅 salient) —— 过目不忘
+
+工程纪律
+--------
+1. 不新建采集,只消费 ``DesktopPerceptionStore``。
+2. 不新建记忆层,只接线已有 ``WorkingMemory`` / ``UnifiedMemory``。
+3. SILENT = 无请求进门；SPEAK 用 canonical TTS；DELEGATE 走 ``handle_request`` 正门。
+4. 循环不选模型,决策脑走系统统一路由。
+5. 默认关闭(``GALAXY_AMBIENT_LOOP``),隐私跟随现有感知授权,不破坏既有行为。
+6. 冷却 + 场景去重兜住"话痨";全路径优雅降级,任何子步失败都不影响主流程。
+"""
+from __future__ import annotations
+
+import asyncio
+import base64
+import hashlib
+import logging
+import os
+import time
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, List, Optional, Protocol
+
+logger = logging.getLogger("Galaxy.Ambient")
+
+# 默认参数（均可由环境变量覆盖）
+_DEFAULT_INTERVAL_S = 2.0        # 循环节拍
+_DEFAULT_COOLDOWN_S = 20.0       # 开口/委托后的冷却
+_DEFAULT_DIFF_THRESHOLD = 0.06   # 帧差阈值（0..1，归一化平均像素差）
+_AMBIENT_SESSION = "ambient"     # 工作记忆专用会话
+_RECENT_MEMORY_N = 5             # 每次决策带上的最近记忆条数
+
+
+# ---------------------------------------------------------------------------
+# 三选一决策
+# ---------------------------------------------------------------------------
+class AmbientAction(str, Enum):
+    """注意力头的三选一——即"这一拍主体该处于哪个存在状态"的具象化。"""
+
+    SPEAK = "speak"       # 值得主动开口 → MANIFEST
+    SILENT = "silent"     # 看到了但不打扰 → 留在 SILENT（应是绝大多数情况）
+    DELEGATE = "delegate"  # 该派活儿而非嘴上说 → LIMINAL 执行分支
+
+
+@dataclass
+class AmbientDecision:
+    """一次注意力决策的结构化结果。"""
+
+    action: AmbientAction
+    rationale: str = ""            # 为什么这么决定（记录 + 面板显示）
+    utterance: str = ""            # SPEAK 时要说的话
+    task: str = ""                 # DELEGATE 时要委托的任务
+    salient: bool = False          # 是否值得写入终身记忆
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "action": self.action.value,
+            "rationale": self.rationale,
+            "utterance": self.utterance,
+            "task": self.task,
+            "salient": self.salient,
+        }
+
+
+@dataclass
+class AmbientObservation:
+    """一拍观察的输入快照。"""
+
+    frame_b64: Optional[str] = None
+    frame_mime: str = "image/jpeg"
+    frame_source: str = ""
+    audio_b64: Optional[str] = None
+    audio_mime: str = "audio/webm"
+    audio_transcript: Optional[str] = None  # 听:能力驱动桥接转写(asr_bridge)后的文字
+    screen_meta: Optional[Dict[str, Any]] = None
+    recent_memory: List[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# 决策脑接口（可插拔：档位 A 用系统主脑；档位 B 换京东 JoyAI 容器，循环不改）
+# ---------------------------------------------------------------------------
+class AmbientDecider(Protocol):
+    async def decide(self, obs: AmbientObservation) -> AmbientDecision:  # pragma: no cover - 协议
+        ...
+
+
+# 严格三选一输出格式：第一行必须是三个动作词之一，后续行给理由/内容。
+_DECISION_FORMAT = (
+    "你是一个桌面 AI 的『注意力头』。你持续在场地看着用户的摄像头/屏幕、听着麦克风，"
+    "但你的唯一任务不是描述画面，而是判断【此刻该不该主动介入】。\n"
+    "严格从以下三选一，且第一行只能是这三个词之一：\n"
+    "SPEAK   —— 此刻确实值得你主动开口（如用户明显卡住、出现你被托付留意的事、用户回到座位）。\n"
+    "SILENT  —— 看到了但不值得打扰（用户在正常操作、只是光线/无关变化）。这应是绝大多数情况的答案。\n"
+    "DELEGATE—— 不该嘴上说，而该派一个后台任务（如反复报错需查日志、需要 OCR 提取屏幕文字）。\n"
+    "输出格式（严格）：\n"
+    "第一行：SPEAK 或 SILENT 或 DELEGATE\n"
+    "第二行起：理由（一句话）。若为 SPEAK，另起一行以『说：』开头写出你要说的话；"
+    "若为 DELEGATE，另起一行以『派：』开头写出要委托的任务。\n"
+    "克制是美德——拿不准就选 SILENT。"
+)
+
+
+class LLMRouterDecider:
+    """默认决策脑：走系统统一 LLM 路由（与面板/克隆界面选好的主脑一致）。
+
+    多模态:构造 OpenAI 风格的 image_url content part;路由的 Ollama 适配器会
+    自动转成 Ollama 的 images 字段(见 multi_llm_router._to_ollama_messages),
+    因此对 OpenAI 兼容后端与本地 Ollama 后端都成立——真正模型无关。
+    图像发送失败时优雅降级为纯文本(带上屏幕结构化上下文)。
+    """
+
+    def __init__(self, router: Optional[Any] = None) -> None:
+        self._router = router
+
+    def _get_router(self):
+        if self._router is None:
+            from core.multi_llm_router import get_llm_router
+            self._router = get_llm_router()
+        return self._router
+
+    @staticmethod
+    def _image_part(image_b64: str, mime: str) -> Dict[str, Any]:
+        url = image_b64 if image_b64.startswith("data:") else f"data:{mime or 'image/jpeg'};base64,{image_b64}"
+        return {"type": "image_url", "image_url": {"url": url}}
+
+    def _build_messages(self, obs: AmbientObservation) -> List[Dict[str, Any]]:
+        text_lines = [_DECISION_FORMAT, ""]
+        if obs.recent_memory:
+            text_lines.append("最近你注意到的（供连续性参考）：")
+            text_lines.extend(f"- {m}" for m in obs.recent_memory[-_RECENT_MEMORY_N:])
+            text_lines.append("")
+        if obs.screen_meta:
+            title = obs.screen_meta.get("window_title") or obs.screen_meta.get("title")
+            if title:
+                text_lines.append(f"当前活动窗口：{title}")
+        # 听:asr_bridge 已转写出文字 → 直接把用户说的话交给模型判断；
+        # 未转写(native 待服务/转写失败)则只提示"有声音"。
+        if obs.audio_transcript:
+            text_lines.append(f"（麦克风此刻听到：「{obs.audio_transcript}」）")
+        elif obs.audio_b64:
+            text_lines.append("（麦克风此刻有新的声音输入。）")
+        text_lines.append("现在，请判断此刻该 SPEAK / SILENT / DELEGATE。")
+        text = "\n".join(text_lines)
+
+        if obs.frame_b64:
+            content: List[Dict[str, Any]] = [{"type": "text", "text": text}]
+            content.append(self._image_part(obs.frame_b64, obs.frame_mime))
+            return [{"role": "user", "content": content}]
+        return [{"role": "user", "content": text}]
+
+    async def decide(self, obs: AmbientObservation) -> AmbientDecision:
+        router = self._get_router()
+        messages = self._build_messages(obs)
+        try:
+            resp = await router.chat(messages, temperature=0.2, max_tokens=200)
+            text = (resp.content or "").strip()
+        except Exception as exc:  # noqa: BLE001 — 多模态发送失败等
+            # 纯文本降级重试一次
+            logger.debug("Ambient decider 多模态调用失败,降级纯文本: %s", exc)
+            try:
+                fallback = [{"role": "user", "content": messages[0]["content"][0]["text"]
+                             if isinstance(messages[0]["content"], list) else messages[0]["content"]}]
+                resp = await router.chat(fallback, temperature=0.2, max_tokens=200)
+                text = (resp.content or "").strip()
+            except Exception as exc2:  # noqa: BLE001
+                logger.debug("Ambient decider 纯文本降级也失败: %s", exc2)
+                return AmbientDecision(action=AmbientAction.SILENT, rationale=f"决策不可用: {exc2}")
+        return parse_decision(text)
+
+
+def parse_decision(text: str) -> AmbientDecision:
+    """把主脑的自由文本解析成严格三选一。
+
+    第一行的第一个可辨识词决定 action;拿不准一律 SILENT(克制优先)。
+    """
+    if not text:
+        return AmbientDecision(action=AmbientAction.SILENT, rationale="空响应")
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    head = lines[0].upper() if lines else "SILENT"
+
+    if head.startswith("SPEAK"):
+        action = AmbientAction.SPEAK
+    elif head.startswith("DELEGATE"):
+        action = AmbientAction.DELEGATE
+    elif head.startswith("SILENT"):
+        action = AmbientAction.SILENT
+    else:
+        # 首行不规范：在全文里找线索，否则保守 SILENT
+        upper = text.upper()
+        if "DELEGATE" in upper:
+            action = AmbientAction.DELEGATE
+        elif "SPEAK" in upper:
+            action = AmbientAction.SPEAK
+        else:
+            action = AmbientAction.SILENT
+
+    rationale = ""
+    utterance = ""
+    task = ""
+    for ln in lines[1:]:
+        if ln.startswith("说：") or ln.startswith("说:"):
+            utterance = ln.split("：", 1)[-1].split(":", 1)[-1].strip()
+        elif ln.startswith("派：") or ln.startswith("派:"):
+            task = ln.split("：", 1)[-1].split(":", 1)[-1].strip()
+        elif not rationale:
+            rationale = ln
+
+    # SPEAK 但没给出要说的话 → 用理由兜底；仍为空则降级 SILENT（不空口说白话）
+    if action == AmbientAction.SPEAK and not utterance:
+        utterance = rationale
+        if not utterance:
+            return AmbientDecision(action=AmbientAction.SILENT, rationale="SPEAK 无内容,降级沉默")
+    # DELEGATE 但没给出任务 → 用理由兜底；仍为空则降级 SILENT
+    if action == AmbientAction.DELEGATE and not task:
+        task = rationale
+        if not task:
+            return AmbientDecision(action=AmbientAction.SILENT, rationale="DELEGATE 无任务,降级沉默")
+
+    salient = action in (AmbientAction.SPEAK, AmbientAction.DELEGATE)
+    return AmbientDecision(
+        action=action, rationale=rationale, utterance=utterance, task=task, salient=salient
+    )
+
+
+# ---------------------------------------------------------------------------
+# 帧差门控（零模型开销）
+# ---------------------------------------------------------------------------
+def _perceptual_signature(frame_b64: str) -> Optional[Any]:
+    """把一帧 base64 图像压成一个 16x16 灰度指纹（numpy 数组）。
+
+    用 PIL 解码 + 下采样;不可用时返回 None(调用方退回字节级启发式)。
+    """
+    try:
+        import io
+        from PIL import Image
+        import numpy as np
+
+        raw = base64.b64decode(frame_b64)
+        img = Image.open(io.BytesIO(raw)).convert("L").resize((16, 16))
+        return np.asarray(img, dtype="float32") / 255.0
+    except Exception:  # noqa: BLE001 — PIL 缺失/解码失败
+        return None
+
+
+def _byte_similarity(a: str, b: str) -> float:
+    """字节级相似度兜底（PIL 不可用时）：采样若干字节位比较。0..1，越大越像。"""
+    if not a or not b:
+        return 0.0
+    la, lb = len(a), len(b)
+    if la == 0 or lb == 0:
+        return 0.0
+    len_ratio = min(la, lb) / max(la, lb)
+    n = min(256, min(la, lb))
+    step = max(1, min(la, lb) // n)
+    same = sum(1 for i in range(0, min(la, lb), step) if a[i] == b[i])
+    total = len(range(0, min(la, lb), step))
+    byte_ratio = same / total if total else 0.0
+    return 0.5 * len_ratio + 0.5 * byte_ratio
+
+
+class FrameGate:
+    """维护上一帧指纹，判断新帧是否"变化足够大到值得惊动模型"。"""
+
+    def __init__(self, threshold: float = _DEFAULT_DIFF_THRESHOLD) -> None:
+        self.threshold = threshold
+        self._prev_sig: Optional[Any] = None
+        self._prev_b64: Optional[str] = None
+
+    def changed(self, frame_b64: Optional[str]) -> bool:
+        if not frame_b64:
+            return False
+        sig = _perceptual_signature(frame_b64)
+        if sig is not None:
+            import numpy as np
+            if self._prev_sig is None:
+                self._prev_sig = sig
+                self._prev_b64 = frame_b64
+                return True  # 第一帧视为变化
+            diff = float(np.mean(np.abs(sig - self._prev_sig)))
+            self._prev_sig = sig
+            self._prev_b64 = frame_b64
+            return diff > self.threshold
+        # 字节级兜底
+        if self._prev_b64 is None:
+            self._prev_b64 = frame_b64
+            return True
+        sim = _byte_similarity(frame_b64, self._prev_b64)
+        self._prev_b64 = frame_b64
+        return sim < 0.995
+
+
+# ---------------------------------------------------------------------------
+# 常驻注意力循环
+# ---------------------------------------------------------------------------
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _float_env(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, "").strip() or default)
+    except (TypeError, ValueError):
+        return default
+
+
+class AmbientAttentionLoop:
+    """自发注意力循环。所有协作者可注入，便于单测。"""
+
+    def __init__(
+        self,
+        *,
+        decider: Optional[AmbientDecider] = None,
+        perception_store: Optional[Any] = None,
+        working_memory: Optional[Any] = None,
+        unified_memory: Optional[Any] = None,
+        event_bus: Optional[Any] = None,
+        interval_s: Optional[float] = None,
+        cooldown_s: Optional[float] = None,
+        diff_threshold: Optional[float] = None,
+        session_id: str = _AMBIENT_SESSION,
+    ) -> None:
+        self._decider = decider
+        self._store = perception_store
+        self._wm = working_memory
+        self._um = unified_memory
+        self._bus = event_bus
+        self.interval_s = interval_s if interval_s is not None else _float_env("GALAXY_AMBIENT_INTERVAL_S", _DEFAULT_INTERVAL_S)
+        self.cooldown_s = cooldown_s if cooldown_s is not None else _float_env("GALAXY_AMBIENT_COOLDOWN_S", _DEFAULT_COOLDOWN_S)
+        self._gate = FrameGate(diff_threshold if diff_threshold is not None else _float_env("GALAXY_AMBIENT_DIFF_THRESHOLD", _DEFAULT_DIFF_THRESHOLD))
+        self.session_id = session_id
+
+        self._task: Optional[asyncio.Task] = None
+        self._running = False
+        self._last_action_ts = 0.0
+        self._last_audio_hash = ""
+        self._recent_rationales: List[str] = []
+        self.ticks = 0
+        self.decisions = 0
+
+    # ── 懒加载协作者（避免导入期副作用）──
+    def _get_store(self):
+        if self._store is None:
+            from core.perception.desktop_perception_store import get_desktop_perception_store
+            self._store = get_desktop_perception_store()
+        return self._store
+
+    def _get_wm(self):
+        if self._wm is None:
+            from core.cognitive.working_memory import get_working_memory
+            self._wm = get_working_memory()
+        return self._wm
+
+    def _get_um(self):
+        if self._um is None:
+            try:
+                from core.memory.unified import get_unified_memory
+                self._um = get_unified_memory()
+            except Exception:  # noqa: BLE001
+                self._um = None
+        return self._um
+
+    def _get_decider(self) -> AmbientDecider:
+        if self._decider is None:
+            self._decider = LLMRouterDecider()
+        return self._decider
+
+    def _get_bus(self):
+        if self._bus is None:
+            try:
+                from core.state_event_bus import get_state_event_bus
+                self._bus = get_state_event_bus()
+            except Exception:  # noqa: BLE001
+                self._bus = None
+        return self._bus
+
+    # ── 门控：这一拍是否值得惊动模型 ──
+    def _gather_observation(self) -> Optional[AmbientObservation]:
+        """从感知库读一份快照（只读，不消费对话音频）；被门控挡下返回 None。"""
+        store = self._get_store()
+        try:
+            media = store.snapshot_media()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Ambient: snapshot_media 失败: %s", exc)
+            return None
+
+        frame_b64 = media.get("screen_b64") or media.get("camera_b64") or media.get("image_b64")
+        frame_mime = media.get("screen_mime") if media.get("screen_b64") else media.get("camera_mime", "image/jpeg")
+        frame_source = "desktop_screen" if media.get("screen_b64") else "desktop_camera"
+        audio_b64 = media.get("audio_b64")
+
+        # 冷却期内：直接跳过（防话痨）
+        if time.time() - self._last_action_ts < self.cooldown_s:
+            return None
+
+        # 门控：帧变化 OR 有"新"音频（音频按内容哈希去重，避免同一片段反复触发）
+        frame_changed = self._gate.changed(frame_b64)
+        audio_new = False
+        if audio_b64:
+            ah = hashlib.sha1(audio_b64.encode("utf-8", "ignore")).hexdigest()[:16]
+            if ah != self._last_audio_hash:
+                audio_new = True
+                self._last_audio_hash = ah
+
+        if not frame_changed and not audio_new:
+            return None  # 什么都没变 → 这一拍免费跳过
+
+        # 听:能力驱动。当前档位若走 asr_bridge 且有新音频 → 转写成文字（真"听"）。
+        # native（服务层支持原生音频）则保留原始音频交给决策器/服务路径处理。
+        audio_for_obs = audio_b64 if audio_new else None
+        transcript: Optional[str] = None
+        if audio_for_obs:
+            try:
+                from core.modality_bridge import resolve_audio_in, transcribe_b64
+                if resolve_audio_in() == "asr_bridge":
+                    transcript = transcribe_b64(
+                        audio_for_obs, mime=media.get("audio_mime", "audio/webm"),
+                    )
+            except Exception as exc:  # noqa: BLE001 — 听不可用不致命
+                logger.debug("Ambient 听桥接失败(非致命): %s", exc)
+
+        return AmbientObservation(
+            frame_b64=frame_b64,
+            frame_mime=frame_mime or "image/jpeg",
+            frame_source=frame_source,
+            audio_b64=audio_for_obs,
+            audio_mime=media.get("audio_mime", "audio/webm"),
+            audio_transcript=transcript,
+            screen_meta=media.get("screen_meta"),
+            recent_memory=list(self._recent_rationales[-_RECENT_MEMORY_N:]),
+        )
+
+    # ── 一拍：门控 → 决策 → 路由 → 记忆 → 事件（单测入口）──
+    async def tick(self) -> Optional[AmbientDecision]:
+        self.ticks += 1
+        obs = self._gather_observation()
+        if obs is None:
+            return None
+
+        self._emit("ambient.observed", {
+            "has_frame": bool(obs.frame_b64),
+            "frame_source": obs.frame_source,
+            "has_audio": bool(obs.audio_b64),
+            "recent_memory": obs.recent_memory,
+        })
+
+        try:
+            decision = await self._get_decider().decide(obs)
+        except Exception as exc:  # noqa: BLE001 — 决策不可致命
+            logger.debug("Ambient decide 异常,视为 SILENT: %s", exc)
+            decision = AmbientDecision(action=AmbientAction.SILENT, rationale=f"决策异常: {exc}")
+
+        self.decisions += 1
+        await self._route(decision, obs)
+        self._record(decision, obs)
+        self._emit("ambient.decision", decision.to_dict())
+        return decision
+
+    async def _route(self, decision: AmbientDecision, obs: AmbientObservation) -> None:
+        if decision.action == AmbientAction.SPEAK:
+            self._last_action_ts = time.time()
+            try:
+                from core.speech_output import speak_response
+                # 与 handle_request 内部同一条 canonical TTS 路径。source="ambient"
+                # 让 speak_response 的去重/开关策略统一生效。
+                speak_response(decision.utterance, source="ambient")
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Ambient SPEAK 朗读失败(非致命): %s", exc)
+        elif decision.action == AmbientAction.DELEGATE:
+            self._last_action_ts = time.time()
+            await self._delegate(decision, obs)
+        # SILENT：无请求进门，主体留在 SILENT，仅记录（在 _record 里做）。
+
+    async def _delegate(self, decision: AmbientDecision, obs: AmbientObservation) -> None:
+        """DELEGATE → handle_request 正门（source="ambient"）→ LIMINAL 执行分支。
+
+        携带当前帧作为 multimodal_context,让主体带着"它看到的东西"去执行,
+        OpenClawd 内部可自主调用 Node_107 工具链完成委托。
+        """
+        try:
+            from core.desktop_presence_runtime import get_desktop_presence_runtime
+
+            mm_context = None
+            if obs.frame_b64:
+                try:
+                    from core.schemas.multimodal import MultiModalContext, MultiModalImage
+                    mm_context = MultiModalContext(images=[MultiModalImage(
+                        mime=obs.frame_mime, data=obs.frame_b64, source=obs.frame_source,
+                    )])
+                except Exception:  # noqa: BLE001
+                    mm_context = None
+
+            runtime = get_desktop_presence_runtime()
+            await runtime.handle_request(
+                message=decision.task,
+                source="ambient",
+                session_id=self.session_id,
+                user_id="ambient",
+                multimodal_context=mm_context,
+                entry_mode="local",
+            )
+        except Exception as exc:  # noqa: BLE001 — 委托失败不影响循环
+            logger.debug("Ambient DELEGATE 经正门失败(非致命): %s", exc)
+
+    def _record(self, decision: AmbientDecision, obs: AmbientObservation) -> None:
+        """写回记忆:工作记忆(滚动,喂面板/下次决策/对话注入) + 终身记忆(仅 salient)。"""
+        summary = decision.rationale or decision.utterance or decision.task or decision.action.value
+        # 供下一拍决策做时间连续性参考
+        self._recent_rationales.append(f"[{decision.action.value}] {summary}")
+        if len(self._recent_rationales) > 20:
+            self._recent_rationales = self._recent_rationales[-20:]
+
+        # 工作记忆（角色标记为 ambient，与对话消息区分）
+        try:
+            self._get_wm().add(
+                session_id=self.session_id,
+                role="ambient",
+                content=summary,
+                metadata={
+                    "action": decision.action.value,
+                    "frame_source": obs.frame_source,
+                    "has_audio": bool(obs.audio_b64),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Ambient 工作记忆写入失败(非致命): %s", exc)
+
+        # 终身记忆：只记 salient（SimpleMem 第一原则：选择性摄入，别把库灌成垃圾场）
+        if decision.salient:
+            um = self._get_um()
+            if um is not None and getattr(um, "enabled", False):
+                try:
+                    um.remember(
+                        summary,
+                        modality="text",
+                        tags=["ambient", decision.action.value],
+                        metadata={"source": "ambient_attention_loop"},
+                    )
+                    # 可选：把 salient 帧本身也存进跨模态记忆（默认关，档位 A 省资源）
+                    if obs.frame_b64 and _bool_env("GALAXY_AMBIENT_MEMORY_MEDIA", False):
+                        um.remember_media(
+                            obs.frame_b64, modality="image", mime=obs.frame_mime,
+                            tags=["ambient"], caption=summary,
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("Ambient 终身记忆写入失败(非致命): %s", exc)
+
+    def _emit(self, event_type: str, payload: Dict[str, Any]) -> None:
+        bus = self._get_bus()
+        if bus is None:
+            return
+        try:
+            bus.publish(event_type, source="ambient_attention_loop", payload=payload)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Ambient 事件发布失败(非致命): %s", exc)
+
+    # ── 生命周期 ──
+    async def _run_loop(self) -> None:
+        logger.info(
+            "AmbientAttentionLoop 启动 | interval=%.1fs cooldown=%.1fs",
+            self.interval_s, self.cooldown_s,
+        )
+        while self._running:
+            try:
+                await self.tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — 单拍异常不该杀死循环
+                logger.debug("Ambient tick 异常(已吞,继续): %s", exc)
+            try:
+                await asyncio.sleep(self.interval_s)
+            except asyncio.CancelledError:
+                raise
+
+    async def start(self) -> None:
+        if self._running:
+            return
+        self._running = True
+        self._task = asyncio.create_task(self._run_loop())
+
+    async def stop(self) -> None:
+        self._running = False
+        if self._task is not None:
+            self._task.cancel()
+            try:
+                await self._task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+            self._task = None
+        logger.info("AmbientAttentionLoop 已停止 | ticks=%d decisions=%d", self.ticks, self.decisions)
+
+    @property
+    def running(self) -> bool:
+        return self._running
+
+
+# ---------------------------------------------------------------------------
+# 单例
+# ---------------------------------------------------------------------------
+_loop_instance: Optional[AmbientAttentionLoop] = None
+
+
+def get_ambient_loop() -> AmbientAttentionLoop:
+    global _loop_instance
+    if _loop_instance is None:
+        _loop_instance = AmbientAttentionLoop()
+    return _loop_instance
+
+
+def reset_ambient_loop() -> None:
+    """测试用：清空单例。"""
+    global _loop_instance
+    _loop_instance = None
+
+
+def ambient_loop_enabled() -> bool:
+    """总开关：默认关（不破坏既有行为），GALAXY_AMBIENT_LOOP=1 开启。"""
+    return _bool_env("GALAXY_AMBIENT_LOOP", False)

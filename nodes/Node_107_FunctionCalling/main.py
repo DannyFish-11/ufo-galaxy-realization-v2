@@ -457,6 +457,47 @@ async def mcp_call(request: Dict[str, Any]):
 
 
 # ---------------------------------------------------------------------------
+# In-process entry (Golden Path / fusion_entry)
+# ---------------------------------------------------------------------------
+
+
+async def process(command: str = "call", **params: Any) -> Dict[str, Any]:
+    """统一进程内入口 — 供 fusion_entry / node_invocation 直调用。
+
+    背景:本节点此前只有 FastAPI 路由,没有任何模块级可调用入口——
+    fusion_entry.FusionNode.execute() 按 process/execute/run/handle 探测时
+    一无所获,返回 "No executable method found"。结果是:主调用链
+    (node_invocation)永远无法把本节点当作工具调度器使用,它沦为一个
+    没人调用的孤立 HTTP 服务,"LLM 自主调用工具"的能力形同虚设。
+    这里补上进程内入口,与 HTTP 路由复用完全相同的注册表和调度逻辑。
+
+    支持的 command:
+      - "call"          params: prompt(必填), tools(可选白名单)
+      - "list_tools"    列出全部已注册工具
+      - "register_tool" params 同 RegisterToolRequest
+      - "health"        节点健康状态
+    """
+    try:
+        if command in ("call", "prompt"):
+            prompt = params.get("prompt") or params.get("message") or ""
+            if not prompt:
+                return {"success": False, "error": "missing 'prompt'"}
+            return await call(CallRequest(prompt=prompt, tools=params.get("tools")))
+        if command == "list_tools":
+            return await list_tools()
+        if command == "register_tool":
+            return await register_tool(RegisterToolRequest(**params))
+        if command == "health":
+            return await health()
+        return {"success": False, "error": f"unknown command: {command}"}
+    except HTTPException as exc:
+        # 进程内调用方拿不到 HTTP 语义,把 FastAPI 异常降级为普通错误返回。
+        return {"success": False, "error": str(exc.detail)}
+    except Exception as exc:  # noqa: BLE001
+        return {"success": False, "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 

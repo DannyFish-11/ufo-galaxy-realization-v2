@@ -101,6 +101,15 @@ export interface PanelData {
     status: 'loaded' | 'unloaded' | 'error' | 'disabled';
     description: string;
   }>;
+
+  // 自发注意力（在场栏实时显示"它正在看/听什么、刚才为何开口/沉默"）
+  ambient: {
+    seeing: boolean;
+    hearing: boolean;
+    action: string;      // speak | silent | delegate | ''
+    rationale: string;
+    ts: number;
+  };
 }
 
 interface UsePanelDataReturn {
@@ -155,6 +164,7 @@ const DEFAULT_PANEL_DATA: PanelData = {
   natsMessages: [],
   mcpServers: [],
   skills: [],
+  ambient: { seeing: false, hearing: false, action: '', rationale: '', ts: 0 },
 };
 
 // ── IPC 驱动 Hook ────────────────────────────────
@@ -189,7 +199,10 @@ export function usePanelData(): UsePanelDataReturn {
           else mappedPhase = 'manifest';
         }
 
-        setPanelData({
+        // ambient 只由 bridge 的 state_event 携带；/panel/feed 慢轮询里没有此字段。
+        // 用函数式更新在缺省时【保留上一次】ambient，避免两路交替刷新时闪烁掉。
+        const incomingAmbient = payload.ambient;
+        setPanelData((prev) => ({
           phase: mappedPhase,
           phaseLabel: mappedPhase.toUpperCase(),
           presenceIntensity: intensity,
@@ -216,7 +229,14 @@ export function usePanelData(): UsePanelDataReturn {
           natsMessages: payload.nats_messages || DEFAULT_PANEL_DATA.natsMessages,
           mcpServers: payload.mcp_servers || DEFAULT_PANEL_DATA.mcpServers,
           skills: payload.skills || DEFAULT_PANEL_DATA.skills,
-        });
+          ambient: incomingAmbient ? {
+            seeing: !!incomingAmbient.seeing,
+            hearing: !!incomingAmbient.hearing,
+            action: incomingAmbient.action || '',
+            rationale: incomingAmbient.rationale || '',
+            ts: incomingAmbient.ts || 0,
+          } : prev.ambient,
+        }));
         setLoading(false);
         setError(null);
       } catch (e) {

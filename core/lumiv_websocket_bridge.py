@@ -68,6 +68,13 @@ class GalaxyPresenceBridge:
     _intent: float = 0.0
     _speaking: bool = False
 
+    # 自发注意力（ambient）最近一拍：供面板在场栏显示"它正在看什么/刚才为何开口"。
+    _ambient_seeing: bool = False
+    _ambient_hearing: bool = False
+    _ambient_action: str = ""       # speak | silent | delegate
+    _ambient_rationale: str = ""
+    _ambient_ts: float = 0.0
+
     # 桥接已启动
     _started: bool = False
 
@@ -86,8 +93,13 @@ class GalaxyPresenceBridge:
         self._started = True
 
         try:
-            from core.state_event_bus import StateEventBus
-            bus = StateEventBus.get_instance()
+            # 修复:此前用 StateEventBus.get_instance() —— 该类【没有】这个
+            # classmethod（单例入口是模块级 get_state_event_bus()）。于是 start()
+            # 每次都在这里抛 AttributeError 被下面 except 吞掉，桥【从未真正订阅
+            # 到任何事件】：连三态相位订阅都是死的（面板相位靠另一条 IPC feed
+            # 才没露馅）。改用正确的模块级单例入口，让订阅真正生效。
+            from core.state_event_bus import get_state_event_bus
+            bus = get_state_event_bus()
 
             # 订阅三态转换事件
             bus.subscribe("phase.silent",   self._on_phase_silent)
@@ -96,6 +108,10 @@ class GalaxyPresenceBridge:
 
             # 订阅 intent 强度更新
             bus.subscribe("intent.update",  self._on_intent_update)
+
+            # 订阅自发注意力事件 → 面板在场栏实时显示"在看/在听 + 决策理由"。
+            bus.subscribe("ambient.observed", self._on_ambient_observed)
+            bus.subscribe("ambient.decision", self._on_ambient_decision)
 
             logger.info("GalaxyPresenceBridge started — subscribed to StateEventBus (IPC HTTP + WS fallback)")
         except Exception as exc:
@@ -110,12 +126,13 @@ class GalaxyPresenceBridge:
         self._speaking = False
         asyncio.create_task(self._broadcast_state())
 
-    def _on_phase_liminal(self, payload: Dict[str, Any]) -> None:
+    def _on_phase_liminal(self, event: Any) -> None:
+        p = self._payload_of(event)
         self._current_mode = "liminal"
         self._current_depth = MODE_DEPTH_MAP["liminal"]
         # intent 从 payload 中提取，如果没有则默认 0.5
-        self._intent = payload.get("intent_strength", 0.5)
-        self._speaking = payload.get("speaking", False)
+        self._intent = p.get("intent_strength", 0.5)
+        self._speaking = p.get("speaking", False)
         asyncio.create_task(self._broadcast_state())
 
     def _on_phase_manifest(self, payload: Dict[str, Any]) -> None:
@@ -125,15 +142,42 @@ class GalaxyPresenceBridge:
         self._speaking = False
         asyncio.create_task(self._broadcast_state())
 
-    def _on_intent_update(self, payload: Dict[str, Any]) -> None:
+    def _on_intent_update(self, event: Any) -> None:
         """意图强度持续更新 — Liminal 态下微调 depth。"""
         if self._current_mode != "liminal":
             return
-        intent = payload.get("intent_strength", 0.5)
+        p = self._payload_of(event)
+        intent = p.get("intent_strength", 0.5)
         self._intent = intent
         # depth 在 0.15-0.85 之间随 intent 线性映射
         self._current_depth = 0.15 + intent * 0.70
-        self._speaking = payload.get("speaking", False)
+        self._speaking = p.get("speaking", False)
+        asyncio.create_task(self._broadcast_state())
+
+    @staticmethod
+    def _payload_of(event: Any) -> Dict[str, Any]:
+        """StateEventBus 回调收到的是 StateEvent 对象；取其 .payload（兼容裸 dict）。"""
+        p = getattr(event, "payload", None)
+        if isinstance(p, dict):
+            return p
+        return event if isinstance(event, dict) else {}
+
+    def _on_ambient_observed(self, event: Any) -> None:
+        """自发注意力：门控放行、正在观察一帧（看/听）。"""
+        import time as _t
+        p = self._payload_of(event)
+        self._ambient_seeing = bool(p.get("has_frame"))
+        self._ambient_hearing = bool(p.get("has_audio"))
+        self._ambient_ts = _t.time()
+        asyncio.create_task(self._broadcast_state())
+
+    def _on_ambient_decision(self, event: Any) -> None:
+        """自发注意力：三选一决策（speak/silent/delegate）+ 理由。"""
+        import time as _t
+        p = self._payload_of(event)
+        self._ambient_action = str(p.get("action", ""))
+        self._ambient_rationale = str(p.get("rationale") or p.get("utterance") or p.get("task") or "")
+        self._ambient_ts = _t.time()
         asyncio.create_task(self._broadcast_state())
 
     # ── WebSocket 客户端管理 ──
@@ -212,6 +256,14 @@ class GalaxyPresenceBridge:
                 "speaking": self._speaking,
                 "mode": self._current_mode,
                 "source": "DesktopPresenceRuntime",
+                # 自发注意力最近一拍（面板在场栏展示"在看/在听 + 决策"）。
+                "ambient": {
+                    "seeing": self._ambient_seeing,
+                    "hearing": self._ambient_hearing,
+                    "action": self._ambient_action,
+                    "rationale": self._ambient_rationale[:120],
+                    "ts": round(self._ambient_ts, 3),
+                },
             },
         }
 

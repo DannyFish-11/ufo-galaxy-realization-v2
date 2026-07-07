@@ -115,6 +115,13 @@ class StateEventType(str, Enum):
     # ── Multimodal ingest (PR-3) ───────────────────────────────────────────
     MULTIMODAL_INGEST_ACTIVE = "multimodal.ingest.active"  # ingest bus started/running
 
+    # ── Ambient attention (自发注意力循环) ─────────────────────────────────
+    # 常驻注意力循环每拍产出:AMBIENT_OBSERVED = 门控放行、正在观察一帧;
+    # AMBIENT_DECISION = 三选一决策(SPEAK/SILENT/DELEGATE)+理由。供面板在场栏
+    # 实时显示"它正在看什么、刚才为何开口/为何沉默"。
+    AMBIENT_OBSERVED = "ambient.observed"
+    AMBIENT_DECISION = "ambient.decision"
+
     # ── Generic / passthrough ─────────────────────────────────────────────
     GENERIC         = "generic"         # uncategorised event
 

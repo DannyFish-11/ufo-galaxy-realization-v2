@@ -1,0 +1,129 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getBackendUrl } from '@/lib/api';
+
+/**
+ * useModelCatalog — ABC 档位模型目录 + 实时状态（去硬编码，单一真相源）
+ *
+ * 目录(tiers/models/能力)从后端 /api/v1/models/catalog 一次性取（派生自
+ * core.model_catalog，前端不再硬编码 LOCAL_BRAINS）。安装/拉取状态从
+ * /api/v1/models/status 在【后台静默轮询】，只更新状态徽标、不重取整份目录、
+ * 不闪整页——满足"后台刷新但不影响前端视觉"。
+ */
+
+export interface ModelCaps {
+  vision: boolean;
+  audio_in: boolean;
+  audio_out: boolean;
+  tools: boolean;
+}
+export interface CatalogModel {
+  tag: string;
+  name: string;
+  desc: string;
+  source: string;        // local | container | cloud
+  requires_gpu: boolean;
+  size_mb: number;
+  caps: ModelCaps;
+}
+export interface EffectiveIO {
+  vision: string;        // native | none
+  audio_in: string;      // native | asr_bridge
+  audio_out: string;     // native | tts_bridge
+  tools: boolean;
+}
+export interface CatalogTier {
+  key: string;           // A | B | C
+  label: string;
+  desc: string;
+  kind: string;          // single | composite
+  models: CatalogModel[];
+  effective_io: EffectiveIO;
+}
+export interface Catalog {
+  current_tier: string;
+  current_main_brain: string;
+  tiers: CatalogTier[];
+}
+export type ModelStatus = 'installed' | 'absent' | 'broken';
+export interface StatusEntry {
+  status: ModelStatus;
+  ollama_reachable: boolean;
+  matched: string;
+}
+
+const STATUS_POLL_MS = 4000;
+
+async function fetchCatalog(): Promise<Catalog> {
+  const base = await getBackendUrl();
+  const r = await fetch(`${base}/api/v1/models/catalog`);
+  if (!r.ok) throw new Error(`catalog ${r.status}`);
+  return r.json();
+}
+
+async function fetchStatus(): Promise<Record<string, StatusEntry>> {
+  const base = await getBackendUrl();
+  const r = await fetch(`${base}/api/v1/models/status`);
+  if (!r.ok) throw new Error(`status ${r.status}`);
+  const j = await r.json();
+  return j.models ?? {};
+}
+
+export function useModelCatalog() {
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [status, setStatus] = useState<Record<string, StatusEntry>>({});
+  const [error, setError] = useState<string | null>(null);
+  const catalogRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 目录：一次性取（失败则退避重试，界面照常渲染，不整页阻塞）。
+  const loadCatalog = useCallback(async () => {
+    try {
+      const c = await fetchCatalog();
+      setCatalog(c);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '目录加载失败');
+      if (catalogRetry.current) clearTimeout(catalogRetry.current);
+      catalogRetry.current = setTimeout(() => { loadCatalog(); }, 4000);
+    }
+  }, []);
+
+  // 状态：后台静默轮询，只更新徽标。
+  const loadStatus = useCallback(async () => {
+    try {
+      setStatus(await fetchStatus());
+    } catch {
+      /* 静默：Ollama 未起等，下一轮再试，不打扰视觉 */
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCatalog();
+    loadStatus();
+    const t = setInterval(loadStatus, STATUS_POLL_MS);
+    return () => {
+      clearInterval(t);
+      if (catalogRetry.current) clearTimeout(catalogRetry.current);
+    };
+  }, [loadCatalog, loadStatus]);
+
+  // 选档：POST /tier → 立刻本地乐观更新 current_tier + 立即刷一次状态。
+  const selectTier = useCallback(async (tier: string, mainBrain?: string) => {
+    const base = await getBackendUrl();
+    const r = await fetch(`${base}/api/v1/models/tier`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tier, main_brain: mainBrain ?? null }),
+    });
+    const body = await r.json().catch(() => ({ success: false }));
+    if (body.success) {
+      setCatalog((prev) => prev ? {
+        ...prev, current_tier: body.tier, current_main_brain: body.main_brain,
+      } : prev);
+      // 触发了后台拉取 → 尽快刷一次状态看到"拉取中/已装"。
+      setTimeout(loadStatus, 800);
+    }
+    return body as { success: boolean; tier?: string; main_brain?: string; pulling?: string[]; error?: string };
+  }, [loadStatus]);
+
+  return { catalog, status, error, reloadCatalog: loadCatalog, selectTier };
+}

@@ -43,7 +43,9 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "SONAR_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Perplexity Sonar API Key (alias)"},
     "VLLM_URL": {"default": "", "type": "url", "category": "llm", "description": "vLLM URL (alias)"},
     "LOCAL_VLLM_URL": {"default": "", "type": "url", "category": "llm", "description": "Local vLLM URL"},
-    "OLLAMA_MODEL": {"default": "", "type": "select", "category": "llm", "description": "本地主脑模型（原生多模态）", "options": ["gemma4:12b", "openbmb/minicpm-o4.5", "gemma4:e4b", "gemma4:e2b"]},
+    # options 不再硬编码——由 get_config 在响应时从 core.model_catalog 动态派生
+    # （与 model_selection、面板 ModelsTab 同一真相源，杜绝三份清单漂移）。
+    "OLLAMA_MODEL": {"default": "", "type": "select", "category": "llm", "description": "本地主脑模型（原生多模态）", "options": []},
 
     # --- Service Ports & Nodes ---
     "GATEWAY_PORT": {"default": "9000", "type": "number", "category": "ports", "description": "Galaxy Gateway Port"},
@@ -128,6 +130,13 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_MAX_CONTEXT_TOKENS": {"default": "100000", "type": "number", "category": "dev", "description": "Max Context Tokens"},
     "GALAXY_MAX_MESSAGE_SIZE": {"default": "10485760", "type": "number", "category": "dev", "description": "Max Message Size (bytes)"},
 
+    # --- Ambient Attention Loop (自发在场) ---
+    # 常驻注意力循环:持续消费桌面感知,主脑三选一(SPEAK/SILENT/DELEGATE)。
+    # 默认关闭,不破坏既有行为;开启后系统从"对话驱动"升级为"在场主体"。
+    "GALAXY_AMBIENT_LOOP": {"default": "false", "type": "boolean", "category": "dev", "description": "常驻注意力循环(自发在场,默认关)"},
+    "GALAXY_AMBIENT_INTERVAL_S": {"default": "2.0", "type": "number", "category": "dev", "description": "注意力循环节拍(秒)"},
+    "GALAXY_AMBIENT_COOLDOWN_S": {"default": "20.0", "type": "number", "category": "dev", "description": "开口/委托后冷却(秒,防话痨)"},
+
     # --- WebRTC & Network ---
     "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL": {"default": "false", "type": "boolean", "category": "network", "description": "WebRTC Data Channel"},
     "GALAXY_TURN_URLS": {"default": "", "type": "string", "category": "network", "description": "TURN Server URLs"},
@@ -161,6 +170,14 @@ async def get_config():
     导致「设置」tab 拿到的永远是精简版、按 key 查不到任何一项 → 只见左侧分类
     标签、右侧内容空白。故完整明细改挂 /api/config/all,与精简版共存不冲突。
     """
+    # OLLAMA_MODEL 的候选项从 catalog 动态派生（单一真相源），而非用 schema 里的空占位。
+    dynamic_options: Dict[str, list] = {}
+    try:
+        from core.model_catalog import local_choice_options
+        dynamic_options["OLLAMA_MODEL"] = local_choice_options()
+    except Exception:  # noqa: BLE001
+        pass
+
     result = {}
     for key, meta in CONFIG_SCHEMA.items():
         result[key] = {
@@ -170,7 +187,9 @@ async def get_config():
             "category": meta["category"],
             "description": meta["description"],
         }
-        if "options" in meta:
+        if key in dynamic_options and dynamic_options[key]:
+            result[key]["options"] = dynamic_options[key]
+        elif "options" in meta:
             result[key]["options"] = meta["options"]
     return result
 
