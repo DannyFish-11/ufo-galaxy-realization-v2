@@ -295,7 +295,10 @@ def save_tier(key: str, *, main_brain: Optional[str] = None) -> str:
     # 选主脑
     local_in_tier = [s.tag for s in tier_models(key) if s.source == "local"]
     chosen = ""
-    if main_brain and main_brain in local_in_tier:
+    if main_brain:
+        # 显式指定了主脑 → 一律尊重,即便它不在本档的目录候选里(如用户通过 HF
+        # 回退装的自定义 tag)。此前"不在档内候选就替换成档内第一个"会把用户刚在
+        # 设置页选定的自定义模型静默改回 gemma4:e2b —— 一条真实的静默数据丢失路径。
         chosen = main_brain
     elif local_in_tier:
         chosen = local_in_tier[0]

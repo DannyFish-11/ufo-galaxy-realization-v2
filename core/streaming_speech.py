@@ -100,14 +100,29 @@ class StreamingSpeaker:
         play: PlayFn,
         stop: Optional[StopFn] = None,
         on_speaking: Optional[Callable[[bool], None]] = None,
+        discard: Optional[Callable[[str], Any]] = None,
     ) -> None:
         self._synth = synth
         self._play = play
         self._stop = stop
         self._on_speaking = on_speaking
+        # discard(handle):清理一个【已合成但不会被播放】的句柄(如临时 mp3)。
+        # 正常播放路径由 play 负责删文件;但被 interrupt 打断时,已预取合成、尚未
+        # 播放的句柄不会走 play → 若不在这里清掉就会泄漏临时文件(每次打断漏 1~2 个)。
+        self._discard = discard
         self._interrupted = False
         self._speaking = False
         self.chunks_spoken = 0
+
+    async def _discard_handle(self, handle: Optional[str]) -> None:
+        if handle is None or self._discard is None:
+            return
+        try:
+            res = self._discard(handle)
+            if asyncio.iscoroutine(res):
+                await res
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("丢弃未播放句柄失败(非致命): %s", exc)
 
     @property
     def speaking(self) -> bool:
@@ -139,17 +154,26 @@ class StreamingSpeaker:
                 if handle is None:
                     continue
                 if self._interrupted:
+                    await self._discard_handle(handle)  # 已合成但被打断,不会播 → 清掉
                     break
                 try:
                     await self._play(handle)
                     self.chunks_spoken += 1
                 except asyncio.CancelledError:
+                    await self._discard_handle(handle)
                     raise
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("流式播放一句失败(跳过): %s", exc)
-            # 若已中断，等待并丢弃在飞的预取合成，避免悬挂任务。
+                    await self._discard_handle(handle)
+            # 若已中断，取消在飞的预取合成；若它已合成完(有结果句柄)也一并清掉,
+            # 避免泄漏。
             if next_synth is not None:
                 next_synth.cancel()
+                try:
+                    leftover = await next_synth
+                    await self._discard_handle(leftover)
+                except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                    pass
         finally:
             self._set_speaking(False)
 

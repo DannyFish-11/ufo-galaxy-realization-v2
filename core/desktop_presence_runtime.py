@@ -891,11 +891,16 @@ class DesktopPresenceRuntime:
         result.setdefault("trace_id", rsession.runtime_session_id)
         result["tristate"] = rsession.tristate.value
         result["entrypoint_source"] = source
-        # PR-SPEAK: "说"默认启用——任何渠道(语音/面板/自发)产出回复都在此集中朗读一次。
+        # PR-SPEAK: "说"默认启用——任何渠道(语音/面板)产出回复都在此集中朗读一次。
         # 非阻塞、去重、缺 edge-tts 优雅降级;GALAXY_SPEAK=0 可关。语音回路不再各自 TTS(避免双声)。
+        # 例外:source="ambient" 只会由自发注意力循环的 DELEGATE 分支进来——委托是
+        # "不出声、后台派活儿"的动作(三选一里 SPEAK 才该出声,且那条已在 ambient
+        # 循环内直接朗读)。若这里也把委托的完整认知回复念出来,等于每次委托都多一句
+        # 冗余 TTS,违背 DELEGATE"闭嘴干活"的语义。故对 ambient 抑制自动朗读。
         try:
             from core.speech_output import speak_response
-            speak_response(result.get("response", ""), source=source)
+            if source != "ambient":
+                speak_response(result.get("response", ""), source=source)
         except Exception:  # noqa: BLE001
             pass
         result["conversation_session_id"] = conversation_session_id
