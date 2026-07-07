@@ -43,7 +43,9 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "SONAR_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Perplexity Sonar API Key (alias)"},
     "VLLM_URL": {"default": "", "type": "url", "category": "llm", "description": "vLLM URL (alias)"},
     "LOCAL_VLLM_URL": {"default": "", "type": "url", "category": "llm", "description": "Local vLLM URL"},
-    "OLLAMA_MODEL": {"default": "", "type": "select", "category": "llm", "description": "本地主脑模型（原生多模态）", "options": ["gemma4:12b", "openbmb/minicpm-o4.5", "gemma4:e4b", "gemma4:e2b"]},
+    # options 不再硬编码——由 get_config 在响应时从 core.model_catalog 动态派生
+    # （与 model_selection、面板 ModelsTab 同一真相源，杜绝三份清单漂移）。
+    "OLLAMA_MODEL": {"default": "", "type": "select", "category": "llm", "description": "本地主脑模型（原生多模态）", "options": []},
 
     # --- Service Ports & Nodes ---
     "GATEWAY_PORT": {"default": "9000", "type": "number", "category": "ports", "description": "Galaxy Gateway Port"},
@@ -168,6 +170,14 @@ async def get_config():
     导致「设置」tab 拿到的永远是精简版、按 key 查不到任何一项 → 只见左侧分类
     标签、右侧内容空白。故完整明细改挂 /api/config/all,与精简版共存不冲突。
     """
+    # OLLAMA_MODEL 的候选项从 catalog 动态派生（单一真相源），而非用 schema 里的空占位。
+    dynamic_options: Dict[str, list] = {}
+    try:
+        from core.model_catalog import local_choice_options
+        dynamic_options["OLLAMA_MODEL"] = local_choice_options()
+    except Exception:  # noqa: BLE001
+        pass
+
     result = {}
     for key, meta in CONFIG_SCHEMA.items():
         result[key] = {
@@ -177,7 +187,9 @@ async def get_config():
             "category": meta["category"],
             "description": meta["description"],
         }
-        if "options" in meta:
+        if key in dynamic_options and dynamic_options[key]:
+            result[key]["options"] = dynamic_options[key]
+        elif "options" in meta:
             result[key]["options"] = meta["options"]
     return result
 

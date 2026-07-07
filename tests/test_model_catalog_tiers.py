@@ -1,0 +1,180 @@
+"""tests/test_model_catalog_tiers.py
+=======================================
+
+模型目录 SSOT + ABC 档位 + 能力驱动 IO + 三份硬编码统一 + API + 档位选择。
+
+核心不变量：
+  - 面板(ModelsTab)/config(OLLAMA_MODEL.options)/CLI(model_selection) 三处清单
+    统一派生自 core.model_catalog —— 证明不再各存一份会漂移的硬编码。
+  - 能力驱动：A 档说走 TTS 桥、B/C 档全原生；服务门控关时不自欺（声明原生也走桥）。
+"""
+from __future__ import annotations
+
+import asyncio
+import os
+
+import pytest
+
+import core.model_catalog as mc
+
+
+@pytest.fixture(autouse=True)
+def _clean_env(tmp_path, monkeypatch):
+    # 隔离档位持久化文件与环境，避免测试互相污染。
+    monkeypatch.setattr(mc, "_TIER_FILE", tmp_path / ".galaxy_tier")
+    for k in ("GALAXY_MODEL_TIER", "GALAXY_NATIVE_AUDIO", "OLLAMA_MODEL"):
+        monkeypatch.delenv(k, raising=False)
+    yield
+
+
+class TestCatalogStructure:
+    def test_three_tiers_abc(self):
+        assert [t.key for t in mc.all_tiers()] == ["A", "B", "C"]
+
+    def test_tier_A_is_gemma_single(self):
+        t = mc.get_tier("A")
+        assert t.kind == "single"
+        assert all("gemma" in tag for tag in t.model_tags)
+
+    def test_tier_B_is_minicpm_single(self):
+        t = mc.get_tier("B")
+        assert t.kind == "single"
+        assert t.model_tags == ["openbmb/minicpm-o4.5"]
+
+    def test_tier_C_is_composite_joyai_plus_minicpm(self):
+        t = mc.get_tier("C")
+        assert t.kind == "composite"
+        assert "joyai-vl-interaction" in t.model_tags
+        assert "openbmb/minicpm-o4.5" in t.model_tags
+
+    def test_size_from_local_brain_manager_ssot(self):
+        # 尺寸取自 LocalBrainManager，不是本模块自带
+        spec = mc.get_model("gemma4:e2b")
+        assert spec.size_mb() == 1800
+
+
+class TestCapabilityDrivenIO:
+    def test_A_listens_native_speaks_via_bridge(self):
+        io = mc.tier_effective_io("A")
+        assert io.vision == "native"
+        assert io.audio_in == "native"     # Gemma 原生听
+        assert io.audio_out == "tts_bridge"  # 但不原生说 → TTS 桥
+
+    def test_B_all_native(self):
+        io = mc.tier_effective_io("B")
+        assert io.audio_in == "native" and io.audio_out == "native"
+
+    def test_C_all_native_via_minicpm(self):
+        io = mc.tier_effective_io("C")
+        assert io.audio_out == "native"  # MiniCPM-o 覆盖说
+
+    def test_effective_io_takes_union_of_models(self):
+        # 复合档：任一模型有该能力即 native
+        io = mc.effective_io(["joyai-vl-interaction", "openbmb/minicpm-o4.5"])
+        assert io.audio_out == "native"   # 来自 minicpm
+        # 仅 JoyAI（无原生音频）→ 说要走桥
+        io2 = mc.effective_io(["joyai-vl-interaction"])
+        assert io2.audio_out == "tts_bridge"
+
+
+class TestUnifiedNoHardcode:
+    def test_model_selection_derives_from_catalog(self):
+        from core.model_selection import list_models
+        tags = [t for t, _ in list_models()]
+        assert tags == mc.choice_order()
+
+    def test_config_options_derive_from_catalog(self):
+        from core.model_catalog import local_choice_options
+        # config.py 的 OLLAMA_MODEL.options 现在是空占位，运行时由此填充
+        from core.routes.config import CONFIG_SCHEMA
+        assert CONFIG_SCHEMA["OLLAMA_MODEL"]["options"] == []
+        assert local_choice_options() == mc.choice_order()
+
+    def test_choice_order_excludes_container_models(self):
+        # JoyAI 是容器决策头，不进"本地主脑单选"清单
+        assert "joyai-vl-interaction" not in mc.choice_order()
+
+
+class TestTierPersistence:
+    def test_save_and_load_tier(self):
+        mc.save_tier("B")
+        assert mc.load_tier() == "B"
+
+    def test_save_tier_sets_main_brain(self):
+        chosen = mc.save_tier("B")
+        assert chosen == "openbmb/minicpm-o4.5"
+        assert os.environ.get("OLLAMA_MODEL") == "openbmb/minicpm-o4.5"
+
+    def test_single_tier_honors_requested_brain(self):
+        chosen = mc.save_tier("A", main_brain="gemma4:e4b")
+        assert chosen == "gemma4:e4b"
+
+    def test_composite_tier_picks_local_conversation_model(self):
+        # C 档主脑取第一个本地对话模型（MiniCPM-o），不是 JoyAI（容器决策头）
+        chosen = mc.save_tier("C")
+        assert chosen == "openbmb/minicpm-o4.5"
+
+    def test_infer_tier_from_model(self):
+        assert mc.infer_tier_from_model("gemma4:12b") == "A"
+        assert mc.infer_tier_from_model("openbmb/minicpm-o4.5") == "B"
+
+    def test_unknown_tier_defaults_A(self):
+        assert mc.save_tier("Z") in (mc.choice_order()[0],)
+        assert mc.load_tier() == "A"
+
+
+class TestModalityBridge:
+    def test_A_tier_listens_via_asr_bridge(self, monkeypatch):
+        monkeypatch.setattr(mc, "_TIER_FILE", mc._TIER_FILE)  # keep patched
+        mc.save_tier("A")
+        from core.modality_bridge import resolve_audio_in, resolve_audio_out
+        assert resolve_audio_in() == "asr_bridge"   # Ollama 不管原生音频 → 桥
+        assert resolve_audio_out() == "tts_bridge"
+
+    def test_native_audio_gate_off_stays_bridge_even_for_B(self, monkeypatch):
+        mc.save_tier("B")
+        monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "0")
+        from core.modality_bridge import resolve_audio_in
+        assert resolve_audio_in() == "asr_bridge"  # 不自欺：服务层没接就走桥
+
+    def test_native_audio_gate_on_enables_native_for_B(self, monkeypatch):
+        mc.save_tier("B")
+        monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "1")
+        from core.modality_bridge import resolve_audio_in, resolve_audio_out
+        assert resolve_audio_in() == "native"
+        assert resolve_audio_out() == "native"
+
+    def test_transcribe_empty_returns_none(self):
+        from core.modality_bridge import transcribe_b64
+        assert transcribe_b64("") is None
+
+
+class TestModelsAPI:
+    def test_catalog_endpoint_shape(self):
+        from core.routes.models import get_catalog
+        snap = asyncio.run(get_catalog())
+        assert snap["current_tier"] in ("A", "B", "C")
+        assert len(snap["tiers"]) == 3
+        for t in snap["tiers"]:
+            assert "effective_io" in t and "models" in t
+
+    def test_status_endpoint_shape(self):
+        from core.routes.models import get_status
+        st = asyncio.run(get_status())
+        # 本地候选都在（状态可能是 absent，因为测试环境没有 Ollama）
+        assert set(st["models"].keys()) == set(mc.choice_order())
+
+    def test_select_tier_endpoint(self, monkeypatch):
+        from core.routes.models import select_tier, TierSelectRequest
+        # 屏蔽真实后台拉取与路由刷新
+        import core.model_selection as ms
+        monkeypatch.setattr(ms, "background_pull", lambda tag: None)
+        out = asyncio.run(select_tier(TierSelectRequest(tier="B")))
+        assert out["success"] is True
+        assert out["tier"] == "B"
+        assert out["main_brain"] == "openbmb/minicpm-o4.5"
+
+    def test_select_unknown_tier_fails_cleanly(self):
+        from core.routes.models import select_tier, TierSelectRequest
+        out = asyncio.run(select_tier(TierSelectRequest(tier="Z")))
+        assert out["success"] is False

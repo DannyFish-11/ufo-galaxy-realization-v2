@@ -26,15 +26,30 @@ logger = logging.getLogger("Galaxy.ModelSelection")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _CHOICE_FILE = PROJECT_ROOT / ".galaxy_model"
 
-# 可选主脑（顺序=推荐优先级，最强在前）。tag 必须存在于 LocalBrainManager 的目录里；
-# 这里只放"展示用"的人类可读标签/模态说明，体积/尺寸一律向 LocalBrainManager 取。
-_CHOICE_ORDER: List[str] = ["gemma4:12b", "openbmb/minicpm-o4.5", "gemma4:e4b", "gemma4:e2b"]
-_LABELS: Dict[str, Tuple[str, str]] = {
-    "gemma4:12b":            ("Google Gemma 4 12B", "文本 + 视觉 + 原生音频(听) + 工具调用，128K"),
-    "openbmb/minicpm-o4.5":  ("MiniCPM-o 4.5 (9B)", "全模态：看 + 听 + 说，全双工(需显卡)"),
-    "gemma4:e4b":            ("Google Gemma 4 E4B", "文本 + 视觉 + 原生音频(听)，中等显存"),
-    "gemma4:e2b":            ("Google Gemma 4 E2B", "文本 + 视觉 + 原生音频(听)，轻量"),
-}
+# 可选主脑清单不再在此硬编码 —— 统一派生自 core.model_catalog（唯一真相源）。
+# 此前这里、ModelsTab.tsx、config.py 各存一份必须手动同步的清单，漏改即漂移。
+# 现在三处全部从 catalog 派生。展示标签/模态说明也取自 catalog 的 ModelSpec。
+def _choice_order() -> List[str]:
+    try:
+        from core.model_catalog import choice_order
+        return choice_order()
+    except Exception:  # noqa: BLE001 — catalog 不可用时的保守兜底
+        return ["gemma4:e2b", "gemma4:e4b", "gemma4:12b", "openbmb/minicpm-o4.5"]
+
+
+def _labels() -> Dict[str, Tuple[str, str]]:
+    try:
+        from core.model_catalog import get_model
+        out: Dict[str, Tuple[str, str]] = {}
+        for tag in _choice_order():
+            spec = get_model(tag)
+            if spec:
+                out[tag] = (spec.name, spec.desc)
+        return out
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 _SMALLEST_FALLBACK = "gemma4:e2b"
 
 # gemma4 系列需要较新的 Ollama 客户端才能解析其 manifest(联网核实：多个独立来源
@@ -85,19 +100,20 @@ def _default_tag() -> str:
 
 
 def list_models() -> List[Tuple[str, Dict]]:
-    """返回 (tag, {name, desc, size_mb}) 列表，按推荐优先级排序。"""
+    """返回 (tag, {name, desc, size_mb}) 列表，按推荐优先级排序（派生自 catalog）。"""
     sizes = _brain_sizes()
+    labels = _labels()
     out: List[Tuple[str, Dict]] = []
-    for tag in _CHOICE_ORDER:
-        if tag not in _LABELS:
+    for tag in _choice_order():
+        if tag not in labels:
             continue
-        name, desc = _LABELS[tag]
+        name, desc = labels[tag]
         out.append((tag, {"name": name, "desc": desc, "size_mb": sizes.get(tag, 0)}))
     return out
 
 
 def model_name(tag: str) -> str:
-    return _LABELS.get(tag, (tag, ""))[0]
+    return _labels().get(tag, (tag, ""))[0]
 
 
 def get_compute_summary() -> Tuple[int, bool, str]:
@@ -137,7 +153,7 @@ def recommend(max_model_size_mb: Optional[int] = None, has_gpu: Optional[bool] =
     sizes = _brain_sizes()
     if not max_model_size_mb:
         return "openbmb/minicpm-o4.5"
-    for tag in _CHOICE_ORDER:
+    for tag in _choice_order():
         need = sizes.get(tag)
         if need and need <= max_model_size_mb:
             return tag
@@ -163,60 +179,105 @@ def save_choice(tag: str) -> None:
         os.environ["OLLAMA_MODEL"] = tag
 
 
-def interactive_select() -> str:
-    """显示硬件推荐 + 全部模型，让用户手动选主脑。返回 tag（"" = 跳过）。
+def recommend_tier(has_gpu: Optional[bool] = None, max_mb: Optional[int] = None) -> str:
+    """按硬件推荐档位：无独显→A；有显卡且够跑全模态单模型→B;显存充裕→C。"""
+    if has_gpu is None or max_mb is None:
+        _mb, _gpu, _ = get_compute_summary()
+        max_mb = _mb if max_mb is None else max_mb
+        has_gpu = _gpu if has_gpu is None else has_gpu
+    if not has_gpu:
+        return "A"
+    # C 档双模型（JoyAI 8B + MiniCPM-o 9B）都要，显存需求高，保守取 ~14GB 门槛。
+    if max_mb and max_mb >= 14000:
+        return "C"
+    # B 档 MiniCPM-o 4.5 约 6GB。
+    if max_mb and max_mb >= 6000:
+        return "B"
+    return "A"
 
-    非交互终端(无 TTY)时不阻塞、不"偷偷"选：返回推荐，由调用方明确打印"已自动选用"。
-    渲染走 core.cli_render（与启动界面同一套：对齐、细线、不画歪掉的中文框）。
+
+def interactive_select() -> str:
+    """ABC 三档选择（克隆界面 / 启动时）。返回最终生效的主脑 tag（"" = 跳过）。
+
+    A 档 Gemma 系（单选，档内按硬件再挑一个）· B 档 MiniCPM-o 全模态（单）·
+    C 档 京东 JoyAI + MiniCPM-o 复合顶配。选定后经 model_catalog.save_tier
+    持久化档位并联动 OLLAMA_MODEL。非交互终端返回推荐档位的主脑，不阻塞。
     """
     from core import cli_render as r
     from core.ascii_art import Colors
+    from core import model_catalog as mc
 
     max_mb, has_gpu, hw = get_compute_summary()
-    rec = recommend(max_mb, has_gpu)
-    models = list_models()
+    rec_tier = recommend_tier(has_gpu, max_mb)
+    tiers = mc.all_tiers()
+
+    def _resolve_brain(tier_key: str) -> str:
+        """档内定主脑：single 档按硬件在档内挑；composite 取档内第一个本地对话模型。"""
+        specs = mc.tier_models(tier_key)
+        local = [s for s in specs if s.source == "local"]
+        if not local:
+            return ""
+        tier = mc.get_tier(tier_key)
+        if tier and tier.kind == "single":
+            # 档内按硬件推荐：挑装得下的最强一个
+            rec = recommend(max_mb, has_gpu)
+            for s in local:
+                if s.tag == rec:
+                    return s.tag
+            return local[0].tag
+        return local[0].tag  # composite：对话主脑取第一个本地模型（如 MiniCPM-o）
 
     if not (sys.stdin and sys.stdin.isatty()):
-        return rec  # 非交互：交给 main.py 明确说明"已自动选推荐"
+        # 非交互：用推荐档，持久化并返回主脑
+        brain = _resolve_brain(rec_tier)
+        mc.save_tier(rec_tier, main_brain=brain)
+        return brain
 
     def _c(t, color):
         return f"{color}{t}{Colors.ENDC}" if r._use_color() else t
 
     print()
-    print("  " + _c("选择 AI 主脑模型", Colors.BOLD + Colors.CYAN)
-          + _c("  (本地原生多模态)", Colors.DIM))
+    print("  " + _c("选择 AI 主脑档位", Colors.BOLD + Colors.CYAN)
+          + _c("  (ABC 三档 · 本地原生多模态)", Colors.DIM))
     r.rule()
     r.phase("硬件", hw, "info")
-    r.phase("推荐", f"{model_name(rec)}  ←（按你的实际硬件）", "ok")
+    r.phase("推荐", f"{rec_tier} 档  ←（按你的实际硬件）", "ok")
     print()
-    # 列出全部可选模型：序号 + 名称(对齐) + 建议显存；推荐项加 ▸ 与「← 推荐」。
-    for i, (tag, info) in enumerate(models, 1):
-        is_rec = (tag == rec)
+    keys = [t.key for t in tiers]
+    for i, t in enumerate(tiers, 1):
+        is_rec = (t.key == rec_tier)
         marker = _c("▸", Colors.GREEN) if is_rec else " "
         num = _c(f"[{i}]", Colors.BOLD if is_rec else Colors.DIM)
-        name = r.pad_display(info["name"], 24)
-        sz = _c(f"显存 ≥ {info['size_mb']} MB", Colors.DIM) if info["size_mb"] else ""
+        io = mc.tier_effective_io(t.key)
+        io_txt = f"看:{io.vision} 听:{io.audio_in} 说:{io.audio_out}"
         tail = _c("  ← 推荐", Colors.GREEN) if is_rec else ""
-        print(f"  {marker} {num} {name}{sz}{tail}")
-        print(f"         {_c(info['desc'], Colors.DIM)}")
+        print(f"  {marker} {num} {_c(t.label, Colors.BOLD if is_rec else Colors.ENDC)}{tail}")
+        print(f"         {_c(t.desc, Colors.DIM)}")
+        print(f"         {_c(io_txt, Colors.DIM)} · 模型: "
+              + _c(", ".join(m.name for m in mc.tier_models(t.key)), Colors.DIM))
     r.rule()
-    print("  " + _c("回车=用推荐 · 数字=手选 · s=跳过下载", Colors.DIM)
-          + _c("   (之后可用 --select-model 重选)", Colors.DIM))
-    # 循环直到拿到有效输入：避免"一闪而过"——只有明确回车/序号/s 才往下走。
+    print("  " + _c("回车=用推荐档 · 数字=选档 · s=跳过下载", Colors.DIM))
     while True:
         try:
-            choice = input(f"  请选择主脑 [1-{len(models)} / 回车 / s]: ").strip().lower()
+            choice = input(f"  请选择档位 [1-{len(tiers)} / 回车 / s]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
-            return rec
+            brain = _resolve_brain(rec_tier)
+            mc.save_tier(rec_tier, main_brain=brain)
+            return brain
         if choice == "":
-            return rec
+            brain = _resolve_brain(rec_tier)
+            mc.save_tier(rec_tier, main_brain=brain)
+            return brain
         if choice == "s":
             return ""
         if choice.isdigit():
             idx = int(choice) - 1
-            if 0 <= idx < len(models):
-                return models[idx][0]
-        print("  " + _c("⚠ 无效输入，请重新选择（或直接回车用推荐）。", Colors.YELLOW))
+            if 0 <= idx < len(keys):
+                key = keys[idx]
+                brain = _resolve_brain(key)
+                mc.save_tier(key, main_brain=brain)
+                return brain
+        print("  " + _c("⚠ 无效输入，请重新选择（或直接回车用推荐档）。", Colors.YELLOW))
 
 
 def background_pull(tag: str) -> None:
@@ -342,8 +403,9 @@ def resolve_main_brain(interactive: bool = True) -> str:
 
 
 # ── 向后兼容：main.py / launch_desktop 仍以 MODELS[tag]["name"] 取展示名 ──
+# 同样派生自 catalog（模块导入期求值一次；catalog 是静态定义，够用）。
 MODELS: Dict[str, Dict] = {
-    tag: {"name": _LABELS[tag][0], "modalities": _LABELS[tag][1]}
-    for tag in _CHOICE_ORDER if tag in _LABELS
+    tag: {"name": lbl[0], "modalities": lbl[1]}
+    for tag, lbl in _labels().items()
 }
 DEFAULT_MODEL = _default_tag()

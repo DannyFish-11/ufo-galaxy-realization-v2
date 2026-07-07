@@ -101,6 +101,7 @@ class AmbientObservation:
     frame_source: str = ""
     audio_b64: Optional[str] = None
     audio_mime: str = "audio/webm"
+    audio_transcript: Optional[str] = None  # 听:能力驱动桥接转写(asr_bridge)后的文字
     screen_meta: Optional[Dict[str, Any]] = None
     recent_memory: List[str] = field(default_factory=list)
 
@@ -162,7 +163,11 @@ class LLMRouterDecider:
             title = obs.screen_meta.get("window_title") or obs.screen_meta.get("title")
             if title:
                 text_lines.append(f"当前活动窗口：{title}")
-        if obs.audio_b64:
+        # 听:asr_bridge 已转写出文字 → 直接把用户说的话交给模型判断；
+        # 未转写(native 待服务/转写失败)则只提示"有声音"。
+        if obs.audio_transcript:
+            text_lines.append(f"（麦克风此刻听到：「{obs.audio_transcript}」）")
+        elif obs.audio_b64:
             text_lines.append("（麦克风此刻有新的声音输入。）")
         text_lines.append("现在，请判断此刻该 SPEAK / SILENT / DELEGATE。")
         text = "\n".join(text_lines)
@@ -432,12 +437,27 @@ class AmbientAttentionLoop:
         if not frame_changed and not audio_new:
             return None  # 什么都没变 → 这一拍免费跳过
 
+        # 听:能力驱动。当前档位若走 asr_bridge 且有新音频 → 转写成文字（真"听"）。
+        # native（服务层支持原生音频）则保留原始音频交给决策器/服务路径处理。
+        audio_for_obs = audio_b64 if audio_new else None
+        transcript: Optional[str] = None
+        if audio_for_obs:
+            try:
+                from core.modality_bridge import resolve_audio_in, transcribe_b64
+                if resolve_audio_in() == "asr_bridge":
+                    transcript = transcribe_b64(
+                        audio_for_obs, mime=media.get("audio_mime", "audio/webm"),
+                    )
+            except Exception as exc:  # noqa: BLE001 — 听不可用不致命
+                logger.debug("Ambient 听桥接失败(非致命): %s", exc)
+
         return AmbientObservation(
             frame_b64=frame_b64,
             frame_mime=frame_mime or "image/jpeg",
             frame_source=frame_source,
-            audio_b64=audio_b64 if audio_new else None,
+            audio_b64=audio_for_obs,
             audio_mime=media.get("audio_mime", "audio/webm"),
+            audio_transcript=transcript,
             screen_meta=media.get("screen_meta"),
             recent_memory=list(self._recent_rationales[-_RECENT_MEMORY_N:]),
         )
