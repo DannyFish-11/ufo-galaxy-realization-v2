@@ -128,6 +128,13 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_MAX_CONTEXT_TOKENS": {"default": "100000", "type": "number", "category": "dev", "description": "Max Context Tokens"},
     "GALAXY_MAX_MESSAGE_SIZE": {"default": "10485760", "type": "number", "category": "dev", "description": "Max Message Size (bytes)"},
 
+    # --- Ambient Attention Loop (自发在场) ---
+    # 常驻注意力循环:持续消费桌面感知,主脑三选一(SPEAK/SILENT/DELEGATE)。
+    # 默认关闭,不破坏既有行为;开启后系统从"对话驱动"升级为"在场主体"。
+    "GALAXY_AMBIENT_LOOP": {"default": "false", "type": "boolean", "category": "dev", "description": "常驻注意力循环(自发在场,默认关)"},
+    "GALAXY_AMBIENT_INTERVAL_S": {"default": "2.0", "type": "number", "category": "dev", "description": "注意力循环节拍(秒)"},
+    "GALAXY_AMBIENT_COOLDOWN_S": {"default": "20.0", "type": "number", "category": "dev", "description": "开口/委托后冷却(秒,防话痨)"},
+
     # --- WebRTC & Network ---
     "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL": {"default": "false", "type": "boolean", "category": "network", "description": "WebRTC Data Channel"},
     "GALAXY_TURN_URLS": {"default": "", "type": "string", "category": "network", "description": "TURN Server URLs"},

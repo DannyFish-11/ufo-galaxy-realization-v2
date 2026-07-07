@@ -805,6 +805,29 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning(f"健康检查整合层启动失败: {e}")
 
     # ====================================================================
+    # 15a. 常驻注意力循环（自发在场 / Ambient Attention Loop）
+    # ====================================================================
+    # 给三态 SILENT 补上"自发注意力":持续消费桌面感知(摄像头/屏幕/麦克风),
+    # 帧差门控放行后让主脑做 SPEAK/SILENT/DELEGATE 三选一,把系统从"对话驱动"
+    # 升级为"在场主体"。默认关闭(GALAXY_AMBIENT_LOOP=1 开启),不破坏既有行为;
+    # 隐私跟随现有感知授权。
+    try:
+        from core.ambient_attention_loop import get_ambient_loop, ambient_loop_enabled
+
+        if ambient_loop_enabled():
+            _ambient = get_ambient_loop()
+            await _ambient.start()
+            results["ambient_attention_loop"] = {"status": "ok"}
+            logger.info("常驻注意力循环已启动（自发在场）")
+        else:
+            results["ambient_attention_loop"] = {"status": "disabled"}
+            logger.info("常驻注意力循环未启用（GALAXY_AMBIENT_LOOP=1 开启）")
+    except Exception as e:
+        logger.debug("Fallback triggered: %s", e)
+        results["ambient_attention_loop"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"常驻注意力循环启动失败(非致命): {e}")
+
+    # ====================================================================
     # 15b. MCP Bridge（外部语言 MCP 服务器桥接）
     # ====================================================================
     try:
@@ -1125,6 +1148,13 @@ async def shutdown_subsystems():
         await _shutdown_with_timeout("系统负载采样循环", get_load_monitor().stop_monitoring())
     except Exception as e:
         logger.warning(f"系统负载采样循环停止失败: {e}")
+
+    # 0a-2. 常驻注意力循环（bootstrap 15a 里启动，需在关闭序列显式停掉后台任务）
+    try:
+        from core.ambient_attention_loop import get_ambient_loop
+        await _shutdown_with_timeout("常驻注意力循环", get_ambient_loop().stop())
+    except Exception as e:
+        logger.warning(f"常驻注意力循环停止失败: {e}")
 
     # 0b. 节点发现服务
     try:
