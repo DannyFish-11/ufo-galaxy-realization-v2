@@ -148,6 +148,16 @@ class VoiceLoop:
 
         logger.info("Voice input: %s", text)
 
+        # barge-in：用户开口时若 AI 正在朗读，立刻掐断——"你一说话它就闭嘴"。
+        # ASR 出词即视为用户已开口（句级打断）；集中式朗读走 speech_output。
+        try:
+            from core.speech_output import interrupt_speech, is_speaking
+            if is_speaking():
+                interrupt_speech()
+                logger.info("Barge-in: 用户开口，打断 AI 朗读")
+        except Exception as _exc:  # noqa: BLE001
+            logger.debug("barge-in 跳过(非致命): %s", _exc)
+
         # A 融合:把语音对话实时推给面板"实时上下文"。此前只有默认【关闭】的
         # core.voice_conversation_bridge 调用 emit_conversation,而真正默认【开启】、
         # 驱动三态与朗读的正是本 VoiceLoop——它此前从不推送,导致默认配置下面板的

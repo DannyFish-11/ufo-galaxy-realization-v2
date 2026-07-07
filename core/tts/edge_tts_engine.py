@@ -82,6 +82,9 @@ class EdgeTTSEngine:
         self.volume = volume
         self.proxy = proxy
         self._play_lock = asyncio.Lock()
+        # 当前播放子进程句柄（供 stop()/barge-in 掐断）；_stopped 标记"是主动掐断"。
+        self._current_proc: Optional[Any] = None
+        self._stopped: bool = False
 
     async def synthesize(
         self,
@@ -250,13 +253,42 @@ class EdgeTTSEngine:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
-            stdout, stderr = await proc.communicate()
-            if proc.returncode != 0:
+            # 记录当前播放子进程，供 stop()（barge-in）掐断。
+            self._current_proc = proc
+            try:
+                stdout, stderr = await proc.communicate()
+            finally:
+                if self._current_proc is proc:
+                    self._current_proc = None
+            # 被 stop() 主动杀掉时 returncode 非 0 属预期，不当错误报。
+            if proc.returncode not in (0, None) and not self._stopped:
                 logger.warning(
                     "Audio playback failed (code=%d): %s",
                     proc.returncode,
                     stderr.decode("utf-8", errors="replace")[:200],
                 )
+            self._stopped = False
+
+    async def stop(self) -> None:
+        """掐断【当前正在播放】的音频（barge-in）。无播放时是安全空操作。"""
+        proc = self._current_proc
+        if proc is None:
+            return
+        self._stopped = True
+        try:
+            proc.terminate()
+        except ProcessLookupError:
+            return
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("终止播放子进程失败: %s", exc)
+            return
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=1.0)
+        except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+            try:
+                proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
 
     def _command_exists(self, cmd: str) -> bool:
         """检查系统命令是否可用。
