@@ -78,6 +78,9 @@ export function useModelCatalog() {
   const loadCatalog = useCallback(async () => {
     try {
       const c = await fetchCatalog();
+      // 成功即取消任何在途的失败重试计时器——否则用户点"重试"恢复后，之前排的
+      // 4s 重试仍会再触发一次，后端偶发抖动就把已加载好的界面又翻回"目录暂不可达"。
+      if (catalogRetry.current) { clearTimeout(catalogRetry.current); catalogRetry.current = null; }
       setCatalog(c);
       setError(null);
     } catch (e) {

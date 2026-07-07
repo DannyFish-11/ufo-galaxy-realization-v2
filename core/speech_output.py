@@ -33,6 +33,12 @@ _engine: Optional[Any] = None
 _engine_failed = False
 _last_text = ""
 _last_ts = 0.0
+_active_speaker: Optional[Any] = None  # 当前 StreamingSpeaker（供 barge-in 打断）
+
+
+def _streaming_enabled() -> bool:
+    """分句流式朗读默认开；GALAXY_TTS_STREAMING=0 回到整段批处理。"""
+    return os.getenv("GALAXY_TTS_STREAMING", "1").strip().lower() not in ("0", "false", "no", "off")
 
 
 def _max_chars() -> int:
@@ -91,6 +97,36 @@ def speak_response(text: str, *, source: str = "") -> None:
             from core.lumiv_websocket_bridge import set_ai_speaking as _set_speaking
         except Exception:
             _set_speaking = None  # type: ignore
+        global _active_speaker
+        if _streaming_enabled():
+            # 分句流式：第一句就绪即开口，感知延迟 ≈ 第一句合成时长；可被打断。
+            from core.streaming_speech import StreamingSpeaker
+
+            async def _synth(chunk: str) -> str:
+                return await engine.synthesize(chunk)
+
+            async def _play(path: str) -> None:
+                await engine._play_audio(path)
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+            async def _stop() -> None:
+                await engine.stop()
+
+            speaker = StreamingSpeaker(_synth, _play, stop=_stop, on_speaking=_set_speaking)
+            _active_speaker = speaker
+            try:
+                await speaker.speak(spoken)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("流式语音输出失败(降级): %s", exc)
+            finally:
+                if _active_speaker is speaker:
+                    _active_speaker = None
+            return
+
+        # 回退：整段批处理（GALAXY_TTS_STREAMING=0）。
         if _set_speaking is not None:
             _set_speaking(True)
         try:
@@ -110,3 +146,27 @@ def speak_response(text: str, *, source: str = "") -> None:
             asyncio.run(_run())
         except Exception:  # noqa: BLE001
             pass
+
+
+def interrupt_speech() -> None:
+    """barge-in：用户一开口就掐断 AI 正在进行的朗读。非阻塞、降级安全。
+
+    语音回路在 VAD 检测到用户说话时调用此函数，实现"你一开口它就闭嘴"。
+    """
+    speaker = _active_speaker
+    if speaker is None:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(speaker.interrupt())
+    except RuntimeError:
+        try:
+            asyncio.run(speaker.interrupt())
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def is_speaking() -> bool:
+    """AI 当前是否正在朗读（供 VAD/回路判断是否需要 barge-in）。"""
+    speaker = _active_speaker
+    return bool(speaker is not None and getattr(speaker, "speaking", False))

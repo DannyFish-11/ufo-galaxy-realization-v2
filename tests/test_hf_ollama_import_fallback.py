@@ -149,9 +149,12 @@ class TestDownloadAndImportToOllama:
 
 
 def test_all_choice_order_tags_have_candidates():
-    """model_selection._CHOICE_ORDER 里每一档都要有 HF 回退候选,不能有遗漏档位。"""
-    from core.model_selection import _CHOICE_ORDER
+    """本地主脑候选（现派生自 model_catalog）每一档都要有 HF 回退候选。
 
-    for tag in _CHOICE_ORDER:
+    _CHOICE_ORDER 常量已改为函数 _choice_order()（统一到 model_catalog 后）。
+    """
+    from core.model_selection import _choice_order
+
+    for tag in _choice_order():
         assert tag in HF_GGUF_CANDIDATES, f"{tag} 缺少 HF 回退候选列表"
         assert len(HF_GGUF_CANDIDATES[tag]) >= 2, f"{tag} 候选太少,建议至少两个兜底"

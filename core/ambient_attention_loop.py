@@ -437,30 +437,36 @@ class AmbientAttentionLoop:
         if not frame_changed and not audio_new:
             return None  # 什么都没变 → 这一拍免费跳过
 
-        # 听:能力驱动。当前档位若走 asr_bridge 且有新音频 → 转写成文字（真"听"）。
-        # native（服务层支持原生音频）则保留原始音频交给决策器/服务路径处理。
+        # 注意:转写(ASR)是 CPU 密集的同步调用,绝不能在这里(会在 async tick 内
+        # 同步执行)直接跑——否则整个事件循环被 Whisper 卡住整段转写时长,期间
+        # 流式播放推进、barge-in、其它请求全部停摆。故此处只做【快速门控】,把
+        # 音频原样带出,转写移到 tick() 里用 asyncio.to_thread 离线到线程池。
         audio_for_obs = audio_b64 if audio_new else None
-        transcript: Optional[str] = None
-        if audio_for_obs:
-            try:
-                from core.modality_bridge import resolve_audio_in, transcribe_b64
-                if resolve_audio_in() == "asr_bridge":
-                    transcript = transcribe_b64(
-                        audio_for_obs, mime=media.get("audio_mime", "audio/webm"),
-                    )
-            except Exception as exc:  # noqa: BLE001 — 听不可用不致命
-                logger.debug("Ambient 听桥接失败(非致命): %s", exc)
-
         return AmbientObservation(
             frame_b64=frame_b64,
             frame_mime=frame_mime or "image/jpeg",
             frame_source=frame_source,
             audio_b64=audio_for_obs,
             audio_mime=media.get("audio_mime", "audio/webm"),
-            audio_transcript=transcript,
+            audio_transcript=None,  # 由 tick() 异步补上
             screen_meta=media.get("screen_meta"),
             recent_memory=list(self._recent_rationales[-_RECENT_MEMORY_N:]),
         )
+
+    async def _transcribe_async(self, obs: AmbientObservation) -> None:
+        """听:能力驱动 + 不阻塞事件循环。asr_bridge 档位下把新音频离线到线程池
+        转写,回填 obs.audio_transcript。native 或无音频则跳过。"""
+        if not obs.audio_b64:
+            return
+        try:
+            from core.modality_bridge import resolve_audio_in, transcribe_b64
+            if resolve_audio_in() != "asr_bridge":
+                return
+            obs.audio_transcript = await asyncio.to_thread(
+                transcribe_b64, obs.audio_b64, mime=obs.audio_mime,
+            )
+        except Exception as exc:  # noqa: BLE001 — 听不可用不致命
+            logger.debug("Ambient 听桥接失败(非致命): %s", exc)
 
     # ── 一拍：门控 → 决策 → 路由 → 记忆 → 事件（单测入口）──
     async def tick(self) -> Optional[AmbientDecision]:
@@ -468,6 +474,9 @@ class AmbientAttentionLoop:
         obs = self._gather_observation()
         if obs is None:
             return None
+
+        # 听（转写）离线到线程池，不卡事件循环。
+        await self._transcribe_async(obs)
 
         self._emit("ambient.observed", {
             "has_frame": bool(obs.frame_b64),

@@ -112,13 +112,20 @@ async def select_tier(req: TierSelectRequest) -> Dict[str, Any]:
     chosen = save_tier(req.tier, main_brain=req.main_brain)
 
     # 对该档内所有【本地】模型触发后台拉取（缺失才拉，不阻塞）。
+    # 【容器模型】(如 C 档的 JoyAI-VL-Interaction, source=="container")不经 Ollama
+    # 拉取,当前也没有自动的 vLLM/容器拉起流程——诚实地把它们列进 container_pending,
+    # 让面板明确显示"该档的容器决策头尚未自动部署",而不是让用户以为顶配复合档
+    # 已完整跑起来(实际只有本地对话模型在跑)。
     pulled: List[str] = []
+    container_pending: List[str] = []
     try:
         from core.model_selection import background_pull
         for spec in tier_models(req.tier):
             if spec.source == "local":
                 background_pull(spec.tag)
                 pulled.append(spec.tag)
+            elif spec.source == "container":
+                container_pending.append(spec.tag)
     except Exception as exc:  # noqa: BLE001
         logger.debug("档位切换后台拉取触发失败(非致命): %s", exc)
 
@@ -129,9 +136,17 @@ async def select_tier(req: TierSelectRequest) -> Dict[str, Any]:
     except Exception:  # noqa: BLE001
         pass
 
-    return {
+    resp: Dict[str, Any] = {
         "success": True,
         "tier": req.tier,
         "main_brain": chosen,
         "pulling": pulled,
     }
+    if container_pending:
+        resp["container_pending"] = container_pending
+        resp["note"] = (
+            "该档含容器模型(" + ", ".join(container_pending) + ")，"
+            "当前无自动容器部署流程，需手动部署其 vLLM 服务后方可启用其决策头；"
+            "本地对话主脑已切换并生效。"
+        )
+    return resp
