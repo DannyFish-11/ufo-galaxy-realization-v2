@@ -233,6 +233,17 @@ async def update_config(req: ConfigUpdateRequest):
             save_choice(req.config["OLLAMA_MODEL"])
         except Exception:
             pass
+        # 档位联动:设置页/模型页改了 OLLAMA_MODEL 后,必须把档位(.galaxy_tier)也
+        # 推到该模型所属档。否则档位与主脑会分叉——active_effective_io() 读的是
+        # 档位,若档位停在旧的(如 C 档 全原生)、主脑却换成了 Gemma(不原生说),
+        # modality_bridge 在 GALAXY_NATIVE_AUDIO 开启时会误判"原生说"→不接 TTS 桥
+        # → AI 变哑巴。按模型反推档位并联动持久化,消除这个静默分叉。
+        try:
+            from core import model_catalog as _mc
+            _tag = req.config["OLLAMA_MODEL"]
+            _mc.save_tier(_mc.infer_tier_from_model(_tag), main_brain=_tag)
+        except Exception:
+            pass
 
     # 修复:_write_env_file() 之前完全没有 try/except——Windows 上 .env 若被
     # 杀毒软件/编辑器占用锁定,或所在目录权限不足,write_text() 会抛

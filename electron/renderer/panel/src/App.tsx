@@ -25,7 +25,7 @@ const TABS: TabDef[] = [
 function App() {
   const { panelData } = usePanelData();
   const { connected, lastMessage } = useWebSocket();
-  const { turns: convTurns, speaking: convSpeaking } = useConversation(lastMessage);
+  const { turns: convTurns, speaking: convSpeaking } = useConversation(lastMessage, connected);
   const { phase: wsPhase, handleMessage } = usePhase();
 
   const [activeTab, setActiveTab] = useState(0);

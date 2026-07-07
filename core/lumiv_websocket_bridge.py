@@ -268,5 +268,103 @@ class GalaxyPresenceBridge:
         }
 
 
+    async def _broadcast_conversation(self, msg: Dict[str, Any]) -> None:
+        """对话消息只走 WebSocket（useConversation 的通道）。
+
+        刻意【不】走 IPC /ipc/presence-state —— 那条路被 main.js 当作
+        presence-state 转给 usePanelData，若把 {type:"conversation"} 塞进去会污染
+        面板在场状态（每来一句就把其它字段重置/闪烁）。对话与在场共用同一条
+        /ws/desktop-presence，但用不同 type 区分，由前端各自的 hook 分流。
+        """
+        await self._ws_broadcast(msg)
+
+
+# ---------------------------------------------------------------------------
+# 模块级便捷函数
+# ---------------------------------------------------------------------------
+# 修复:此前 speech_output / voice_loop / routes.chat / voice_conversation_bridge
+# 四处都 `from core.lumiv_websocket_bridge import set_ai_speaking / emit_conversation`,
+# 但本模块【从未定义过这两个函数】——每处 import 都抛 ImportError 被 try/except
+# 静默吞掉,于是:①"AI 正在说话"同步到三态覆盖层的信号一直是死的;②语音/文字
+# 对话推送到面板"实时上下文"一直是死的(PresencePanel 的 turns 永远空)。这两个
+# 用户可见功能名义上接了、实际从没生效。这里补齐定义。
+
+def _schedule(coro) -> None:
+    """在当前事件循环里调度协程；无运行循环时同步兜底跑一次。"""
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(coro)
+    except RuntimeError:
+        try:
+            asyncio.run(coro)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def get_current_phase() -> str:
+    """返回 GalaxyPresenceBridge 的真实实时相位，规范化为 silent/liminal/manifest。
+
+    core/routes/panel.py 用它覆盖 build_unified_panel_payload() 那个恒为 "silent"
+    的死值（走的是从未赋值的 _continuum_state → 模块路径写错的 cognitive_field_engine
+    兜底）。此前此函数缺失 → import 失败 → 覆盖不生效 → WS 断线重连期间面板相位
+    被错误拉回"待机"。内部态 "static" 对外即三态的 SILENT。
+    """
+    try:
+        mode = GalaxyPresenceBridge.get_instance()._current_mode
+    except Exception:  # noqa: BLE001
+        return "silent"
+    return {"static": "silent", "silent": "silent",
+            "liminal": "liminal", "manifest": "manifest"}.get(mode, "silent")
+
+
+def set_ai_speaking(speaking: bool) -> None:
+    """标记 AI 是否正在朗读，并广播到三态覆盖层（说话时动画随之运转）。
+
+    非阻塞、降级安全。集中式 TTS(core.speech_output)在播放起止各调一次。
+    """
+    try:
+        bridge = GalaxyPresenceBridge.get_instance()
+        bridge._speaking = bool(speaking)
+        _schedule(bridge._broadcast_state())
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("set_ai_speaking 跳过(非致命): %s", exc)
+
+
+def emit_conversation(
+    role: str,
+    text: str,
+    *,
+    source: str = "text",
+    speaking: bool = False,
+    turn_id: str = "",
+    final: bool = True,
+) -> None:
+    """把一轮对话（"听到的"/"AI 说的"）实时推给面板的"实时上下文"视图。
+
+    与前端 useConversation 的契约对齐：type="conversation"，payload 含
+    role/text/source/speaking/turn_id/final。非阻塞、降级安全、永不抛出。
+    """
+    try:
+        if not (text or "").strip():
+            return
+        bridge = GalaxyPresenceBridge.get_instance()
+        if speaking:
+            bridge._speaking = True
+        msg = {
+            "type": "conversation",
+            "payload": {
+                "role": "ai" if role == "ai" else "user",
+                "text": text,
+                "source": source or "text",
+                "speaking": bool(speaking),
+                "turn_id": str(turn_id or ""),
+                "final": bool(final),
+            },
+        }
+        _schedule(bridge._broadcast_conversation(msg))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("emit_conversation 跳过(非致命): %s", exc)
+
+
 # 兼容旧类名
 LumivWebSocketBridge = GalaxyPresenceBridge

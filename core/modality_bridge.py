@@ -96,10 +96,28 @@ def _decode_audio_to_pcm(audio_bytes: bytes):
         container = av.open(io.BytesIO(audio_bytes))
         resampler = av.audio.resampler.AudioResampler(format="s16", layout="mono", rate=16000)
         samples = []
-        for frame in container.decode(audio=0):
-            for rframe in resampler.resample(frame):
+
+        def _collect(rframes) -> None:
+            # PyAV 版本差异:resample() 可能返回单个 AudioFrame 或帧列表。统一处理。
+            if rframes is None:
+                return
+            if not isinstance(rframes, (list, tuple)):
+                rframes = [rframes]
+            for rframe in rframes:
+                if rframe is None:
+                    continue
                 arr = rframe.to_ndarray()  # shape (1, n) int16
                 samples.append(arr.reshape(-1))
+
+        for frame in container.decode(audio=0):
+            _collect(resampler.resample(frame))
+        # 关键:冲刷重采样器内部缓冲——否则每段音频结尾几十毫秒(可能是最后一个词)
+        # 被静默丢弃,Whisper 根本看不到。
+        try:
+            _collect(resampler.resample(None))
+        except Exception:  # noqa: BLE001 — 个别版本不支持 flush,忽略
+            pass
+
         if not samples:
             return None
         pcm = np.concatenate(samples).astype(np.float32) / 32768.0

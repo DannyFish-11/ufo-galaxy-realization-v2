@@ -19,7 +19,7 @@ export interface ConversationTurn {
 
 const MAX_TURNS = 12;
 
-export function useConversation(lastMessage: WebSocketMessage | null): {
+export function useConversation(lastMessage: WebSocketMessage | null, connected = true): {
   turns: ConversationTurn[];
   speaking: boolean;
 } {
@@ -27,6 +27,12 @@ export function useConversation(lastMessage: WebSocketMessage | null): {
   const [speaking, setSpeaking] = useState(false);
   const idRef = useRef(0);
   const streamKeyRef = useRef<string>('');
+
+  // WS 断线时后端可能永远发不出 speaking:false 那一帧 → "正在朗读…"会永久卡住。
+  // 连接断开即强制复位 speaking，避免面板停在假的"朗读中"。
+  useEffect(() => {
+    if (!connected) setSpeaking(false);
+  }, [connected]);
 
   useEffect(() => {
     if (!lastMessage || lastMessage.type !== 'conversation') return;
@@ -37,7 +43,8 @@ export function useConversation(lastMessage: WebSocketMessage | null): {
     const final = p.final === undefined ? true : Boolean(p.final);
     const turnId = String(p.turn_id ?? '');
 
-    setSpeaking(Boolean(p.speaking));
+    // 只在消息确实带了 speaking 字段时才更新，避免无关轮次把它强制拉成 false。
+    if ('speaking' in p) setSpeaking(Boolean(p.speaking));
     if (!text.trim()) return;
 
     setTurns((prev) => {

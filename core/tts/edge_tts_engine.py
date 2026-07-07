@@ -248,26 +248,31 @@ class EdgeTTSEngine:
 
         if play_cmd:
             logger.debug("Playing audio with: %s", " ".join(play_cmd[:2]))
-            proc = await asyncio.create_subprocess_exec(
-                *play_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            # 记录当前播放子进程，供 stop()（barge-in）掐断。
-            self._current_proc = proc
-            try:
-                stdout, stderr = await proc.communicate()
-            finally:
-                if self._current_proc is proc:
-                    self._current_proc = None
-            # 被 stop() 主动杀掉时 returncode 非 0 属预期，不当错误报。
-            if proc.returncode not in (0, None) and not self._stopped:
-                logger.warning(
-                    "Audio playback failed (code=%d): %s",
-                    proc.returncode,
-                    stderr.decode("utf-8", errors="replace")[:200],
+            # 串行化播放:_play_lock 此前声明了却从没被用过,导致两路并发播放
+            # (如 ambient SPEAK 与流式回复同时播)互相覆盖 _current_proc,stop()
+            # 只能掐掉其中一个、另一个变孤儿。用锁保证同一时刻只有一路在播,
+            # _current_proc/_stopped 也就不再是被并发践踏的共享态。
+            async with self._play_lock:
+                proc = await asyncio.create_subprocess_exec(
+                    *play_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                 )
-            self._stopped = False
+                # 记录当前播放子进程，供 stop()（barge-in）掐断。
+                self._current_proc = proc
+                try:
+                    stdout, stderr = await proc.communicate()
+                finally:
+                    if self._current_proc is proc:
+                        self._current_proc = None
+                # 被 stop() 主动杀掉时 returncode 非 0 属预期，不当错误报。
+                if proc.returncode not in (0, None) and not self._stopped:
+                    logger.warning(
+                        "Audio playback failed (code=%d): %s",
+                        proc.returncode,
+                        stderr.decode("utf-8", errors="replace")[:200],
+                    )
+                self._stopped = False
 
     async def stop(self) -> None:
         """掐断【当前正在播放】的音频（barge-in）。无播放时是安全空操作。"""
