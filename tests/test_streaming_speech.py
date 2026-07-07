@@ -122,6 +122,29 @@ class TestStreamingSpeaker:
         asyncio.run(sp.speak(""))
         assert rec.played == [] and rec.synthed == []
 
+    def test_interrupt_discards_unplayed_synthesized_handles(self):
+        # 打断时,已合成但没播的句柄必须被 discard 清理(否则临时 mp3 泄漏)。
+        five = "".join(f"这是第{i}句要念的话。" for i in "一二三四五")
+        rec = _Recorder(play_delay=0.05)
+        discarded: List[str] = []
+
+        async def run():
+            sp = StreamingSpeaker(
+                rec.synth, rec.play, stop=rec.stop,
+                discard=lambda h: discarded.append(h),
+            )
+            task = asyncio.ensure_future(sp.speak(five))
+            await asyncio.sleep(0.06)
+            await sp.interrupt()
+            await task
+
+        asyncio.run(run())
+        # 合成过的句柄里,凡是没被播放的,都应出现在 discarded 中(不泄漏)。
+        synth_handles = {f"handle::{c}" for c in rec.synthed}
+        played = set(rec.played)
+        leaked = synth_handles - played - set(discarded)
+        assert not leaked, f"这些已合成句柄既没播也没清理(泄漏): {leaked}"
+
     def test_synth_failure_skips_chunk_not_fatal(self):
         rec = _Recorder()
 

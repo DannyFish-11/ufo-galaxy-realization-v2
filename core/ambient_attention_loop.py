@@ -322,6 +322,15 @@ class FrameGate:
 # ---------------------------------------------------------------------------
 # 常驻注意力循环
 # ---------------------------------------------------------------------------
+def _ai_is_speaking() -> bool:
+    """AI 当前是否正在朗读（反自激励门控用）。降级安全:取不到就当没在说。"""
+    try:
+        from core.speech_output import is_speaking
+        return bool(is_speaking())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _bool_env(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -421,18 +430,26 @@ class AmbientAttentionLoop:
         frame_source = "desktop_screen" if media.get("screen_b64") else "desktop_camera"
         audio_b64 = media.get("audio_b64")
 
-        # 冷却期内：直接跳过（防话痨）
-        if time.time() - self._last_action_ts < self.cooldown_s:
-            return None
-
-        # 门控：帧变化 OR 有"新"音频（音频按内容哈希去重，避免同一片段反复触发）
+        # 门控更新必须【每拍都做】,不能被冷却提前 return 跳过——否则冷却期内
+        # _gate 的 prev_sig / 音频哈希都停在冷却开始前那一帧,冷却一结束,新帧
+        # 会跟一个 20 秒前的旧帧比对,几乎必然超阈值 → 冷却刚过就无条件触发一次
+        # 模型调用,与屏幕当前是否真的变化无关。故先更新门控,再判冷却。
         frame_changed = self._gate.changed(frame_b64)
         audio_new = False
         if audio_b64:
             ah = hashlib.sha1(audio_b64.encode("utf-8", "ignore")).hexdigest()[:16]
             if ah != self._last_audio_hash:
-                audio_new = True
+                # 反自激励(anti-echo):AI 正在朗读时,TTS 从扬声器播出会被麦克风
+                # 采到 → 进感知库音频槽 → 若当作"新音频"触发,就会把 AI 自己说的话
+                # 转写成文字、当成用户输入喂回下一拍 → AI 对自己说的话做反应 → 无限
+                # 自言自语。故朗读期间的音频只更新去重哈希、不作为触发信号。
                 self._last_audio_hash = ah
+                if not _ai_is_speaking():
+                    audio_new = True
+
+        # 冷却期内：门控已更新,但不采取行动（防话痨/防委托风暴）。
+        if time.time() - self._last_action_ts < self.cooldown_s:
+            return None
 
         if not frame_changed and not audio_new:
             return None  # 什么都没变 → 这一拍免费跳过
@@ -508,8 +525,13 @@ class AmbientAttentionLoop:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Ambient SPEAK 朗读失败(非致命): %s", exc)
         elif decision.action == AmbientAction.DELEGATE:
-            self._last_action_ts = time.time()
+            # 关键:委托要走完整 OpenClawd 认知(可能几十秒),而 _delegate 是被 await
+            # 的、会阻塞本拍直到返回。若在这里(委托【开始】时)打冷却时间戳,等委托
+            # 几十秒后返回,20 秒冷却早已过期 → 场景持续变化时(如屏幕在放视频)下
+            # 一拍立刻又委托 → 背靠背全认知委托风暴。故冷却时间戳必须在委托
+            # 【返回后】再打,保证两次委托之间真有冷却间隔。
             await self._delegate(decision, obs)
+            self._last_action_ts = time.time()
         # SILENT：无请求进门，主体留在 SILENT，仅记录（在 _record 里做）。
 
     async def _delegate(self, decision: AmbientDecision, obs: AmbientObservation) -> None:
@@ -531,11 +553,16 @@ class AmbientAttentionLoop:
                 except Exception:  # noqa: BLE001
                     mm_context = None
 
+            # 委托用【独立的一次性会话】,不复用 self.session_id——后者是 ambient
+            # 工作记忆里记"观察理由"的滚动会话。若两者同一个 session_id,OpenClawd
+            # 会把委托的对话轮写进这个滚动理由日志、并让每次委托共享同一个越滚越
+            # 大的会话上下文(理由日志混进委托认知)。每次委托用独立会话隔离。
+            import uuid as _uuid
             runtime = get_desktop_presence_runtime()
             await runtime.handle_request(
                 message=decision.task,
                 source="ambient",
-                session_id=self.session_id,
+                session_id=f"ambient-delegate-{_uuid.uuid4().hex[:12]}",
                 user_id="ambient",
                 multimodal_context=mm_context,
                 entry_mode="local",

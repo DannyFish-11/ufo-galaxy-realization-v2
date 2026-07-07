@@ -107,15 +107,21 @@ def speak_response(text: str, *, source: str = "") -> None:
 
             async def _play(path: str) -> None:
                 await engine._play_audio(path)
+                _rm(path)
+
+            async def _stop() -> None:
+                await engine.stop()
+
+            def _rm(path: str) -> None:
                 try:
                     os.remove(path)
                 except OSError:
                     pass
 
-            async def _stop() -> None:
-                await engine.stop()
-
-            speaker = StreamingSpeaker(_synth, _play, stop=_stop, on_speaking=_set_speaking)
+            # discard:被打断时清理已合成但没播的临时 mp3,避免每次 barge-in 泄漏文件。
+            speaker = StreamingSpeaker(
+                _synth, _play, stop=_stop, on_speaking=_set_speaking, discard=_rm,
+            )
             _active_speaker = speaker
             try:
                 await speaker.speak(spoken)
