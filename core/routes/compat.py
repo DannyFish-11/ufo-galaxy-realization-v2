@@ -181,7 +181,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         for did, info in registered_devices.items():
             devices.append({
                 **info,
-                "online": did in connection_manager.active_devices,
+                "online": connection_manager.is_online(did),
             })
         return JSONResponse({"devices": devices, "total": len(devices)})
 

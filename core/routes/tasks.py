@@ -193,7 +193,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         }
         task_queue[task_id] = task
 
-        if req.device_id and req.device_id in connection_manager.active_devices:
+        if req.device_id and connection_manager.is_online(req.device_id):
             # PR-E: attempt canonical dispatch via CommandRouter.route_envelope()
             # before falling back to the compat send_to_device path.
             # This ensures major live task entry paths converge on the canonical

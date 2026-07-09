@@ -1172,7 +1172,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                         from core.proxy_relay import get_proxy_relay
                         relay = get_proxy_relay()
                         relay.set_sender(connection_manager.send_to_device)
-                        relay.set_online_getter(lambda: list(connection_manager.active_devices.keys()))
+                        relay.set_online_getter(lambda: connection_manager.online_device_ids())
                         result = await relay.handle_relay_request_from_device(device_id, data)
                         await websocket.send_json({
                             "type": "relay_ack",
@@ -1307,7 +1307,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         try:
             await websocket.send_json({
                 "type": "initial_status",
-                "devices_online": len(connection_manager.active_devices),
+                "devices_online": len(connection_manager.online_device_ids()),
                 "devices_registered": len(registered_devices),
                 "timestamp": datetime.now().isoformat()
             })

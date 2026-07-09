@@ -4332,7 +4332,7 @@ class CommandRouter:
         try:
             from core.routes._shared import connection_manager
 
-            if device_id not in connection_manager.active_devices:
+            if not connection_manager.is_online(device_id):
                 latency_ms = (time.monotonic() - t0) * 1000
                 result = {
                     **trace_base,
@@ -4488,7 +4488,7 @@ class CommandRouter:
         )
 
         # ── Step 1: agent_deploy ─────────────────────────────────────────
-        if device_id not in connection_manager.active_devices:
+        if not connection_manager.is_online(device_id):
             logger.warning(
                 "agent_predeploy_required but device offline | " "device_id=%s device_type=%s trace_id=%s task_id=%s",
                 device_id,

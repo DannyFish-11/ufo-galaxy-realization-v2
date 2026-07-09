@@ -396,7 +396,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "checksum": checksum,
             }
 
-            if req.target_device in connection_manager.active_devices:
+            if connection_manager.is_online(req.target_device):
                 success = await connection_manager.send_to_device(req.target_device, ws_message)
                 if success:
                     logger.info(f"Agent {manifest.manifest_id[:8]} deployed to {req.target_device}")

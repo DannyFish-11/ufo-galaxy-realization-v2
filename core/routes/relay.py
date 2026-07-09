@@ -39,7 +39,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     proxy_relay = get_proxy_relay()
 
     proxy_relay.set_sender(connection_manager.send_to_device)
-    proxy_relay.set_online_getter(lambda: list(connection_manager.active_devices.keys()))
+    proxy_relay.set_online_getter(lambda: connection_manager.online_device_ids())
 
     class DeviceRelayRequest(BaseModel):
         """设备间中继请求"""

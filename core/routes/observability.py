@@ -124,7 +124,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         active_ws: list = []
         try:
             from core.routes._shared import connection_manager
-            active_ws = list(connection_manager.active_devices.keys())
+            active_ws = connection_manager.online_device_ids()
         except Exception as exc:
             logger.debug("gateway_status ws error: %s", exc)
 
