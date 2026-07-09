@@ -101,18 +101,23 @@ class LocalBrainManager:
 
     @staticmethod
     def _normalize_ollama_url(raw: str) -> str:
-        """确保 URL 带 http(s):// 协议头。
+        """确保 URL 非空且带 http(s):// 协议头。
 
-        真机复现过:用户在面板「模型」tab 填 OLLAMA_URL 时只填了 host:port
-        (如 "localhost:11434"),没带协议头。这里不做兜底的话,值会原样存进
-        self.ollama_url,直到真的发起 httpx 请求时才炸
-        "Request URL is missing an 'http://' or 'https://' protocol."——
-        和 core.multi_llm_router._normalize_base_url 同一处理方式。
+        两类真机故障都在这里兜底:
+        1) 用户在面板「模型」tab 只填 host:port(如 "localhost:11434")无协议头。
+        2) **空值**:面板保存配置会把 OLLAMA_URL="" 同步进【运行进程的 os.environ】,
+           于是 ``os.environ.get("OLLAMA_URL", DEFAULT)`` 返回的是 ""(键存在)、
+           不是默认值。此前本函数对空值【原样返回 ""】→ self.ollama_url="" →
+           每个 ``f"{self.ollama_url}/api/tags"`` 都炸 "Request URL is missing an
+           'http://'..."(克隆界面探测 Ollama 时那个 HTTP 报错、Ollama 明明在跑却
+           判"未响应")。故空值一律回落默认地址,不再放空 URL 出门。
         """
         raw = (raw or "").strip()
-        if raw and not raw.startswith(("http://", "https://")):
+        if not raw:
+            return LocalBrainManager.OLLAMA_DEFAULT_URL
+        if not raw.startswith(("http://", "https://")):
             raw = f"http://{raw}"
-        return raw
+        return raw.rstrip("/")
 
     def __init__(self, backend: str = "auto", ollama_url: Optional[str] = None):
         """
