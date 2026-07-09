@@ -226,6 +226,30 @@ class TestTickGating:
         assert asyncio.run(loop.tick()) is None
 
 
+class TestAmbientHearing:
+    """听:ambient 决策脑是纯文本消费者,想"听"就必须转写。原生音频门控
+    (GALAXY_NATIVE_AUDIO)管的是全模态服务通路,不该让常驻循环变聋。"""
+
+    def _run_with_transcript(self, monkeypatch, native_gate: str) -> Optional[str]:
+        monkeypatch.setenv("GALAXY_NATIVE_AUDIO", native_gate)
+        # 桥接转写打桩:返回定值,证明"确实调了转写"。
+        import core.modality_bridge as mb
+        monkeypatch.setattr(mb, "transcribe_b64",
+                            lambda b64, mime="audio/webm", language="zh": "用户说了话")
+        store = FakeStore({"camera_b64": _BLACK, "audio_b64": "AAAA", "audio_mime": "audio/webm"})
+        dec = FakeDecider(AmbientDecision(AmbientAction.SILENT, rationale="ok"))
+        loop = _loop(store, dec)
+        asyncio.run(loop.tick())
+        return dec.last_obs.audio_transcript if dec.last_obs else None
+
+    def test_transcribes_when_native_gate_off(self, monkeypatch):
+        assert self._run_with_transcript(monkeypatch, "0") == "用户说了话"
+
+    def test_transcribes_even_when_native_gate_on(self, monkeypatch):
+        # 回归:此前门控开=跳过转写→原生音频又无处送→决策脑收到空 transcript(聋)。
+        assert self._run_with_transcript(monkeypatch, "1") == "用户说了话"
+
+
 # ── tick: 三路路由 ────────────────────────────────────────────────────────────
 import contextlib
 from unittest.mock import patch
