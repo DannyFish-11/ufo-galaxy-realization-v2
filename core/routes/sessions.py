@@ -15,7 +15,7 @@ Routes:
 import asyncio
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -41,6 +41,30 @@ class JoinSessionRequest(BaseModel):
 class SyncSessionRequest(BaseModel):
     device_id: str
     max_turns: int = 50
+
+
+class ReconcileSessionRequest(BaseModel):
+    """把设备本地(离线)自建的会话认领到用户 canonical 主线。"""
+    local_session_id: str
+    canonical_session_id: str = ""
+    user_id: str = ""
+    device_id: str = ""
+    merge_history: bool = True
+
+
+class IngestTurnModel(BaseModel):
+    role: str
+    content: str
+    ts: float = 0.0
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class IngestTurnsRequest(BaseModel):
+    """手机离线期间记录的对话轮次,重连后补录进统一主线。"""
+    session_id: str
+    user_id: str = ""
+    device_id: str = ""
+    turns: List[IngestTurnModel] = []
 
 
 async def migrate_session_via_canonical_manager(
@@ -143,6 +167,144 @@ async def migrate_session_via_canonical_manager(
         "active_device": session.active_device,
         "message": f"Session successfully migrated to {target_device}",
         "history_count": len(history),
+    }
+
+
+async def reconcile_session_to_canonical(
+    *,
+    local_session_id: str,
+    canonical_session_id: str = "",
+    user_id: str = "",
+    device_id: str = "",
+    merge_history: bool = True,
+    session_manager=None,
+    ws_connection_manager=None,
+) -> Dict[str, Any]:
+    """把设备本地/离线自建的 ``local_session_id`` 认领到用户 canonical 会话主线。
+
+    目标主线的选择优先级:显式 ``canonical_session_id`` > 用户活跃会话 > 新建一条。
+    步骤:
+      1. 解析/确定目标 canonical 主线(必要时新建并确保存在)。
+      2. 可选:把本地会话已记录的历史轮次并入主线(经统一记忆门,自带相邻去重)。
+      3. 登记别名 ``local_session_id → canonical``——此后带该本地 id 进来的任何轮次
+         (在线 goal_execution / 面板 / 离线补录)都自动归并到这条主线。
+      4. 向设备推送合并后的 session_sync。
+    """
+    from core.session_memory_facade import record_session_turn
+
+    sm = session_manager or get_session_manager()
+    cm = ws_connection_manager or connection_manager
+
+    if not local_session_id:
+        return {"success": False, "status_code": 422, "error": "local_session_id required"}
+
+    owner = user_id or f"device::{device_id or 'default'}"
+
+    # 1. 目标主线
+    target = sm.resolve_session_alias(canonical_session_id) if canonical_session_id else ""
+    if not target and user_id:
+        target = sm._user_active_session.get(user_id, "")
+    if not target:
+        target = sm.get_or_create_session_sync(owner, device_id or "").conversation_session_id
+    canonical = sm.resolve_session_alias(target)
+    sm.ensure_session_sync(canonical, user_id=owner, device_id=device_id or "")
+
+    # 2. 合并本地历史(在登记别名之前抓取本地会话对象,此刻 local 尚无别名、指向自身)
+    merged = 0
+    local_resolved = sm.resolve_session_alias(local_session_id)
+    local_session = sm.get_session(local_resolved)
+    if merge_history and local_session is not None and local_resolved != canonical:
+        for msg in list(getattr(local_session, "history", []) or []):
+            role = getattr(msg, "role", "") or ""
+            content = getattr(msg, "content", "") or ""
+            if not role or not content:
+                continue
+            md = dict(getattr(msg, "metadata", {}) or {})
+            md.setdefault("reconciled_from", local_session_id)
+            await record_session_turn(
+                conversation_session_id=canonical,
+                role=role,
+                content=content,
+                user_id=user_id,
+                device_id=getattr(msg, "device_id", "") or device_id,
+                metadata=md,
+            )
+            merged += 1
+
+    # 3. 登记别名(合并之后,避免 resolve(local) 提前折向 canonical)
+    aliased = sm.register_session_alias(local_session_id, canonical)
+
+    # 4. 推送合并后的完整历史给设备
+    history = sm.get_full_history(canonical)
+    if device_id:
+        try:
+            await cm.send_to_device(device_id, {
+                "type": "session_sync",
+                "session_id": canonical,
+                "history": history,
+                "reconciled_from": local_session_id,
+            })
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("reconcile session_sync push failed: %s", exc)
+
+    return {
+        "success": True,
+        "status_code": 200,
+        "local_session_id": local_session_id,
+        "canonical_session_id": canonical,
+        "aliased": aliased,
+        "merged_turns": merged,
+        "history_count": len(history),
+    }
+
+
+async def ingest_conversation_turns(
+    *,
+    session_id: str,
+    turns: List[Any],
+    user_id: str = "",
+    device_id: str = "",
+    session_manager=None,
+) -> Dict[str, Any]:
+    """把一批(通常来自手机离线期间的)对话轮次补录进统一会话主线。
+
+    ``session_id`` 会先经别名解析到 canonical 主线;每条轮次走 ``record_session_turn``
+    这道统一记忆门(会话历史 + 工作记忆 + 对话记忆 + 统一语义记忆一次写齐,自带相邻去重)。
+    """
+    from core.session_memory_facade import record_session_turn
+
+    sm = session_manager or get_session_manager()
+    canonical = sm.resolve_session_alias(session_id)
+    if not canonical:
+        return {"success": False, "status_code": 422, "error": "session_id required"}
+
+    ingested = 0
+    for t in turns or []:
+        role = (getattr(t, "role", "") or "").strip()
+        content = (getattr(t, "content", "") or "").strip()
+        if not role or not content:
+            continue
+        md = dict(getattr(t, "metadata", None) or {})
+        md.setdefault("offline_ingest", True)
+        ts = getattr(t, "ts", 0.0) or 0.0
+        if ts:
+            md.setdefault("client_ts", ts)
+        await record_session_turn(
+            conversation_session_id=canonical,
+            role=role,
+            content=content,
+            user_id=user_id,
+            device_id=device_id,
+            metadata=md,
+        )
+        ingested += 1
+
+    return {
+        "success": True,
+        "status_code": 200,
+        "session_id": canonical,
+        "ingested": ingested,
+        "history_count": len(sm.get_full_history(canonical)),
     }
 
 
@@ -297,6 +459,38 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             context_override=migrate_req.context,
             session_manager=sm,
             ws_connection_manager=connection_manager,
+        )
+        status_code = int(result.pop("status_code", 200))
+        return JSONResponse(result, status_code=status_code)
+
+    # ──────────────────────────────────────────────────────────────────────
+    # 跨设备统一上下文:对账(reconcile)+ 离线轮次补录(ingest)
+    # ──────────────────────────────────────────────────────────────────────
+
+    @router.post("/api/v1/sessions/reconcile")
+    async def reconcile_session(req: ReconcileSessionRequest):
+        """把设备本地/离线自建的会话认领到用户 canonical 主线(重连对账)。"""
+        result = await reconcile_session_to_canonical(
+            local_session_id=req.local_session_id,
+            canonical_session_id=req.canonical_session_id,
+            user_id=req.user_id,
+            device_id=req.device_id,
+            merge_history=req.merge_history,
+            session_manager=sm,
+            ws_connection_manager=connection_manager,
+        )
+        status_code = int(result.pop("status_code", 200))
+        return JSONResponse(result, status_code=status_code)
+
+    @router.post("/api/v1/sessions/ingest_turns")
+    async def ingest_turns(req: IngestTurnsRequest):
+        """补录手机离线期间记录的对话轮次到统一主线(先经别名解析)。"""
+        result = await ingest_conversation_turns(
+            session_id=req.session_id,
+            turns=req.turns,
+            user_id=req.user_id,
+            device_id=req.device_id,
+            session_manager=sm,
         )
         status_code = int(result.pop("status_code", 200))
         return JSONResponse(result, status_code=status_code)

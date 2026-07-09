@@ -559,17 +559,35 @@ class AmbientAttentionLoop:
                 except Exception:  # noqa: BLE001
                     mm_context = None
 
-            # 委托用【独立的一次性会话】,不复用 self.session_id——后者是 ambient
-            # 工作记忆里记"观察理由"的滚动会话。若两者同一个 session_id,OpenClawd
-            # 会把委托的对话轮写进这个滚动理由日志、并让每次委托共享同一个越滚越
-            # 大的会话上下文(理由日志混进委托认知)。每次委托用独立会话隔离。
+            # 委托会话的选择:
+            #  - 默认(GALAXY_AMBIENT_SHARE_SESSION=1):续到用户**当前对话主线**上,
+            #    让自发动作共享真实上下文(跨设备统一上下文的一部分:自发在场不再是
+            #    一座孤岛)。仍不复用 self.session_id——那是 ambient 观察理由的滚动日志。
+            #  - 无主线(刚启动、还没对话)或显式关闭 → 退回一次性隔离会话(旧行为),
+            #    避免把理由日志与委托认知混在一起。
+            import os as _os
             import uuid as _uuid
+            session_id = f"ambient-delegate-{_uuid.uuid4().hex[:12]}"
+            user_id = "ambient"
+            if _os.getenv("GALAXY_AMBIENT_SHARE_SESSION", "1").strip().lower() not in (
+                "0", "false", "no", "off",
+            ):
+                try:
+                    from core.session_manager import get_session_manager
+                    _sm = get_session_manager()
+                    _primary = _sm.get_primary_session_id()
+                    if _primary:
+                        session_id = _primary
+                        _sess = _sm.get_session(_primary)
+                        user_id = getattr(_sess, "user_id", "") or "ambient"
+                except Exception as exc:  # noqa: BLE001 — 解析失败退回隔离会话
+                    logger.debug("Ambient 主线解析失败,退回隔离会话: %s", exc)
             runtime = get_desktop_presence_runtime()
             await runtime.handle_request(
                 message=decision.task,
                 source="ambient",
-                session_id=f"ambient-delegate-{_uuid.uuid4().hex[:12]}",
-                user_id="ambient",
+                session_id=session_id,
+                user_id=user_id,
                 multimodal_context=mm_context,
                 entry_mode="local",
             )
