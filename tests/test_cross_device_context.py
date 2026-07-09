@@ -13,7 +13,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 
 import pytest
 
@@ -189,7 +188,6 @@ class TestPrimarySession:
         sm.ensure_session_sync("real_old", user_id="u1")
         sm.ensure_session_sync("real_new", user_id="u1")
         # real_new 触碰得更晚
-        import time as _t
         sm._sessions["real_old"].updated_at = 100.0
         sm._sessions["real_new"].updated_at = 200.0
         assert sm.get_primary_session_id() == "real_new"
