@@ -1643,6 +1643,8 @@ class RuntimeRestartRecoveryCoordinator:
 # ---------------------------------------------------------------------------
 
 _coordinator_instance: Optional[RuntimeRestartRecoveryCoordinator] = None
+# 进程内首次 startup recovery 的报告缓存(见 run_startup_recovery 的幂等说明)。
+_startup_recovery_report: Optional["RuntimeRecoveryReport"] = None
 
 
 def get_recovery_coordinator(**kwargs) -> RuntimeRestartRecoveryCoordinator:
@@ -1707,6 +1709,20 @@ def run_startup_recovery(
     -------
     :class:`RuntimeRecoveryReport`
     """
+    # 融合(启动链去重):同一进程内本函数被两层启动代码各调一次——
+    # system_orchestrator 预检 Phase 4 与 core.startup 步骤 20(main.py 进程内
+    # 直调 unified_launcher → core.startup)。恢复动作有副作用(标记中断/回放/
+    # 重置),每次启动双跑一遍。进程内幂等:显式传 store(测试注入)时不缓存;
+    # 无参调用第二次直接返回首次报告。
+    global _startup_recovery_report
+    _explicit = any(x is not None for x in (
+        mesh_session_store, body_mesh_store, body_mesh_registry,
+        hybrid_continuity_registry, hybrid_continuity_store, task_lifecycle_store,
+    ))
+    if not _explicit and _startup_recovery_report is not None:
+        logger.info("startup recovery 本进程已执行过(recovery_id=%s),复用首次报告",
+                    _startup_recovery_report.recovery_id)
+        return _startup_recovery_report
     coordinator = RuntimeRestartRecoveryCoordinator(
         mesh_session_store=mesh_session_store,
         body_mesh_store=body_mesh_store,
@@ -1715,4 +1731,7 @@ def run_startup_recovery(
         hybrid_continuity_store=hybrid_continuity_store,
         task_lifecycle_store=task_lifecycle_store,
     )
-    return coordinator.run_recovery()
+    report = coordinator.run_recovery()
+    if not _explicit:
+        _startup_recovery_report = report
+    return report

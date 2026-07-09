@@ -159,7 +159,7 @@ class VoiceLoop:
             logger.debug("barge-in 跳过(非致命): %s", _exc)
 
         # A 融合:把语音对话实时推给面板"实时上下文"。此前只有默认【关闭】的
-        # core.voice_conversation_bridge 调用 emit_conversation,而真正默认【开启】、
+        # (已删除的旧 voice_conversation_bridge 曾调 emit_conversation)真正默认【开启】、
         # 驱动三态与朗读的正是本 VoiceLoop——它此前从不推送,导致默认配置下面板的
         # 语音实时显示永远是空的(PresencePanel 的"语音"标签形同虚设)。这里在本
         # (唯一默认活跃的)语音闭环里补上推送,让面板与语音真正一体。容错、永不抛出。

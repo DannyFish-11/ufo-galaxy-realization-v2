@@ -119,6 +119,16 @@ app.include_router(sessions_router)
 app.include_router(chat_router)
 app.include_router(llm_router)
 
+# 接线(审计 KEEP-WIRE):/sync/status 跨设备同步质量诊断端点——模块一直存在
+# 但从未被挂载(孤儿路由)。fastapi 缺失时模块自身优雅降级(router=None)。
+try:
+    from galaxy_gateway.routes.sync_status import router as _sync_status_router
+    if _sync_status_router is not None:
+        app.include_router(_sync_status_router)
+        logger.info("Sync status route mounted: GET /sync/status")
+except Exception as _sync_exc:  # noqa: BLE001 — 诊断端点缺席不阻断网关
+    logger.warning("sync_status 路由挂载跳过: %s", _sync_exc)
+
 
 # ── WebSocket endpoints (order-sensitive — must be registered after routers) ──
 register_websocket_routes(app)

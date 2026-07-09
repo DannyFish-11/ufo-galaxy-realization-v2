@@ -86,6 +86,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_MESH_SECRET": {"default": "", "type": "string", "category": "auth", "description": "Mesh 签名密钥(能力令牌 HMAC;留空自动生成)"},
 
     # --- Mesh & NATS ---
+    "GALAXY_MDNS": {"default": "true", "type": "boolean", "category": "mesh", "description": "局域网零配置发现(mDNS · 手机/手表免输 IP 自动发现网关)"},
     "GALAXY_NATS_ENABLED": {"default": "true", "type": "boolean", "category": "mesh", "description": "Enable NATS"},
     "GALAXY_NATS_URL": {"default": "nats://localhost:4222", "type": "url", "category": "mesh", "description": "NATS URL"},
     "GALAXY_NATS_EXECUTOR_TIMEOUT": {"default": "30", "type": "number", "category": "mesh", "description": "NATS Executor Timeout (s)"},

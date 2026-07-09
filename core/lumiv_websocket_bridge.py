@@ -282,7 +282,7 @@ class GalaxyPresenceBridge:
 # ---------------------------------------------------------------------------
 # 模块级便捷函数
 # ---------------------------------------------------------------------------
-# 修复:此前 speech_output / voice_loop / routes.chat / voice_conversation_bridge
+# 修复:此前 speech_output / voice_loop / routes.chat
 # 四处都 `from core.lumiv_websocket_bridge import set_ai_speaking / emit_conversation`,
 # 但本模块【从未定义过这两个函数】——每处 import 都抛 ImportError 被 try/except
 # 静默吞掉,于是:①"AI 正在说话"同步到三态覆盖层的信号一直是死的;②语音/文字

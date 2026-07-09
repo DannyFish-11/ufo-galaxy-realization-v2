@@ -1078,13 +1078,11 @@ class TestAndroidBridgeModuleReExports:
         assert MessageBuilder is not None
 
     def test_android_bridge_package_bridge_py(self):
-        from galaxy_gateway.android.bridge import (
-            AndroidBridge,
-            android_bridge,
-            DeviceCapability,
-            MessageBuilder,
-            Rect,
-            UIElement,
-            AndroidDevice,
-        )
-        assert AndroidBridge is not None
+        # 融合清理:galaxy_gateway/android/bridge.py 纯再导出壳已删除——
+        # "一个桥接一个入口"字面成立;canonical 符号仍在唯一入口可用。
+        import importlib.util
+        assert importlib.util.find_spec("galaxy_gateway.android.bridge") is None
+        from galaxy_gateway.android_bridge import AndroidBridge
+        from galaxy_gateway.android.capabilities import DeviceCapability
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        assert AndroidBridge is not None and DeviceCapability is not None and MessageBuilder is not None
