@@ -181,7 +181,23 @@ class TraceEvent(BaseModel):
         description="Arbitrary structured data associated with the event.",
     )
 
+    # ── 防篡改哈希链(tamper-evident) ────────────────────────────────────────
+    # 每条记录哈希【它自身内容 + 前一条的 entry_hash】。改动任意一条,它及其后所有
+    # entry_hash 都对不上 → 链断,篡改一目了然(借鉴 Astrid 的哈希链审计日志)。
+    seq: int = Field(default=-1, description="链内序号(0 起);-1=未入链。")
+    prev_hash: str = Field(default="", description="前一条的 entry_hash(创世为全 0)。")
+    entry_hash: str = Field(default="", description="本条内容 + prev_hash 的 SHA-256。")
+
     model_config = {"frozen": True}  # prevent post-creation mutation
+
+    def compute_hash(self) -> str:
+        """对本条【除 entry_hash 外】的规范化内容 + prev_hash 求 SHA-256。"""
+        import hashlib
+        import json as _json
+
+        data = self.model_dump(mode="json", exclude={"entry_hash"})
+        canonical = _json.dumps(data, sort_keys=True, ensure_ascii=False, default=str)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 class LedgerSnapshot(BaseModel):
@@ -323,8 +339,27 @@ class AuditLedger:
             session_id=session_id,
             payload=payload or {},
         )
+        # 入链:接上前一条的 entry_hash,算本条 entry_hash(frozen → model_copy 定稿)。
+        _GENESIS = "0" * 64
+        prev_hash = self._events[-1].entry_hash if self._events else _GENESIS
+        seq = len(self._events)
+        event = event.model_copy(update={"seq": seq, "prev_hash": prev_hash})
+        event = event.model_copy(update={"entry_hash": event.compute_hash()})
         self._events.append(event)
         return event.event_id
+
+    def verify_chain(self) -> Dict[str, Any]:
+        """校验哈希链完整性。返回 ``{"intact": bool, "count": int, "broken_at": int|None}``。
+
+        任意记录被改/删/插,它或其后某条的 prev_hash 链接或 entry_hash 就对不上 →
+        报出首个断裂位置。"""
+        _GENESIS = "0" * 64
+        prev = _GENESIS
+        for i, ev in enumerate(self._events):
+            if ev.seq != i or ev.prev_hash != prev or ev.compute_hash() != ev.entry_hash:
+                return {"intact": False, "count": len(self._events), "broken_at": i}
+            prev = ev.entry_hash
+        return {"intact": True, "count": len(self._events), "broken_at": None}
 
     # ------------------------------------------------------------------
     # Read

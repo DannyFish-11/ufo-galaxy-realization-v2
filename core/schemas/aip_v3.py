@@ -218,6 +218,12 @@ class TaskAssignMsg(AIPMessage):
     goal: str = Field(default="", description="Natural-language goal description")
     constraints: List[str] = Field(default_factory=list, description="Execution constraints")
     context: Dict[str, Any] = Field(default_factory=dict, description="Execution context: previous results, state, ...")
+    ui_graph: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="结构化界面态(AG-UI): 序列化的 core.schemas.ui_element.UIGraph。"
+        "执行侧优先对着结构化控件图 grounding(点名为『发送』的控件),而非像素坐标;"
+        "缺失/第三方封锁时回退视觉。以 dict 携带,保持协议层自洽、可 JSON 序列化。",
+    )
 
 
 class TaskResultMsg(AIPMessage):
@@ -233,6 +239,11 @@ class TaskResultMsg(AIPMessage):
     error: str = Field(default="", description="Error message if status is failed/timeout/cancelled")
     duration_ms: int = Field(default=0, description="Execution duration in milliseconds")
     partial_results: List[Dict[str, Any]] = Field(default_factory=list, description="Partial results from multi-step execution")
+    ui_graph: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="动作后的结构化界面态(AG-UI): 序列化的 UIGraph。与 TASK_ASSIGN 的 "
+        "ui_graph 对比即可做闭环校验(点击后是否真跳到目标界面),无需再截一张图让模型比对。",
+    )
 
 
 class TaskCancelMsg(AIPMessage):

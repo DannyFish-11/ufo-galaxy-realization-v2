@@ -83,8 +83,22 @@ class OllamaBackend(LocalModelBackend):
     supports_streaming = True
 
     def __init__(self, base_url: str = "http://localhost:11434"):
-        self.base_url = base_url
+        self.base_url = self._normalize_url(base_url)
         self._loaded_models: Dict[str, bool] = {}
+
+    @staticmethod
+    def _normalize_url(raw: str) -> str:
+        """兜底补协议头。真机复现:用户在面板「模型」tab 只填 host:port
+        (如 "localhost:11434")、或上游把裸值透传进来,不补协议头的话,值会
+        原样带到 httpx,请求时才炸 `Request URL is missing an 'http://'...`
+        (克隆界面/onboarding 探测 Ollama 时最常见的那个 HTTP 报错)。这里在
+        最内层消费端统一加固,任何 create_backend('ollama') 路径都不再漏。"""
+        s = (raw or "").strip()
+        if not s:
+            return "http://localhost:11434"
+        if not s.startswith(("http://", "https://")):
+            s = f"http://{s}"
+        return s.rstrip("/")
 
     async def generate(
         self,

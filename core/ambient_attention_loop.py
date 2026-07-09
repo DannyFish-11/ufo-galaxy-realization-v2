@@ -471,14 +471,20 @@ class AmbientAttentionLoop:
         )
 
     async def _transcribe_async(self, obs: AmbientObservation) -> None:
-        """听:能力驱动 + 不阻塞事件循环。asr_bridge 档位下把新音频离线到线程池
-        转写,回填 obs.audio_transcript。native 或无音频则跳过。"""
+        """听:把新音频离线到线程池转写,回填 obs.audio_transcript;不阻塞事件循环。
+
+        关键:ambient 决策脑走 ``router.chat()``,它只有文本 + 图像 content block,
+        **没有音频通路**(见 modality_bridge 文档:Ollama 不吃原生音频)。因此无论
+        GALAXY_NATIVE_AUDIO 开关如何,ambient 想"听"就只能靠 ASR 桥转写成文字喂给
+        决策脑——它是纯文本消费者。此前按 resolve_audio_in()=='asr_bridge' 短路:
+        一旦有人开了原生音频门控,转写被跳过、原生音频又无处可送,常驻在场循环直接
+        变【聋】(只知"有声音"、听不到内容)。故这里对 audio 一律尽力转写。
+        (原生音频门控 GALAXY_NATIVE_AUDIO 管的是全模态服务通路——audio_pipeline /
+        perception 路由——不是这个文本决策脑。)"""
         if not obs.audio_b64:
             return
         try:
-            from core.modality_bridge import resolve_audio_in, transcribe_b64
-            if resolve_audio_in() != "asr_bridge":
-                return
+            from core.modality_bridge import transcribe_b64
             obs.audio_transcript = await asyncio.to_thread(
                 transcribe_b64, obs.audio_b64, mime=obs.audio_mime,
             )
