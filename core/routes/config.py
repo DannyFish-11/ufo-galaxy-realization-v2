@@ -232,6 +232,30 @@ async def update_config(req: ConfigUpdateRequest):
                 value = f"http://{stripped}"
         os.environ[key] = value
 
+    # 密钥收敛到【唯一密钥库】:API key / token 等敏感项走 ConfigService.set_secret
+    # → runtime/secrets.env(canonical 密钥库),不再明文落进 .env。
+    # 关键的重启正确性:main.py 顶部先把 .env 灌进 os.environ,config_preflight 再以
+    # `key not in os.environ` 的门读 secrets.env——所以 .env 里若残留同名旧值会【盖住】
+    # secrets.env(正是历史上"重启丢 key"的根因)。因此:成功写进 secrets.env 的密钥
+    # 必须从 .env 排除(_write_env_file 全量重写时自动清掉旧明文行);写 secrets.env 失败
+    # 的仍回落 .env,不丢持久化。os.environ 上面已设,当次即时生效。
+    _secrets_persisted: set = set()
+    try:
+        from core.config_schema import classify_key as _classify
+        from core.config_service import ConfigService as _CS
+        _cs = None
+        for _k, _v in req.config.items():
+            if _classify(_k) == "secret" and str(_v).strip():
+                try:
+                    if _cs is None:
+                        _cs = _CS()
+                    _cs.set_secret(_k, str(_v))
+                    _secrets_persisted.add(_k)
+                except Exception as _e:  # noqa: BLE001 — 失败则保留 .env 回落
+                    logger.debug("密钥写入 secrets.env 失败(回落 .env): %s", _e)
+    except Exception as exc:  # noqa: BLE001 — ConfigService 不可用 → 全部回落 .env
+        logger.debug("密钥收敛不可用(降级为 .env 持久化): %s", exc)
+
     # 模型选择收敛到唯一门:model_catalog.save_tier 把【档位 + 主脑】写进同一条
     # 记录(runtime/model_state.json)并派生 OLLAMA_MODEL —— 不再各写 .galaxy_model /
     # .galaxy_tier / OLLAMA_MODEL 三处。按模型反推档位并联动,消除档位↔主脑分叉
@@ -264,7 +288,7 @@ async def update_config(req: ConfigUpdateRequest):
     # PermissionError,FastAPI 缺省转成裸 500、无任何 detail,前端只能显示
     # "保存失败"四个字,排查全靠猜。这里显式捕获并把真实原因透传出去。
     try:
-        _write_env_file()
+        _write_env_file(exclude=_secrets_persisted)
     except OSError as exc:
         raise HTTPException(
             status_code=500,
@@ -367,8 +391,11 @@ async def probe_config_urls(req: ProbeRequest):
     return {"results": results}
 
 
-def _write_env_file():
+def _write_env_file(exclude=None):
     """将所有【非空】配置写入 .env 文件。
+
+    exclude: 已写进 canonical 密钥库(runtime/secrets.env)的密钥名集合——这些
+    不再明文落进 .env(否则重启时 .env 旧值会盖住 secrets.env),全量重写即清掉旧行。
 
     关键修复:之前把全部 schema 键(含空值)统统写成 ``KEY=`` 行。空字符串
     一旦被 .env 加载进 os.environ,就会把代码里的默认值顶掉——
@@ -383,7 +410,10 @@ def _write_env_file():
 
     # 按类别分组
     current_category = ""
+    _exclude = exclude or set()
     for key, meta in sorted(CONFIG_SCHEMA.items(), key=lambda x: x[1]["category"]):
+        if key in _exclude:
+            continue  # 已入 canonical 密钥库,不再明文写 .env
         value = os.environ.get(key, meta["default"])
         if not str(value).strip():
             continue  # 空值不落盘——否则会把代码默认值顶掉
