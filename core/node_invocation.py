@@ -451,12 +451,15 @@ class UnifiedNodeExecutor:
 
         nodes_root = self._get_nodes_root()
         # 安全:node_id 可能源自不可信入口(REST /ui/act、/nodes/call 等),会用于
-        # os.path.join + 目录 fuzzy 匹配。含路径分隔符/".."/绝对路径一律拒绝,杜绝
-        # 路径穿越(在 sink 处消毒,任何调用方都受保护)。
-        if (os.sep in node_id or (os.altsep and os.altsep in node_id)
-                or ".." in node_id or os.path.isabs(node_id)):
+        # os.path.join + 目录 fuzzy 匹配。用【规范化 + 包含性校验】杜绝路径穿越——
+        # 先拒绝分隔符/绝对路径,再核实 realpath 仍在 nodes_root 之内(即使符号链接
+        # 也逃不出根)。在 sink 处消毒,任何调用方都受保护。
+        _root_real = os.path.realpath(nodes_root)
+        node_dir = os.path.realpath(os.path.join(nodes_root, node_id))
+        _bad_id = (os.sep in node_id or (os.altsep and os.altsep in node_id)
+                   or ".." in node_id or os.path.isabs(node_id))
+        if _bad_id or not (node_dir == _root_real or node_dir.startswith(_root_real + os.sep)):
             return self._fail(envelope, f"非法 node_id(疑似路径穿越): {node_id!r}", started)
-        node_dir = os.path.join(nodes_root, node_id)
 
         # -- locate node directory -------------------------------------------
         if not os.path.isdir(node_dir):
