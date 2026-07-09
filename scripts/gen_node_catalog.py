@@ -157,6 +157,37 @@ _TYPE_LABELS = {
 }
 
 
+# ── 声明式动作权限(Astrid manifest 门禁思路,借"魂"不借壳)────────────────────
+# 每个敏感节点声明它【允许被调用的动作白名单】——派发时由
+# core.node_action_permissions 在统一执行器里强制校验(fail-closed):声明了的
+# 节点,动作不在白名单 → 拒绝执行,即使 prompt 注入也无法越权调用未声明动作。
+#
+# 白名单从各节点 main.py/fusion_entry.py 的【真实 dispatch 表】核实提取(不自欺:
+# 只给核实过的节点声明;没核实的先不声明=legacy 放行+告警,GALAXY_PERM_STRICT=1
+# 可收紧为未声明即拒绝)。支持 fnmatch 通配(如 "get_*")。
+# 通用元动作(help/status/health)各节点普遍支持,统一并入。
+_META_ACTIONS = ["help", "status", "health"]
+_ACTION_PERMISSIONS: dict = {
+    27: ["toggle", "off", "set_brightness", "set_temperature"],           # SmartHome
+    33: ["tap", "swipe", "input", "keyevent", "screenshot", "shell",      # ADB
+         "devices", "connected_devices", "current_device", "adb_path"],
+    34: ["tap", "swipe", "input_text", "key_event", "press_back",         # Scrcpy
+         "press_home", "screenshot", "shell", "install", "devices",
+         "device_info", "packages"],
+    36: ["click", "double_click", "right_click", "drag", "move_mouse",    # UIAWindows
+         "type_text", "press_key", "hotkey", "scroll", "screenshot",
+         "locate_on_screen", "get_mouse_position", "get_screen_size",
+         "list_windows", "window_action", "focus", "close", "maximize",
+         "minimize", "restore", "find_element", "find_elements", "get_ui_tree"],
+    45: ["click", "double_click", "move", "type", "press", "hotkey",      # DesktopAuto
+         "scroll", "screenshot", "locate", "position", "screen_size"],
+    74: ["register_device", "get_twin", "get_status", "get_history",      # DigitalTwin
+         "list_devices", "simulate", "cycle", "reset"],
+    92: ["click", "input", "press_key", "hotkey", "scroll"],              # AutoControl
+    124: ["get", "set", "list", "move", "resize"],                        # LinuxDesktopAuto
+}
+
+
 def build() -> dict:
     nodes = []
     for num, name, typ, runnable, oauth, purpose in _ROWS:
@@ -171,6 +202,10 @@ def build() -> dict:
         if oauth:
             kind, _, svc = oauth.partition(":")
             entry["connector"] = {"kind": kind, "service": svc or None}
+        if num in _ACTION_PERMISSIONS:
+            entry["permissions"] = {
+                "actions": sorted(set(_ACTION_PERMISSIONS[num]) | set(_META_ACTIONS)),
+            }
         nodes.append(entry)
     nodes.sort(key=lambda n: n["num"])
     return {

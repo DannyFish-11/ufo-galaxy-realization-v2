@@ -348,6 +348,43 @@ class UnifiedNodeExecutor:
                 _gov_exc,
             )
 
+        # -- 动作权限门禁(manifest 声明 · fail-closed) ------------------------
+        # 治理门管"节点当前状态可不可以被调";本门管"节点被允许做这个动作吗"。
+        # 声明了白名单的节点,动作不在名单内 → 拒绝(即使 prompt 注入也无法越权);
+        # 未声明节点 legacy 放行(GALAXY_PERM_STRICT=1 收紧)。
+        try:
+            from core.node_action_permissions import evaluate_action_permission  # noqa: PLC0415
+
+            perm = evaluate_action_permission(node_id, action)
+            if not perm.allowed:
+                logger.warning(
+                    "invoke node DENIED by action-permission gate | node_id=%s action=%s "
+                    "reason=%s request_id=%s",
+                    node_id, action, perm.reason, envelope.request_id,
+                )
+                result = NodeInvocationResult(
+                    success=False,
+                    node_id=node_id,
+                    action=action,
+                    request_id=envelope.request_id,
+                    trace_id=envelope.trace_id,
+                    error=(
+                        f"Node {node_id} denied action {action!r} by declared "
+                        f"permission manifest: {perm.reason}"
+                    ),
+                    duration_ms=(time.time() - started) * 1000.0,
+                    execution_mode=envelope.execution_domain,
+                    execution_source=envelope.invocation_source.value,
+                    eligibility_denial={"permission_denial": perm.to_dict()},
+                )
+                self._emit_aip_v3_task_result(envelope, result)
+                return result
+        except Exception as _perm_exc:  # noqa: BLE001 — 门禁自身故障不拦执行
+            logger.warning(
+                "invoke node: action-permission gate unavailable for node_id=%s: %s; proceeding",
+                node_id, _perm_exc,
+            )
+
         # -- PR-GOLDEN-PATH: Golden Path node resolution + local facade ----
         # Try the unified device-node resolution first. If a mapping exists
         # in device_node_map, use LocalNodeFacade for direct Python calls.

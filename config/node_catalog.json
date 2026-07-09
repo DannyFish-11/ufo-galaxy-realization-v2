@@ -280,7 +280,18 @@
       "type": "device-automation",
       "type_label": "设备自动化",
       "runnable": true,
-      "purpose": "智能家居设备控制"
+      "purpose": "智能家居设备控制",
+      "permissions": {
+        "actions": [
+          "health",
+          "help",
+          "off",
+          "set_brightness",
+          "set_temperature",
+          "status",
+          "toggle"
+        ]
+      }
     },
     {
       "num": 28,
@@ -328,7 +339,24 @@
       "type": "device-automation",
       "type_label": "设备自动化",
       "runnable": true,
-      "purpose": "Android Debug Bridge 控制"
+      "purpose": "Android Debug Bridge 控制",
+      "permissions": {
+        "actions": [
+          "adb_path",
+          "connected_devices",
+          "current_device",
+          "devices",
+          "health",
+          "help",
+          "input",
+          "keyevent",
+          "screenshot",
+          "shell",
+          "status",
+          "swipe",
+          "tap"
+        ]
+      }
     },
     {
       "num": 34,
@@ -336,7 +364,26 @@
       "type": "device-automation",
       "type_label": "设备自动化",
       "runnable": true,
-      "purpose": "Android 投屏/控制"
+      "purpose": "Android 投屏/控制",
+      "permissions": {
+        "actions": [
+          "device_info",
+          "devices",
+          "health",
+          "help",
+          "input_text",
+          "install",
+          "key_event",
+          "packages",
+          "press_back",
+          "press_home",
+          "screenshot",
+          "shell",
+          "status",
+          "swipe",
+          "tap"
+        ]
+      }
     },
     {
       "num": 35,
@@ -352,7 +399,37 @@
       "type": "device-automation",
       "type_label": "设备自动化",
       "runnable": true,
-      "purpose": "Windows UI 自动化"
+      "purpose": "Windows UI 自动化",
+      "permissions": {
+        "actions": [
+          "click",
+          "close",
+          "double_click",
+          "drag",
+          "find_element",
+          "find_elements",
+          "focus",
+          "get_mouse_position",
+          "get_screen_size",
+          "get_ui_tree",
+          "health",
+          "help",
+          "hotkey",
+          "list_windows",
+          "locate_on_screen",
+          "maximize",
+          "minimize",
+          "move_mouse",
+          "press_key",
+          "restore",
+          "right_click",
+          "screenshot",
+          "scroll",
+          "status",
+          "type_text",
+          "window_action"
+        ]
+      }
     },
     {
       "num": 39,
@@ -392,7 +469,25 @@
       "type": "device-automation",
       "type_label": "设备自动化",
       "runnable": true,
-      "purpose": "桌面 GUI 自动化"
+      "purpose": "桌面 GUI 自动化",
+      "permissions": {
+        "actions": [
+          "click",
+          "double_click",
+          "health",
+          "help",
+          "hotkey",
+          "locate",
+          "move",
+          "position",
+          "press",
+          "screen_size",
+          "screenshot",
+          "scroll",
+          "status",
+          "type"
+        ]
+      }
     },
     {
       "num": 46,
@@ -628,7 +723,22 @@
       "type": "device-automation",
       "type_label": "设备自动化",
       "runnable": true,
-      "purpose": "物理设备数字孪生"
+      "purpose": "物理设备数字孪生",
+      "permissions": {
+        "actions": [
+          "cycle",
+          "get_history",
+          "get_status",
+          "get_twin",
+          "health",
+          "help",
+          "list_devices",
+          "register_device",
+          "reset",
+          "simulate",
+          "status"
+        ]
+      }
     },
     {
       "num": 75,
@@ -792,7 +902,19 @@
       "type": "device-automation",
       "type_label": "设备自动化",
       "runnable": true,
-      "purpose": "Windows+Android 统一控制接口"
+      "purpose": "Windows+Android 统一控制接口",
+      "permissions": {
+        "actions": [
+          "click",
+          "health",
+          "help",
+          "hotkey",
+          "input",
+          "press_key",
+          "scroll",
+          "status"
+        ]
+      }
     },
     {
       "num": 93,
@@ -1132,7 +1254,19 @@
       "type": "device-automation",
       "type_label": "设备自动化",
       "runnable": true,
-      "purpose": "Linux 桌面自动化"
+      "purpose": "Linux 桌面自动化",
+      "permissions": {
+        "actions": [
+          "get",
+          "health",
+          "help",
+          "list",
+          "move",
+          "resize",
+          "set",
+          "status"
+        ]
+      }
     },
     {
       "num": 125,
