@@ -85,6 +85,8 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_NATS_EXECUTOR_TIMEOUT": {"default": "30", "type": "number", "category": "mesh", "description": "NATS Executor Timeout (s)"},
     "GALAXY_NATS_EXECUTOR_FALLBACK": {"default": "sync", "type": "select", "category": "mesh", "description": "Executor Fallback Mode", "options": ["sync", "async", "reject"]},
     "GALAXY_CROSS_DEVICE_ENABLED": {"default": "true", "type": "boolean", "category": "mesh", "description": "Cross-Device Orchestration"},
+    "GALAXY_MASTER_BRAIN_ENABLED": {"default": "false", "type": "boolean", "category": "mesh", "description": "启用主脑编排 + worker/NATS 分布式(多设备总开关 · 默认关=单机)"},
+    "GALAXY_FABRIC_STRICT": {"default": "false", "type": "boolean", "category": "mesh", "description": "严格织网:NATS 不可达即视为致命(默认关=优雅降级单机)"},
     "GALAXY_HEARTBEAT_INTERVAL": {"default": "5", "type": "number", "category": "mesh", "description": "Heartbeat Interval (s)"},
     "FEDERATION_ENABLED": {"default": "false", "type": "boolean", "category": "mesh", "description": "Enable Federation"},
     "FEDERATION_LOCAL_HOST": {"default": "", "type": "string", "category": "mesh", "description": "Federation Local Host"},

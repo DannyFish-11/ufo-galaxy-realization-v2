@@ -171,6 +171,11 @@ class NodeInvocationEnvelope:
     # (full governance enforcement).
     governance_override: Optional[str] = None
 
+    # 结构化界面态(AG-UI): 序列化的 core.schemas.ui_element.UIGraph。设备操作类
+    # 节点据此做"结构优先"grounding(点名为『发送』的控件),而非像素坐标。随
+    # TASK_ASSIGN 一并流转、可闭环校验。缺省 None——不影响非操作类节点。
+    ui_graph: Optional[Dict[str, Any]] = None
+
     # Timing
     started_at: float = field(default_factory=time.time)
     timeout_ms: float = 30_000.0
@@ -436,13 +441,25 @@ class UnifiedNodeExecutor:
         # This is the Golden Path: device_node_map → resolver → facade → execute.
         # If no mapping or execution fails, fall back to legacy fusion_entry loading.
         golden_result = await self._try_golden_path(envelope)
-        if golden_result is not None and not golden_result.get("fallback"):
+        # _try_golden_path 返回 None 即"未走 Golden Path,退回 legacy";返回
+        # NodeInvocationResult(dataclass,无 .get())即真命中。此前误对 dataclass
+        # 调 .get("fallback") 会抛 AttributeError——但因上面漏 return 从没触发过。
+        if golden_result is not None:
             self._emit_aip_v3_task_result(envelope, golden_result)
             self._record_feedback(envelope, golden_result)
             return golden_result
 
         nodes_root = self._get_nodes_root()
-        node_dir = os.path.join(nodes_root, node_id)
+        # 安全:node_id 可能源自不可信入口(REST /ui/act、/nodes/call 等),会用于
+        # os.path.join + 目录 fuzzy 匹配。用【规范化 + 包含性校验】杜绝路径穿越——
+        # 先拒绝分隔符/绝对路径,再核实 realpath 仍在 nodes_root 之内(即使符号链接
+        # 也逃不出根)。在 sink 处消毒,任何调用方都受保护。
+        _root_real = os.path.realpath(nodes_root)
+        node_dir = os.path.realpath(os.path.join(nodes_root, node_id))
+        _bad_id = (os.sep in node_id or (os.altsep and os.altsep in node_id)
+                   or ".." in node_id or os.path.isabs(node_id))
+        if _bad_id or not (node_dir == _root_real or node_dir.startswith(_root_real + os.sep)):
+            return self._fail(envelope, f"非法 node_id(疑似路径穿越): {node_id!r}", started)
 
         # -- locate node directory -------------------------------------------
         if not os.path.isdir(node_dir):
@@ -601,6 +618,10 @@ class UnifiedNodeExecutor:
                 execution_mode=result.get("via", "golden_path"),
                 execution_source=envelope.invocation_source.value,
             )
+            # 关键:构造后必须 return——此前漏了 return,Golden Path 成功也返回 None,
+            # 每次调用都白走一遍 facade 再退回 legacy fusion_entry 加载(strangler
+            # 层形同虚设)。
+            return golden_result
 
         except Exception as _exc:  # noqa: BLE001
             logger.debug(
@@ -653,6 +674,7 @@ class UnifiedNodeExecutor:
                 action=envelope.action,
                 params=envelope.params if isinstance(envelope.params, dict) else {},
                 trace_id=envelope.trace_id,
+                ui_graph=envelope.ui_graph,  # 结构化界面态随 TASK_ASSIGN 流转(有则带)
             )
             nats = get_nats_bus()
             if nats.is_connected():
@@ -749,6 +771,7 @@ async def invoke_node(
     session_id: Optional[str] = None,
     route_mode: str = "local",
     timeout_ms: float = 30_000.0,
+    ui_graph: Optional[Dict[str, Any]] = None,
 ) -> NodeInvocationResult:
     """Convenience wrapper: build an envelope and call the unified executor.
 
@@ -782,6 +805,7 @@ async def invoke_node(
         invocation_source=invocation_source,
         route_mode=route_mode,
         timeout_ms=timeout_ms,
+        ui_graph=ui_graph,
     )
     if request_id is not None:
         envelope.request_id = request_id
@@ -792,4 +816,7 @@ async def invoke_node(
     if session_id is not None:
         envelope.session_id = session_id
 
-    return 
+    # 关键:此前这里是个【裸 return】(返回 None)——invoke_node 号称"所有本地节点
+    # 执行的唯一首选入口",却对每一次调用都返回 None(REST /nodes/call、命令路由、
+    # OpenClawd 工具派发、能力分发器全部拿到 None)。补上真正的委派。
+    return await get_unified_node_executor().execute(envelope)
