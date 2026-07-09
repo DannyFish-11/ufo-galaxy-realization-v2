@@ -79,8 +79,11 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_SECRET_BACKEND": {"default": "env", "type": "select", "category": "auth", "description": "Secret Backend", "options": ["env", "vault", "kms"]},
     "GALAXY_TLS_CERT": {"default": "", "type": "string", "category": "auth", "description": "TLS Certificate Path"},
     "GITHUB_TOKEN": {"default": "", "type": "string", "category": "auth", "description": "GitHub Token"},
-    "GALAXY_AUDIT_KEY": {"default": "", "type": "string", "category": "auth", "description": "Audit Key"},
-    "GALAXY_MESSAGE_SIGNING_KEY": {"default": "", "type": "string", "category": "auth", "description": "Message Signing Key"},
+    # 融合(域6):删掉两个幽灵开关 GALAXY_AUDIT_KEY / GALAXY_MESSAGE_SIGNING_KEY——
+    # 全仓无任何代码读它们(面板上摆着没实现的安全功能,误导操作者)。消息签名
+    # 【真实已实现】,但键名是 GALAXY_MESH_SECRET(capability_token HMAC 签名/校验,
+    # 缺省自动生成 .galaxy_mesh_key),把真的这只上面板。
+    "GALAXY_MESH_SECRET": {"default": "", "type": "string", "category": "auth", "description": "Mesh 签名密钥(能力令牌 HMAC;留空自动生成)"},
 
     # --- Mesh & NATS ---
     "GALAXY_NATS_ENABLED": {"default": "true", "type": "boolean", "category": "mesh", "description": "Enable NATS"},
