@@ -232,28 +232,18 @@ async def update_config(req: ConfigUpdateRequest):
                 value = f"http://{stripped}"
         os.environ[key] = value
 
-    # OLLAMA_MODEL 有两个持久化存点:.env(本函数写)和 .galaxy_model
-    # (core.model_selection.save_choice() 写,resolve_main_brain() 在 env 变量
-    # 缺失时会退回读它)。这里只写了前者,两处会静默分叉——若以后 .env 里的
-    # OLLAMA_MODEL 被清空,resolve_main_brain() 就会退回 .galaxy_model 里那个
-    # 更早、已经过时的选择,而不是用户刚在面板上选的这个。同步一下避免分叉。
+    # 模型选择收敛到唯一门:model_catalog.save_tier 把【档位 + 主脑】写进同一条
+    # 记录(runtime/model_state.json)并派生 OLLAMA_MODEL —— 不再各写 .galaxy_model /
+    # .galaxy_tier / OLLAMA_MODEL 三处。按模型反推档位并联动,消除档位↔主脑分叉
+    # (否则 active_effective_io() 读的档位与实际主脑不符,modality_bridge 会误判听/说通路)。
+    # 上面 .env 里也已写了 OLLAMA_MODEL(env 层持久化,归配置域);二者一致。
     if "OLLAMA_MODEL" in req.config:
-        try:
-            from core.model_selection import save_choice
-            save_choice(req.config["OLLAMA_MODEL"])
-        except Exception:
-            pass
-        # 档位联动:设置页/模型页改了 OLLAMA_MODEL 后,必须把档位(.galaxy_tier)也
-        # 推到该模型所属档。否则档位与主脑会分叉——active_effective_io() 读的是
-        # 档位,若档位停在旧的(如 B 档 全原生)、主脑却换成了 Gemma(不原生说),
-        # modality_bridge 在 GALAXY_NATIVE_AUDIO 开启时会误判"原生说"→不接 TTS 桥
-        # → AI 变哑巴。按模型反推档位并联动持久化,消除这个静默分叉。
         try:
             from core import model_catalog as _mc
             _tag = req.config["OLLAMA_MODEL"]
             _mc.save_tier(_mc.infer_tier_from_model(_tag), main_brain=_tag)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("模型状态联动写入失败(非致命): %s", exc)
 
     # 自发在场开关改动 → 立刻生效(启动/停止常驻循环),不必重启。GALAXY_SPEAK/
     # TTS_STREAMING/NATIVE_AUDIO 都是每次用时现读 os.environ,上面已写入即时生效,

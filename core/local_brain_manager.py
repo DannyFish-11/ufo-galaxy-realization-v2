@@ -974,3 +974,17 @@ async def check_local_brain() -> Dict[str, Any]:
     """
     brain = get_local_brain_manager()
     return await brain.health_check()
+
+
+# ── 与 model_catalog 收口(尺寸/默认主脑的 SSOT 是目录)────────────────────────────
+# 目录内 curated 模型(Gemma 4 系 / MiniCPM-o)的尺寸与"默认主脑"以 core.model_catalog
+# 为唯一真相源;此处把它们回填进本类的表,避免两处重复维护(目录赢)。非目录的通用
+# 模型(qwen/llama/…)尺寸仍保留本表作 VRAM 评估兜底。catalog 不反向依赖本模块,无环。
+try:  # noqa: SIM105
+    from core import model_catalog as _mc
+    for _spec in _mc.all_models():
+        if _spec.size_mb():
+            LocalBrainManager.MODEL_SIZE_ESTIMATE_MB[_spec.tag] = _spec.size_mb()
+    LocalBrainManager.RECOMMENDED_MODELS["default"] = _mc.default_model()
+except Exception:  # noqa: BLE001 — 目录不可用时保留本表原值
+    pass

@@ -45,7 +45,12 @@ from typing import Dict, List, Optional
 logger = logging.getLogger("Galaxy.ModelCatalog")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-_TIER_FILE = PROJECT_ROOT / ".galaxy_tier"
+# 统一状态记录:档位 + 主脑 合成【一条】记录(此前 .galaxy_tier 与 .galaxy_model
+# 分裂两存点 + OLLAMA_MODEL env 三写易漂移)。运行时 env(GALAXY_MODEL_TIER /
+# OLLAMA_MODEL)从本记录派生导出。旧的两个文件仅做一次性迁移读入。
+_STATE_FILE = PROJECT_ROOT / "runtime" / "model_state.json"
+_LEGACY_TIER_FILE = PROJECT_ROOT / ".galaxy_tier"
+_LEGACY_MODEL_FILE = PROJECT_ROOT / ".galaxy_model"
 
 
 # ---------------------------------------------------------------------------
@@ -71,14 +76,12 @@ class ModelSpec:
     caps: ModelCapability
     source: str = "local"     # local(Ollama) | container(vLLM 容器) | cloud
     requires_gpu: bool = False
+    size_mb_val: int = 0       # 尺寸(MB)——**本目录即 SSOT**,不再反向依赖 LocalBrainManager
+    is_default: bool = False   # 默认主脑(LocalBrainManager.RECOMMENDED_MODELS['default'] 派生自此)
 
     def size_mb(self) -> int:
-        """尺寸(MB)取自 LocalBrainManager（单一真相源）；未知返回 0。"""
-        try:
-            from core.local_brain_manager import LocalBrainManager
-            return int(LocalBrainManager.MODEL_SIZE_ESTIMATE_MB.get(self.tag, 0))
-        except Exception:  # noqa: BLE001
-            return 0
+        """尺寸(MB)——本目录自己拥有(唯一真相源);未定义返回 0。"""
+        return int(self.size_mb_val or 0)
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -95,24 +98,32 @@ _MODELS: Dict[str, ModelSpec] = {
     "gemma4:e2b": ModelSpec(
         "gemma4:e2b", "Gemma 4 · E2B", "看 · 听(原生) · 轻量",
         ModelCapability(vision=True, audio_in=True, audio_out=False, tools=True),
-        source="local", requires_gpu=False,
+        source="local", requires_gpu=False, size_mb_val=1800,
     ),
     "gemma4:e4b": ModelSpec(
         "gemma4:e4b", "Gemma 4 · E4B", "看 · 听(原生) · 中等显存",
         ModelCapability(vision=True, audio_in=True, audio_out=False, tools=True),
-        source="local", requires_gpu=False,
+        source="local", requires_gpu=False, size_mb_val=3000,
     ),
     "gemma4:12b": ModelSpec(
         "gemma4:12b", "Gemma 4 · 12B", "看 · 听(原生) · 工具 · 128K",
         ModelCapability(vision=True, audio_in=True, audio_out=False, tools=True),
-        source="local", requires_gpu=True,
+        source="local", requires_gpu=True, size_mb_val=8000, is_default=True,
     ),
     "openbmb/minicpm-o4.5": ModelSpec(
         "openbmb/minicpm-o4.5", "MiniCPM-o 4.5", "全模态 看/听/说 全原生(需显卡)",
         ModelCapability(vision=True, audio_in=True, audio_out=True, tools=True),
-        source="local", requires_gpu=True,
+        source="local", requires_gpu=True, size_mb_val=6000,
     ),
 }
+
+
+def default_model() -> str:
+    """默认主脑 tag(标了 is_default 的那个)——LocalBrainManager 的默认从此派生。"""
+    for s in _MODELS.values():
+        if s.is_default:
+            return s.tag
+    return "gemma4:12b"
 
 
 # ---------------------------------------------------------------------------
@@ -243,54 +254,96 @@ def active_effective_io() -> EffectiveIO:
 # ---------------------------------------------------------------------------
 # 档位持久化 + 与 OLLAMA_MODEL 的联动
 # ---------------------------------------------------------------------------
+def _read_state() -> Dict[str, str]:
+    """读【一条】统一记录 {tier, main_brain};无则一次性迁移旧的 .galaxy_tier/.galaxy_model。"""
+    import json
+    try:
+        if _STATE_FILE.exists():
+            data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return {
+                    "tier": str(data.get("tier", "")).strip().upper(),
+                    "main_brain": str(data.get("main_brain", "")).strip(),
+                }
+    except Exception:  # noqa: BLE001
+        pass
+    # 迁移:旧的两个分裂存点
+    tier = ""
+    brain = ""
+    try:
+        if _LEGACY_TIER_FILE.exists():
+            tier = _LEGACY_TIER_FILE.read_text(encoding="utf-8").strip().upper()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        if _LEGACY_MODEL_FILE.exists():
+            brain = _LEGACY_MODEL_FILE.read_text(encoding="utf-8").strip()
+    except Exception:  # noqa: BLE001
+        pass
+    return {"tier": tier, "main_brain": brain}
+
+
+def _write_state(tier: str, main_brain: str) -> None:
+    """写【一条】统一记录,并派生导出运行时 env(GALAXY_MODEL_TIER / OLLAMA_MODEL)。"""
+    import json
+    rec = {"tier": (tier or "").strip().upper(), "main_brain": (main_brain or "").strip()}
+    try:
+        _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _STATE_FILE.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("保存模型状态失败(非致命): %s", exc)
+    if rec["tier"]:
+        os.environ["GALAXY_MODEL_TIER"] = rec["tier"]
+    if rec["main_brain"]:
+        os.environ["OLLAMA_MODEL"] = rec["main_brain"]  # 运行时主脑:派生导出
+
+
 def load_tier() -> str:
-    """当前档位：GALAXY_MODEL_TIER 环境变量 > .galaxy_tier 文件 > 默认 A。"""
+    """当前档位：GALAXY_MODEL_TIER 环境变量 > 统一记录 > 默认 A。"""
     env = os.environ.get("GALAXY_MODEL_TIER", "").strip().upper()
     if env in _TIERS:
         return env
-    try:
-        if _TIER_FILE.exists():
-            saved = _TIER_FILE.read_text(encoding="utf-8").strip().upper()
-            if saved in _TIERS:
-                return saved
-    except Exception:  # noqa: BLE001
-        pass
+    saved = _read_state().get("tier", "")
+    if saved in _TIERS:
+        return saved
     return _DEFAULT_TIER
 
 
-def save_tier(key: str, *, main_brain: Optional[str] = None) -> str:
-    """持久化档位选择，并联动主脑 OLLAMA_MODEL。
+def main_brain() -> str:
+    """当前主脑 tag：OLLAMA_MODEL 环境变量 > 统一记录 > ""。"""
+    env = os.environ.get("OLLAMA_MODEL", "").strip()
+    if env:
+        return env
+    return _read_state().get("main_brain", "")
 
-    - single 档：主脑取 main_brain(若属于该档)否则档内第一个本地模型。
-    - composite 档(当前无)：主脑取档内第一个【本地对话模型】。
-    返回最终生效的主脑 tag。
+
+def save_main_brain(tag: str) -> None:
+    """持久化主脑到统一记录(档位保持现值,并派生 OLLAMA_MODEL)。是主脑写入的唯一门。"""
+    if not tag:
+        return
+    _write_state(load_tier(), tag)
+
+
+def save_tier(key: str, *, main_brain: Optional[str] = None) -> str:
+    """持久化档位 + 主脑到【同一条】记录,返回最终生效的主脑 tag。
+
+    - single 档：主脑取 main_brain(显式一律尊重,即便是 HF 回退装的自定义 tag)
+      否则档内第一个本地模型。
+    - 不再分别写 .galaxy_tier / .galaxy_model / 联动 save_choice —— 全收敛到一条记录。
     """
     key = (key or "").strip().upper()
     if key not in _TIERS:
         key = _DEFAULT_TIER
-    try:
-        _TIER_FILE.write_text(key, encoding="utf-8")
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("保存档位失败(非致命): %s", exc)
-    os.environ["GALAXY_MODEL_TIER"] = key
-
-    # 选主脑
     local_in_tier = [s.tag for s in tier_models(key) if s.source == "local"]
-    chosen = ""
     if main_brain:
-        # 显式指定了主脑 → 一律尊重,即便它不在本档的目录候选里(如用户通过 HF
-        # 回退装的自定义 tag)。此前"不在档内候选就替换成档内第一个"会把用户刚在
-        # 设置页选定的自定义模型静默改回 gemma4:e2b —— 一条真实的静默数据丢失路径。
+        # 显式指定 → 一律尊重(此前"不在档内候选就替换成档内第一个"会把用户刚选定的
+        # 自定义模型静默改回 gemma4:e2b —— 真实的静默数据丢失路径)。
         chosen = main_brain
     elif local_in_tier:
         chosen = local_in_tier[0]
-    if chosen:
-        os.environ["OLLAMA_MODEL"] = chosen
-        try:
-            from core.model_selection import save_choice
-            save_choice(chosen)
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("联动 save_choice 失败(非致命): %s", exc)
+    else:
+        chosen = _read_state().get("main_brain", "")
+    _write_state(key, chosen)
     return chosen
 
 

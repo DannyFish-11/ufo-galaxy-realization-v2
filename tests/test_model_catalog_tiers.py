@@ -20,8 +20,10 @@ import core.model_catalog as mc
 
 @pytest.fixture(autouse=True)
 def _clean_env(tmp_path, monkeypatch):
-    # 隔离档位持久化文件与环境，避免测试互相污染。
-    monkeypatch.setattr(mc, "_TIER_FILE", tmp_path / ".galaxy_tier")
+    # 隔离统一状态记录 + 旧的迁移文件与环境，避免测试互相污染。
+    monkeypatch.setattr(mc, "_STATE_FILE", tmp_path / "runtime" / "model_state.json")
+    monkeypatch.setattr(mc, "_LEGACY_TIER_FILE", tmp_path / ".galaxy_tier")
+    monkeypatch.setattr(mc, "_LEGACY_MODEL_FILE", tmp_path / ".galaxy_model")
     for k in ("GALAXY_MODEL_TIER", "GALAXY_NATIVE_AUDIO", "OLLAMA_MODEL"):
         monkeypatch.delenv(k, raising=False)
     yield
@@ -45,8 +47,8 @@ class TestCatalogStructure:
         # 容器复合档已删除；目录里不应再有 container 源模型
         assert all(m.source != "container" for m in mc.all_models())
 
-    def test_size_from_local_brain_manager_ssot(self):
-        # 尺寸取自 LocalBrainManager，不是本模块自带
+    def test_size_owned_by_catalog_ssot(self):
+        # 尺寸现由目录自己拥有(SSOT),不再反向依赖 LocalBrainManager
         spec = mc.get_model("gemma4:e2b")
         assert spec.size_mb() == 1800
 
@@ -114,7 +116,7 @@ class TestTierPersistence:
 
 class TestModalityBridge:
     def test_A_tier_listens_via_asr_bridge(self, monkeypatch):
-        monkeypatch.setattr(mc, "_TIER_FILE", mc._TIER_FILE)  # keep patched
+        # 状态文件已由 autouse fixture 隔离补丁,这里直接用。
         mc.save_tier("A")
         from core.modality_bridge import resolve_audio_in, resolve_audio_out
         assert resolve_audio_in() == "asr_bridge"   # Ollama 不管原生音频 → 桥
