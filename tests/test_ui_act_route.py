@@ -96,6 +96,26 @@ class TestUIAct:
         assert not out["success"]
 
 
+class TestNodeIdSanitization:
+    def test_malicious_node_id_falls_back_to_safe_default(self, monkeypatch):
+        # node_id 来自不可信请求体;路径穿越形状应被拒,回落安全缺省节点。
+        captured = {}
+        async def _fake_invoke(node_id, action, params, **kw):
+            captured["node_id"] = node_id
+            return _FakeResult()
+        monkeypatch.setattr("core.node_invocation.invoke_node", _fake_invoke)
+        out = asyncio.run(ui_act.ui_act(UIActRequest(
+            instruction="点「发送」", ui_graph=_wechat_graph(),
+            node_id="../../etc/passwd")))
+        assert out["dispatched"]
+        assert captured["node_id"] == "Node_36_UIAWindows"  # 非法值未透传
+
+    def test_safe_node_id_helper(self):
+        assert ui_act._safe_node_id("Node_36_UIAWindows") == "Node_36_UIAWindows"
+        for bad in ("../../x", "Node_36/../y", "/abs/path", "", "evil;rm"):
+            assert ui_act._safe_node_id(bad) is None
+
+
 class TestRouteRegistered:
     def test_router_has_act_endpoint(self):
         paths = {r.path for r in ui_act.router.routes}

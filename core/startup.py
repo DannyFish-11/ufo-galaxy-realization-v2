@@ -908,6 +908,33 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["galaxy_gateway"] = {"status": "not_available", "error": str(e)}
         logger.info(f"Galaxy Gateway 未加载: {e}")
 
+    # ── 多设备/Mesh 启用(opt-in,默认关=单机零变化)────────────────────────────
+    # 完整 gateway lifespan 被刻意跳过(会绑 TCP/UDP 端口、双注册,见上文)。这里
+    # 补上【真正启用 worker/Mesh 但不绑端口】的窄路径:仅当 GALAXY_MASTER_BRAIN_ENABLED
+    # 打开(面板"网格"分类的多设备总开关)时——① 起 MasterBrain(连 NATS + 订阅
+    # task_results/worker 生命周期,NATS 客户端连接+JetStream 订阅不绑本地监听端口)、
+    # ② 起 worker 消费循环(订阅派发 → 规范执行器执行 → 回传结果)。全 best-effort,
+    # 任何失败都不阻断启动。默认关时整段跳过,桌面单机行为一字未变。
+    try:
+        from core.master_brain import master_brain_enabled, get_master_brain
+        if master_brain_enabled():
+            brain = get_master_brain()
+            if brain is not None:
+                _mb = await brain.start()
+                results["master_brain"] = {"status": "started",
+                                           "nats_connected": bool((_mb or {}).get("nats_connected"))}
+                logger.info("MasterBrain 已启用(多设备总开关开)")
+            from core.worker_runtime import start_worker_runtime
+            _wk = await start_worker_runtime()
+            results["worker_runtime"] = _wk
+            if _wk.get("started"):
+                logger.info("Worker 消费循环已启用 worker_id=%s", _wk.get("worker_id"))
+        else:
+            results["master_brain"] = {"status": "disabled"}
+    except Exception as _mbe:  # noqa: BLE001 — 启用失败不阻断单机启动
+        logger.warning("多设备/Mesh 启用失败(单机不受影响): %s", _mbe)
+        results["master_brain"] = {"status": "error", "error": str(_mbe)}
+
     # ====================================================================
     # 17. 设备路由器
     # ====================================================================

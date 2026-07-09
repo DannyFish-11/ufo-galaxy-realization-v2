@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter
@@ -29,6 +30,15 @@ from pydantic import BaseModel
 logger = logging.getLogger("Galaxy.Routes.UIAct")
 
 router = APIRouter(prefix="/api/v1/ui", tags=["ui-act"])
+
+# 安全:node_id 来自不可信请求体,会被 invoke_node 用于 os.path.join(nodes_root, id)
+# + 目录 fuzzy 匹配。严格白名单形状,杜绝路径穿越(../、绝对路径、分隔符)。
+_NODE_ID_RE = re.compile(r"^Node_[A-Za-z0-9_]{1,64}$")
+
+
+def _safe_node_id(raw: str) -> Optional[str]:
+    s = (raw or "").strip()
+    return s if _NODE_ID_RE.match(s) else None
 
 
 # 规范化动作 → 各操作节点的动作名(节点动作名与 UIActionKind 略有出入)。
@@ -87,7 +97,8 @@ async def ui_act(req: UIActRequest) -> Dict[str, Any]:
         return out  # dry-run:只规划
 
     # 结构确定命中 → 经规范执行器派发到操作节点(带 ui_graph 结构化界面态)。
-    node_id = req.node_id or "Node_36_UIAWindows"  # 缺省桌面 UIA;手机侧由调用方给
+    # 安全:node_id 不可信,严格白名单校验后才交给 invoke_node(防路径穿越)。
+    node_id = _safe_node_id(req.node_id) or "Node_36_UIAWindows"  # 非法/空 → 缺省桌面 UIA
     node_action = _node_action(node_id, planned.action.value)
     params: Dict[str, Any] = {"target_node_id": planned.node_id, "label": planned.label}
     if planned.coordinates:

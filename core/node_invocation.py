@@ -450,6 +450,12 @@ class UnifiedNodeExecutor:
             return golden_result
 
         nodes_root = self._get_nodes_root()
+        # 安全:node_id 可能源自不可信入口(REST /ui/act、/nodes/call 等),会用于
+        # os.path.join + 目录 fuzzy 匹配。含路径分隔符/".."/绝对路径一律拒绝,杜绝
+        # 路径穿越(在 sink 处消毒,任何调用方都受保护)。
+        if (os.sep in node_id or (os.altsep and os.altsep in node_id)
+                or ".." in node_id or os.path.isabs(node_id)):
+            return self._fail(envelope, f"非法 node_id(疑似路径穿越): {node_id!r}", started)
         node_dir = os.path.join(nodes_root, node_id)
 
         # -- locate node directory -------------------------------------------
