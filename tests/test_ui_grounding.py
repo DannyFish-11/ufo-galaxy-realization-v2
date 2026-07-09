@@ -1,7 +1,7 @@
 """tests/test_ui_grounding.py
 ================================
 
-结构化 grounding 脑:意图→控件、模型回复→控件、结构优先/视觉兜底切换。
+grounding 脑:意图→控件、模型回复→控件、结构确定性快路径 vs 交多模态模型判断。
 """
 from __future__ import annotations
 
@@ -80,14 +80,15 @@ class TestResolveTargetStructural:
         r = resolve_target(_wechat(), "点发送文件")
         assert r.ok and r.node.label == "发送文件"
 
-    def test_vision_fallback_when_absent(self):
+    def test_defer_to_model_when_absent(self):
+        # 结构里点不准 → 交多模态模型(视觉一直在看),不是"降级"
         r = resolve_target(_wechat(), "点「悬浮球」")
-        assert not r.ok and r.strategy is GroundingStrategy.VISION_FALLBACK
+        assert not r.ok and r.strategy is GroundingStrategy.DEFER_TO_MODEL
 
-    def test_no_tree_is_vision_fallback(self):
+    def test_no_tree_defers_to_model(self):
         empty = UIGraph(root=None, source=UISource.VISION)
         r = resolve_target(empty, "点发送")
-        assert r.strategy is GroundingStrategy.VISION_FALLBACK
+        assert r.strategy is GroundingStrategy.DEFER_TO_MODEL
 
 
 class TestParseModelAction:
