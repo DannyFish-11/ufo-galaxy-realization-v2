@@ -36,7 +36,7 @@ import os
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Set
 
 from fastapi import WebSocket
 
@@ -120,6 +120,32 @@ class RouteConnectionPool:
     def _unified() -> "UnifiedConnectionManager":  # type: ignore[name-defined]
         from core.unified.connection_manager import get_unified_connection_manager
         return get_unified_connection_manager()
+
+    # ── 在场判定的 canonical 读(融合·域4)────────────────────────────────────
+    # 在线真相的唯一权威是 UCM 的 presence 投影(online = connected and routable,
+    # 覆盖全部传输,不只本池缓存的 WS 句柄)。此前 26 处调用点直读 active_devices
+    # 当在线真相——那只是传输句柄缓存。UCM 不可用时退本地缓存(超集安全)。
+
+    def online_device_ids(self) -> List[str]:
+        """当前在线设备 id 列表(UCM 权威;失败退本地句柄缓存)。"""
+        try:
+            pv = self._unified().get_presence_view()
+            return [d for d, info in pv.items() if info.get("online")]
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("online_device_ids UCM 读取失败,退本地缓存: %s", exc)
+            return list(self.active_devices.keys())
+
+    def is_online(self, device_id: str) -> bool:
+        """设备是否在线(UCM 权威;UCM 无此设备/不可用时退本地句柄缓存)。"""
+        if not device_id:
+            return False
+        try:
+            pv = self._unified().get_presence_view()
+            if device_id in pv:
+                return bool(pv[device_id].get("online"))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("is_online UCM 读取失败,退本地缓存: %s", exc)
+        return device_id in self.active_devices
 
     # ------------------------------------------------------------------
     # 连接管理

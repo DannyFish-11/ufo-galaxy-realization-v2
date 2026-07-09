@@ -257,7 +257,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         for did, info in registered_devices.items():
             merged[did] = {
                 **info,
-                "online": did in connection_manager.active_devices,
+                "online": connection_manager.is_online(did),
             }
         for did, dev in udm_devices.items():
             dev_dict = {
@@ -269,7 +269,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "metadata": dev.metadata,
                 "registered_at": dev.registered_at.isoformat() if dev.registered_at else None,
                 "last_seen": dev.last_heartbeat.isoformat() if dev.last_heartbeat else None,
-                "online": did in connection_manager.active_devices or dev.is_online(),
+                "online": connection_manager.is_online(did) or dev.is_online(),
             }
             merged[did] = dev_dict
 
@@ -299,7 +299,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         for udm_dev in (udm_all or []):
             did = udm_dev.device_id
-            is_online = did in connection_manager.active_devices or udm_dev.is_online()
+            is_online = connection_manager.is_online(did) or udm_dev.is_online()
             dev_type = str(getattr(udm_dev, "device_type", "") or "")
             caps = list(udm_dev.capabilities or [])
 
@@ -326,7 +326,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         for did, info in registered_devices.items():
             if did in seen:
                 continue
-            is_online = did in connection_manager.active_devices
+            is_online = connection_manager.is_online(did)
             if device_type and info.get("device_type") != device_type:
                 continue
             effective_status = "online" if is_online else info.get("status", "registered")
@@ -417,7 +417,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "metadata": udm_dev.metadata,
                     "registered_at": udm_dev.registered_at.isoformat() if udm_dev.registered_at else None,
                     "last_seen": udm_dev.last_heartbeat.isoformat() if udm_dev.last_heartbeat else None,
-                    "online": device_id in connection_manager.active_devices or udm_dev.is_online(),
+                    "online": connection_manager.is_online(device_id) or udm_dev.is_online(),
                 }
                 return JSONResponse(info)
         except Exception as exc:
@@ -426,7 +426,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # 遗留缓存兜底
         if device_id in registered_devices:
             info = registered_devices[device_id]
-            info["online"] = device_id in connection_manager.active_devices
+            info["online"] = connection_manager.is_online(device_id)
             return JSONResponse(info)
 
         raise HTTPException(status_code=404, detail="设备未找到")
@@ -770,7 +770,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "device_id": did,
                     "device_type": info.get("device_type", "unknown"),
                     "device_name": info.get("device_name", did),
-                    "online": did in connection_manager.active_devices,
+                    "online": connection_manager.is_online(did),
                 })
             return JSONResponse({
                 "success": True,
@@ -806,7 +806,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if udm_dev is None and device_id not in registered_devices:
             raise HTTPException(status_code=404, detail="设备未注册")
 
-        is_online = device_id in connection_manager.active_devices or (
+        is_online = connection_manager.is_online(device_id) or (
             udm_dev is not None and udm_dev.is_online()
         )
 

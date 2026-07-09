@@ -218,10 +218,12 @@ class MessageType(str, Enum):
     SCREEN_STREAM_DATA = "screen_stream_data"
 
     # === AIP_STANDARD: 文件操作 ===
+    # FILE_READ/WRITE 保留为 RESERVED:能力真实存在但经 command action-name
+    # ("file_read"/"file_write" 二段跨设备传输,见 core/device_orchestrator)与
+    # FILE_TRANSFER 走线。FILE_DELETE/FILE_LIST 经全仓核实零足迹(无生产者/无
+    # handler/无客户端定义),已删(融合·域6)。
     FILE_READ = "file_read"
     FILE_WRITE = "file_write"
-    FILE_DELETE = "file_delete"
-    FILE_LIST = "file_list"
     FILE_TRANSFER = "file_transfer"
 
     # === AIP_STANDARD: 进程管理 ===
@@ -431,6 +433,14 @@ class MessageType(str, Enum):
     COORD_BROADCAST_ALIAS = "broadcast"           # ← coord_broadcast 的客户端短别名
     OPERATOR_ACTION_REQUEST = "operator_action_request"
     DEVICE_AUDIT_REPORT = "device_audit_report"
+
+    # ── 融合(域6)· V2_INTERNAL:内部 NATS 总线在用、此前只存在于
+    # core/schemas/aip_v3.py 的 wire 值,提升进本 SSOT——全系统只有一个
+    # message-type 字符串权威(core/schemas 侧由 drift 测试钉住一致性)。
+    CAPABILITY_QUERY = "capability_query"          # NATS 能力协商(已建模,预留)
+    WEBRTC_BIND = "webrtc_bind"                    # core/webrtc_task_lifecycle 经 NATS 发布
+    WEBRTC_UNBIND = "webrtc_unbind"
+    WEBRTC_TRANSPORT_STATE = "webrtc_transport_state"
 
 
 class TaskStatus(str, Enum):

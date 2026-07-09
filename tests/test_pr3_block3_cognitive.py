@@ -452,6 +452,15 @@ class TestWorkingMemory:
     def setup_method(self) -> None:
         _reset_all()
 
+    @pytest.fixture(autouse=True)
+    def _isolated_sm(self, tmp_path, monkeypatch):
+        # 融合(域3)后 WM 对 SM 认识的会话透传 SM —— 隔离 SM 单例与状态文件,
+        # 避免其它测试写进全局 data/sessions.json 的同名会话(如 "s1")交叉污染。
+        import core.session_manager as smmod
+        monkeypatch.setattr(smmod, "_SESSION_FILE", str(tmp_path / "sessions.json"))
+        monkeypatch.setattr(smmod, "_session_manager", smmod.SessionManager())
+        yield
+
     def test_add_and_get(self) -> None:
         from core.cognitive.working_memory import WorkingMemory
         wm = WorkingMemory(capacity=5)

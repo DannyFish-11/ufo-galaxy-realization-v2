@@ -154,6 +154,15 @@ class TestIntentParser:
 class TestConversationMemory:
     """测试对话记忆系统"""
 
+    @pytest.fixture(autouse=True)
+    def _isolated_sm(self, tmp_path, monkeypatch):
+        # 融合(域3)后 CM 直写/透读唯一属主 SessionManager —— 隔离其单例与状态文件,
+        # 避免测试轮次写进全局 data/sessions.json 并与其它测试的同名会话交叉污染。
+        import core.session_manager as smmod
+        monkeypatch.setattr(smmod, "_SESSION_FILE", str(tmp_path / "sessions.json"))
+        monkeypatch.setattr(smmod, "_session_manager", smmod.SessionManager())
+        yield
+
     def test_add_and_get_context(self):
         from core.ai_intent import ConversationMemory
         memory = ConversationMemory()

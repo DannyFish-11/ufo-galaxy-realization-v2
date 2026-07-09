@@ -922,29 +922,6 @@ async def handle_device_register(
                 device_id, _mesh_exc,
             )
 
-        # PR-C / PR-G: attach runtime session with canonical runtime_attachment_session_id
-        # so the device enters the attached runtime session registry and becomes visible
-        # as a managed runtime node with a stable attachment identity.
-        try:
-            from core.attached_runtime_session import attach_runtime_session
-            _attach_record = attach_runtime_session(
-                device_id,
-                source_runtime_posture=_inbound_runtime_posture,
-                runtime_attachment_session_id=inbound_attachment_id,
-                attach_reason="android_device_register",
-                metadata={"registration_trigger": "android_device_register"},
-            )
-            logger.info(
-                "attach_runtime_session: device_id=%s state=%s runtime_attachment_session_id=%s",
-                device_id, _attach_record.attachment_state, _attach_record.runtime_attachment_session_id,
-            )
-        except Exception as _attach_exc:
-            logger.debug(
-                "android_bridge: attach_runtime_session non-fatal: device_id=%s error=%s",
-                device_id, _attach_exc,
-            )
-            record_registration_gap(device_id, "attach_runtime_session")
-
         # PR-C / PR-G / canonical reconnect: register or resume in the authoritative
         # attached runtime session registry.
         #
@@ -1025,6 +1002,35 @@ async def handle_device_register(
                 device_id, _reg_exc,
             )
             record_registration_gap(device_id, "attached_runtime_session_registry")
+
+        # 融合(域5)· PR-C / PR-G: attach 生命周期记录 —— 身份唯一权威是上面的
+        # registry(铸 runtime_attachment_session_id / 连续性判定),本记录是生命周期
+        # 投影,【接收】registry 铸好的 id,绝不各自铸 id。此前本块在 registry 之前
+        # 执行且各自铸 id:inbound id 缺失时,同一设备在两个存储里挂着不同的
+        # runtime_attachment_session_id(双权威分歧的根源)。
+        try:
+            from core.attached_runtime_session import attach_runtime_session
+            _canonical_attachment_id = (
+                _reg_entry.runtime_attachment_session_id
+                if _reg_entry is not None else inbound_attachment_id
+            )
+            _attach_record = attach_runtime_session(
+                device_id,
+                source_runtime_posture=_inbound_runtime_posture,
+                runtime_attachment_session_id=_canonical_attachment_id,
+                attach_reason="android_device_register",
+                metadata={"registration_trigger": "android_device_register"},
+            )
+            logger.info(
+                "attach_runtime_session: device_id=%s state=%s runtime_attachment_session_id=%s",
+                device_id, _attach_record.attachment_state, _attach_record.runtime_attachment_session_id,
+            )
+        except Exception as _attach_exc:
+            logger.debug(
+                "android_bridge: attach_runtime_session non-fatal: device_id=%s error=%s",
+                device_id, _attach_exc,
+            )
+            record_registration_gap(device_id, "attach_runtime_session")
 
         # PR-C: assign Body Mesh roles based on device capability bitmask so
         # that the BodyMeshRegistry (and downstream presence/projection paths)

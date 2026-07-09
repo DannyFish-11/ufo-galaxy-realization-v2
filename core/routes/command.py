@@ -131,7 +131,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         started_at = datetime.now(timezone.utc).isoformat()
 
         try:
-            if target not in connection_manager.active_devices:
+            if not connection_manager.is_online(target):
                 return TargetResult(
                     status=CommandStatus.FAILED,
                     output=None,
@@ -399,7 +399,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     found_as_node = True
                     break
             if not found_as_node:
-                if target in connection_manager.active_devices:
+                if connection_manager.is_online(target):
                     sent = await connection_manager.send_to_device(target, {
                         "type": "command",
                         "command": command,

@@ -195,6 +195,16 @@ _LEGACY_TYPE_MAP: dict = {
     "parallel_task": MessageType.PARALLEL_SUBTASK,
     # parallel result alias – devices/nodes may send "parallel_result"
     "parallel_result": MessageType.PARALLEL_RESULT,
+    # 融合(域6)· 客户端短别名 → canonical 长名归一化。此前短名虽被枚举收留
+    # (MessageType("relay") 不再抛),但没有任何 dispatcher 消费短名成员——设备
+    # 发起的 relay/lock 落进 catch-all 静默丢弃(drift 工具登记为 ALIAS_DRIFT)。
+    # 归一化到长名后,既有的 relay_request/coord_* 处理链才真正接住。
+    "relay": MessageType.RELAY_REQUEST,
+    "forward": MessageType.RELAY_FORWARD,
+    "reply": MessageType.RELAY_REPLY,
+    "lock": MessageType.COORD_LOCK,
+    "unlock": MessageType.COORD_UNLOCK,
+    "broadcast": MessageType.COORD_BROADCAST,
     # v2 transport-layer aliases (used by core/device_communication.py local protocol)
     # These are normalised here so the routing layer only sees v3 type names.
     "handshake": MessageType.DEVICE_REGISTER,      # legacy registration handshake

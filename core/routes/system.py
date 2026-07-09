@@ -95,13 +95,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "services": services,
             "devices": {
                 "registered": len(registered_devices),
-                "online": len(connection_manager.active_devices),
+                "online": len(connection_manager.online_device_ids()),
                 "list": [
                     {
                         "device_id": did,
                         "device_name": info.get("device_name", ""),
                         "device_type": info.get("device_type", ""),
-                        "online": did in connection_manager.active_devices,
+                        "online": connection_manager.is_online(did),
                         "last_seen": info.get("last_seen", "")
                     }
                     for did, info in registered_devices.items()
@@ -469,7 +469,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         android_online = 0
         try:
             android_online = len([
-                did for did in connection_manager.active_devices
+                did for did in connection_manager.online_device_ids()
                 if did in registered_devices
                 and registered_devices[did].get("device_type", "").startswith("android")
             ])

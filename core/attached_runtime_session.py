@@ -813,6 +813,17 @@ def attach_runtime_session(
 
     posture = (source_runtime_posture or _POSTURE_CONTROL_ONLY).lower().strip()
     resolved_runtime_attachment_session_id = runtime_attachment_session_id or session_id
+    # 融合(域5):身份唯一权威是 AttachedSessionRegistry —— 调用方没带 id 时,
+    # 先复用 registry 里该设备的活跃 attachment id,绝不各自铸 id(否则同一设备
+    # 在两个存储里挂不同的 runtime_attachment_session_id,双权威分歧的根源)。
+    if not resolved_runtime_attachment_session_id:
+        try:
+            from core.attached_runtime_session_registry import lookup_session_by_device
+            _reg_entry = lookup_session_by_device(device_id)
+            if _reg_entry is not None:
+                resolved_runtime_attachment_session_id = _reg_entry.runtime_attachment_session_id
+        except Exception:  # noqa: BLE001 — registry 不可用时保持旧行为
+            pass
     existing = runtime.get_latest_for_device(device_id)
     lifecycle_action = classify_attach_lifecycle_action(existing, posture)
 

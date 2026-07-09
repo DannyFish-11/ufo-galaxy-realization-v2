@@ -1161,6 +1161,17 @@ async def shutdown_subsystems():
     except Exception as e:
         logger.warning(f"任务生命周期快照持久化失败: {e}")
 
+    # 0-worker. Worker 消费循环(融合·域7:此前 start_worker_runtime 在 bootstrap
+    # 里启动却从未被本函数停止——NATS 订阅/后台任务在关机时泄漏,循环生命周期
+    # 不对称。仅 mesh opt-in 启用时才在跑;stop() 对未启动实例是安全空操作)。
+    try:
+        from core.worker_runtime import get_worker_runtime
+        _wk_rt = get_worker_runtime()
+        if getattr(_wk_rt, "running", False):
+            await _shutdown_with_timeout("Worker 消费循环", _wk_rt.stop())
+    except Exception as e:
+        logger.warning(f"Worker 消费循环停止失败: {e}")
+
     # 0a. 健康检查整合层
     try:
         from core.health_integration import get_unified_health_manager

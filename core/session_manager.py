@@ -551,6 +551,21 @@ class SessionManager:
             return []
         return [m.to_dict() for m in session.history]
 
+    def clear_history(self, session_id: str) -> bool:
+        """清空会话的对话历史(保留会话身份/设备关系)。
+
+        融合(域3)后轮次唯一属主是本类——"清除上下文"必须清这里
+        (此前 ConversationMemory.clear_session 只清它自己的副本)。
+        """
+        session = self._sessions.get(session_id)
+        if not session:
+            return False
+        session.history.clear()
+        session.updated_at = time.time()
+        self._persist_state()
+        logger.info("会话历史已清空: %s", session_id)
+        return True
+
     # ═══════════════════ 证据链 / 血缘 ═══════════════════
 
     @staticmethod

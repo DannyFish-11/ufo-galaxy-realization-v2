@@ -261,7 +261,8 @@ class TestLauncherPackageExports:
     def test_all_public_symbols_present(self):
         import launcher
         expected = [
-            "ConfigManager", "DependencyResolver",
+            # 融合(域7):HARD_DEPRECATED 的 ConfigManager/DependencyResolver 不再
+            # 由包导入期再导出(每次启动触发 DeprecationWarning;无生产 importer)。
             "PROJECT_ROOT",
             "SystemState", "ServiceType", "SystemConfig", "_write_entrypoint",
             "print_status", "print_section",

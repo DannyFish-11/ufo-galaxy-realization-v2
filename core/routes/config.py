@@ -79,8 +79,11 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_SECRET_BACKEND": {"default": "env", "type": "select", "category": "auth", "description": "Secret Backend", "options": ["env", "vault", "kms"]},
     "GALAXY_TLS_CERT": {"default": "", "type": "string", "category": "auth", "description": "TLS Certificate Path"},
     "GITHUB_TOKEN": {"default": "", "type": "string", "category": "auth", "description": "GitHub Token"},
-    "GALAXY_AUDIT_KEY": {"default": "", "type": "string", "category": "auth", "description": "Audit Key"},
-    "GALAXY_MESSAGE_SIGNING_KEY": {"default": "", "type": "string", "category": "auth", "description": "Message Signing Key"},
+    # 融合(域6):删掉两个幽灵开关 GALAXY_AUDIT_KEY / GALAXY_MESSAGE_SIGNING_KEY——
+    # 全仓无任何代码读它们(面板上摆着没实现的安全功能,误导操作者)。消息签名
+    # 【真实已实现】,但键名是 GALAXY_MESH_SECRET(capability_token HMAC 签名/校验,
+    # 缺省自动生成 .galaxy_mesh_key),把真的这只上面板。
+    "GALAXY_MESH_SECRET": {"default": "", "type": "string", "category": "auth", "description": "Mesh 签名密钥(能力令牌 HMAC;留空自动生成)"},
 
     # --- Mesh & NATS ---
     "GALAXY_NATS_ENABLED": {"default": "true", "type": "boolean", "category": "mesh", "description": "Enable NATS"},
@@ -232,28 +235,42 @@ async def update_config(req: ConfigUpdateRequest):
                 value = f"http://{stripped}"
         os.environ[key] = value
 
-    # OLLAMA_MODEL 有两个持久化存点:.env(本函数写)和 .galaxy_model
-    # (core.model_selection.save_choice() 写,resolve_main_brain() 在 env 变量
-    # 缺失时会退回读它)。这里只写了前者,两处会静默分叉——若以后 .env 里的
-    # OLLAMA_MODEL 被清空,resolve_main_brain() 就会退回 .galaxy_model 里那个
-    # 更早、已经过时的选择,而不是用户刚在面板上选的这个。同步一下避免分叉。
+    # 密钥收敛到【唯一密钥库】:API key / token 等敏感项走 ConfigService.set_secret
+    # → runtime/secrets.env(canonical 密钥库),不再明文落进 .env。
+    # 关键的重启正确性:main.py 顶部先把 .env 灌进 os.environ,config_preflight 再以
+    # `key not in os.environ` 的门读 secrets.env——所以 .env 里若残留同名旧值会【盖住】
+    # secrets.env(正是历史上"重启丢 key"的根因)。因此:成功写进 secrets.env 的密钥
+    # 必须从 .env 排除(_write_env_file 全量重写时自动清掉旧明文行);写 secrets.env 失败
+    # 的仍回落 .env,不丢持久化。os.environ 上面已设,当次即时生效。
+    _secrets_persisted: set = set()
+    try:
+        from core.config_schema import classify_key as _classify
+        from core.config_service import ConfigService as _CS
+        _cs = None
+        for _k, _v in req.config.items():
+            if _classify(_k) == "secret" and str(_v).strip():
+                try:
+                    if _cs is None:
+                        _cs = _CS()
+                    _cs.set_secret(_k, str(_v))
+                    _secrets_persisted.add(_k)
+                except Exception as _e:  # noqa: BLE001 — 失败则保留 .env 回落
+                    logger.debug("密钥写入 secrets.env 失败(回落 .env): %s", _e)
+    except Exception as exc:  # noqa: BLE001 — ConfigService 不可用 → 全部回落 .env
+        logger.debug("密钥收敛不可用(降级为 .env 持久化): %s", exc)
+
+    # 模型选择收敛到唯一门:model_catalog.save_tier 把【档位 + 主脑】写进同一条
+    # 记录(runtime/model_state.json)并派生 OLLAMA_MODEL —— 不再各写 .galaxy_model /
+    # .galaxy_tier / OLLAMA_MODEL 三处。按模型反推档位并联动,消除档位↔主脑分叉
+    # (否则 active_effective_io() 读的档位与实际主脑不符,modality_bridge 会误判听/说通路)。
+    # 上面 .env 里也已写了 OLLAMA_MODEL(env 层持久化,归配置域);二者一致。
     if "OLLAMA_MODEL" in req.config:
-        try:
-            from core.model_selection import save_choice
-            save_choice(req.config["OLLAMA_MODEL"])
-        except Exception:
-            pass
-        # 档位联动:设置页/模型页改了 OLLAMA_MODEL 后,必须把档位(.galaxy_tier)也
-        # 推到该模型所属档。否则档位与主脑会分叉——active_effective_io() 读的是
-        # 档位,若档位停在旧的(如 B 档 全原生)、主脑却换成了 Gemma(不原生说),
-        # modality_bridge 在 GALAXY_NATIVE_AUDIO 开启时会误判"原生说"→不接 TTS 桥
-        # → AI 变哑巴。按模型反推档位并联动持久化,消除这个静默分叉。
         try:
             from core import model_catalog as _mc
             _tag = req.config["OLLAMA_MODEL"]
             _mc.save_tier(_mc.infer_tier_from_model(_tag), main_brain=_tag)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("模型状态联动写入失败(非致命): %s", exc)
 
     # 自发在场开关改动 → 立刻生效(启动/停止常驻循环),不必重启。GALAXY_SPEAK/
     # TTS_STREAMING/NATIVE_AUDIO 都是每次用时现读 os.environ,上面已写入即时生效,
@@ -274,7 +291,7 @@ async def update_config(req: ConfigUpdateRequest):
     # PermissionError,FastAPI 缺省转成裸 500、无任何 detail,前端只能显示
     # "保存失败"四个字,排查全靠猜。这里显式捕获并把真实原因透传出去。
     try:
-        _write_env_file()
+        _write_env_file(exclude=_secrets_persisted)
     except OSError as exc:
         raise HTTPException(
             status_code=500,
@@ -377,8 +394,11 @@ async def probe_config_urls(req: ProbeRequest):
     return {"results": results}
 
 
-def _write_env_file():
+def _write_env_file(exclude=None):
     """将所有【非空】配置写入 .env 文件。
+
+    exclude: 已写进 canonical 密钥库(runtime/secrets.env)的密钥名集合——这些
+    不再明文落进 .env(否则重启时 .env 旧值会盖住 secrets.env),全量重写即清掉旧行。
 
     关键修复:之前把全部 schema 键(含空值)统统写成 ``KEY=`` 行。空字符串
     一旦被 .env 加载进 os.environ,就会把代码里的默认值顶掉——
@@ -393,7 +413,10 @@ def _write_env_file():
 
     # 按类别分组
     current_category = ""
+    _exclude = exclude or set()
     for key, meta in sorted(CONFIG_SCHEMA.items(), key=lambda x: x[1]["category"]):
+        if key in _exclude:
+            continue  # 已入 canonical 密钥库,不再明文写 .env
         value = os.environ.get(key, meta["default"])
         if not str(value).strip():
             continue  # 空值不落盘——否则会把代码默认值顶掉

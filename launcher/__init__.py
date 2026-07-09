@@ -24,9 +24,10 @@ config_manager   — DEPRECATED; use core.unified.config_manager
 dependency_resolver — topology-sort helper
 """
 
-# Legacy helpers (preserved for existing callers)
-from .config_manager import ConfigManager
-from .dependency_resolver import DependencyResolver
+# 融合(域7):不再在包导入期加载 HARD_DEPRECATED 的 config_manager /
+# dependency_resolver(此前每次启动都触发 DeprecationWarning;全仓无生产 importer,
+# 弃用 shim 文件保留给治理合同测试,但离开启动路径)。需要时显式
+# `from launcher.config_manager import ConfigManager`。
 
 # Bootstrap / config layer
 from .bootstrap import (
@@ -53,9 +54,6 @@ from .health_checks import run_startup_health_check
 from .shutdown import async_shutdown
 
 __all__ = [
-    # Legacy
-    "ConfigManager",
-    "DependencyResolver",
     # Bootstrap
     "PROJECT_ROOT",
     "SystemState",

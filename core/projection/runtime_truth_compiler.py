@@ -500,7 +500,7 @@ def _compile_device_presence() -> Dict[str, Any]:
         from core.routes._shared import registered_devices, connection_manager
 
         registered_count = len(registered_devices)
-        online_count = len(connection_manager.active_devices)
+        online_count = len(connection_manager.online_device_ids())
         return {"registered": registered_count, "online": online_count}
     except Exception as exc:
         _logger.debug("_compile_device_presence: unavailable: %s", exc)

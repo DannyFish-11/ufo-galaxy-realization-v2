@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from core.cognitive.working_memory import get_working_memory
 from core.session_manager import get_session_manager
 
 logger = logging.getLogger("Galaxy.SessionMemoryFacade")
@@ -24,23 +23,8 @@ def _is_adjacent_duplicate(
     content: str,
     device_id: str = "",
 ) -> bool:
-    try:
-        wm_entries = get_working_memory().get(
-            session_id=conversation_session_id,
-            last_n=1,
-        )
-        if wm_entries:
-            last = wm_entries[-1]
-            last_device_id = (last.get("metadata") or {}).get("device_id", "")
-            if (
-                last.get("role") == role
-                and last.get("content") == content
-                and (not device_id or last_device_id == device_id)
-            ):
-                return True
-    except Exception as exc:
-        logger.warning("Exception suppressed: %s", exc)
-
+    # 融合(域3):轮次唯一属主是 SessionManager,只需查它(此前还要交叉查
+    # WorkingMemory 的副本——副本已不存在,WM 对话读也透传 SM)。
     try:
         history = get_session_manager().get_full_history(conversation_session_id)
         if history:
@@ -88,6 +72,10 @@ async def record_session_turn(
     if device_id:
         merged_metadata.setdefault("device_id", device_id)
 
+    # 融合(域3):轮次【单写】唯一属主 SessionManager。此前同一轮要四写
+    # (SM + WorkingMemory + ConversationMemory + UnifiedMemory)——WM/CM 的轮次
+    # 副本已删,它们的读全部透传 SM;CM 只保留独有的偏好学习(learn 钩子);
+    # UnifiedMemory 是语义向量【索引】(不同的数据形态),仍经本门写入。
     sm = get_session_manager()
     await sm.ensure_session(
         conversation_session_id,
@@ -102,26 +90,10 @@ async def record_session_turn(
         metadata=merged_metadata,
     )
 
-    try:
-        get_working_memory().add(
-            session_id=conversation_session_id,
-            role=role,
-            content=content,
-            trace_id=trace_id,
-            metadata=merged_metadata,
-        )
-    except Exception as exc:
-        logger.warning("Exception suppressed: %s", exc)
-
+    # 偏好学习钩子(ConversationMemory 的独有能力;不再让它另存一份轮次)。
     try:
         from core.ai_intent import get_conversation_memory
-
-        await get_conversation_memory().add_turn(
-            conversation_session_id,
-            role,
-            content,
-            metadata=merged_metadata,
-        )
+        get_conversation_memory().learn(conversation_session_id, role, content)
     except Exception as exc:
         logger.warning("Exception suppressed: %s", exc)
 
@@ -181,25 +153,10 @@ def get_session_context(
     *,
     max_turns: int = 10,
 ) -> List[Dict[str, Any]]:
+    # 融合(域3):直读唯一属主 SessionManager(此前先读 WorkingMemory 副本、
+    # 再退 SM——两处可能不一致;现在只有一处)。
     if not conversation_session_id:
         return []
-
-    try:
-        wm_entries = get_working_memory().get(
-            session_id=conversation_session_id,
-            last_n=max_turns,
-        )
-        if wm_entries:
-            return [
-                {
-                    "role": entry.get("role", ""),
-                    "content": entry.get("content", ""),
-                }
-                for entry in wm_entries
-            ]
-    except Exception as exc:
-        logger.warning("Exception suppressed: %s", exc)
-
     try:
         history = get_session_manager().get_history(
             conversation_session_id,

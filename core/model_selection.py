@@ -82,19 +82,19 @@ def is_ollama_version_too_old(
 
 
 def _brain_sizes() -> Dict[str, int]:
-    """模型尺寸(MB)取自现有 LocalBrainManager（单一真相来源），失败时空表。"""
+    """模型尺寸(MB)派生自 core.model_catalog（唯一真相源），失败时空表。"""
     try:
-        from core.local_brain_manager import LocalBrainManager
-        return dict(LocalBrainManager.MODEL_SIZE_ESTIMATE_MB)
+        from core.model_catalog import all_models
+        return {s.tag: s.size_mb() for s in all_models()}
     except Exception:  # noqa: BLE001
         return {}
 
 
 def _default_tag() -> str:
-    """默认主脑取自 LocalBrainManager.RECOMMENDED_MODELS['default']。"""
+    """默认主脑派生自 core.model_catalog.default_model()（唯一真相源）。"""
     try:
-        from core.local_brain_manager import LocalBrainManager
-        return LocalBrainManager.RECOMMENDED_MODELS.get("default", "gemma4:12b")
+        from core.model_catalog import default_model
+        return default_model()
     except Exception:  # noqa: BLE001
         return "gemma4:12b"
 
@@ -161,21 +161,30 @@ def recommend(max_model_size_mb: Optional[int] = None, has_gpu: Optional[bool] =
 
 
 def load_choice() -> str:
+    """当前主脑 tag —— 收敛到 model_catalog 的统一记录(不再独立读 .galaxy_model)。"""
     try:
-        if _CHOICE_FILE.exists():
-            return _CHOICE_FILE.read_text(encoding="utf-8").strip()
-    except Exception:  # noqa: BLE001
-        pass
-    return ""
+        from core.model_catalog import main_brain
+        return main_brain()
+    except Exception:  # noqa: BLE001 — catalog 不可用时兜底读旧文件(迁移期)
+        try:
+            if _CHOICE_FILE.exists():
+                return _CHOICE_FILE.read_text(encoding="utf-8").strip()
+        except Exception:  # noqa: BLE001
+            pass
+        return ""
 
 
 def save_choice(tag: str) -> None:
-    """持久化选择并写 OLLAMA_MODEL，让运行时(multi_llm_router/LocalBrainManager)以它为主脑。"""
+    """持久化主脑 —— 收敛到 model_catalog 的统一记录(它写记录 + 派生 OLLAMA_MODEL)。
+
+    不再独立写 .galaxy_model;model_catalog 是主脑写入的唯一门。
+    """
+    if not tag:
+        return
     try:
-        _CHOICE_FILE.write_text(tag, encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        pass
-    if tag:
+        from core.model_catalog import save_main_brain
+        save_main_brain(tag)
+    except Exception:  # noqa: BLE001 — catalog 不可用时至少把运行时 env 设上
         os.environ["OLLAMA_MODEL"] = tag
 
 

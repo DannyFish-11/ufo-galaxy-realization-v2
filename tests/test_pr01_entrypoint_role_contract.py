@@ -155,9 +155,10 @@ def test_legacy_launchers_point_to_main_py_first():
     assert "Authoritative startup path: python main.py" in run_ui_src
     assert "Direct advanced invocation: python unified_launcher.py" in run_ui_src
 
-    launcher_v2_src = _read("scripts/launcher_v2.py")
-    assert "**Canonical startup authority**: ``main.py``" in launcher_v2_src
-    assert "**Canonical subordinate launcher**: ``unified_launcher.py``" in launcher_v2_src
+    # 融合(域7):scripts/launcher_v2.py(自述非权威、仅 subprocess 转发 main.py 的
+    # 死 shim)已删除——入口收敛,不再保留第三个入口壳。
+    import pathlib as _pl
+    assert not (_pl.Path(__file__).parent.parent / "scripts" / "launcher_v2.py").exists()
 
 
 def test_legacy_registry_recommendations_demote_non_main_launchers():
