@@ -36,9 +36,12 @@ import os
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Set
+from typing import TYPE_CHECKING, Any, Dict, Set
 
 from fastapi import WebSocket
+
+if TYPE_CHECKING:  # 仅类型检查用,运行时不导入(避免与 UCM 循环导入)
+    from core.unified.connection_manager import UnifiedConnectionManager
 
 logger = logging.getLogger("Galaxy.API")
 

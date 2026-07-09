@@ -119,21 +119,24 @@ interface CategoryDef {
   label: string;
   icon: string;
   count: number;
+  advanced?: boolean;   // true=开发者/高级项，默认收在「高级」分组里，不占普通用户视线
 }
 
 // 注：模型 API（llm 类）已迁到专门的「模型」tab（ModelsTab），此处不再重复。
 // 「行为 · 在场」放在最前并作默认分类——这些是最常调的面向用户开关(说/流式/
 // 自发在场/原生音频),用户无需再去设置环境变量,打开设置即见、一键切换。
+// 限流熔断/网络/开发者/服务水平 是内部/高级项(用户反馈"看不懂"),标 advanced,
+// 默认折进「高级 · 开发者」分组,普通用户界面只留常用的几类。
 const CATEGORIES: CategoryDef[] = [
   { key: 'behavior', label: '行为 · 在场', icon: '✨', count: 6 },
   { key: 'ports', label: '端口与节点', icon: '🔌', count: 16 },
   { key: 'auth', label: '鉴权', icon: '🔒', count: 12 },
-  { key: 'mesh', label: '组网', icon: '🕸️', count: 11 },
-  { key: 'circuit', label: '限流熔断', icon: '⚡', count: 14 },
+  { key: 'mesh', label: '组网 · 多设备', icon: '🕸️', count: 13 },
   { key: 'storage', label: '存储', icon: '💾', count: 7 },
-  { key: 'dev', label: '开发者', icon: '🛠️', count: 11 },
-  { key: 'network', label: '网络', icon: '🌐', count: 7 },
-  { key: 'slo', label: '服务水平', icon: '📊', count: 7 },
+  { key: 'circuit', label: '限流熔断', icon: '⚡', count: 14, advanced: true },
+  { key: 'dev', label: '开发者', icon: '🛠️', count: 11, advanced: true },
+  { key: 'network', label: '网络', icon: '🌐', count: 7, advanced: true },
+  { key: 'slo', label: '服务水平', icon: '📊', count: 7, advanced: true },
 ];
 
 // ── Config Key Registry (105 items) ─────────────────────────────────
@@ -141,7 +144,7 @@ const CATEGORIES: CategoryDef[] = [
 const CONFIG_KEYS: Record<string, string[]> = {
   behavior: [
     'GALAXY_AUTONOMY',
-    'GALAXY_SPEAK', 'GALAXY_TTS_STREAMING', 'GALAXY_AMBIENT_LOOP',
+    'GALAXY_SPEAK', 'GALAXY_TTS_ENGINE', 'GALAXY_ASR_ENGINE', 'GALAXY_TTS_STREAMING', 'GALAXY_AMBIENT_LOOP',
     'GALAXY_NATIVE_AUDIO', 'GALAXY_AMBIENT_INTERVAL_S', 'GALAXY_AMBIENT_COOLDOWN_S',
   ],
   ports: [
@@ -157,7 +160,7 @@ const CONFIG_KEYS: Record<string, string[]> = {
     'GITHUB_TOKEN', 'GALAXY_AUDIT_KEY', 'GALAXY_MESSAGE_SIGNING_KEY',
   ],
   mesh: [
-    'GALAXY_MASTER_BRAIN_ENABLED', 'GALAXY_FABRIC_STRICT',
+    'GALAXY_MASTER_BRAIN_ENABLED', 'GALAXY_SYSTEM_MODE', 'GALAXY_FABRIC_STRICT',
     'GALAXY_NATS_ENABLED', 'GALAXY_NATS_URL', 'GALAXY_NATS_EXECUTOR_TIMEOUT',
     'GALAXY_NATS_EXECUTOR_FALLBACK', 'GALAXY_CROSS_DEVICE_ENABLED',
     'GALAXY_HEARTBEAT_INTERVAL', 'FEDERATION_ENABLED', 'FEDERATION_LOCAL_HOST',
@@ -312,6 +315,7 @@ export default function SettingsTab() {
   const [config, setConfig] = useState<Record<string, ConfigItem>>({});
   const [changed, setChanged] = useState<Record<string, string>>({});
   const [activeCategory, setActiveCategory] = useState<string>('behavior');
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -858,11 +862,31 @@ export default function SettingsTab() {
   return (
     <div className="settings-tab">
       {/* ── Left Navigation ── */}
+      {/* 常用类常显;高级/开发者类折进可展开分组,避免"一堆看不懂的东西"占视线。 */}
       <nav className="settings-nav">
-        {CATEGORIES.map((cat) => (
+        {CATEGORIES.filter((c) => !c.advanced).map((cat) => (
           <button
             key={cat.key}
             className={`settings-nav-item ${activeCategory === cat.key ? 'active' : ''}`}
+            onClick={() => setActiveCategory(cat.key)}
+            title={`${cat.label} (${cat.count} items)`}
+          >
+            <span className="settings-nav-icon">{cat.icon}</span>
+            <span className="settings-nav-label">{cat.label}</span>
+          </button>
+        ))}
+        <button
+          className="settings-nav-item settings-nav-advanced-toggle"
+          onClick={() => setShowAdvanced((v) => !v)}
+          title="高级 / 开发者设置(限流、网络、SLO 等)"
+        >
+          <span className="settings-nav-icon">{showAdvanced ? '▾' : '▸'}</span>
+          <span className="settings-nav-label">高级 · 开发者</span>
+        </button>
+        {showAdvanced && CATEGORIES.filter((c) => c.advanced).map((cat) => (
+          <button
+            key={cat.key}
+            className={`settings-nav-item settings-nav-sub ${activeCategory === cat.key ? 'active' : ''}`}
             onClick={() => setActiveCategory(cat.key)}
             title={`${cat.label} (${cat.count} items)`}
           >

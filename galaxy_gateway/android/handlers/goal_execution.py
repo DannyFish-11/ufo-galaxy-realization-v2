@@ -412,7 +412,18 @@ async def handle_goal_execution(
     """
     payload = message.get("payload", {})
     device_id = message.get("device_id") or payload.get("device_id", "unknown")
-    session_id = payload.get("session_id") or message.get("session_id") or "android_default"
+    raw_session_id = payload.get("session_id") or message.get("session_id") or ""
+    # 跨设备统一上下文:不再把所有无 session 的手机目标塞进单一全局 "android_default"
+    # 桶(会把不同设备/用户的上下文搅在一起)。走 canonical 身份解析 → 每设备一条稳定、
+    # 且能被 /api/v1/sessions/reconcile 认领并入用户主线的会话线;别名已认领时自动归并。
+    try:
+        from core.session_identity import build_canonical_session_identity
+        session_id = build_canonical_session_identity(
+            session_id=raw_session_id, device_id=device_id, create_session=True,
+        ).conversation_session_id
+    except Exception as exc:  # noqa: BLE001 — 解析失败退回兜底,绝不阻断目标下发
+        logger.debug("goal_execution canonical session resolve failed (non-fatal): %s", exc)
+        session_id = raw_session_id or "android_default"
     trace_id = payload.get("trace_id") or message.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
     task_id = payload.get("task_id") or message.get("task_id") or str(uuid.uuid4())
     goal = payload.get("goal", "").strip()
@@ -628,7 +639,18 @@ async def handle_parallel_subtask(
     """
     payload = message.get("payload", {})
     device_id = message.get("device_id") or payload.get("device_id", "unknown")
-    session_id = payload.get("session_id") or message.get("session_id") or "android_default"
+    raw_session_id = payload.get("session_id") or message.get("session_id") or ""
+    # 跨设备统一上下文:不再把所有无 session 的手机目标塞进单一全局 "android_default"
+    # 桶(会把不同设备/用户的上下文搅在一起)。走 canonical 身份解析 → 每设备一条稳定、
+    # 且能被 /api/v1/sessions/reconcile 认领并入用户主线的会话线;别名已认领时自动归并。
+    try:
+        from core.session_identity import build_canonical_session_identity
+        session_id = build_canonical_session_identity(
+            session_id=raw_session_id, device_id=device_id, create_session=True,
+        ).conversation_session_id
+    except Exception as exc:  # noqa: BLE001 — 解析失败退回兜底,绝不阻断目标下发
+        logger.debug("goal_execution canonical session resolve failed (non-fatal): %s", exc)
+        session_id = raw_session_id or "android_default"
     trace_id = payload.get("trace_id") or message.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
     task_id = payload.get("task_id") or message.get("task_id") or str(uuid.uuid4())
     goal = payload.get("goal", "").strip()

@@ -228,6 +228,11 @@ class SessionManager:
         self._sessions: Dict[str, Session] = {}
         # user_id → active session_id 映射
         self._user_active_session: Dict[str, str] = {}
+        # 别名映射:设备本地/离线生成的 session_id → 归一化的 canonical 会话主线。
+        # 跨设备统一上下文的核心:手机离线时自建一条本地会话线,重连后经
+        # /api/v1/sessions/reconcile 把它「认领」到桌面的用户主线上——之后该本地
+        # session_id 的所有轮次(在线 goal_execution / 离线补录)都落进同一条主线。
+        self._session_aliases: Dict[str, str] = {}
         # 会话更新回调（用于 WebSocket 广播）
         self._on_update_callback = None
         self._lock = asyncio.Lock()
@@ -386,6 +391,53 @@ class SessionManager:
             self._persist_state()
             return session
 
+    # ── 别名/对账（跨设备统一上下文主线）──
+    # 一个设备本地(常见于离线)自建的 session_id,重连后通过 reconcile 被「认领」到
+    # 用户的 canonical 主线上。resolve 把任意入参解析成主线 id;register 记录映射。
+    # 都用 _evidence_lock(线程锁)保护,可被同步/异步调用方安全调用。
+
+    def resolve_session_alias(self, session_id: str) -> str:
+        """把设备本地/离线 session_id 沿别名链解析到 canonical 主线 id。
+
+        无别名则原样返回。带深度上限的环路防护(别名闭环时返回当前解析结果,不死循环)。
+        """
+        if not session_id:
+            return session_id
+        seen = {session_id}
+        cur = session_id
+        for _ in range(16):  # 深度上限:防止别名成环导致死循环
+            nxt = self._session_aliases.get(cur)
+            if not nxt or nxt == cur or nxt in seen:
+                break
+            seen.add(nxt)
+            cur = nxt
+        return cur
+
+    def register_session_alias(self, alias_id: str, canonical_id: str) -> bool:
+        """记录 ``alias_id → canonical_id`` 别名。返回是否实际写入。
+
+        拒绝自指与会引入环路的映射(canonical 已经解析回 alias 自身)。持久化。
+        """
+        if not alias_id or not canonical_id or alias_id == canonical_id:
+            return False
+        with self._evidence_lock:
+            # 环路防护:若把 canonical 解析回来会落到 alias_id,则该映射成环,拒绝。
+            probe = canonical_id
+            for _ in range(16):
+                if probe == alias_id:
+                    logger.warning(
+                        "拒绝会成环的会话别名: %s → %s", alias_id, canonical_id
+                    )
+                    return False
+                nxt = self._session_aliases.get(probe)
+                if not nxt or nxt == probe:
+                    break
+                probe = nxt
+            self._session_aliases[alias_id] = canonical_id
+            self._persist_state()
+            logger.info("会话别名已登记: %s → %s", alias_id, canonical_id)
+            return True
+
     async def join_session(self, session_id: str, device_id: str) -> bool:
         """设备加入已有会话"""
         async with self._lock:
@@ -406,6 +458,25 @@ class SessionManager:
         if user_id:
             sessions = [s for s in sessions if s.user_id == user_id]
         return [s.to_summary() for s in sessions]
+
+    def get_primary_session_id(
+        self,
+        *,
+        exclude_prefixes: tuple = ("ambient", "control", "worker", "session::"),
+    ) -> str:
+        """最近活跃的**真实对话**会话 id(排除 ambient/control/worker 等系统桶)。
+
+        供 ambient 自发委托「续到用户正在进行的对话主线」上用——让自发动作共享真实
+        上下文,而非跑在一次性隔离会话里。没有任何真实会话时返回 ""。
+        """
+        best_id, best_ts = "", -1.0
+        for sid, s in self._sessions.items():
+            if any(sid.startswith(p) for p in exclude_prefixes):
+                continue
+            ts = getattr(s, "updated_at", 0.0) or 0.0
+            if ts > best_ts:
+                best_ts, best_id = ts, sid
+        return best_id
 
     def list_device_sessions(self, device_id: str) -> List[Dict]:
         """列出设备参与的所有会话"""
@@ -743,6 +814,7 @@ class SessionManager:
                     sid: s.to_dict() for sid, s in self._sessions.items()
                 },
                 "user_active_session": self._user_active_session,
+                "session_aliases": self._session_aliases,
             }
             with open(_SESSION_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
@@ -759,6 +831,7 @@ class SessionManager:
             for sid, sdata in data.get("sessions", {}).items():
                 self._sessions[sid] = Session.from_dict(sdata)
             self._user_active_session = data.get("user_active_session", {})
+            self._session_aliases = data.get("session_aliases", {}) or {}
             logger.info(f"已恢复 {len(self._sessions)} 个会话")
         except Exception as e:
             logger.warning(f"会话恢复失败: {e}")

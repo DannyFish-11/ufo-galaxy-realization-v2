@@ -20,7 +20,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Awaitable, Callable, List, Optional
+from typing import Any, Awaitable, Callable, List, Optional
 
 logger = logging.getLogger("Galaxy.StreamingSpeech")
 

@@ -3,12 +3,15 @@ Galaxy Configuration API
 提供系统配置的全量读取和批量更新，持久化到 .env 文件。
 """
 
+import logging
 import os
 import json
 from pathlib import Path
 from typing import Any, Dict
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+logger = logging.getLogger("Galaxy.API.Config")
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
@@ -122,7 +125,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     # --- Development ---
     "GALAXY_DEV_MODE": {"default": "false", "type": "boolean", "category": "dev", "description": "Developer Mode"},
     "GALAXY_MODE": {"default": "standard", "type": "select", "category": "dev", "description": "Run Mode", "options": ["standard", "distributed", "federated", "standalone"]},
-    "GALAXY_SYSTEM_MODE": {"default": "active", "type": "select", "category": "dev", "description": "System Mode", "options": ["active", "passive", "maintenance"]},
+    "GALAXY_SYSTEM_MODE": {"default": "desktop-local", "type": "select", "category": "mesh", "description": "运行模式（desktop-local=单机 · desktop-cross-device=跨设备织网）", "options": ["desktop-local", "desktop-cross-device"]},
     "GALAXY_PREFLIGHT_MODE": {"default": "normal", "type": "select", "category": "dev", "description": "Preflight Mode", "options": ["normal", "strict", "skip"]},
     "GALAXY_PREFLIGHT_FAIL_FAST": {"default": "false", "type": "boolean", "category": "dev", "description": "Preflight Fail-Fast"},
     "GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK": {"default": "false", "type": "boolean", "category": "dev", "description": "Legacy Scheduler Fallback"},
@@ -136,6 +139,8 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     # 这些是面向用户的行为开关，面板上以明确的开关呈现:说/流式/自发在场/原生音频。
     "GALAXY_AUTONOMY": {"default": "guided", "type": "select", "category": "behavior", "description": "自治档位（safe=敏感操作全问 · guided=读放行写审批 · autonomous=不逐步问人）", "options": ["safe", "guided", "autonomous"]},
     "GALAXY_SPEAK": {"default": "true", "type": "boolean", "category": "behavior", "description": "朗读回复（说 · 默认开）"},
+    "GALAXY_TTS_ENGINE": {"default": "edge", "type": "select", "category": "behavior", "description": "说·语音引擎（edge=联网音质好 · melo=离线中英混读自然 · piper=离线最轻 · auto=优先edge退melo退piper）", "options": ["edge", "melo", "piper", "auto"]},
+    "GALAXY_ASR_ENGINE": {"default": "auto", "type": "select", "category": "behavior", "description": "听·识别引擎（auto=中文CPU首选SenseVoice退Whisper · sensevoice=离线中文快而准 · whisper=兜底）", "options": ["auto", "sensevoice", "whisper"]},
     "GALAXY_TTS_STREAMING": {"default": "true", "type": "boolean", "category": "behavior", "description": "分句流式朗读（边生成边说 · 默认开）"},
     "GALAXY_AMBIENT_LOOP": {"default": "false", "type": "boolean", "category": "behavior", "description": "自发在场（持续看/听、自己判断何时开口 · 需桌面感知）"},
     "GALAXY_NATIVE_AUDIO": {"default": "false", "type": "boolean", "category": "behavior", "description": "原生音频输入（模型直接听音频，需全模态服务；关则走 ASR 转文字）"},

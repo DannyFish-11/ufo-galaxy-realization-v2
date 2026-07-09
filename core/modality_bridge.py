@@ -66,20 +66,48 @@ _asr_lock = threading.Lock()
 _asr_failed = False  # 一旦初始化失败就不再反复尝试（缺 faster-whisper 等）
 
 
+def _try_sensevoice():
+    """离线中文首选:SenseVoiceSmall(非自回归,CPU 快十几倍,中文 CER<5%)。"""
+    try:
+        from core.asr.sensevoice_asr import SenseVoiceASR
+        eng = SenseVoiceASR()
+        return eng if eng.available() else None
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("SenseVoice ASR 不可用: %s", exc)
+        return None
+
+
+def _try_whisper():
+    """兜底:faster-whisper。轻量优先——ambient 转写要快,tiny/base 足够抓关键词。"""
+    try:
+        from core.asr.whisper_asr import WhisperASR
+        size = os.getenv("GALAXY_AMBIENT_ASR_SIZE", "base")
+        return WhisperASR(model_size=size)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Whisper ASR 不可用: %s", exc)
+        return None
+
+
 def _get_asr():
     global _asr_singleton, _asr_failed
     if _asr_singleton is not None or _asr_failed:
         return _asr_singleton
     with _asr_lock:
         if _asr_singleton is None and not _asr_failed:
-            try:
-                from core.asr.whisper_asr import WhisperASR
-                # 轻量优先：ambient 转写要快，tiny/base 足够抓关键词判断是否介入。
-                size = os.getenv("GALAXY_AMBIENT_ASR_SIZE", "base")
-                _asr_singleton = WhisperASR(model_size=size)
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("ASR 初始化失败,听将降级为'有声音但未转写': %s", exc)
+            # 引擎选择:GALAXY_ASR_ENGINE = auto(默认,中文 CPU 首选 SenseVoice,
+            # 缺包退 Whisper) | sensevoice | whisper。装了 funasr 即自动升级到 SenseVoice。
+            choice = os.getenv("GALAXY_ASR_ENGINE", "auto").strip().lower()
+            if choice == "whisper":
+                _asr_singleton = _try_whisper()
+            elif choice == "sensevoice":
+                _asr_singleton = _try_sensevoice() or _try_whisper()
+            else:  # auto
+                _asr_singleton = _try_sensevoice() or _try_whisper()
+            if _asr_singleton is None:
+                logger.debug("ASR 初始化失败,听将降级为'有声音但未转写'")
                 _asr_failed = True
+            else:
+                logger.info("ASR 引擎: %s", type(_asr_singleton).__name__)
     return _asr_singleton
 
 
