@@ -52,8 +52,9 @@ def _get_engine() -> Optional[Any]:
     global _engine, _engine_failed
     if _engine is not None or _engine_failed:
         return _engine
-    # 引擎选择:GALAXY_TTS_ENGINE = edge(默认,联网·音质好) | piper(离线·纯 CPU) |
-    # auto(优先 edge,edge 不可用/无网退 piper)。A 档无卡断网可选 piper。
+    # 引擎选择:GALAXY_TTS_ENGINE = edge(默认,联网·音质好) | melo(离线·中英混读自然) |
+    # piper(离线·纯 CPU·最轻) | auto(优先 edge,无网退 melo 再退 piper)。
+    # A 档无卡断网:melo 音质更好,piper 更轻;二者都完全离线。
     choice = os.getenv("GALAXY_TTS_ENGINE", "edge").strip().lower()
 
     def _try_piper():
@@ -65,6 +66,15 @@ def _get_engine() -> Optional[Any]:
             logger.info("Piper TTS 不可用: %s", exc)
             return None
 
+    def _try_melo():
+        try:
+            from core.tts.melo_engine import MeloTTSEngine
+            eng = MeloTTSEngine()
+            return eng if eng.available() else None
+        except Exception as exc:  # noqa: BLE001
+            logger.info("Melo TTS 不可用: %s", exc)
+            return None
+
     def _try_edge():
         try:
             from core.tts import EdgeTTSEngine
@@ -74,15 +84,17 @@ def _get_engine() -> Optional[Any]:
             logger.info("Edge TTS 不可用: %s", exc)
             return None
 
-    if choice == "piper":
-        _engine = _try_piper() or _try_edge()
+    if choice == "melo":
+        _engine = _try_melo() or _try_piper() or _try_edge()
+    elif choice == "piper":
+        _engine = _try_piper() or _try_melo() or _try_edge()
     elif choice == "auto":
-        _engine = _try_edge() or _try_piper()
+        _engine = _try_edge() or _try_melo() or _try_piper()
     else:  # edge(默认)
         _engine = _try_edge()
 
     if _engine is None:
-        logger.warning("TTS 引擎不可用(语音输出降级;装 edge-tts 或 piper-tts 可启用)")
+        logger.warning("TTS 引擎不可用(语音输出降级;装 edge-tts / melotts / piper-tts 可启用)")
         _engine_failed = True
     return _engine
 
