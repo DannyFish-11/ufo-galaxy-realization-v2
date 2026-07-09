@@ -278,16 +278,11 @@ class TestShellSafetyFixes:
         )
 
     def test_windows_bridge_no_shell_true(self):
-        src = self._read_source(
-            "enhancements/clients/windows_client/ufo_ui_automation_bridge.py"
-        )
-        # Filter out comments and check active code
-        uncommented = "\n".join(
-            line for line in src.splitlines() if not line.lstrip().startswith("#")
-        )
-        assert "shell=True" not in uncommented, (
-            "ufo_ui_automation_bridge.py 的活跃代码仍使用 shell=True"
-        )
+        # 死代码清理:ufo_ui_automation_bridge.py(UFO 胶水,零调用者)已整体删除,
+        # shell=True 卫生问题随之消失;断言其不复活。
+        import pathlib as _pl
+        assert not (_pl.Path(__file__).parent.parent
+                    / "enhancements/clients/windows_client/ufo_ui_automation_bridge.py").exists()
 
 
 # ─────────────────────────────────────────────────────────────

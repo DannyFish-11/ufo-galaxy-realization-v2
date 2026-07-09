@@ -90,25 +90,12 @@ async def test_emit_failure_does_not_break_voice_processing(monkeypatch):
 
 
 class TestSingleVoiceLoopExclusion:
-    """A 融合互斥:GALAXY_VOICE(主 VoiceLoop)开启时,voice_conversation_bridge
-    的 start_voice_loop() 必须跳过,避免双跑;只有主 VoiceLoop 显式关闭才启用。"""
+    """A 融合互斥的终局(死代码清理):voice_conversation_bridge 是 voice_loop 的
+    被架空旧版(自认子集,默认关闭,仅测试引用),已整体删除——互斥从"运行时闸门"
+    升级为"结构性不存在"。唯一语音回路 = core.voice_loop。"""
 
-    def test_bridge_skips_when_main_voice_loop_on(self, monkeypatch):
-        import core.voice_conversation_bridge as vcb
-        monkeypatch.setenv("GALAXY_VOICE_LOOP", "1")   # 本模块被显式启用
-        monkeypatch.setenv("GALAXY_VOICE", "1")         # 但主 VoiceLoop 也开着(默认)
-        assert vcb.start_voice_loop() is False, "主 VoiceLoop 在跑时必须跳过,避免双跑"
-
-    def test_bridge_runs_only_when_main_voice_loop_off(self, monkeypatch):
-        import core.voice_conversation_bridge as vcb
-        monkeypatch.setenv("GALAXY_VOICE_LOOP", "1")
-        monkeypatch.setenv("GALAXY_VOICE", "0")         # 用户显式关掉主 VoiceLoop
-        # 依赖(音频/Whisper)在沙箱里不可用,会在后续步骤返回 False——但关键是
-        # 它【越过了互斥闸门】开始尝试,而不是在闸门处直接跳过。用 monkeypatch 让
-        # AudioCaptureService 抛异常,验证它确实走到了那一步(而非被互斥挡掉)。
-        import core.multimodal.audio_capture_service as acs
-        def _boom(*a, **k):
-            raise RuntimeError("no audio in sandbox")
-        monkeypatch.setattr(acs, "AudioCaptureService", _boom)
-        # 走到音频初始化并因沙箱无音频返回 False —— 证明没有被互斥闸门提前拦截。
-        assert vcb.start_voice_loop() is False
+    def test_legacy_bridge_module_removed(self):
+        import importlib.util
+        assert importlib.util.find_spec("core.voice_conversation_bridge") is None, (
+            "voice_conversation_bridge 已删除(voice_loop 是唯一语音回路),不应复活"
+        )

@@ -212,6 +212,19 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     except Exception as _ts_err:
         logger.debug("Tailscale init skipped (non-fatal): %s", _ts_err, exc_info=True)  # H4 fixed
 
+    # 4b. mDNS Announcer — 零配置局域网发现(接线·审计 KEEP-WIRE:模块一直存在
+    # 但从未被启动)。发布 _galaxy._tcp,手机/手表同 Wi-Fi 免手输 IP 自动发现网关;
+    # zeroconf 未装/GALAXY_MDNS=0 时优雅跳过;离网场景由上面的 Tailscale 兜底。
+    try:
+        if os.getenv("GALAXY_MDNS", "1").strip().lower() not in ("0", "false", "no", "off"):
+            from galaxy_gateway.mdns_announcer import MdnsAnnouncer  # noqa: PLC0415
+            _mdns = MdnsAnnouncer(port=int(os.getenv("GALAXY_GATEWAY_PORT", "9000") or 9000))
+            _mdns.start()
+            app.state.mdns_announcer = _mdns
+            logger.info("mDNS: _galaxy._tcp 已发布(局域网零配置发现)")
+    except Exception as _mdns_err:
+        logger.debug("mDNS init skipped (non-fatal): %s", _mdns_err, exc_info=True)
+
     # 5. Voice Wake Module — local "Galaxy" wake-word detection
     try:
         from core.voice_wake_module import get_voice_wake  # noqa: PLC0415
@@ -532,6 +545,14 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     if app.state.nats_adapter is not None:
         try:
             await app.state.nats_adapter.stop()
+        except Exception:
+            pass
+
+    # mDNS 注销(与 4b 启动对称;未启动时安全跳过)
+    _mdns = getattr(app.state, "mdns_announcer", None)
+    if _mdns is not None:
+        try:
+            _mdns.stop()
         except Exception:
             pass
 
