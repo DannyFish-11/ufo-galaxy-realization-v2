@@ -25,9 +25,12 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 import numpy as np
+
+if TYPE_CHECKING:  # 仅类型检查:WhisperASR 实际用时在方法内懒导入(见 add_whisper_callback)
+    from core.asr import WhisperASR
 
 from .audio_ingest import AudioIngestPipeline, AudioIngestConfig
 from .audio_features import AudioState

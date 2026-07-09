@@ -52,7 +52,10 @@ from typing import Callable  # auto: missing import
 
 import asyncio
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:  # 仅类型检查:MultimodalIngressBus 实际用时在函数内懒导入
+    from core.multimodal.ingress_bus import MultimodalIngressBus
 
 logger = logging.getLogger("Galaxy.MultimodalIngestRuntime")
 

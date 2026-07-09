@@ -3,12 +3,15 @@ Galaxy Configuration API
 提供系统配置的全量读取和批量更新，持久化到 .env 文件。
 """
 
+import logging
 import os
 import json
 from pathlib import Path
 from typing import Any, Dict
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+logger = logging.getLogger("Galaxy.API.Config")
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 

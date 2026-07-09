@@ -79,7 +79,7 @@ def _get_tool_governor():
 
 
 def _get_task_queue():
-    global _task_queue
+    # 只读取模块级 _task_queue,无需 global(global 仅用于赋值;此处是死声明)。
     return _task_queue
 
 
