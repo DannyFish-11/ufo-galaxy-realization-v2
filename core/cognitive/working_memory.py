@@ -146,6 +146,11 @@ class WorkingMemory:
     ) -> List[Dict[str, Any]]:
         """Return working memory entries for *session_id* as a list of dicts.
 
+        融合(域3):对话轮次的唯一属主是 SessionManager —— 若它认识该会话,
+        直接读它的历史(映射成本地 entry 形状),本模块不再保存对话轮次的副本。
+        本地 deque 只服务【易失 scratch 会话】(如 ambient 的观察理由滚动日志,
+        高频写、刻意不落盘),SessionManager 不认识的会话才走它。
+
         Parameters
         ----------
         session_id:
@@ -160,6 +165,29 @@ class WorkingMemory:
         """
         if not self._enabled:
             return []
+        # 对话会话 → 读唯一属主 SessionManager(内存 dict 读,无 IO)。
+        try:
+            from core.session_manager import get_session_manager
+            sm = get_session_manager()
+            if sm.get_session(session_id) is not None:
+                history = sm.get_full_history(session_id)
+                if last_n is not None:
+                    history = history[-last_n:]
+                return [
+                    {
+                        "role": m.get("role", ""),
+                        "content": m.get("content", ""),
+                        "trace_id": (m.get("metadata") or {}).get("trace_id", ""),
+                        "ts": m.get("timestamp", 0.0),
+                        "metadata": {
+                            **(m.get("metadata") or {}),
+                            **({"device_id": m["device_id"]} if m.get("device_id") else {}),
+                        },
+                    }
+                    for m in history
+                ]
+        except Exception as exc:  # noqa: BLE001 — SM 不可用时退回本地 deque
+            logger.debug("WorkingMemory.get SM 读取失败,退本地: %s", exc)
         with self._lock:
             buf = self._store.get(session_id)
             if not buf:

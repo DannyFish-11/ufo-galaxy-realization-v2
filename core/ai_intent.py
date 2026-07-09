@@ -310,39 +310,65 @@ class ConversationMemory:
         self._user_profiles: Dict[str, Dict[str, Any]] = {}
 
     async def add_turn(self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None):
-        """添加对话轮次"""
+        """添加对话轮次。
+
+        融合(域3):对话轮次的唯一属主是 SessionManager —— 本方法直写它
+        (ensure + add_message),不再维护自己的轮次副本;本模块保留的独有能力是
+        【用户偏好学习】。SessionManager 不可用时回落旧的本地列表(不丢数据)。
+        """
+        # 学习用户偏好(本模块的独有能力,保留)
+        if role == "user":
+            self._learn_preference(session_id, content)
+
+        try:
+            from core.session_manager import get_session_manager
+            sm = get_session_manager()
+            await sm.ensure_session(session_id)
+            # 相邻重复防护:同一轮可能同时经门面(record_session_turn)与本方法进来
+            # (如 routes/ai 直接调 add_turn,而请求主链又走了门面)。
+            history = sm.get_full_history(session_id)
+            if history and history[-1].get("role") == role and history[-1].get("content") == content:
+                return
+            await sm.add_message(session_id, role, content, metadata=metadata or {})
+            return
+        except Exception as e:  # noqa: BLE001 — SM 不可用时回落本地(极端兜底)
+            logger.debug(f"ConversationMemory.add_turn SM 写入失败,回落本地: {e}")
+
         if session_id not in self._sessions:
             self._sessions[session_id] = []
-
-        turn = ConversationTurn(
-            role=role,
-            content=content,
-            metadata=metadata or {},
-        )
-        self._sessions[session_id].append(turn)
-
-        # 超出最大轮次时裁剪
+        self._sessions[session_id].append(ConversationTurn(role=role, content=content, metadata=metadata or {}))
         if len(self._sessions[session_id]) > self.max_turns:
             self._sessions[session_id] = self._sessions[session_id][-self.max_turns:]
-
-        # 持久化到缓存
         if self._cache:
             await self._persist_session(session_id)
 
-        # 学习用户偏好
+    def learn(self, session_id: str, role: str, content: str) -> None:
+        """仅做偏好学习,不写轮次(轮次由统一门 record_session_turn 写唯一属主)。"""
         if role == "user":
             self._learn_preference(session_id, content)
 
     async def get_context(self, session_id: str, max_turns: int = 10) -> List[Dict]:
-        """获取对话上下文"""
-        turns = self._sessions.get(session_id, [])
+        """获取对话上下文 —— 读唯一属主 SessionManager;老会话回落本地/缓存。
 
+        语义保留:旧实现的本地列表被 self.max_turns 截断,所以返回条数从不超过它;
+        融合后 SM 保留更长历史,这里在读侧沿用同一上限,行为不变。
+        """
+        limit = min(max_turns, self.max_turns)
+        try:
+            from core.session_manager import get_session_manager
+            sm = get_session_manager()
+            if sm.get_session(session_id) is not None:
+                return sm.get_history(session_id, max_turns=limit)
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"ConversationMemory.get_context SM 读取失败,退本地: {e}")
+
+        turns = self._sessions.get(session_id, [])
         # 尝试从缓存恢复
         if not turns and self._cache:
             turns = await self._restore_session(session_id)
 
         context = []
-        for turn in turns[-max_turns:]:
+        for turn in turns[-limit:]:
             context.append({
                 "role": turn.role,
                 "content": turn.content,
@@ -350,8 +376,20 @@ class ConversationMemory:
         return context
 
     async def get_summary(self, session_id: str) -> str:
-        """获取会话摘要"""
-        turns = self._sessions.get(session_id, [])
+        """获取会话摘要 —— 基于唯一属主 SessionManager 的历史;老会话退本地。"""
+        turns: List[Any] = []
+        try:
+            from core.session_manager import get_session_manager
+            sm = get_session_manager()
+            if sm.get_session(session_id) is not None:
+                turns = [
+                    ConversationTurn(role=m.get("role", ""), content=m.get("content", ""))
+                    for m in sm.get_full_history(session_id)
+                ]
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"ConversationMemory.get_summary SM 读取失败,退本地: {e}")
+        if not turns:
+            turns = self._sessions.get(session_id, [])
         if not turns:
             return "空会话"
 
@@ -372,8 +410,14 @@ class ConversationMemory:
         })
 
     async def clear_session(self, session_id: str):
-        """清除会话"""
+        """清除会话 —— 融合后轮次在唯一属主 SessionManager,必须连它一起清,
+        否则用户"清除上下文"只清了本地副本、对话依旧带着旧历史。"""
         self._sessions.pop(session_id, None)
+        try:
+            from core.session_manager import get_session_manager
+            get_session_manager().clear_history(session_id)
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"ConversationMemory.clear_session SM 清空失败: {e}")
         if self._cache:
             await self._cache.delete(f"conversation:{session_id}")
 
