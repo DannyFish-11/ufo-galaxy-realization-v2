@@ -140,6 +140,7 @@ const CATEGORIES: CategoryDef[] = [
 
 const CONFIG_KEYS: Record<string, string[]> = {
   behavior: [
+    'GALAXY_AUTONOMY',
     'GALAXY_SPEAK', 'GALAXY_TTS_STREAMING', 'GALAXY_AMBIENT_LOOP',
     'GALAXY_NATIVE_AUDIO', 'GALAXY_AMBIENT_INTERVAL_S', 'GALAXY_AMBIENT_COOLDOWN_S',
   ],

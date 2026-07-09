@@ -385,6 +385,51 @@ class UnifiedNodeExecutor:
                 node_id, _perm_exc,
             )
 
+        # -- 自治拨盘门(GALAXY_AUTONOMY: safe/guided/autonomous) ---------------
+        # 权限门管"允许不允许",本门管"这次要不要先问人"。需要审批时:把请求排进
+        # ApprovalRegistry(人不在线就排队,不执行也不静默跳过),返回结构化
+        # approval_required;用户放行(仅此次/本会话/永久)后重试即通过。
+        try:
+            from core.autonomy_policy import evaluate_autonomy, ensure_approval_request  # noqa: PLC0415
+
+            auto_dec = evaluate_autonomy(node_id, action)
+            if auto_dec.needs_approval:
+                pending = ensure_approval_request(
+                    node_id, action,
+                    envelope.params if isinstance(envelope.params, dict) else {},
+                )
+                logger.info(
+                    "invoke node HELD for approval | node_id=%s action=%s request_id=%s "
+                    "approval_id=%s level=%s",
+                    node_id, action, envelope.request_id,
+                    pending.get("request_id"), auto_dec.level,
+                )
+                result = NodeInvocationResult(
+                    success=False,
+                    node_id=node_id,
+                    action=action,
+                    request_id=envelope.request_id,
+                    trace_id=envelope.trace_id,
+                    error=(
+                        f"approval_required: {node_id}.{action} 需人工审批"
+                        f"(自治档位={auto_dec.level});审批通过后重试即可。"
+                        f"approval_id={pending.get('request_id')}"
+                    ),
+                    duration_ms=(time.time() - started) * 1000.0,
+                    execution_mode=envelope.execution_domain,
+                    execution_source=envelope.invocation_source.value,
+                    eligibility_denial={
+                        "approval_required": {**auto_dec.to_dict(), **pending},
+                    },
+                )
+                self._emit_aip_v3_task_result(envelope, result)
+                return result
+        except Exception as _auto_exc:  # noqa: BLE001 — 拨盘门故障不拦执行
+            logger.warning(
+                "invoke node: autonomy gate unavailable for node_id=%s: %s; proceeding",
+                node_id, _auto_exc,
+            )
+
         # -- PR-GOLDEN-PATH: Golden Path node resolution + local facade ----
         # Try the unified device-node resolution first. If a mapping exists
         # in device_node_map, use LocalNodeFacade for direct Python calls.

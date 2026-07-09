@@ -132,6 +132,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
 
     # --- 行为 / 在场 (面板"行为"区直接开关，无需改环境变量) ---
     # 这些是面向用户的行为开关，面板上以明确的开关呈现:说/流式/自发在场/原生音频。
+    "GALAXY_AUTONOMY": {"default": "guided", "type": "select", "category": "behavior", "description": "自治档位（safe=敏感操作全问 · guided=读放行写审批 · autonomous=不逐步问人）", "options": ["safe", "guided", "autonomous"]},
     "GALAXY_SPEAK": {"default": "true", "type": "boolean", "category": "behavior", "description": "朗读回复（说 · 默认开）"},
     "GALAXY_TTS_STREAMING": {"default": "true", "type": "boolean", "category": "behavior", "description": "分句流式朗读（边生成边说 · 默认开）"},
     "GALAXY_AMBIENT_LOOP": {"default": "false", "type": "boolean", "category": "behavior", "description": "自发在场（持续看/听、自己判断何时开口 · 需桌面感知）"},
