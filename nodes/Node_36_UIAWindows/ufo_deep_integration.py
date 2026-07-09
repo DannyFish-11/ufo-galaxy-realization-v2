@@ -182,29 +182,70 @@ class UFODeepIntegration:
     # UI 元素操作
     # ========================================================================
     
+    def capture_desktop_graph(self, window_title: Optional[str] = None,
+                              max_depth: int = 40) -> Optional[Dict[str, Any]]:
+        """读一棵真实的 Windows UIA 控件树 → 结构化 UIGraph（dict）。
+
+        这是桌面 system-API 的"结构优先"输入:对着语义控件图(名为『发送』的按钮)
+        推理,而不是对着像素猜坐标。非 Windows / 缺 pywinauto 时返回 None(上层回退
+        视觉)。前台窗口默认;给 window_title 则按标题连接。"""
+        try:
+            from pywinauto import Desktop  # 延迟 import: 仅 Windows 可用
+        except Exception as e:  # noqa: BLE001
+            logger.info("capture_desktop_graph 不可用(非 Windows / 缺 pywinauto): %s", e)
+            return None
+        try:
+            from .ui_tree import build_ui_graph
+        except ImportError:
+            from ui_tree import build_ui_graph  # 直接运行时的回退
+        try:
+            desk = Desktop(backend="uia")
+            win = desk.window(title=window_title) if window_title else desk.window(active_only=True)
+            ctl = win.wrapper_object()
+            app = ""
+            try:
+                app = ctl.window_text()
+            except Exception:  # noqa: BLE001
+                pass
+            graph = build_ui_graph(ctl, app=app, device_id="windows", max_depth=max_depth)
+            return graph.model_dump()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("capture_desktop_graph 失败: %s", e)
+            return None
+
+    async def get_ui_tree(self, window_title: Optional[str] = None,
+                          max_depth: int = 40) -> Dict[str, Any]:
+        """结构化界面树端点。返回 ``{success, graph?, prompt?, error?}``。"""
+        graph = self.capture_desktop_graph(window_title, max_depth)
+        if graph is None:
+            return {"success": False, "error": "ui_tree_unavailable"}
+        try:
+            from core.schemas.ui_element import UIGraph
+            prompt = UIGraph.model_validate(graph).to_prompt()
+        except Exception:  # noqa: BLE001
+            prompt = ""
+        return {"success": True, "graph": graph, "prompt": prompt}
+
     async def find_element(self, selector: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        查找 UI 元素
-        
-        Args:
-            selector: 选择器，支持：
-                - name: 元素名称
-                - automation_id: 自动化 ID
-                - class_name: 类名
-                - control_type: 控件类型
-        
-        Returns:
-            元素信息字典
-        """
-        # ControlReceiver 不提供按属性搜索, 需要直接 pywinauto 集成
-        logger.warning("find_element: ControlReceiver requires existing control handle, "
-                        "not selector-based search")
-        return None
+        """按选择器查找单个 UI 元素(结构化 UIA 树搜索;真做实,不再是桩)。
+
+        selector 支持: name/label · automation_id · class_name · control_type/role。
+        命中多个时可交互控件优先。非 Windows / 无树时返回 None。"""
+        hits = await self.find_elements(selector)
+        return hits[0] if hits else None
 
     async def find_elements(self, selector: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """查找多个 UI 元素"""
-        logger.warning("find_elements: ControlReceiver requires existing control handle")
-        return []
+        """按选择器查找全部匹配的 UI 元素(结构化 UIA 树搜索)。"""
+        graph = self.capture_desktop_graph()
+        if graph is None:
+            return []
+        try:
+            from core.schemas.ui_element import UIGraph
+            from .ui_tree import find_in_graph
+        except ImportError:
+            from core.schemas.ui_element import UIGraph
+            from ui_tree import find_in_graph
+        return [n.model_dump() for n in find_in_graph(UIGraph.model_validate(graph), selector)]
     
     def _element_to_dict(self, element) -> Dict[str, Any]:
         """将 UFO 元素转换为字典"""
