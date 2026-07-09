@@ -72,7 +72,7 @@ def create_router() -> APIRouter:
             logger.error("list_pending_approvals failed: %s", exc, exc_info=True)
             return JSONResponse(
                 status_code=500,
-                content={"ok": False, "error": str(exc)},
+                content={"ok": False, "error": "internal error"},
             )
 
     @router.get("/api/v1/approvals/{request_id}")
@@ -93,7 +93,7 @@ def create_router() -> APIRouter:
             logger.error("get_approval failed: %s", exc, exc_info=True)
             return JSONResponse(
                 status_code=500,
-                content={"ok": False, "error": str(exc)},
+                content={"ok": False, "error": "internal error"},
             )
 
     @router.post("/api/v1/approvals/{request_id}")
@@ -188,7 +188,7 @@ def create_router() -> APIRouter:
             logger.error("resolve_approval failed: %s", exc, exc_info=True)
             return JSONResponse(
                 status_code=500,
-                content={"ok": False, "error": str(exc)},
+                content={"ok": False, "error": "internal error"},
             )
 
     # ── 授权记录管理(审批分级配套;独立路径避免与 {request_id} 撞) ──────────
@@ -200,7 +200,7 @@ def create_router() -> APIRouter:
             return JSONResponse(content={"ok": True, "grants": get_grant_store().list_grants()})
         except Exception as exc:  # noqa: BLE001
             logger.error("list_grants failed: %s", exc, exc_info=True)
-            return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
+            return JSONResponse(status_code=500, content={"ok": False, "error": "internal error"})
 
     @router.delete("/api/v1/approval-grants/{grant_key:path}")
     async def revoke_grant(grant_key: str):
@@ -211,6 +211,6 @@ def create_router() -> APIRouter:
             return JSONResponse(content={"ok": ok, "revoked": grant_key if ok else None})
         except Exception as exc:  # noqa: BLE001
             logger.error("revoke_grant failed: %s", exc, exc_info=True)
-            return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
+            return JSONResponse(status_code=500, content={"ok": False, "error": "internal error"})
 
     return router
