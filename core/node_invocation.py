@@ -436,7 +436,10 @@ class UnifiedNodeExecutor:
         # This is the Golden Path: device_node_map → resolver → facade → execute.
         # If no mapping or execution fails, fall back to legacy fusion_entry loading.
         golden_result = await self._try_golden_path(envelope)
-        if golden_result is not None and not golden_result.get("fallback"):
+        # _try_golden_path 返回 None 即"未走 Golden Path,退回 legacy";返回
+        # NodeInvocationResult(dataclass,无 .get())即真命中。此前误对 dataclass
+        # 调 .get("fallback") 会抛 AttributeError——但因上面漏 return 从没触发过。
+        if golden_result is not None:
             self._emit_aip_v3_task_result(envelope, golden_result)
             self._record_feedback(envelope, golden_result)
             return golden_result
@@ -601,6 +604,10 @@ class UnifiedNodeExecutor:
                 execution_mode=result.get("via", "golden_path"),
                 execution_source=envelope.invocation_source.value,
             )
+            # 关键:构造后必须 return——此前漏了 return,Golden Path 成功也返回 None,
+            # 每次调用都白走一遍 facade 再退回 legacy fusion_entry 加载(strangler
+            # 层形同虚设)。
+            return golden_result
 
         except Exception as _exc:  # noqa: BLE001
             logger.debug(
@@ -792,4 +799,7 @@ async def invoke_node(
     if session_id is not None:
         envelope.session_id = session_id
 
-    return 
+    # 关键:此前这里是个【裸 return】(返回 None)——invoke_node 号称"所有本地节点
+    # 执行的唯一首选入口",却对每一次调用都返回 None(REST /nodes/call、命令路由、
+    # OpenClawd 工具派发、能力分发器全部拿到 None)。补上真正的委派。
+    return await get_unified_node_executor().execute(envelope)
