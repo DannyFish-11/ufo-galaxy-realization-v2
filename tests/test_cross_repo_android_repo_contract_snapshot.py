@@ -30,23 +30,41 @@ def _read_android_file(relative_path: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+# Android MsgType 的 canonical 位置:客户端枚举早已迁到 shared-protocol
+# (Android + WearOS 共用的唯一 wire 权威);旧 AipModels.kt 仅作历史回退。
+# 此前本测试只读 AipModels.kt → 迁移后一直 "Unable to locate MsgType enum"。
+_ANDROID_MSGTYPE_PATHS = (
+    "shared-protocol/src/main/java/com/ufo/galaxy/shared/protocol/MsgType.kt",
+    "app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt",  # legacy fallback
+)
+
+
+def _read_android_msg_type_source() -> str:
+    root = _android_repo_root()
+    for rel in _ANDROID_MSGTYPE_PATHS:
+        path = root / rel
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+    pytest.skip(f"Android MsgType source not found in any of: {_ANDROID_MSGTYPE_PATHS}")
+
+
 def _extract_android_msg_type_wire_values(aip_models_source: str) -> set[str]:
-    # Keep this extraction scoped to the stable MsgType enum shape used in
-    # app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt:
+    # Keep this extraction scoped to the stable MsgType enum shape
+    # (shared-protocol/MsgType.kt, legacy AipModels.kt 同型):
     # enum class MsgType(val value: String) { ... }
     # If Android changes MsgType declaration syntax materially, update this
     # parser together with the cross-repo compatibility tests.
     enum_match = re.search(
-        r"enum class MsgType\(val value: String\)\s*\{(.*?)\}",
+        r"enum class MsgType\(val value: String\)\s*\{(.*?)\n\}",
         aip_models_source,
         flags=re.DOTALL,
     )
-    assert enum_match is not None, "Unable to locate Android MsgType enum in AipModels.kt"
+    assert enum_match is not None, "Unable to locate Android MsgType enum"
     return set(re.findall(r"\(\s*\"([a-z0-9_]+)\"\s*\)", enum_match.group(1)))
 
 
 def test_android_msg_type_enum_covers_v2_required_message_types() -> None:
-    aip_models_source = _read_android_file("app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt")
+    aip_models_source = _read_android_msg_type_source()
     wire_values = _extract_android_msg_type_wire_values(aip_models_source)
     missing = sorted(REQUIRED_AIP_MESSAGE_TYPES - wire_values)
     assert not missing, (
@@ -57,7 +75,7 @@ def test_android_msg_type_enum_covers_v2_required_message_types() -> None:
 
 def test_android_schema_and_dedupe_tokens_for_v2_contract_are_present() -> None:
     root = _android_repo_root()
-    aip_models_source = _read_android_file("app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt")
+    aip_models_source = _read_android_msg_type_source()
     msg_type_values = _extract_android_msg_type_wire_values(aip_models_source)
     kotlin_paths = list(root.rglob("*.kt"))
     file_cache: dict[Path, str] = {}
