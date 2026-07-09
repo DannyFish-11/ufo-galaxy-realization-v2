@@ -52,12 +52,37 @@ def _get_engine() -> Optional[Any]:
     global _engine, _engine_failed
     if _engine is not None or _engine_failed:
         return _engine
-    try:
-        from core.tts import EdgeTTSEngine
-        voice = os.getenv("GALAXY_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
-        _engine = EdgeTTSEngine(voice=voice)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("TTS 引擎不可用(语音输出降级；装 edge-tts 可启用): %s", exc)
+    # 引擎选择:GALAXY_TTS_ENGINE = edge(默认,联网·音质好) | piper(离线·纯 CPU) |
+    # auto(优先 edge,edge 不可用/无网退 piper)。A 档无卡断网可选 piper。
+    choice = os.getenv("GALAXY_TTS_ENGINE", "edge").strip().lower()
+
+    def _try_piper():
+        try:
+            from core.tts.piper_engine import PiperTTSEngine
+            eng = PiperTTSEngine()
+            return eng if eng.available() else None
+        except Exception as exc:  # noqa: BLE001
+            logger.info("Piper TTS 不可用: %s", exc)
+            return None
+
+    def _try_edge():
+        try:
+            from core.tts import EdgeTTSEngine
+            voice = os.getenv("GALAXY_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
+            return EdgeTTSEngine(voice=voice)
+        except Exception as exc:  # noqa: BLE001
+            logger.info("Edge TTS 不可用: %s", exc)
+            return None
+
+    if choice == "piper":
+        _engine = _try_piper() or _try_edge()
+    elif choice == "auto":
+        _engine = _try_edge() or _try_piper()
+    else:  # edge(默认)
+        _engine = _try_edge()
+
+    if _engine is None:
+        logger.warning("TTS 引擎不可用(语音输出降级;装 edge-tts 或 piper-tts 可启用)")
         _engine_failed = True
     return _engine
 
