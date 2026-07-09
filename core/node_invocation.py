@@ -171,6 +171,11 @@ class NodeInvocationEnvelope:
     # (full governance enforcement).
     governance_override: Optional[str] = None
 
+    # 结构化界面态(AG-UI): 序列化的 core.schemas.ui_element.UIGraph。设备操作类
+    # 节点据此做"结构优先"grounding(点名为『发送』的控件),而非像素坐标。随
+    # TASK_ASSIGN 一并流转、可闭环校验。缺省 None——不影响非操作类节点。
+    ui_graph: Optional[Dict[str, Any]] = None
+
     # Timing
     started_at: float = field(default_factory=time.time)
     timeout_ms: float = 30_000.0
@@ -660,6 +665,7 @@ class UnifiedNodeExecutor:
                 action=envelope.action,
                 params=envelope.params if isinstance(envelope.params, dict) else {},
                 trace_id=envelope.trace_id,
+                ui_graph=envelope.ui_graph,  # 结构化界面态随 TASK_ASSIGN 流转(有则带)
             )
             nats = get_nats_bus()
             if nats.is_connected():
@@ -756,6 +762,7 @@ async def invoke_node(
     session_id: Optional[str] = None,
     route_mode: str = "local",
     timeout_ms: float = 30_000.0,
+    ui_graph: Optional[Dict[str, Any]] = None,
 ) -> NodeInvocationResult:
     """Convenience wrapper: build an envelope and call the unified executor.
 
@@ -789,6 +796,7 @@ async def invoke_node(
         invocation_source=invocation_source,
         route_mode=route_mode,
         timeout_ms=timeout_ms,
+        ui_graph=ui_graph,
     )
     if request_id is not None:
         envelope.request_id = request_id
