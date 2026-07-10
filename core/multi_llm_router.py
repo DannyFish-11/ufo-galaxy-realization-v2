@@ -74,6 +74,18 @@ class ProviderConfig:
     last_used: float = 0.0
     down_since: float = 0.0  # 标记为 DOWN 的时刻(见 is_available())
 
+    def __post_init__(self) -> None:
+        # base_url 规范化收口在类型本身:任何构造路径(发现/面板保存/持久化
+        # 恢复)传进无协议头或空的 URL,都在这里一次修好,而不是指望每个
+        # 调用点自己记得。空值对本地 provider 回退默认地址,避免运行时
+        # 才炸 "Request URL is missing an 'http://' or 'https://' protocol."
+        raw = (self.base_url or "").strip()
+        if not raw and self.name == "ollama":
+            raw = os.environ.get("OLLAMA_URL", "").strip() or "http://localhost:11434"
+        if raw and not raw.startswith(("http://", "https://")):
+            raw = f"http://{raw}"
+        self.base_url = raw
+
     def is_available(self, recovery_seconds: float = 60.0) -> bool:
         """该 provider 现在是否该被当作候选。
 

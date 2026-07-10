@@ -88,7 +88,7 @@ class TestGroupA_TryIngestHelper:
             captured.update(msg)
             return MagicMock(was_reconciled=False, reject_reason="no_record", envelope=None)
 
-        with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
             _tl._try_ingest_participant_truth({"task_id": "t1"}, "cancel")
 
         assert captured.get("truth_kind") == "cancel"
@@ -101,7 +101,7 @@ class TestGroupA_TryIngestHelper:
             captured.update(msg)
             return MagicMock(was_reconciled=False, reject_reason="", envelope=None)
 
-        with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
             _tl._try_ingest_participant_truth({"truth_kind": "result"}, "cancel")
 
         # original truth_kind preserved
@@ -109,7 +109,7 @@ class TestGroupA_TryIngestHelper:
 
     def test_a4_none_ingress_is_noop(self) -> None:
         """AC4: if _ingest_participant_truth is None, helper does not raise."""
-        with patch.object(_tl, "_ingest_participant_truth", None):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", None):
             _tl._try_ingest_participant_truth({"task_id": "t1"}, "cancel")  # must not raise
 
     def test_a5_exception_in_ingress_is_suppressed(self) -> None:
@@ -118,7 +118,7 @@ class TestGroupA_TryIngestHelper:
         def _raising(msg: Dict[str, Any], **_kw: Any) -> Any:
             raise RuntimeError("simulated ingress crash")
 
-        with patch.object(_tl, "_ingest_participant_truth", _raising):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", _raising):
             _tl._try_ingest_participant_truth({"task_id": "t1"}, "failure")  # must not raise
 
 
@@ -139,7 +139,7 @@ class TestGroupB_HandleTaskCancel:
             calls.append(dict(m))
             return MagicMock(was_reconciled=False, reject_reason="no_record", envelope=None)
 
-        with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
             _run(_tl.handle_task_cancel(bridge, None, msg))
 
         assert any(c.get("truth_kind") == "cancel" for c in calls), (
@@ -151,7 +151,7 @@ class TestGroupB_HandleTaskCancel:
         bridge = _make_bridge()
         msg = {"task_id": "t-b2", "device_id": "dev-b2"}
 
-        with patch.object(_tl, "_ingest_participant_truth", None):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", None):
             result = _run(_tl.handle_task_cancel(bridge, None, msg))
 
         assert result.get("type") == "task_cancel_ack"
@@ -166,7 +166,7 @@ class TestGroupB_HandleTaskCancel:
             calls.append(dict(m))
             return MagicMock(was_reconciled=False, reject_reason="", envelope=None)
 
-        with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
             _run(_tl.handle_task_cancel(bridge, None, msg))
 
         assert calls, "ingress must be called"
@@ -191,7 +191,7 @@ class TestGroupC_HandleError:
             calls.append(dict(m))
             return MagicMock(was_reconciled=False, reject_reason="", envelope=None)
 
-        with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
             _run(_tl.handle_error(bridge, None, msg))
 
         assert any(c.get("truth_kind") == "failure" for c in calls)
@@ -200,7 +200,7 @@ class TestGroupC_HandleError:
         """AC4: handle_error completes normally without ingress."""
         bridge = _make_bridge()
         msg = {"task_id": "t-c2", "device_id": "dev-c2"}
-        with patch.object(_tl, "_ingest_participant_truth", None):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", None):
             _run(_tl.handle_error(bridge, None, msg))  # must not raise
 
 
@@ -221,20 +221,25 @@ class TestGroupD_HandleTaskResult:
             calls.append(dict(m))
             return MagicMock(was_reconciled=False, reject_reason="", envelope=None)
 
-        with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
             with patch.object(_tl, "store_task_result", None):
                 # Force legacy path (truth chain unavailable) so
                 # _try_ingest_participant_truth is called directly.
+                # 统一结果 ingress 优先于 legacy 分支,须一并置为不可用。
                 with patch.object(_tl, "_run_task_result_truth_chain", None):
-                    # Allow continuity legality check (fail-open).
-                    with patch.object(_tl, "_evaluate_continuity_legality", None):
-                        # Bypass durable idempotency so the same task_id can be
-                        # reused across test sessions without being suppressed.
-                        with patch(
-                            "core.durable_result_idempotency.check_result_idempotency",
-                            return_value=False,
-                        ):
-                            _run(_tl.handle_task_result(bridge, None, msg))
+                    with patch(
+                        "core.unified_result_ingress.ingest_result_async",
+                        side_effect=ImportError("force legacy path"),
+                    ):
+                        # Allow continuity legality check (fail-open).
+                        with patch.object(_tl, "_evaluate_continuity_legality", None):
+                            # Bypass durable idempotency so the same task_id can be
+                            # reused across test sessions without being suppressed.
+                            with patch(
+                                "core.durable_result_idempotency.check_result_idempotency",
+                                return_value=False,
+                            ):
+                                _run(_tl.handle_task_result(bridge, None, msg))
 
         assert any(c.get("truth_kind") == "result" for c in calls)
 
@@ -255,7 +260,7 @@ class TestGroupD_HandleTaskResult:
                     canonical_update="done", tracking_record_phase="completed",
                 )
 
-            with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
+            with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
                 with patch.object(_tl, "store_task_result", None):
                     # Force legacy path and allow continuity legality so the
                     # function proceeds to resolve the pending future.
@@ -290,7 +295,7 @@ class TestGroupE_HandleTaskEnd:
             calls.append(dict(m))
             return MagicMock(was_reconciled=False, reject_reason="", envelope=None)
 
-        with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
             _run(_tl.handle_task_end(bridge, None, msg))
 
         assert any(c.get("truth_kind") == "task_phase" for c in calls)
@@ -299,7 +304,7 @@ class TestGroupE_HandleTaskEnd:
         """AC4: task_end_ack is returned regardless of ingress state."""
         bridge = _make_bridge()
         msg = {"task_id": "t-e2", "device_id": "dev-e2"}
-        with patch.object(_tl, "_ingest_participant_truth", None):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", None):
             result = _run(_tl.handle_task_end(bridge, None, msg))
         assert result.get("type") == "task_end_ack"
 
@@ -321,7 +326,7 @@ class TestGroupF_HandleTaskProgress:
             calls.append(dict(m))
             return MagicMock(was_reconciled=False, reject_reason="", envelope=None)
 
-        with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
             _run(_tl.handle_task_progress(bridge, None, msg))
 
         assert any(c.get("truth_kind") == "status" for c in calls)
@@ -344,7 +349,7 @@ class TestGroupG_HandleTaskStatus:
             calls.append(dict(m))
             return MagicMock(was_reconciled=False, reject_reason="", envelope=None)
 
-        with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
             _run(_tl.handle_task_status(bridge, None, msg))
 
         assert any(c.get("truth_kind") == "status" for c in calls)
@@ -360,7 +365,7 @@ class TestGroupG_HandleTaskStatus:
             calls.append(dict(m))
             return MagicMock(was_reconciled=False, reject_reason="", envelope=None)
 
-        with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
             _run(_tl.handle_task_status(bridge, None, msg))
 
         assert calls, "ingress must be called"
@@ -371,7 +376,7 @@ class TestGroupG_HandleTaskStatus:
         """AC4: task_status_response is returned regardless of ingress state."""
         bridge = _make_bridge()
         msg = {"task_id": "t-g3", "device_id": "dev-g3"}
-        with patch.object(_tl, "_ingest_participant_truth", None):
+        with patch.object(_tl, "_ingest_via_canonical_ingress", None):
             result = _run(_tl.handle_task_status(bridge, None, msg))
         assert result.get("type") == "task_status_response"
 
@@ -386,7 +391,7 @@ class TestGroupH_GracefulDegradation:
     """Verify that all handlers work correctly when the ingress module is absent."""
 
     def _patch_none(self) -> Any:
-        return patch.object(_tl, "_ingest_participant_truth", None)
+        return patch.object(_tl, "_ingest_via_canonical_ingress", None)
 
     def test_h1_cancel_with_no_ingress(self) -> None:
         bridge = _make_bridge()
@@ -441,11 +446,15 @@ class TestGroupI_LocalModeUnifiedClosure:
             "type": "task_result",
         }
 
-        _fake_outcome = SimpleNamespace(
+        # 用真实契约类型构造,避免 SimpleNamespace 随字段演进反复过期。
+        from core.unified_result_ingress import UnifiedResultIngressOutcome
+
+        _fake_outcome = UnifiedResultIngressOutcome(
             completion_notified=True,
             is_fully_closed=False,
             evidence_acceptance_verdict="quarantine",
             incomplete_reason="evidence_gate:quarantine",
+            completion_disposition="first_accepted",
         )
         _ingest_async = AsyncMock(return_value=_fake_outcome)
 

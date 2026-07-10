@@ -341,7 +341,7 @@ def _clone_shallow(owner: str, repo: str, ref: str, dest: Path) -> Optional[str]
     cmd = ["git", "clone", "--depth", "1", "--branch", ref, clone_url, str(dest)]
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=120
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120
         )
         if result.returncode != 0:
             logger.debug("git clone failed: %s", result.stderr)
@@ -350,7 +350,7 @@ def _clone_shallow(owner: str, repo: str, ref: str, dest: Path) -> Optional[str]
         # Get commit SHA
         rev = subprocess.run(
             ["git", "-C", str(dest), "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
         )
         return rev.stdout.strip() if rev.returncode == 0 else None
     except Exception as exc:
@@ -403,7 +403,7 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
 
     logger.info("Installing dependencies: %s", pip_cmd[3:])  # skip ['python', '-m', 'pip']
     try:
-        result = subprocess.run(pip_cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(pip_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
         if result.returncode != 0:
             logger.warning("Dependency install warnings/errors: %s", result.stderr[:500])
         return result.returncode == 0

@@ -790,7 +790,7 @@ class LocalBrainManager:
                 result = subprocess.run(
                     ["sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"],
                     capture_output=True,
-                    text=True,
+                    text=True, encoding="utf-8", errors="replace",
                     timeout=300,
                 )
                 return result.returncode == 0
@@ -799,7 +799,7 @@ class LocalBrainManager:
                 result = subprocess.run(
                     ["brew", "install", "ollama"],
                     capture_output=True,
-                    text=True,
+                    text=True, encoding="utf-8", errors="replace",
                     timeout=300,
                 )
                 return result.returncode == 0
@@ -850,7 +850,7 @@ class LocalBrainManager:
             if shutil.which("nvidia-smi"):
                 result = subprocess.run(
                     ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,compute_cap", "--format=csv,noheader,nounits"],
-                    capture_output=True, text=True, timeout=10.0
+                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10.0
                 )
                 if result.returncode == 0:
                     line = result.stdout.strip().split("\n")[0]

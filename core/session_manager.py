@@ -248,22 +248,31 @@ class SessionManager:
 
     # ═══════════════════ 会话生命周期 ═══════════════════
 
+    def _create_session_locked(self, user_id: str, device_id: str = "") -> Session:
+        """create_session 的持锁内核——调用方必须已持有 self._lock。
+
+        asyncio.Lock 不可重入:get_or_create_session 持锁期间再 await
+        create_session() 拿同一把锁会【死锁】(真机表现:首次会话创建的
+        调用方永远挂起)。持锁内核抽出来供两条路径共用。
+        """
+        session_id = f"session_{uuid.uuid4().hex[:12]}"
+        devices = [device_id] if device_id else []
+        session = Session(
+            id=session_id,
+            user_id=user_id,
+            devices=devices,
+            active_device=device_id,
+        )
+        self._sessions[session_id] = session
+        self._user_active_session[user_id] = session_id
+        self._persist_state()
+        logger.info(f"会话已创建: {session_id} (user={user_id}, device={device_id})")
+        return session
+
     async def create_session(self, user_id: str, device_id: str = "") -> Session:
         """创建新会话"""
         async with self._lock:
-            session_id = f"session_{uuid.uuid4().hex[:12]}"
-            devices = [device_id] if device_id else []
-            session = Session(
-                id=session_id,
-                user_id=user_id,
-                devices=devices,
-                active_device=device_id,
-            )
-            self._sessions[session_id] = session
-            self._user_active_session[user_id] = session_id
-            self._persist_state()
-            logger.info(f"会话已创建: {session_id} (user={user_id}, device={device_id})")
-            return session
+            return self._create_session_locked(user_id, device_id)
 
     async def ensure_session(
         self,
@@ -324,7 +333,9 @@ class SessionManager:
                     session.active_device = device_id
                 return session
 
-            return await self.create_session(user_id, device_id)
+            # 已持有 self._lock:不能 await create_session()(同一把非重入锁,
+            # 会死锁)——走持锁内核。
+            return self._create_session_locked(user_id, device_id)
 
     def get_session(self, session_id: str) -> Optional[Session]:
         """获取会话"""

@@ -98,6 +98,22 @@ def _make_envelope(
     )
 
 
+@pytest.fixture(autouse=True)
+def _dispatchable_devices():
+    """就绪设备走完整权威注册链(UDM+能力网络+UCM),否则 V3 槽位门拒发。
+
+    dev-unready / dev-unknown 故意不注册——若干用例断言它们被排除。
+    """
+    from tests.dispatch_device_harness import (
+        register_dispatchable_device,
+        cleanup_dispatchable_devices,
+    )
+    for did in ("dev-ready-001", "dev-ready", "dev-001"):
+        register_dispatchable_device(did, capabilities=["screen"])
+    yield
+    cleanup_dispatchable_devices()
+
+
 def _run(coro):
     """Run a coroutine in a fresh event loop."""
     return asyncio.run(coro)

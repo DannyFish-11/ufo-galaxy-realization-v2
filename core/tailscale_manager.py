@@ -92,7 +92,7 @@ class TailscaleManager:
             r = await asyncio.to_thread(
                 subprocess.run,
                 ["tailscale", "set", "--advertise-relay"],
-                capture_output=True, text=True, timeout=15,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
             )
             if r.returncode == 0:
                 logger.info("Tailscale 对等中继已宣告（本机充当私有 relay，手机/手表弱网经此中转）")
@@ -116,7 +116,7 @@ class TailscaleManager:
             return out
         try:
             result = subprocess.run(
-                ["tailscale", "status", "--json"], capture_output=True, text=True, timeout=10,
+                ["tailscale", "status", "--json"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)
@@ -144,7 +144,7 @@ class TailscaleManager:
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
-                capture_output=True, text=True, timeout=10
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)
@@ -368,7 +368,7 @@ class TailscaleManager:
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)
@@ -395,7 +395,7 @@ class TailscaleManager:
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)

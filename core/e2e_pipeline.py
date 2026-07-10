@@ -86,18 +86,21 @@ class EndToEndPipeline:
         # ═══════ Step 1: 会话管理 ═══════
         try:
             if self.session_manager:
+                # SessionManager 生命周期方法已 async 化:漏 await 会让协程被
+                # 静默丢弃,session.id 直接 AttributeError 被吞 → session_id
+                # 恒为空、消息永远不入会话史(聊天记忆断裂的根因)。
                 if session_id:
                     session = self.session_manager.get_session(session_id)
                     if session and source_device_id:
-                        self.session_manager.join_session(session_id, source_device_id)
+                        await self.session_manager.join_session(session_id, source_device_id)
                 else:
-                    session = self.session_manager.get_or_create_session(
+                    session = await self.session_manager.get_or_create_session(
                         user_id, source_device_id
                     )
                     session_id = session.id if session else None
 
                 if session_id:
-                    self.session_manager.add_message(
+                    await self.session_manager.add_message(
                         session_id, "user", message, source_device_id
                     )
                     result["session_id"] = session_id
@@ -164,7 +167,7 @@ class EndToEndPipeline:
         # 保存到会话
         if session_id and self.session_manager:
             try:
-                self.session_manager.add_message(
+                await self.session_manager.add_message(
                     session_id, "assistant", result["reply"], ""
                 )
             except Exception as exc:

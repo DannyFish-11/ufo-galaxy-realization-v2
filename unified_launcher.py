@@ -883,6 +883,23 @@ class GalaxyUnified:
                 _r = sp.run([npm, "install"], cwd=str(electron_dir),
                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
                 if _r.returncode != 0:
+                    # 网络类失败(官方 registry TLS 被断/超时,国内网络常见)→
+                    # 自动用 npmmirror 镜像重试一次,而不是直接放弃桌面壳。
+                    _err_txt = (_r.stderr or _r.stdout or "")
+                    _network_fail = any(k in _err_txt for k in (
+                        "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN",
+                        "network", "socket", "TLS", "fetch failed",
+                    ))
+                    if _network_fail:
+                        logger.warning(
+                            "npm install 官方源失败(疑似网络问题),改用 npmmirror 镜像重试…")
+                        print_status_row("npm 官方源不可达，改用国内镜像重试…", status="success")
+                        _r = sp.run(
+                            [npm, "install", "--registry=https://registry.npmmirror.com"],
+                            cwd=str(electron_dir), capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=600,
+                        )
+                if _r.returncode != 0:
                     logger.error(
                         "Electron npm install 失败 (rc=%s):\n%s",
                         _r.returncode, (_r.stderr or _r.stdout or "")[-1000:],

@@ -249,56 +249,42 @@ def test_16_android_route_docstring_states_not_canonical():
     )
 
 
-def test_17_generic_route_docstring_contains_deprecated_tag():
-    """gateway /ws/{device_id} route docstring contains [DEPRECATED] tag."""
+# 收敛后契约:/ws/{device_id}(DEPRECATED)与 /ws(DEBUG)入口面已被移除,
+# 权威文档表记录其处置;以下测试改为断言"确实不存在 + 文档有交代"。
+
+def test_17_generic_deprecated_route_removed():
+    """收敛契约:/ws/{device_id} 弃用入口已移除,不得再注册。"""
     import re
-    match = re.search(
-        r'async def websocket_endpoint\b.*?"""(.*?)"""',
-        _GW_WS, re.DOTALL
+    assert not re.search(r'@app\.websocket\("/ws/\{device_id\}"\)', _GW_WS), (
+        "/ws/{device_id} deprecated ingress must stay removed"
     )
-    assert match, "websocket_endpoint function with docstring not found"
-    docstring = match.group(1)
-    assert "[DEPRECATED]" in docstring, f"[DEPRECATED] not in websocket_endpoint docstring: {docstring!r}"
+    # 文档表仍须交代该面的处置
+    assert "[DEPRECATED]" in _GW_WS
 
 
-def test_18_generic_route_docstring_directs_to_canonical():
-    """gateway /ws/{device_id} route docstring directs new clients to use /ws/device/."""
+def test_18_module_doc_directs_to_canonical():
+    """权威文档表把新客户端指向 /ws/device/。"""
+    assert "/ws/device/" in _GW_WS
+
+
+def test_19_ws_root_debug_route_removed():
+    """收敛契约:/ws 调试入口已移除,不得再注册。"""
     import re
-    match = re.search(
-        r'async def websocket_endpoint\b.*?"""(.*?)"""',
-        _GW_WS, re.DOTALL
+    assert not re.search(r'@app\.websocket\("/ws"\)', _GW_WS), (
+        "/ws debug ingress must stay removed"
     )
-    assert match
-    docstring = match.group(1)
-    assert "/ws/device/" in docstring, (
-        "websocket_endpoint docstring should reference /ws/device/ as the correct path"
-    )
+    assert "[DEBUG]" in _GW_WS
 
 
-def test_19_ws_root_docstring_contains_debug_tag():
-    """gateway /ws route docstring contains [DEBUG] tag."""
+def test_20_only_one_canonical_ingress():
+    """整个模块只允许一个 [CANONICAL] 入口(/ws/device/{device_id})。"""
     import re
-    match = re.search(
-        r'async def websocket_endpoint_auto.*?"""(.*?)"""',
-        _GW_WS, re.DOTALL
+    canonical_routes = re.findall(
+        r'ingress_classification="canonical"', _GW_WS
     )
-    assert match, "websocket_endpoint_auto function with docstring not found"
-    docstring = match.group(1)
-    assert "[DEBUG]" in docstring, f"[DEBUG] not in websocket_endpoint_auto docstring: {docstring!r}"
-
-
-def test_20_ws_root_docstring_not_for_production():
-    """gateway /ws route docstring states it is not for production device ingress."""
-    import re
-    match = re.search(
-        r'async def websocket_endpoint_auto.*?"""(.*?)"""',
-        _GW_WS, re.DOTALL
-    )
-    assert match
-    docstring = match.group(1)
-    lower = docstring.lower()
-    assert "not for production" in lower or "debug" in lower, (
-        "websocket_endpoint_auto docstring should state it is not for production"
+    # 默认参数 + 规范路由两处;不允许出现第三处
+    assert len(canonical_routes) <= 2, (
+        f"only /ws/device/{{device_id}} may be canonical, found {len(canonical_routes)} markers"
     )
 
 

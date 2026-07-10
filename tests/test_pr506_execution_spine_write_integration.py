@@ -108,6 +108,13 @@ def _make_envelope(task_id: str = "", tool_name: str = "test_cmd", targets=None)
 
 def _fresh_singletons():
     """Reset all relevant singletons for test isolation."""
+    # 派发链要求设备走完整权威注册链(UDM+能力网络+UCM),否则 V3 槽位门拒发。
+    from tests.dispatch_device_harness import register_dispatchable_device
+    for _did in (
+        "device_test", "primary_dev", "fallback_dev",
+        "device_abc", "device_xyz", "device_open", "dev_compat",
+    ):
+        register_dispatchable_device(_did, capabilities=["screen"])
     try:
         from core.task_graph_runtime import reset_task_graph_runtime
         reset_task_graph_runtime()

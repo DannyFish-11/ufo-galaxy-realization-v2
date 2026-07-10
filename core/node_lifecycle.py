@@ -55,7 +55,7 @@ def _pid_alive(pid: int) -> bool:
         if sys.platform == "win32":
             out = subprocess.run(
                 ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5,
             ).stdout
             return str(pid) in out
         os.kill(pid, 0)  # 不发信号,只探测存在
@@ -189,7 +189,7 @@ def container_start_node(node: str) -> Dict[str, object]:
         if port:
             run_cmd += ["-p", f"{port}:{port}"]
         run_cmd.append(image)
-        r = subprocess.run(run_cmd, capture_output=True, text=True, timeout=60)
+        r = subprocess.run(run_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
         if r.returncode != 0:
             return {"ok": False, "error": f"{rt} run 失败: {(r.stderr or '')[:160]}"}
         logger.info("节点容器已启动 %s via %s (%s)", dir_name, rt, cname)
