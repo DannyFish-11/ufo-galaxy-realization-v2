@@ -413,8 +413,13 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
             continue
         # Relative paths (e.g. ".") resolved against addon_dir
         if dep.startswith(".") or dep.startswith("/"):
+            # 源头净化:路径型依赖只允许安全字符集,在【构造任何路径之前】
+            # 就掐断污点(绝对路径 /etc/... 、含 shell 元字符等一律拒绝)。
+            if dep.startswith("/") or not re.fullmatch(r"[A-Za-z0-9_./-]+", dep):
+                logger.warning("dep rejected (unsafe path chars): %r", dep)
+                continue
             dep_path = (addon_dir / dep).resolve()
-            # 路径型依赖必须落在 addon 目录内(防 ../ 穿越装任意本地包)。
+            # 二次防御:归一后必须仍落在 addon 目录内(防 ../ 穿越)。
             # 用 is_relative_to 而不是 startswith 前缀判断——后者可被
             # 同前缀旁路目录绕过(如 /addons-evil 通过 /addons 的检查)。
             if not dep_path.is_relative_to(addon_root):
@@ -422,6 +427,11 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
                 continue
             pip_cmd.append(str(dep_path))
         else:
+            # 包名/版本规格:PEP 508 合法字符白名单(字母数字 + . _ - [ ] < > = ! ~ , ;
+            # 空格)。掐掉 shell 元字符与选项注入,再交给 pip(list 形式无 shell)。
+            if not re.fullmatch(r"[A-Za-z0-9._\-\[\]<>=!~,; ]+", dep):
+                logger.warning("dep rejected (unsafe package spec): %r", dep)
+                continue
             pip_cmd.append(dep)
 
     if req_file.exists():
