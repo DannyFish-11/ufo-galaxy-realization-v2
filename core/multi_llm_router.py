@@ -1032,7 +1032,11 @@ class MultiLLMRouter:
         if not key:
             key = os.environ.get("OPENAI_API_KEY", "")
         if key and not key.startswith("your-"):
-            base = self._get_key("openai_base") or os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
+            # OPENAI_API_BASE="" (面板保存空值)会让 .get(k, default) 返回 ""——
+            # 显式回退默认地址,避免 base_url 为空导致请求时炸缺协议头。
+            base = (self._get_key("openai_base") or os.environ.get("OPENAI_API_BASE", "") or "").strip()
+            if not base:
+                base = "https://api.openai.com/v1"
             cfg = ProviderConfig(
                 name="openai", api_key=key, base_url=base,
                 models=["gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-4o"],

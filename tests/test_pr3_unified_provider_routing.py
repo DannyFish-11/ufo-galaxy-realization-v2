@@ -179,16 +179,18 @@ class TestPR3ProviderRoutingClosure(unittest.TestCase):
         snippet = _MULTI_ROUTER_SRC[g_idx: _MULTI_ROUTER_SRC.find("]", g_idx) + 1]
         self.assertIn('"ollama"', snippet)
 
-    def test_14_ollama_is_last_in_general_preferences_source(self):
+    def test_14_ollama_is_first_in_general_preferences_source(self):
+        # 设计已从 PR3 的"ollama 兜底(最后)"演进为 LOCAL-BRAIN-FIRST——
+        # 本地原生多模态主脑(ollama)在所有任务偏好里【排第一】,云端专有兜底。
         idx = _MULTI_ROUTER_SRC.find("TASK_ROUTING_PREFERENCES")
         g_idx = _MULTI_ROUTER_SRC.find("TaskType.GENERAL", idx)
+        bracket_start = _MULTI_ROUTER_SRC.find("[", g_idx)
         bracket_end = _MULTI_ROUTER_SRC.find("]", g_idx)
-        snippet = _MULTI_ROUTER_SRC[g_idx: bracket_end + 1]
-        ollama_pos = snippet.rfind('"ollama"')
-        self.assertGreater(ollama_pos, 0)
-        after = snippet[ollama_pos + len('"ollama"'):]
-        others = re.findall(r'"[a-zA-Z0-9_-]+"', after)
-        self.assertEqual(others, [], f"Found providers after ollama: {others}")
+        snippet = _MULTI_ROUTER_SRC[bracket_start: bracket_end + 1]
+        providers = re.findall(r'"[a-zA-Z0-9_-]+"', snippet)
+        self.assertTrue(providers, "GENERAL preferences list is empty")
+        self.assertEqual(providers[0], '"ollama"',
+                         f"local-brain-first: ollama must be first, got {providers[:3]}")
 
     # 15-18 ─ Routing closure: no direct get_llm_router() bypasses
     def test_15_handle_chat_no_direct_bypass(self):

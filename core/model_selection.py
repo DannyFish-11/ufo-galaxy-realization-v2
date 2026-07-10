@@ -310,7 +310,9 @@ def background_pull(tag: str) -> None:
     def _pull() -> None:
         try:
             import httpx
-            _raw = os.environ.get("OLLAMA_URL", "http://localhost:11434").strip()
+            # OLLAMA_URL="" (面板保存空值)会绕过 .get 的默认值 → 拼出坏 URL,
+            # 显式回退默认地址。
+            _raw = os.environ.get("OLLAMA_URL", "").strip() or "http://localhost:11434"
             base = (_raw if _raw.startswith(("http://", "https://")) else f"http://{_raw}").rstrip("/")
             have: List[str] = []
             try:

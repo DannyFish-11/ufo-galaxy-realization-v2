@@ -277,6 +277,8 @@ async def sandbox_execute(req: SandboxExecuteRequest):
                 cwd=tmpdir,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=req.timeout,
                 input=req.stdin or "",
                 preexec_fn=lambda: _set_resource_limits(
