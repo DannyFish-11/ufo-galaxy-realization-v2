@@ -401,14 +401,24 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
         return True
 
     pip_cmd = [sys.executable, "-m", "pip", "install", "--quiet"]
+    addon_root = addon_dir.resolve()
     for dep in deps:
         dep = dep.strip()
         if not dep:
             continue
+        # 安全:deps 来自第三方仓库的 manifest。"-" 开头的条目会被 pip 当作
+        # 【选项】(如 --index-url=恶意源 → 供应链注入),一律拒绝。
+        if dep.startswith("-"):
+            logger.warning("dep rejected (option-like, injection risk): %r", dep)
+            continue
         # Relative paths (e.g. ".") resolved against addon_dir
         if dep.startswith(".") or dep.startswith("/"):
-            dep_path = str((addon_dir / dep).resolve())
-            pip_cmd.append(dep_path)
+            dep_path = (addon_dir / dep).resolve()
+            # 路径型依赖必须落在 addon 目录内(防 ../ 穿越装任意本地包)
+            if not str(dep_path).startswith(str(addon_root)):
+                logger.warning("dep rejected (escapes addon dir): %r", dep)
+                continue
+            pip_cmd.append(str(dep_path))
         else:
             pip_cmd.append(dep)
 
