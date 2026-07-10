@@ -522,6 +522,14 @@ class AmbientAttentionLoop:
 
     async def _route(self, decision: AmbientDecision, obs: AmbientObservation) -> None:
         if decision.action == AmbientAction.SPEAK:
+            # hold 闸(对话政策唯一属主):用户说了"等一下别说话",自发开口同样闭嘴。
+            try:
+                from core.voice_dialog_policy import get_dialog_policy
+                if get_dialog_policy().is_holding():
+                    logger.debug("ambient SPEAK 被 hold 抑制")
+                    return
+            except Exception:  # noqa: BLE001 — 政策不可用不拦自发开口
+                pass
             self._last_action_ts = time.time()
             try:
                 from core.speech_output import speak_response

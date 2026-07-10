@@ -81,6 +81,11 @@ class VoiceLoop:
         self.capture: Optional[Any] = None
         self._running: bool = False
         self._voice_input_handler: Optional[Callable[[str], asyncio.Future]] = None
+        # 语义回合合并(GPT-Live 借鉴):悬垂片段暂存,等下一片段并进同一回合。
+        self._pending_text: str = ""
+        self._turn_seq: int = 0
+        # 委托模式:后台任务句柄(防 GC;stop 时取消)。
+        self._bg_tasks: set = set()
 
     async def start(self) -> None:
         """启动语音闭环。
@@ -158,6 +163,29 @@ class VoiceLoop:
         except Exception as _exc:  # noqa: BLE001
             logger.debug("barge-in 跳过(非致命): %s", _exc)
 
+        # ── 对话政策(GPT-Live 借鉴,政策集中在 core.voice_dialog_policy)──
+        from core.voice_dialog_policy import delegation_enabled, get_dialog_policy
+        policy = get_dialog_policy()
+
+        # hold("等一下别说话"):安静等着,只认恢复口令或窗口到期;期间不处理、不出声。
+        if policy.is_holding():
+            if policy.check_resume_command(text):
+                policy.release_hold()
+                logger.info("hold 解除(用户口令): %s", text)
+                if len(text.strip()) <= 10:
+                    return  # 纯恢复口令("好了/继续")静默消化,不当内容送大脑
+            else:
+                logger.info("hold 中,忽略语音输入: %s", text[:40])
+                return
+        elif policy.check_hold_command(text):
+            policy.hold()
+            return  # 按 GPT-Live 行为:安静等着,不答话
+
+        # 语义回合判定:悬垂结尾(连接词/逗号)→ 等一拍并入下一片段,不抢话。
+        text = await self._resolve_turn(text)
+        if text is None:
+            return  # 已并入更新的回合,由后到的调用处理
+
         # A 融合:把语音对话实时推给面板"实时上下文"。此前只有默认【关闭】的
         # (已删除的旧 voice_conversation_bridge 曾调 emit_conversation)真正默认【开启】、
         # 驱动三态与朗读的正是本 VoiceLoop——它此前从不推送,导致默认配置下面板的
@@ -169,6 +197,60 @@ class VoiceLoop:
         except Exception as _exc:  # noqa: BLE001
             logger.debug("emit_conversation(user) 跳过(非致命): %s", _exc)
 
+        # 委托模式(对话节奏 ⊥ 推理深度):heavy 回合立即口头致谢,重活丢后台跑,
+        # 期间按节奏出捧哏;结果回来经既有链路(集中朗读/面板推送)自然回到对话。
+        # quick 回合走原同步路径——闲聊不需要"我去查"的仪式感。
+        if delegation_enabled() and policy.classify_turn(text) == "heavy":
+            ack = policy.ack_phrase()
+            try:
+                from core.speech_output import speak_response
+                speak_response(ack, source="voice")
+            except Exception as _exc:  # noqa: BLE001
+                logger.debug("委托致谢朗读跳过(非致命): %s", _exc)
+            try:
+                from core.lumiv_websocket_bridge import emit_conversation
+                emit_conversation("ai", ack, source="voice")
+            except Exception as _exc:  # noqa: BLE001
+                logger.debug("emit_conversation(ack) 跳过(非致命): %s", _exc)
+            task = asyncio.ensure_future(self._process_and_reply(text))
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
+            bc = asyncio.ensure_future(self._backchannel_while(task))
+            self._bg_tasks.add(bc)
+            bc.add_done_callback(self._bg_tasks.discard)
+            return
+
+        await self._process_and_reply(text)
+
+    async def _resolve_turn(self, text: str) -> Optional[str]:
+        """语义回合合并:悬垂片段暂存、等一拍;新片段到来即接管合并。
+
+        返回最终成句的回合文本;返回 None 表示本片段已并入更新的回合。
+        """
+        from core.voice_dialog_policy import end_of_turn_wait
+        self._turn_seq += 1
+        my_seq = self._turn_seq
+        if self._pending_text:
+            # 与暂存的悬垂片段合并成同一回合
+            text = f"{self._pending_text} {text}".strip()
+            self._pending_text = ""
+        try:
+            wait = end_of_turn_wait(text)
+        except Exception as _exc:  # noqa: BLE001 — 政策失败不影响主链
+            logger.debug("end_of_turn_wait 失败,按说完处理: %s", _exc)
+            wait = 0.0
+        if wait <= 0:
+            return text
+        self._pending_text = text
+        logger.debug("回合疑似未说完,等待 %.1fs 并句: %s", wait, text[-20:])
+        await asyncio.sleep(wait)
+        if self._turn_seq != my_seq:
+            return None  # 新片段已接管(合并发生在后到调用里)
+        self._pending_text = ""
+        return text
+
+    async def _process_and_reply(self, text: str) -> None:
+        """把一个成句回合交给 Galaxy 处理并回话(原 _on_voice_input 主体)。"""
         try:
             # 1. 发送给 Galaxy 处理
             if asyncio.iscoroutinefunction(self.galaxy.process):
@@ -204,12 +286,47 @@ class VoiceLoop:
         except Exception as exc:
             logger.error("Voice input processing error: %s", exc)
 
+    async def _backchannel_while(self, task: "asyncio.Future") -> None:
+        """后台任务运行期间按政策节奏出捧哏(首次 ~5s,之后 ~12s,最多 2 次)。
+
+        hold 中/AI 正在朗读时跳过本拍,绝不叠声。
+        """
+        from core.voice_dialog_policy import get_dialog_policy
+        import time as _time
+        policy = get_dialog_policy()
+        start = _time.monotonic()
+        emitted = 0
+        try:
+            while not task.done():
+                await asyncio.sleep(0.5)
+                if task.done():
+                    break
+                if policy.is_holding():
+                    continue
+                if not policy.should_backchannel(_time.monotonic() - start, emitted):
+                    continue
+                try:
+                    from core.speech_output import is_speaking, speak_response
+                    if is_speaking():
+                        continue  # 不压着正在播的话
+                    speak_response(policy.backchannel_phrase(), source="voice")
+                    emitted += 1
+                except Exception as _exc:  # noqa: BLE001
+                    logger.debug("捧哏跳过(非致命): %s", _exc)
+        except asyncio.CancelledError:  # stop() 取消属正常路径
+            pass
+
     async def stop(self) -> None:
         """停止语音闭环。
 
         停止音频捕获服务并清理资源。
         """
         self._running = False
+
+        # 取消委托/捧哏后台任务(生命周期对称,不留孤儿)
+        for t in list(self._bg_tasks):
+            t.cancel()
+        self._bg_tasks.clear()
 
         if self.capture is not None:
             try:
