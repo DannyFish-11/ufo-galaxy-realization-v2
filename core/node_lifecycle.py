@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -65,8 +66,15 @@ def _pid_alive(pid: int) -> bool:
 
 
 def _resolve_dir(node: str) -> Optional[str]:
-    """把 '71' / 'Node_71' / 'Node_71_MultiDeviceCoordination' / 'MultiDevice...' 归一到实际目录名。"""
+    """把 '71' / 'Node_71' / 'Node_71_MultiDeviceCoordination' / 'MultiDevice...' 归一到实际目录名。
+
+    安全:node 是外部输入(API 可达),先白名单校验字符集——既防
+    ``../`` 路径穿越,也保证归一结果可安全用于容器名/命令参数
+    (list 形式命令仍可能被 ``-`` 前缀参数注入)。
+    """
     node = str(node).strip()
+    if not re.match(r"^[A-Za-z0-9_.-]{1,120}$", node) or node.startswith((".", "-")):
+        return None
     if (_NODES_DIR / node).is_dir():
         return node
     # 纯数字或 Node_数字

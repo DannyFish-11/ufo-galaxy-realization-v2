@@ -27,6 +27,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GOOGLE_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Google API Key"},
     "GEMINI_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Gemini API Key (alias)"},
     "XAI_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "xAI API Key"},
+    "META_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Meta Model API Key (Muse Spark)"},
     "MISTRAL_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Mistral API Key"},
     "QWEN_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Qwen API Key"},
     "DASHSCOPE_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "DashScope API Key (alias)"},

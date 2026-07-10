@@ -323,11 +323,25 @@ def _download_and_extract(
     return commit_sha
 
 
+_OWNER_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
+_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/_.-]{0,200}$")
+
+
 def _clone_shallow(owner: str, repo: str, ref: str, dest: Path) -> Optional[str]:
     """Shallow-clone the repo using git (if available).
 
     Returns the HEAD commit SHA, or ``None`` on failure.
+
+    安全:owner/repo/ref 是外部输入,命令虽是 list 形式(无 shell 注入),
+    但以 ``-`` 开头的值仍可能被 git 当作【选项】(参数注入)。这里按
+    GitHub 命名规则白名单校验,不合法直接拒绝。
     """
+    if not (_OWNER_REPO_RE.match(owner or "") and _OWNER_REPO_RE.match(repo or "")):
+        logger.warning("clone rejected: invalid owner/repo %r/%r", owner, repo)
+        return None
+    if not _REF_RE.match(ref or ""):
+        logger.warning("clone rejected: invalid ref %r", ref)
+        return None
     if shutil.which("git") is None:
         return None
 
