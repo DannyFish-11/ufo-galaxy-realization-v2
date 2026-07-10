@@ -139,14 +139,23 @@ class AudioIngestPipeline:
             return
         queue: asyncio.Queue = asyncio.Queue(maxsize=30)
 
+        def _safe_put(chunk_: np.ndarray) -> None:
+            # 在事件循环内执行:满了就丢帧。之前直接调度 queue.put_nowait,
+            # QueueFull 在回调执行时抛进事件循环,每帧刷一条
+            # "Exception in callback Queue.put_nowait" 错误日志。
+            try:
+                queue.put_nowait(chunk_)
+            except asyncio.QueueFull:
+                pass  # drop frame rather than block
+
         def _sd_callback(indata: np.ndarray, frames: int, time_info, status) -> None:
             if status:
                 logger.debug("sounddevice status: %s", status)
             chunk = indata[:, 0].copy() if indata.ndim > 1 else indata.flatten().copy()
             try:
-                loop.call_soon_threadsafe(queue.put_nowait, chunk)
-            except asyncio.QueueFull:
-                pass  # drop frame rather than block
+                loop.call_soon_threadsafe(_safe_put, chunk)
+            except RuntimeError:
+                pass  # loop closed during shutdown — drop
 
         self._running = True
         self._quality = SignalQuality.ok()

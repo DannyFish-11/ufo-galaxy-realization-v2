@@ -1,8 +1,25 @@
 """
-galaxy_gateway/routes/websocket.py — WebSocket 路由兼容层
+galaxy_gateway/routes/websocket.py — 设备 WebSocket 入口(规范属主)
 
-PR-GATEWAY-FIX: 提供 core/api_routes.py 所需的导出，
-实际实现委托给 galaxy_gateway.websocket_handler。
+CANONICAL DEVICE INGRESS AUTHORITY
+==================================
+本模块是设备 WebSocket 入口的唯一规范属主。入口面登记(与
+DEVICE_WS_INGRESS_SURFACE_REGISTRY 保持一致):
+
+    /ws/device/{device_id}   [CANONICAL]        规范设备入口(唯一)
+    /ws/android/{device_id}  [COMPAT]           旧安卓路径参数入口 → 委派规范处理器
+    /ws/android              [COMPAT]           旧安卓查询参数入口 → 委派规范处理器
+    /ws/ufo3/{device_id}     [COMPAT]           原 [LEGACY-DISABLED];PR-25 起改为
+                                                委派规范处理器的兼容入口
+    /ws/{device_id}          [DEPRECATED]       已移除——新客户端一律使用 /ws/device/
+    /ws                      [DEBUG]            已移除——调试入口不再对外暴露
+
+所有入口面(规范与兼容)统一汇聚到 _handle_android_ws 单处理器,消息处理
+与入口记账不会随路由分叉。本模块只主张设备【入口】权威,不主张编排
+(orchestration)或就绪(readiness)权威。
+
+PR-GATEWAY-FIX: 同时提供 core/api_routes.py 所需的兼容导出,
+实际连接管理委托给 galaxy_gateway.websocket_handler。
 """
 
 import logging
@@ -136,7 +153,8 @@ def register_websocket_routes(app) -> None:
     from fastapi import WebSocket
 
     @app.websocket("/ws/device/{device_id}")
-    async def canonical_device_ws(websocket: WebSocket, device_id: str):
+    async def websocket_device(websocket: WebSocket, device_id: str):
+        """[CANONICAL] 规范设备 WebSocket 入口——所有新客户端必须走这里。"""
         # Resolved via module namespace so tests can monkeypatch the handler.
         await _resolve_android_ws_handler()(
             websocket,
@@ -146,7 +164,8 @@ def register_websocket_routes(app) -> None:
         )
 
     @app.websocket("/ws/android/{device_id}")
-    async def compat_android_path_ws(websocket: WebSocket, device_id: str):
+    async def websocket_android_primary(websocket: WebSocket, device_id: str):
+        """[COMPAT] 旧安卓入口——NOT the canonical ingress;委派规范处理器。"""
         await _resolve_android_ws_handler()(
             websocket,
             device_id,
@@ -155,7 +174,21 @@ def register_websocket_routes(app) -> None:
         )
 
     @app.websocket("/ws/ufo3/{device_id}")
-    async def compat_ufo3_path_ws(websocket: WebSocket, device_id: str):
+    async def websocket_ufo3_compat(websocket: WebSocket, device_id: str):
+        """[COMPAT] 旧 UFO3 入口——legacy 守卫默认关闭;开启后委派规范处理器。
+
+        PR-1 契约:legacy 协议面默认禁用(GALAXY_ENABLE_LEGACY_PROTOCOLS=1
+        显式开启),避免无人使用的历史入口成为常开攻击面。
+        """
+        if not _LEGACY_PROTOCOLS_ENABLED():
+            await websocket.close(
+                code=1008,
+                reason=(
+                    "legacy ufo3 ingress disabled; set "
+                    "GALAXY_ENABLE_LEGACY_PROTOCOLS=1 or use /ws/device/{device_id}"
+                ),
+            )
+            return
         await _resolve_android_ws_handler()(
             websocket,
             device_id,
@@ -177,6 +210,14 @@ def register_websocket_routes(app) -> None:
             ingress_path="/ws/android",
             ingress_classification="compat",
         )
+
+
+def _LEGACY_PROTOCOLS_ENABLED() -> bool:
+    """legacy 协议入口(/ws/ufo3)是否显式开启——默认禁用。"""
+    import os
+    return os.environ.get("GALAXY_ENABLE_LEGACY_PROTOCOLS", "").strip().lower() in (
+        "1", "true", "yes",
+    )
 
 
 def _resolve_android_ws_handler():

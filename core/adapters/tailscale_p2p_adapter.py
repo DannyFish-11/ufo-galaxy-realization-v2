@@ -368,7 +368,7 @@ class TailscaleP2PAdapter(TransportAdapter):
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)
@@ -391,7 +391,7 @@ class TailscaleP2PAdapter(TransportAdapter):
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)

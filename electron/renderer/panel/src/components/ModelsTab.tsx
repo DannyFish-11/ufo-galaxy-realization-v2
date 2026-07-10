@@ -43,6 +43,7 @@ const PROPRIETARY: Provider[] = [
   },
   { key: 'GOOGLE_API_KEY', name: 'Gemini', latin: 'google', note: '多模态 · 兜底' },
   { key: 'XAI_API_KEY', name: 'xAI', latin: 'grok' },
+  { key: 'META_API_KEY', name: 'Meta', latin: 'muse-spark', note: 'Muse Spark · agentic 多模态' },
   { key: 'PERPLEXITY_API_KEY', name: 'Perplexity', latin: 'perplexity', note: '联网检索' },
 ];
 

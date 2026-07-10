@@ -323,11 +323,25 @@ def _download_and_extract(
     return commit_sha
 
 
+_OWNER_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
+_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/_.-]{0,200}$")
+
+
 def _clone_shallow(owner: str, repo: str, ref: str, dest: Path) -> Optional[str]:
     """Shallow-clone the repo using git (if available).
 
     Returns the HEAD commit SHA, or ``None`` on failure.
+
+    安全:owner/repo/ref 是外部输入,命令虽是 list 形式(无 shell 注入),
+    但以 ``-`` 开头的值仍可能被 git 当作【选项】(参数注入)。这里按
+    GitHub 命名规则白名单校验,不合法直接拒绝。
     """
+    if not (_OWNER_REPO_RE.match(owner or "") and _OWNER_REPO_RE.match(repo or "")):
+        logger.warning("clone rejected: invalid owner/repo %r/%r", owner, repo)
+        return None
+    if not _REF_RE.match(ref or ""):
+        logger.warning("clone rejected: invalid ref %r", ref)
+        return None
     if shutil.which("git") is None:
         return None
 
@@ -341,7 +355,7 @@ def _clone_shallow(owner: str, repo: str, ref: str, dest: Path) -> Optional[str]
     cmd = ["git", "clone", "--depth", "1", "--branch", ref, clone_url, str(dest)]
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=120
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120
         )
         if result.returncode != 0:
             logger.debug("git clone failed: %s", result.stderr)
@@ -350,7 +364,7 @@ def _clone_shallow(owner: str, repo: str, ref: str, dest: Path) -> Optional[str]
         # Get commit SHA
         rev = subprocess.run(
             ["git", "-C", str(dest), "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
         )
         return rev.stdout.strip() if rev.returncode == 0 else None
     except Exception as exc:
@@ -387,15 +401,37 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
         return True
 
     pip_cmd = [sys.executable, "-m", "pip", "install", "--quiet"]
+    addon_root = addon_dir.resolve()
     for dep in deps:
         dep = dep.strip()
         if not dep:
             continue
+        # 安全:deps 来自第三方仓库的 manifest。"-" 开头的条目会被 pip 当作
+        # 【选项】(如 --index-url=恶意源 → 供应链注入),一律拒绝。
+        if dep.startswith("-"):
+            logger.warning("dep rejected (option-like, injection risk): %r", dep)
+            continue
         # Relative paths (e.g. ".") resolved against addon_dir
         if dep.startswith(".") or dep.startswith("/"):
-            dep_path = str((addon_dir / dep).resolve())
-            pip_cmd.append(dep_path)
+            # 源头净化:路径型依赖只允许安全字符集,在【构造任何路径之前】
+            # 就掐断污点(绝对路径 /etc/... 、含 shell 元字符等一律拒绝)。
+            if dep.startswith("/") or not re.fullmatch(r"[A-Za-z0-9_./-]+", dep):
+                logger.warning("dep rejected (unsafe path chars): %r", dep)
+                continue
+            dep_path = (addon_dir / dep).resolve()
+            # 二次防御:归一后必须仍落在 addon 目录内(防 ../ 穿越)。
+            # 用 is_relative_to 而不是 startswith 前缀判断——后者可被
+            # 同前缀旁路目录绕过(如 /addons-evil 通过 /addons 的检查)。
+            if not dep_path.is_relative_to(addon_root):
+                logger.warning("dep rejected (escapes addon dir): %r", dep)
+                continue
+            pip_cmd.append(str(dep_path))
         else:
+            # 包名/版本规格:PEP 508 合法字符白名单(字母数字 + . _ - [ ] < > = ! ~ , ;
+            # 空格)。掐掉 shell 元字符与选项注入,再交给 pip(list 形式无 shell)。
+            if not re.fullmatch(r"[A-Za-z0-9._\-\[\]<>=!~,; ]+", dep):
+                logger.warning("dep rejected (unsafe package spec): %r", dep)
+                continue
             pip_cmd.append(dep)
 
     if req_file.exists():
@@ -403,7 +439,7 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
 
     logger.info("Installing dependencies: %s", pip_cmd[3:])  # skip ['python', '-m', 'pip']
     try:
-        result = subprocess.run(pip_cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(pip_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
         if result.returncode != 0:
             logger.warning("Dependency install warnings/errors: %s", result.stderr[:500])
         return result.returncode == 0

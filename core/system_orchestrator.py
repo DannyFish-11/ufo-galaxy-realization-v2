@@ -612,18 +612,39 @@ class SystemOrchestrator:
                 )
             logger.warning("[启动·桌面壳] Electron 依赖缺失或不完整 -- running npm install ...")
             try:
+                # Windows 子进程默认按 cp1252 解码,npm 的 UTF-8 输出会让读线程
+                # UnicodeDecodeError 崩掉、stderr 变 None——显式 UTF-8 + replace。
                 npm_result = subprocess.run(
                     [npm_path, "install"],
                     cwd=electron_dir,
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=120,
                 )
+                if npm_result.returncode != 0:
+                    # 官方 registry 网络失败(国内常见)→ npmmirror 镜像重试一次
+                    _err_txt = (npm_result.stderr or npm_result.stdout or "")
+                    if any(k in _err_txt for k in (
+                        "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN",
+                        "network", "socket", "TLS", "fetch failed",
+                    )):
+                        logger.warning("[启动·桌面壳] npm 官方源失败,改用 npmmirror 镜像重试…")
+                        npm_result = subprocess.run(
+                            [npm_path, "install", "--registry=https://registry.npmmirror.com"],
+                            cwd=electron_dir,
+                            capture_output=True,
+                            text=True,
+                            encoding="utf-8",
+                            errors="replace",
+                            timeout=300,
+                        )
                 if npm_result.returncode != 0:
                     return PhaseResult(
                         phase=StartupPhase.DESKTOP_SURFACE,
                         status=PhaseStatus.DEGRADED,
-                        detail=f"npm install failed: {npm_result.stderr[:200]}",
+                        detail=f"npm install failed: {(npm_result.stderr or '')[:200]}",
                     )
             except subprocess.TimeoutExpired:
                 return PhaseResult(
@@ -649,7 +670,7 @@ class SystemOrchestrator:
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
+                text=True, encoding="utf-8", errors="replace",
                 bufsize=1,
                 # Detached so Electron survives if Python parent exits.
                 # (POSIX: setsid via start_new_session; ignored on Windows.)

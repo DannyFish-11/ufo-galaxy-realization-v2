@@ -2236,6 +2236,10 @@ class CommandRouter:
                         "tool_invocation_truth": _v3_blocked_result.get("tool_invocation_truth"),
                         "repo_mutation_truth": _v3_blocked_result.get("repo_mutation_truth"),
                     }
+                    # 约束链追踪在拒发路径同样要随结果返回(端到端可审查性)。
+                    _constraint_chain_trace["v3_slot_gate_applied"] = True
+                    _constraint_chain_trace["v3_blocked_targets"] = list(_v3_blocked_targets)
+                    _v3_blocked_result["_constraint_chain_trace"] = dict(_constraint_chain_trace)
                     return _v3_blocked_result
 
             except Exception as _v3_exc:

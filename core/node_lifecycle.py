@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -55,7 +56,7 @@ def _pid_alive(pid: int) -> bool:
         if sys.platform == "win32":
             out = subprocess.run(
                 ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5,
             ).stdout
             return str(pid) in out
         os.kill(pid, 0)  # 不发信号,只探测存在
@@ -65,8 +66,15 @@ def _pid_alive(pid: int) -> bool:
 
 
 def _resolve_dir(node: str) -> Optional[str]:
-    """把 '71' / 'Node_71' / 'Node_71_MultiDeviceCoordination' / 'MultiDevice...' 归一到实际目录名。"""
+    """把 '71' / 'Node_71' / 'Node_71_MultiDeviceCoordination' / 'MultiDevice...' 归一到实际目录名。
+
+    安全:node 是外部输入(API 可达),先白名单校验字符集——既防
+    ``../`` 路径穿越,也保证归一结果可安全用于容器名/命令参数
+    (list 形式命令仍可能被 ``-`` 前缀参数注入)。
+    """
     node = str(node).strip()
+    if not re.match(r"^[A-Za-z0-9_.-]{1,120}$", node) or node.startswith((".", "-")):
+        return None
     if (_NODES_DIR / node).is_dir():
         return node
     # 纯数字或 Node_数字
@@ -189,7 +197,7 @@ def container_start_node(node: str) -> Dict[str, object]:
         if port:
             run_cmd += ["-p", f"{port}:{port}"]
         run_cmd.append(image)
-        r = subprocess.run(run_cmd, capture_output=True, text=True, timeout=60)
+        r = subprocess.run(run_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
         if r.returncode != 0:
             return {"ok": False, "error": f"{rt} run 失败: {(r.stderr or '')[:160]}"}
         logger.info("节点容器已启动 %s via %s (%s)", dir_name, rt, cname)

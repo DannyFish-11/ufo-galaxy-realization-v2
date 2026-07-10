@@ -258,22 +258,46 @@ class GalaxyTray:
             logger.info("Panel toggled via IPC")
             return
 
-        # 2) 回退：Electron 未运行 → 拉起桌面层
+        # 2) 回退:Electron 未运行 → 依赖完整才尝试拉起;否则直接开 Web 面板。
+        #    此前依赖残缺时 npm start 静默失败(CREATE_NO_WINDOW、无任何提示),
+        #    用户感受就是"托盘点了没反应"。后端面板本身一直可用,浏览器兜底。
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         electron_dir = os.path.join(project_root, "electron")
-        if not os.path.isdir(electron_dir):
-            logger.error("Electron GUI directory not found: %s", electron_dir)
-            self._show_notification("GUI Not Found", f"Electron directory missing:\n{electron_dir}")
-            return
+
+        electron_ready = os.path.isdir(electron_dir)
+        if electron_ready:
+            try:
+                sys.path.insert(0, project_root)
+                from core.electron_launch_guard import electron_package_intact
+                electron_ready = electron_package_intact(electron_dir)
+            except Exception:
+                electron_ready = os.path.isdir(os.path.join(electron_dir, "node_modules"))
+
+        if electron_ready:
+            try:
+                if sys.platform == "win32":
+                    subprocess.Popen(["npm", "start"], cwd=electron_dir, shell=True,
+                                     creationflags=subprocess.CREATE_NO_WINDOW)
+                else:
+                    subprocess.Popen(["npm", "start"], cwd=electron_dir)
+                logger.info("Electron GUI launched from %s", electron_dir)
+                return
+            except Exception as exc:
+                logger.error("Failed to launch GUI: %s", exc)
+
+        # 3) 最终兜底:桌面壳不可用 → 浏览器打开 Web 面板(后端始终在跑)
+        port = os.environ.get("GALAXY_GATEWAY_PORT", "") or os.environ.get("GALAXY_PORT", "") or "9000"
+        panel_url = f"http://localhost:{port}"
         try:
-            if sys.platform == "win32":
-                subprocess.Popen(["npm", "start"], cwd=electron_dir, shell=True,
-                                 creationflags=subprocess.CREATE_NO_WINDOW)
-            else:
-                subprocess.Popen(["npm", "start"], cwd=electron_dir)
-            logger.info("Electron GUI launched from %s", electron_dir)
+            webbrowser.open(panel_url, new=1, autoraise=True)
+            self._show_notification(
+                "Galaxy",
+                "桌面壳未就绪(electron 依赖未装好),已用浏览器打开面板。\n"
+                "修复:在 electron/ 目录执行 npm install。",
+            )
+            logger.info("Desktop shell unavailable — opened web panel %s", panel_url)
         except Exception as exc:
-            logger.error("Failed to launch GUI: %s", exc)
+            logger.error("Failed to open web panel fallback: %s", exc)
 
     def _wake_overlay(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         """通过 IPC 唤醒三态覆盖层（不依赖快捷键）。

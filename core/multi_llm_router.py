@@ -74,6 +74,18 @@ class ProviderConfig:
     last_used: float = 0.0
     down_since: float = 0.0  # 标记为 DOWN 的时刻(见 is_available())
 
+    def __post_init__(self) -> None:
+        # base_url 规范化收口在类型本身:任何构造路径(发现/面板保存/持久化
+        # 恢复)传进无协议头或空的 URL,都在这里一次修好,而不是指望每个
+        # 调用点自己记得。空值对本地 provider 回退默认地址,避免运行时
+        # 才炸 "Request URL is missing an 'http://' or 'https://' protocol."
+        raw = (self.base_url or "").strip()
+        if not raw and self.name == "ollama":
+            raw = os.environ.get("OLLAMA_URL", "").strip() or "http://localhost:11434"
+        if raw and not raw.startswith(("http://", "https://")):
+            raw = f"http://{raw}"
+        self.base_url = raw
+
     def is_available(self, recovery_seconds: float = 60.0) -> bool:
         """该 provider 现在是否该被当作候选。
 
@@ -151,6 +163,7 @@ _PROVIDER_ENV_KEY_MAP: Dict[str, str] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "google": "GOOGLE_API_KEY",
     "xai": "XAI_API_KEY",
+    "meta": "META_API_KEY",
     "mistral": "MISTRAL_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
     "qwen": "QWEN_API_KEY",
@@ -174,14 +187,16 @@ TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
     # 本地主脑优先，API 专科后备
     # LOCAL-BRAIN-FIRST: hf_local (HuggingFace local models) are checked after ollama
     # 2026-05-29: 新增 minimax/step/mimo 三个国产提供商
-    TaskType.REASONING:      ["ollama", "hf_local", "anthropic", "openai", "deepseek", "google", "qwen", "step"],
+    # 2026-07-10: 新增 meta(Muse Spark 1.1,agentic/多模态/1M ctx)——
+    # 定位在专有兜底梯队,agentic 任务(AGENT_CONTROL/CODING/PLANNING)优先级靠前
+    TaskType.REASONING:      ["ollama", "hf_local", "anthropic", "openai", "meta", "deepseek", "google", "qwen", "step"],
     TaskType.FAST_RESPONSE:  ["ollama", "hf_local", "deepseek", "mimo", "groq", "google", "openai", "zhipu"],
-    TaskType.CODING:         ["ollama", "hf_local", "deepseek", "qwen", "anthropic", "openai", "step", "mimo"],
+    TaskType.CODING:         ["ollama", "hf_local", "deepseek", "qwen", "anthropic", "openai", "meta", "step", "mimo"],
     TaskType.CREATIVE:       ["ollama", "hf_local", "openai", "anthropic", "mistral", "deepseek", "minimax"],
-    TaskType.ANALYSIS:       ["ollama", "hf_local", "anthropic", "openai", "deepseek", "google", "perplexity", "qwen", "step"],
-    TaskType.PLANNING:       ["ollama", "hf_local", "anthropic", "openai", "deepseek", "xai", "qwen", "minimax", "step"],
-    TaskType.AGENT_CONTROL:  ["ollama", "hf_local", "anthropic", "openai", "deepseek", "minimax", "step"],
-    TaskType.GENERAL:        ["ollama", "hf_local", "openai", "anthropic", "deepseek", "google", "qwen", "zhipu", "minimax", "step", "mimo"],
+    TaskType.ANALYSIS:       ["ollama", "hf_local", "anthropic", "openai", "meta", "deepseek", "google", "perplexity", "qwen", "step"],
+    TaskType.PLANNING:       ["ollama", "hf_local", "anthropic", "openai", "meta", "deepseek", "xai", "qwen", "minimax", "step"],
+    TaskType.AGENT_CONTROL:  ["ollama", "hf_local", "anthropic", "openai", "meta", "deepseek", "minimax", "step"],
+    TaskType.GENERAL:        ["ollama", "hf_local", "openai", "anthropic", "meta", "deepseek", "google", "qwen", "zhipu", "minimax", "step", "mimo"],
 }
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -314,6 +329,19 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.PLANNING:      "gemini-3.5-flash",
         TaskType.AGENT_CONTROL: "gemini-3.5-flash",
         TaskType.GENERAL:       "gemini-3.5-flash",
+    },
+    "meta": {
+        # Muse Spark 1.1(2026-07-09,Meta Superintelligence Labs):Llama 后继,
+        # Meta Model API 首发唯一模型。多模态推理+agentic(工具/电脑使用/编码),
+        # 1M ctx,OpenAI SDK 兼容(api.meta.ai/v1),$1.25/$4.25 每 M tokens。
+        TaskType.REASONING:     "muse-spark-1.1",
+        TaskType.FAST_RESPONSE: "muse-spark-1.1",
+        TaskType.CODING:        "muse-spark-1.1",
+        TaskType.CREATIVE:      "muse-spark-1.1",
+        TaskType.ANALYSIS:      "muse-spark-1.1",
+        TaskType.PLANNING:      "muse-spark-1.1",
+        TaskType.AGENT_CONTROL: "muse-spark-1.1",
+        TaskType.GENERAL:       "muse-spark-1.1",
     },
     "xai": {
         TaskType.REASONING:     "grok-4.5",
@@ -819,6 +847,11 @@ class GrokAdapter(OpenAIAdapter):
     pass
 
 
+class MetaAdapter(OpenAIAdapter):
+    """Meta Muse Spark via OpenAI-compatible Meta Model API (api.meta.ai)"""
+    pass
+
+
 class MistralAdapter(OpenAIAdapter):
     """Mistral AI via OpenAI-compatible API (api.mistral.ai)"""
     pass
@@ -1057,6 +1090,24 @@ class MultiLLMRouter:
             )
             self.providers["xai"] = cfg
             self.adapters["xai"] = GrokAdapter(cfg)
+
+        # Meta Muse Spark(Meta Model API,2026-07-09 公测)
+        key = self._get_key("meta")
+        if not key:
+            key = os.environ.get("META_API_KEY", "")
+        if key and not key.startswith("your-"):
+            cfg = ProviderConfig(
+                name="meta", api_key=key,
+                base_url="https://api.meta.ai/v1",
+                models=["muse-spark-1.1"],
+                default_model="muse-spark-1.1",
+                max_tokens=8192,
+                cost_per_1k_input=0.00125, cost_per_1k_output=0.00425,
+                multimodal=True, supports_vision=True,
+                env_key="META_API_KEY",
+            )
+            self.providers["meta"] = cfg
+            self.adapters["meta"] = MetaAdapter(cfg)
 
         # Mistral
         key = self._get_key("mistral")

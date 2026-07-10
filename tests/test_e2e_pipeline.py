@@ -74,39 +74,39 @@ def pipeline(session_manager, mock_llm_router, mock_connection_manager):
 class TestSessionManager:
     """Tests for cross-device unified session management."""
 
-    def test_create_session(self, session_manager):
-        session = session_manager.create_session("user_001", "phone_01")
+    async def test_create_session(self, session_manager):
+        session = await session_manager.create_session("user_001", "phone_01")
         assert session.user_id == "user_001"
         assert "phone_01" in session.devices
         assert session.id.startswith("session_")
 
-    def test_get_or_create_session(self, session_manager):
-        s1 = session_manager.get_or_create_session("user_001", "phone_01")
-        s2 = session_manager.get_or_create_session("user_001", "pc_01")
+    async def test_get_or_create_session(self, session_manager):
+        s1 = await session_manager.get_or_create_session("user_001", "phone_01")
+        s2 = await session_manager.get_or_create_session("user_001", "pc_01")
         # Same user should get same session
         assert s1.id == s2.id
         # Both devices should be in the session
         assert "phone_01" in s2.devices
         assert "pc_01" in s2.devices
 
-    def test_different_users_get_different_sessions(self, session_manager):
-        s1 = session_manager.get_or_create_session("user_001", "phone_01")
-        s2 = session_manager.get_or_create_session("user_002", "phone_02")
+    async def test_different_users_get_different_sessions(self, session_manager):
+        s1 = await session_manager.get_or_create_session("user_001", "phone_01")
+        s2 = await session_manager.get_or_create_session("user_002", "phone_02")
         assert s1.id != s2.id
 
-    def test_join_session(self, session_manager):
-        session = session_manager.create_session("user_001", "phone_01")
-        ok = session_manager.join_session(session.id, "tablet_01")
+    async def test_join_session(self, session_manager):
+        session = await session_manager.create_session("user_001", "phone_01")
+        ok = await session_manager.join_session(session.id, "tablet_01")
         assert ok is True
         assert "tablet_01" in session.devices
 
-    def test_join_nonexistent_session(self, session_manager):
-        ok = session_manager.join_session("nonexistent", "device_01")
+    async def test_join_nonexistent_session(self, session_manager):
+        ok = await session_manager.join_session("nonexistent", "device_01")
         assert ok is False
 
-    def test_add_message(self, session_manager):
-        session = session_manager.create_session("user_001", "phone_01")
-        ok = session_manager.add_message(
+    async def test_add_message(self, session_manager):
+        session = await session_manager.create_session("user_001", "phone_01")
+        ok = await session_manager.add_message(
             session.id, "user", "Hello", "phone_01"
         )
         assert ok is True
@@ -114,14 +114,14 @@ class TestSessionManager:
         assert session.history[0].content == "Hello"
         assert session.history[0].device_id == "phone_01"
 
-    def test_add_message_to_nonexistent(self, session_manager):
-        ok = session_manager.add_message("nonexistent", "user", "Hello")
+    async def test_add_message_to_nonexistent(self, session_manager):
+        ok = await session_manager.add_message("nonexistent", "user", "Hello")
         assert ok is False
 
-    def test_get_history(self, session_manager):
-        session = session_manager.create_session("user_001")
+    async def test_get_history(self, session_manager):
+        session = await session_manager.create_session("user_001")
         for i in range(5):
-            session_manager.add_message(session.id, "user", f"msg_{i}")
+            await session_manager.add_message(session.id, "user", f"msg_{i}")
 
         history = session_manager.get_history(session.id, max_turns=3)
         assert len(history) == 3
@@ -129,27 +129,27 @@ class TestSessionManager:
         assert history[0]["content"] == "msg_2"
         assert history[2]["content"] == "msg_4"
 
-    def test_get_history_as_llm_format(self, session_manager):
-        session = session_manager.create_session("user_001")
-        session_manager.add_message(session.id, "user", "What's the weather?")
-        session_manager.add_message(session.id, "assistant", "It's sunny!")
+    async def test_get_history_as_llm_format(self, session_manager):
+        session = await session_manager.create_session("user_001")
+        await session_manager.add_message(session.id, "user", "What's the weather?")
+        await session_manager.add_message(session.id, "assistant", "It's sunny!")
 
         history = session_manager.get_history(session.id)
         assert history[0] == {"role": "user", "content": "What's the weather?"}
         assert history[1] == {"role": "assistant", "content": "It's sunny!"}
 
-    def test_history_truncation(self, session_manager):
+    async def test_history_truncation(self, session_manager):
         session_manager.MAX_HISTORY = 5
-        session = session_manager.create_session("user_001")
+        session = await session_manager.create_session("user_001")
         for i in range(10):
-            session_manager.add_message(session.id, "user", f"msg_{i}")
+            await session_manager.add_message(session.id, "user", f"msg_{i}")
 
         assert len(session.history) == 5
         assert session.history[0].content == "msg_5"
 
-    def test_list_sessions(self, session_manager):
-        session_manager.create_session("user_001", "phone_01")
-        session_manager.create_session("user_002", "phone_02")
+    async def test_list_sessions(self, session_manager):
+        await session_manager.create_session("user_001", "phone_01")
+        await session_manager.create_session("user_002", "phone_02")
 
         all_sessions = session_manager.list_sessions()
         assert len(all_sessions) == 2
@@ -157,17 +157,17 @@ class TestSessionManager:
         user1_sessions = session_manager.list_sessions("user_001")
         assert len(user1_sessions) == 1
 
-    def test_list_device_sessions(self, session_manager):
-        s1 = session_manager.create_session("user_001", "phone_01")
-        s2 = session_manager.create_session("user_002", "pc_01")
-        session_manager.join_session(s2.id, "phone_01")
+    async def test_list_device_sessions(self, session_manager):
+        s1 = await session_manager.create_session("user_001", "phone_01")
+        s2 = await session_manager.create_session("user_002", "pc_01")
+        await session_manager.join_session(s2.id, "phone_01")
 
         phone_sessions = session_manager.list_device_sessions("phone_01")
         assert len(phone_sessions) == 2
 
-    def test_get_full_history(self, session_manager):
-        session = session_manager.create_session("user_001", "phone_01")
-        session_manager.add_message(
+    async def test_get_full_history(self, session_manager):
+        session = await session_manager.create_session("user_001", "phone_01")
+        await session_manager.add_message(
             session.id, "user", "Hello", "phone_01", {"source": "voice"}
         )
 
@@ -177,9 +177,9 @@ class TestSessionManager:
         assert full[0]["metadata"] == {"source": "voice"}
         assert "timestamp" in full[0]
 
-    def test_session_to_dict_roundtrip(self, session_manager):
-        session = session_manager.create_session("user_001", "phone_01")
-        session_manager.add_message(session.id, "user", "test")
+    async def test_session_to_dict_roundtrip(self, session_manager):
+        session = await session_manager.create_session("user_001", "phone_01")
+        await session_manager.add_message(session.id, "user", "test")
 
         d = session.to_dict()
         restored = Session.from_dict(d)
@@ -187,21 +187,21 @@ class TestSessionManager:
         assert restored.user_id == "user_001"
         assert len(restored.history) == 1
 
-    def test_session_summary(self, session_manager):
-        session = session_manager.create_session("user_001", "phone_01")
-        session_manager.add_message(session.id, "user", "test")
+    async def test_session_summary(self, session_manager):
+        session = await session_manager.create_session("user_001", "phone_01")
+        await session_manager.add_message(session.id, "user", "test")
 
         summary = session.to_summary()
         assert summary["message_count"] == 1
         assert "history" not in summary
 
-    def test_update_callback(self, session_manager):
+    async def test_update_callback(self, session_manager):
         called = []
         session_manager.set_update_callback(
             lambda sid, msg, devices: called.append((sid, msg, devices))
         )
-        session = session_manager.create_session("user_001", "phone_01")
-        session_manager.add_message(session.id, "user", "test", "phone_01")
+        session = await session_manager.create_session("user_001", "phone_01")
+        await session_manager.add_message(session.id, "user", "test", "phone_01")
 
         assert len(called) == 1
         assert called[0][0] == session.id
@@ -297,7 +297,7 @@ class TestEndToEndPipeline:
 
     @pytest.mark.asyncio
     async def test_explicit_session_id(self, pipeline, session_manager):
-        session = session_manager.create_session("user_001", "phone_01")
+        session = await session_manager.create_session("user_001", "phone_01")
         result = await pipeline.execute(
             message="test",
             user_id="user_001",
