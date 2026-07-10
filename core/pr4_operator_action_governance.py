@@ -2099,10 +2099,17 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
                 selected_runtime="android_delegated" if device_for_reasoning else "v2_local",
                 selected_device=device_for_reasoning,
                 participation_tier=tier_for_reasoning,
+                # 闭环帧的 mode_state:证据已证明该设备以 distributed_participant
+                # 参与(跨设备执行),不能继承当前姿态的 local(V2 域)——否则
+                # derive_execution_location 会把明确的委派执行折叠成 android_local。
                 mode_state=(
-                    proj.runtime_decision_reasoning.get("mode_basis", {}).get("mode_state")
-                    if isinstance(proj.runtime_decision_reasoning, dict)
-                    else None
+                    "cross_device"
+                    if device_for_reasoning and tier_for_reasoning == "distributed_participant"
+                    else (
+                        proj.runtime_decision_reasoning.get("mode_basis", {}).get("mode_state")
+                        if isinstance(proj.runtime_decision_reasoning, dict)
+                        else None
+                    )
                 ),
                 readiness_summary={
                     "verdict": (

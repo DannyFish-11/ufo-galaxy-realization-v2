@@ -305,8 +305,10 @@ class TestRuntimeStatePreFilterInSelection(unittest.TestCase):
                 "core.target_device_validator.validate_target_device",
                 side_effect=ImportError("skip admissibility for this test"),
             ),
+            # device_selection 在模块级 import 了该函数,必须 patch 使用处的
+            # 绑定名,patch 源模块不生效。
             patch(
-                "core.android_device_state_store.get_device_state_snapshot",
+                "galaxy_gateway.routing.device_selection.get_device_state_snapshot",
                 side_effect=_fake_snap,
             ),
             patch(

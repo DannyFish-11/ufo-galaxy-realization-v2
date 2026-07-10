@@ -44,7 +44,9 @@ except ImportError as _e:
 
 class TestResults:
     """测试结果"""
-    
+
+    __test__ = False  # 结果收集器,不是测试类
+
     def __init__(self):
         self.total = 0
         self.passed = 0
@@ -82,6 +84,19 @@ class TestResults:
 # ============================================================================
 # 测试函数
 # ============================================================================
+
+@pytest.fixture()
+def results():
+    """给每个测试一个结果收集器;收尾断言全部子检查通过。
+
+    这些函数原是手工集成脚本(python tests/integration/test_gateway_v3.py),
+    子检查失败只记录在 TestResults 里——在 pytest 下必须把它变成真实断言,
+    否则永远显示通过。
+    """
+    r = TestResults()
+    yield r
+    assert r.failed == 0, f"子检查失败: {r.errors}"
+
 
 async def test_aip_protocol(results: TestResults):
     """测试 AIP v3.0 协议"""
@@ -166,8 +181,10 @@ async def test_multimodal_transfer(results: TestResults):
             image_data=img_data
         )
         
-        assert msg.message_type.value == "image"
-        assert msg.payload.size > 0
+        # 协议收敛后:多模态统一走 FILE_TRANSFER,媒体类别在 payload.data_type
+        assert msg.type.value == "file_transfer"
+        assert msg.payload["data_type"] == "image"
+        assert msg.payload["size"] > 0
         
         results.add_result("多模态: 图片传输", True)
     except Exception as e:
@@ -184,8 +201,9 @@ async def test_multimodal_transfer(results: TestResults):
             format="mp3"
         )
         
-        assert msg.message_type.value == "audio"
-        assert msg.payload.size > 0
+        assert msg.type.value == "file_transfer"
+        assert msg.payload["data_type"] == "audio"
+        assert msg.payload["size"] > 0
         
         results.add_result("多模态: 音频传输", True)
     except Exception as e:
@@ -206,8 +224,8 @@ async def test_multimodal_transfer(results: TestResults):
             file_path=temp_file
         )
         
-        assert msg.message_type.value == "file"
-        assert msg.payload.chunks > 0
+        assert msg.type.value == "file_transfer"
+        assert msg.payload["chunks"] > 0
         
         # 清理
         import os

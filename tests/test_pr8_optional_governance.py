@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import json
 import py_compile
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -240,14 +241,33 @@ def test_optional_node_syntax_fusion_entry(name):
 
 @pytest.mark.parametrize("name", OPTIONAL_NODES)
 def test_optional_node_no_hygiene_violations(name):
-    """Test 8: No optional node has hygiene violations in its node directory."""
+    """Test 8: No optional node has hygiene violations committed to the repo.
+
+    判定对象是 git 跟踪的文件,而非本地磁盘状态——本地跑一次套件/起一次节点
+    必然产生 __pycache__/.log,不该让测试把自己跑红。git 不可用时退回磁盘检查。
+    """
     node_dir = NODES_DIR / name
     _HYGIENE_SUFFIXES = {".pid", ".log", ".tmp", ".lock", ".cache"}
     _HYGIENE_NAMES = {"__pycache__"}
+
+    try:
+        tracked = subprocess.run(
+            ["git", "ls-files", "--", str(node_dir)],
+            capture_output=True, text=True, timeout=30, cwd=str(PROJECT_ROOT),
+        )
+        candidates = (
+            [Path(line) for line in tracked.stdout.splitlines()]
+            if tracked.returncode == 0 else None
+        )
+    except (OSError, subprocess.SubprocessError):
+        candidates = None
+    if candidates is None:  # git 不可用(如源码包解开)→ 退回磁盘检查
+        candidates = list(node_dir.iterdir())
+
     violations = []
-    for child in node_dir.iterdir():
-        if child.name in _HYGIENE_NAMES or child.suffix in _HYGIENE_SUFFIXES:
-            violations.append(child.name)
+    for child in candidates:
+        if set(child.parts) & _HYGIENE_NAMES or child.suffix in _HYGIENE_SUFFIXES:
+            violations.append(str(child))
     assert not violations, f"{name} has hygiene violations: {violations}"
 
 

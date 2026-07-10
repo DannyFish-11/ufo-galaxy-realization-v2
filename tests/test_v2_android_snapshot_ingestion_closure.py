@@ -618,8 +618,13 @@ class TestEndToEndBridgeToHTTP:
         assert eco.get("total_devices_with_snapshot", 0) >= 1
         assert "local_loop_ready_count" in eco
         assert eco["local_loop_ready_count"] >= 1
+        # 快照只保留计数级白名单(ANDROID_ECOSYSTEM_SNAPSHOT_KEYS);
+        # per-device 明细的权威出口是 ecosystem summary / 专用 HTTP 路由(R01 已覆盖)。
+        assert "devices" not in eco, "per-device list must stay out of operator_snapshot"
+        from core.android_device_state_store import get_device_ecosystem_summary
+        summary = get_device_ecosystem_summary()
         device = next(
-            (d for d in eco.get("devices", []) if d["device_id"] == "r_dev_02"),
+            (d for d in summary.get("devices", []) if d["device_id"] == "r_dev_02"),
             None,
         )
         assert device is not None

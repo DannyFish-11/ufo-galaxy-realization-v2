@@ -54,13 +54,13 @@ class TestAuthModule(unittest.TestCase):
             del os.environ["GALAXY_API_TOKEN"]
     
     def test_verify_api_token_dev_mode(self):
-        """测试开发模式（未设置 Token）"""
+        """未配置 Token 时必须拒绝——dev-mode 绕过已因安全原因移除。"""
         # 移除环境变量
         if "GALAXY_API_TOKEN" in os.environ:
             del os.environ["GALAXY_API_TOKEN"]
-        
-        # 开发模式下应该跳过鉴权
-        self.assertTrue(verify_api_token("any-token"))
+
+        # 安全契约:无已配置 Token → 任何 Token 都验证失败(不再有开发模式绕过)
+        self.assertFalse(verify_api_token("any-token"))
     
     def test_verify_api_token_valid(self):
         """测试有效 Token"""
@@ -333,19 +333,22 @@ class TestUnifiedCommandEndpointWithAuth(unittest.TestCase):
     
     def setUp(self):
         """设置测试环境"""
-        # 设置 Token
+        # 鉴权是显式开启制(GALAXY_AUTH_ENABLED,production 强制开);
+        # 测 401 语义必须显式开启并配置 Token。
+        os.environ["GALAXY_AUTH_ENABLED"] = "1"
         os.environ["GALAXY_API_TOKEN"] = "test-token-12345"
-        
+
         # 创建测试应用
         self.app = FastAPI()
         router = create_api_routes()
         self.app.include_router(router)
         self.client = TestClient(self.app)
-    
+
     def tearDown(self):
         """清理测试环境"""
-        if "GALAXY_API_TOKEN" in os.environ:
-            del os.environ["GALAXY_API_TOKEN"]
+        for key in ("GALAXY_API_TOKEN", "GALAXY_AUTH_ENABLED"):
+            if key in os.environ:
+                del os.environ[key]
     
     def test_command_without_auth(self):
         """测试未提供鉴权信息"""

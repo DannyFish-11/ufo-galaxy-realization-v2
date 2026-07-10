@@ -368,12 +368,12 @@ def create_installer():
 #define MyAppExeName "{app_name_iss}.exe"
 
 [Setup]
-AppId={{{{8F3B9A2E-1234-5678-9ABC-DEF012345678}}}}
-AppName={{{{MyAppName}}}}
-AppVersion={{{{MyAppVersion}}}}
-AppPublisher={{{{MyAppPublisher}}}}
-DefaultDirName={{{{autopf}}}}\\{{{MyAppName}}}
-DefaultGroupName={{{{MyAppName}}}}
+AppId={{{{8F3B9A2E-1234-5678-9ABC-DEF012345678}}
+AppName={{#MyAppName}}
+AppVersion={{#MyAppVersion}}
+AppPublisher={{#MyAppPublisher}}
+DefaultDirName={{autopf}}\\{{#MyAppName}}
+DefaultGroupName={{#MyAppName}}
 AllowNoIcons=yes
 OutputDir={project_root_iss}\\installer_output
 OutputBaseFilename={app_name_iss}-Setup-{app_version_iss}
@@ -392,11 +392,11 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 Source: "{project_root_iss}\\dist\\{app_name_iss}\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{{group}}\\{{{MyAppName}}}"; Filename: "{{app}}\\{{{MyAppExeName}}}"
-Name: "{{autodesktop}}\\{{{MyAppName}}}"; Filename: "{{app}}\\{{{MyAppExeName}}}"; Tasks: desktopicon
+Name: "{{group}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}"
+Name: "{{autodesktop}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}"; Tasks: desktopicon
 
 [Run]
-Filename: "{{app}}\\{{{MyAppExeName}}}"; Description: "启动 {{{MyAppName}}}"; Flags: nowait postinstall skipifsilent
+Filename: "{{app}}\\{{#MyAppExeName}}"; Description: "启动 {{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 """
 
     iss_path = PROJECT_ROOT / "installer" / f"{APP_NAME}.iss"

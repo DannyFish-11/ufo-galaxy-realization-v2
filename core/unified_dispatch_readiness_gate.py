@@ -632,9 +632,12 @@ def _check_udm_registration(device_id: str) -> Dict[str, Any]:
         udm = get_unified_device_manager()
         device = udm.get_device(device_id)
         if device is not None:
+            # UDM 返回 UnifiedDevice 模型(非 dict):在线状态经 is_online(),
+            # 类型在 device_type 字段(use_enum_values → 已是 str)。
             result["registered"] = True
-            result["online"] = bool(device.get("online", False))
-            result["device_type"] = device.get("device_type") or device.get("platform")
+            is_online = getattr(device, "is_online", None)
+            result["online"] = bool(is_online() if callable(is_online) else False)
+            result["device_type"] = getattr(device, "device_type", None)
         return result
     except Exception as exc:
         logger.warning("Exception suppressed: %s", exc)

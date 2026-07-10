@@ -255,8 +255,8 @@ class P2PConnector:
     
     async def stop(self):
         """停止 P2P 连接器"""
-        # 关闭所有连接
-        for conn in self.connections.values():
+        # 关闭所有连接(_close_connection 会从 connections 删除条目,须拷贝迭代)
+        for conn in list(self.connections.values()):
             await self._close_connection(conn)
         
         # 停止任务
