@@ -324,7 +324,10 @@ class GalaxyDaemon:
             return
         signum = self._signal_pending
         self._signal_pending = 0  # Clear before processing
-        if signum == signal.SIGHUP:
+        # Windows 上 signal.SIGHUP 属性不存在,直接 `signum == signal.SIGHUP`
+        # 会在主循环里 AttributeError 崩掉(即使 SIGHUP 从未注册,求值本身就炸)。
+        _sighup = getattr(signal, "SIGHUP", None)
+        if _sighup is not None and signum == _sighup:
             self._reload_config()
         else:
             self._shutdown_event.set()
