@@ -473,7 +473,7 @@ async def test_dispatch_parallel_goal_partial_failure_still_succeeds():
 class TestWebSocketDisconnectSync:
     """断联时正确更新 UnifiedDeviceManager 状态。"""
 
-    def test_disconnect_updates_unified_device_manager(self):
+    async def test_disconnect_updates_unified_device_manager(self):
         _reset_udm()
         from galaxy_gateway.websocket_handler import GatewayWSManager
         from core.unified.device_manager import UnifiedDeviceManager
@@ -493,7 +493,8 @@ class TestWebSocketDisconnectSync:
 
         from galaxy_gateway.device_router import device_router
         with patch.object(device_router, "unregister_device"):
-            manager.disconnect("conn_1")
+            # disconnect 已是 async(B4 锁保护),同步调用只会产生未执行的协程
+            await manager.disconnect("conn_1")
 
         # Device should be OFFLINE in UDM
         updated = udm.get_device("ws_dev_01")

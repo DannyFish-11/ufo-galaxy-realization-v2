@@ -570,6 +570,11 @@ class CapabilityAssimilationLayer:
 
         with self._rw_lock:
             existing = self._records.get(node_id)
+            # 能力真相保全:重复吸纳时空能力列表意为"本次事件未申报",
+            # 不允许擦除既有非空能力声明(否则一次在场/心跳类事件就会把
+            # 设备从能力图里抹掉,路由随即拒发)。
+            if not caps and existing is not None:
+                caps = list(existing.capability_descriptor.capabilities)
             is_rejoin = (
                 existing is not None
                 and existing.fabric_presence.presence_state

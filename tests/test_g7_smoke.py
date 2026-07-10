@@ -156,10 +156,12 @@ class TestGatewayHealth:
     @pytest.fixture(scope="class")
     def client(self):
         # Import lazily so import errors surface as test failures, not
-        # collection errors.
+        # collection errors.  必须用上下文管理器进入,否则 lifespan(startup)
+        # 不执行,/health 会因 not-ready 门返回 503。
         from galaxy_gateway.app import app
 
-        return TestClient(app)
+        with TestClient(app) as c:
+            yield c
 
     def test_health_200(self, client):
         r = client.get("/health")
@@ -270,8 +272,9 @@ class TestQuickstartDocs:
 
     @pytest.fixture(scope="class")
     def qs_text(self):
-        path = PROJECT_ROOT / "QUICKSTART.md"
-        assert path.exists(), "QUICKSTART.md not found at project root"
+        # PR #1375(克隆门面整洁)把 QUICKSTART.md 移到 docs/guides/。
+        path = PROJECT_ROOT / "docs" / "guides" / "QUICKSTART.md"
+        assert path.exists(), "QUICKSTART.md not found at docs/guides/"
         return path.read_text()
 
     def test_quick_verify_section_present(self, qs_text):

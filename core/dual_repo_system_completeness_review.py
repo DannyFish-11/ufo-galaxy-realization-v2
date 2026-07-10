@@ -802,6 +802,14 @@ class DualRepoSystemCompletenessReviewer:
             completed.append(
                 f"Joint system review docs: {docs_present}/{len(doc_files)} present"
             )
+        # PR-7/8/9 V2 consolidation modules + PR-10 V2 coherence assessment:
+        # 结构收敛(ingress/continuity/orchestration/manifestation/operator truth)
+        # 已由 core.v2_final_consolidation_coherence 做五维一致性评估。
+        if _try_import("core.v2_final_consolidation_coherence"):
+            completed.append(
+                "PR-7/8/9 V2 consolidation paths converged; PR-10 V2 coherence "
+                "assessment module (core.v2_final_consolidation_coherence) present"
+            )
         if gateway_env_constrained or dispatch_env_constrained:
             all_env_constrained = gateway_env_constrained + dispatch_env_constrained
             deferred.append(
@@ -863,6 +871,7 @@ class DualRepoSystemCompletenessReviewer:
                 "tests/test_pr17_v2_system_final_acceptance_verdict.py",
                 "tests/test_pr537_dual_repo_system_reality_audit.py",
                 "tests/test_dual_repo_system_map.py",
+                "tests/test_pr10v2_final_consolidation_coherence.py",
             ],
         )
 

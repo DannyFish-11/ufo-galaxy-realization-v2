@@ -1173,9 +1173,13 @@ class UnifiedPanelAggregationService:
                 selected_device=verdict.get("device_id"),
                 android_truth_block=best_block,
                 participation_tier=verdict.get("tier"),
+                # mode_state 下游会被 derive_execution_location 当作【设备】的
+                # device_mode 消费(local → 折叠成 android_local)。V2 连续体的
+                # runtime_domain(LOCAL=在本机执行)是另一个维度,不能放在设备
+                # 模式前面,否则 V2 本机运行时委派执行会被误报成 android_local。
                 mode_state=str(
-                    payload.runtime_domain
-                    or getattr(best_block, "device_mode", None)
+                    getattr(best_block, "device_mode", None)
+                    or payload.runtime_domain
                     or "unknown"
                 ),
                 ready_to_route=str(payload.readiness_verdict or "").upper() == "READY",

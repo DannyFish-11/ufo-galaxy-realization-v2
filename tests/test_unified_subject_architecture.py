@@ -334,12 +334,19 @@ class TestDocumentationFiles:
         assert "DesktopPresenceRuntime" in doc
         assert "OpenClawd" in doc
 
+    # 注:根目录 ARCHITECTURE_REVIEW / SYSTEM_DESIGN_INTEGRATION_SUMMARY /
+    # README_UI_L4_INTEGRATION / UI_L4_INTEGRATION_REPORT 已在 PR #1375
+    # (克隆门面整洁)有意删除;统一主体框架的权威文档是
+    # docs/UNIFIED_SUBJECT_ARCHITECTURE.md,以下测试对准现有布局。
+
     def test_architecture_review_has_unified_subject_note(self):
-        doc = self._doc("ARCHITECTURE_REVIEW.md")
+        """PR #1375 后:架构评审框架并入权威统一主体文档。"""
+        doc = self._doc("docs/UNIFIED_SUBJECT_ARCHITECTURE.md")
         assert "统一主体架构" in doc or "Unified" in doc
 
     def test_system_design_has_unified_subject_note(self):
-        doc = self._doc("SYSTEM_DESIGN_INTEGRATION_SUMMARY.md")
+        """PR #1375 后:系统设计综述由 README 架构节 + 权威文档承担。"""
+        doc = self._doc("README.md")
         assert "DesktopPresenceRuntime" in doc or "统一主体" in doc
 
     def test_openclawd_state_continuum_distinguishes_from_shell_tristate(self):
@@ -360,9 +367,11 @@ class TestDocumentationFiles:
         assert "liminal" in doc.lower()
 
     def test_readme_ui_l4_has_architecture_note(self):
-        doc = self._doc("README_UI_L4_INTEGRATION.md")
+        """PR #1375 后:UI/L4 集成说明由权威统一主体文档承担 runtime shell 框架。"""
+        doc = self._doc("docs/UNIFIED_SUBJECT_ARCHITECTURE.md")
         assert "DesktopPresenceRuntime" in doc or "统一主体" in doc
 
     def test_ui_l4_integration_report_has_architecture_note(self):
-        doc = self._doc("UI_L4_INTEGRATION_REPORT.md")
-        assert "DesktopPresenceRuntime" in doc or "统一主体" in doc
+        """PR #1375 后:根目录报告已归档;README 指向权威统一主体文档。"""
+        doc = self._doc("README.md")
+        assert "UNIFIED_SUBJECT_ARCHITECTURE" in doc

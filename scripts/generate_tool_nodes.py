@@ -91,7 +91,8 @@ def generate_main_py(node_id: str, name: str, description: str, library: str, to
             return {{"status": "error", "message": str(e)}}
 ''')
     tool_methods_str = "\n".join(tool_methods)
-    
+    name_upper = name.upper()
+
     code = f'''"""
 Node {node_id}: {name}
 {"=" * (len(f"Node {node_id}: {name}") + 4)}

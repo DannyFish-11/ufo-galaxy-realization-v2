@@ -322,9 +322,11 @@ class SmartTransportRouter:
 
         if method == TransportMethod.WEBRTC:
             if use_gateway or not self.webrtc_enabled:
-                # Return the gateway WebSocket signaling URL (AIP v3)
+                # 网关的 WebRTC 信令代理路径是 /ws/webrtc/{device_id}
+                # (galaxy_gateway.webrtc_proxy / websocket.py 注册),
+                # 不是通用设备通道 /ws/device/。
                 ws_url = self.gateway_url.replace("https://", "wss://").replace("http://", "ws://")
-                return f"{ws_url}/ws/device/{device_id}"
+                return f"{ws_url}/ws/webrtc/{device_id}"
             # WebRTC 通道明确启用时返回 Node_95 直连端点
             node_url = self.nodes.get("webrtc", "")
             if network == NetworkLayer.TAILSCALE and self.tailscale_domain:

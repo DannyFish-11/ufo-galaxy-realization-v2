@@ -257,6 +257,8 @@ class TestSmartTransportRouterUseGateway:
 
     @pytest.mark.asyncio
     async def test_use_gateway_returns_gateway_ws_url(self, monkeypatch):
+        # WebRTC 通道是显式启用制(GALAXY_ENABLE_WEBRTC),测 webrtc 路径必须先开
+        monkeypatch.setenv("GALAXY_ENABLE_WEBRTC", "true")
         monkeypatch.setenv("GATEWAY_URL", "http://localhost:8000")
         from galaxy_gateway.smart_transport_router import SmartTransportRouter, TransportRequest
 
@@ -283,6 +285,7 @@ class TestSmartTransportRouterUseGateway:
 
     @pytest.mark.asyncio
     async def test_no_gateway_returns_node95_url(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_ENABLE_WEBRTC", "true")
         monkeypatch.setenv("NODE_95_URL", "http://localhost:8095")
         from galaxy_gateway.smart_transport_router import SmartTransportRouter, TransportRequest
 

@@ -56,6 +56,11 @@
             └── Skill 系统: 动态加载扩展
 ```
 
+统一主体架构:桌面在场运行时(DesktopPresenceRuntime)是唯一主体核心,
+Electron 覆盖层/面板只是运行时外壳(runtime shell);OpenClawd 作为执行策略层
+(PolicyGate 白名单 + 沙箱)挂在主体之下。详见
+[docs/UNIFIED_SUBJECT_ARCHITECTURE.md](docs/UNIFIED_SUBJECT_ARCHITECTURE.md)。
+
 ---
 
 ## 三态交互

@@ -30,19 +30,32 @@ class TestDeviceOrchestratorDelegatesPool:
         """select_device() routes through DevicePoolManager.select_device."""
         from core.device_orchestrator import DeviceOrchestrator
         from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
+        from core.capability_assimilation import (
+            get_capability_assimilation_layer,
+            reset_capability_assimilation_layer,
+        )
 
         DevicePoolManager._reset_singleton()
+        reset_capability_assimilation_layer()
         pool = DevicePoolManager(strategy=SchedulingStrategy.ADAPTIVE)
         pool.register_device("dev_a", capabilities=["screen"])
+        # 权威能力网络(assimilation layer)是路由一票门:pool 候选还要和
+        # query_routable_executors 求交集,设备必须同时注册进权威层。
+        get_capability_assimilation_layer().assimilate(
+            "dev_a", capabilities=["screen"]
+        )
 
-        with patch(
-            "core.device_pool_manager.get_device_pool_manager", return_value=pool
-        ):
-            orch = DeviceOrchestrator()
-            result = orch.select_device(required_capabilities=["screen"])
+        try:
+            with patch(
+                "core.device_pool_manager.get_device_pool_manager", return_value=pool
+            ):
+                orch = DeviceOrchestrator()
+                result = orch.select_device(required_capabilities=["screen"])
 
-        assert result == "dev_a"
-        DevicePoolManager._reset_singleton()
+            assert result == "dev_a"
+        finally:
+            DevicePoolManager._reset_singleton()
+            reset_capability_assimilation_layer()
 
     def test_select_device_returns_none_when_pool_empty(self):
         """select_device() returns None when the pool has no eligible devices."""
@@ -89,10 +102,35 @@ class TestCommandRouterPoolSelection:
         from core.command_router import CommandRouter
         from core.schemas.task_envelope import TaskEnvelope
         from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
+        from core.capability_assimilation import (
+            get_capability_assimilation_layer,
+            reset_capability_assimilation_layer,
+        )
+
+        from core.unified.device_manager import get_unified_device_manager
 
         DevicePoolManager._reset_singleton()
+        reset_capability_assimilation_layer()
         pool = DevicePoolManager(strategy=SchedulingStrategy.ADAPTIVE)
         pool.register_device("pool_dev_1", capabilities=["screen"])
+        # PR-1-P0 能力硬门:capability graph 无执行者时整个派发被拒,
+        # 设备必须同时注册进权威能力网络。
+        get_capability_assimilation_layer().assimilate(
+            "pool_dev_1", capabilities=["screen"]
+        )
+        # V3 槽位权威:设备还必须在 UDM 注册且为可派发类(android/windows)。
+        udm = get_unified_device_manager()
+        udm.register_device_from_dict(
+            "pool_dev_1",
+            {"device_type": "android", "status": "online", "capabilities": ["screen"]},
+        )
+        # 在场真相来自 UCM 活连接:路由中会把无连接设备投影为 offline 并同步
+        # 进能力同化层,必须注册一个(假)连接。
+        from core.unified.connection_manager import get_unified_connection_manager
+
+        await get_unified_connection_manager().register_connection(
+            "pool_dev_1", MagicMock()
+        )
 
         mock_executor = MagicMock(return_value=None)
 
@@ -118,6 +156,7 @@ class TestCommandRouterPoolSelection:
         assert result.get("success") is True
         assert result.get("device_id") == "pool_dev_1"
         DevicePoolManager._reset_singleton()
+        reset_capability_assimilation_layer()
 
     @pytest.mark.asyncio
     async def test_error_when_no_target_and_no_caps(self):
