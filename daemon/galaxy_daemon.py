@@ -256,13 +256,18 @@ class GalaxyDaemon:
         self._signal_pending: int = 0  # 0=none, SIGTERM/SIGINT=shutdown, SIGHUP=reload
 
         # Setup signal handlers — use a simple atomic flag approach for thread safety
+        # Windows 兼容(开机自启的前提):SIGHUP 与 siginterrupt 在 Windows 上不存在,
+        # 此前无条件调用 → 守护进程在 Windows 一启动就 AttributeError 崩掉。
         signal.signal(signal.SIGTERM, self._signal_handler)
         signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGHUP, self._signal_handler)
-        # Prevent signals from interrupting system calls (retry instead)
-        signal.siginterrupt(signal.SIGTERM, False)
-        signal.siginterrupt(signal.SIGINT, False)
-        signal.siginterrupt(signal.SIGHUP, False)
+        if hasattr(signal, "SIGHUP"):
+            signal.signal(signal.SIGHUP, self._signal_handler)
+        if hasattr(signal, "siginterrupt"):
+            # Prevent signals from interrupting system calls (retry instead)
+            signal.siginterrupt(signal.SIGTERM, False)
+            signal.siginterrupt(signal.SIGINT, False)
+            if hasattr(signal, "SIGHUP"):
+                signal.siginterrupt(signal.SIGHUP, False)
 
         logger.info("GalaxyDaemon initialized")
     
@@ -535,9 +540,29 @@ if __name__ == "__main__":
     parser.add_argument("--config", "-c", help="Configuration file path")
     parser.add_argument("--status", "-s", action="store_true", help="Show status")
     parser.add_argument("--stop", action="store_true", help="Stop daemon")
-    
+    parser.add_argument("--install-autostart", action="store_true",
+                        help="注册开机自启(Windows 计划任务 / systemd user / LaunchAgent)")
+    parser.add_argument("--uninstall-autostart", action="store_true", help="取消开机自启")
+    parser.add_argument("--autostart-status", action="store_true", help="查看开机自启状态")
+
     args = parser.parse_args()
-    
+
+    if args.install_autostart or args.uninstall_autostart or args.autostart_status:
+        try:
+            from daemon.autostart import install, status, uninstall
+        except ImportError:
+            # 直接 `python daemon/galaxy_daemon.py` 运行时 sys.path[0] 是 daemon/
+            # 目录本身,包名不可见 → 退回同目录导入。
+            from autostart import install, status, uninstall
+        if args.install_autostart:
+            result = install()
+        elif args.uninstall_autostart:
+            result = uninstall()
+        else:
+            result = status()
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        sys.exit(0 if result.get("ok", result.get("installed")) != "False" else 1)
+
     if args.stop:
         # Send stop signal
         # Find and stop running daemon
