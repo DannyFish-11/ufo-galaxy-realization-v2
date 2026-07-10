@@ -414,8 +414,10 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
         # Relative paths (e.g. ".") resolved against addon_dir
         if dep.startswith(".") or dep.startswith("/"):
             dep_path = (addon_dir / dep).resolve()
-            # 路径型依赖必须落在 addon 目录内(防 ../ 穿越装任意本地包)
-            if not str(dep_path).startswith(str(addon_root)):
+            # 路径型依赖必须落在 addon 目录内(防 ../ 穿越装任意本地包)。
+            # 用 is_relative_to 而不是 startswith 前缀判断——后者可被
+            # 同前缀旁路目录绕过(如 /addons-evil 通过 /addons 的检查)。
+            if not dep_path.is_relative_to(addon_root):
                 logger.warning("dep rejected (escapes addon dir): %r", dep)
                 continue
             pip_cmd.append(str(dep_path))
