@@ -282,44 +282,48 @@ def _provider_quality_tier(name: str) -> int:
 # 提供商 → 推荐模型 (2026-05-29 全面更新)
 PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     "openai": {
-        TaskType.REASONING:     "gpt-5.5",
-        TaskType.FAST_RESPONSE: "gpt-5.5-instant",
-        TaskType.CODING:        "gpt-5.5",
-        TaskType.CREATIVE:      "gpt-5.5",
-        TaskType.ANALYSIS:      "gpt-5.5",
-        TaskType.PLANNING:      "gpt-5.5",
-        TaskType.AGENT_CONTROL: "gpt-5.5",
-        TaskType.GENERAL:       "gpt-5.5",
+        # GPT-5.6 家族(2026-07-09 GA):gpt-5.6 = 旗舰 Sol 的别名(1.05M ctx/128K out);
+        # terra=日常均衡($2.5/$15);luna=快而省($1/$6)。
+        TaskType.REASONING:     "gpt-5.6",
+        TaskType.FAST_RESPONSE: "gpt-5.6-luna",
+        TaskType.CODING:        "gpt-5.6",
+        TaskType.CREATIVE:      "gpt-5.6",
+        TaskType.ANALYSIS:      "gpt-5.6",
+        TaskType.PLANNING:      "gpt-5.6",
+        TaskType.AGENT_CONTROL: "gpt-5.6",
+        TaskType.GENERAL:       "gpt-5.6-terra",
     },
     "anthropic": {
         TaskType.REASONING:     "claude-opus-4-8-20250529",
-        TaskType.FAST_RESPONSE: "claude-sonnet-4-6-20251022",
-        TaskType.CODING:        "claude-sonnet-4-6-20251022",
+        TaskType.FAST_RESPONSE: "claude-sonnet-5",
+        TaskType.CODING:        "claude-sonnet-5",
         TaskType.CREATIVE:      "claude-opus-4-8-20250529",
         TaskType.ANALYSIS:      "claude-opus-4-8-20250529",
         TaskType.PLANNING:      "claude-opus-4-8-20250529",
-        TaskType.AGENT_CONTROL: "claude-sonnet-4-6-20251022",
-        TaskType.GENERAL:       "claude-sonnet-4-6-20251022",
+        TaskType.AGENT_CONTROL: "claude-sonnet-5",
+        TaskType.GENERAL:       "claude-sonnet-5",
     },
     "google": {
+        # 注:gemini-3.5-pro 延期到 2026-07-17 才发布——此前表里引用它会 404。
+        # 现全走 GA 的 3.5-flash;Pro 上线后把 CODING/PLANNING/AGENT 升回去。
         TaskType.REASONING:     "gemini-3.5-flash",
         TaskType.FAST_RESPONSE: "gemini-3.5-flash",
-        TaskType.CODING:        "gemini-3.5-pro",
-        TaskType.CREATIVE:      "gemini-3.5-pro",
+        TaskType.CODING:        "gemini-3.5-flash",
+        TaskType.CREATIVE:      "gemini-3.5-flash",
         TaskType.ANALYSIS:      "gemini-3.5-flash",
-        TaskType.PLANNING:      "gemini-3.5-pro",
-        TaskType.AGENT_CONTROL: "gemini-3.5-pro",
+        TaskType.PLANNING:      "gemini-3.5-flash",
+        TaskType.AGENT_CONTROL: "gemini-3.5-flash",
         TaskType.GENERAL:       "gemini-3.5-flash",
     },
     "xai": {
-        TaskType.REASONING:     "grok-4.1",
-        TaskType.FAST_RESPONSE: "grok-4.1",
-        TaskType.CODING:        "grok-4.1",
-        TaskType.CREATIVE:      "grok-4.1",
-        TaskType.ANALYSIS:      "grok-4.1",
-        TaskType.PLANNING:      "grok-4.1",
-        TaskType.AGENT_CONTROL: "grok-4.1",
-        TaskType.GENERAL:       "grok-4.1",
+        TaskType.REASONING:     "grok-4.5",
+        TaskType.FAST_RESPONSE: "grok-4.5",
+        TaskType.CODING:        "grok-4.5",
+        TaskType.CREATIVE:      "grok-4.5",
+        TaskType.ANALYSIS:      "grok-4.5",
+        TaskType.PLANNING:      "grok-4.5",
+        TaskType.AGENT_CONTROL: "grok-4.5",
+        TaskType.GENERAL:       "grok-4.5",
     },
     "mistral": {
         TaskType.REASONING:     "mistral-large-3",
@@ -333,7 +337,7 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     },
     "deepseek": {
         TaskType.REASONING:     "deepseek-v4-pro",
-        TaskType.FAST_RESPONSE: "deepseek-v4",
+        TaskType.FAST_RESPONSE: "deepseek-v4-flash",
         TaskType.CODING:        "deepseek-v4-pro",
         TaskType.CREATIVE:      "deepseek-v4-pro",
         TaskType.ANALYSIS:      "deepseek-v4-pro",
@@ -344,7 +348,7 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     "qwen": {
         TaskType.REASONING:     "qwen3.7-max",
         TaskType.CODING:        "qwen3.7-coder",
-        TaskType.FAST_RESPONSE: "qwen3.7-max",
+        TaskType.FAST_RESPONSE: "qwen-flash",
         TaskType.GENERAL:       "qwen3.7-max",
         TaskType.ANALYSIS:      "qwen3.7-max",
         TaskType.PLANNING:      "qwen3.7-max",
@@ -390,9 +394,12 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL:       "mimo-v2.5-pro",
     },
     "moonshot": {
-        TaskType.GENERAL:       "moonshot-v1-128k",
-        TaskType.ANALYSIS:      "moonshot-v1-256k",
-        TaskType.FAST_RESPONSE: "moonshot-v1-32k",
+        # Kimi K2 系取代老 moonshot-v1-*:k2.6=最新最强(代码/agent);
+        # k2.5=原生多模态 256K 长上下文(2026-01 开源权重)。
+        TaskType.GENERAL:       "kimi-k2.6",
+        TaskType.CODING:        "kimi-k2.6",
+        TaskType.ANALYSIS:      "kimi-k2.5",
+        TaskType.FAST_RESPONSE: "kimi-k2.5",
     },
     "perplexity": {
         TaskType.REASONING:     "sonar-deep-research",
@@ -995,8 +1002,8 @@ class MultiLLMRouter:
             base = self._get_key("openai_base") or os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
             cfg = ProviderConfig(
                 name="openai", api_key=key, base_url=base,
-                models=["gpt-5.5", "gpt-5.5-instant", "gpt-4.1", "gpt-4o", "gpt-4o-mini"],
-                default_model="gpt-5.5",
+                models=["gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-4o"],
+                default_model="gpt-5.6",
                 cost_per_1k_input=0.005, cost_per_1k_output=0.015,
                 multimodal=True, env_key="OPENAI_API_KEY",
             )
@@ -1011,8 +1018,8 @@ class MultiLLMRouter:
             cfg = ProviderConfig(
                 name="anthropic", api_key=key,
                 base_url="https://api.anthropic.com/v1",
-                models=["claude-opus-4-8-20250529", "claude-sonnet-4-6-20251022", "claude-haiku-4-5-20251001"],
-                default_model="claude-sonnet-4-6-20251022",
+                models=["claude-opus-4-8-20250529", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+                default_model="claude-sonnet-5",
                 cost_per_1k_input=0.003, cost_per_1k_output=0.015,
                 multimodal=True, env_key="ANTHROPIC_API_KEY",
             )
@@ -1043,8 +1050,8 @@ class MultiLLMRouter:
             cfg = ProviderConfig(
                 name="xai", api_key=key,
                 base_url="https://api.x.ai/v1",
-                models=["grok-4.1", "grok-4.1-beta"],
-                default_model="grok-4.1",
+                models=["grok-4.5", "grok-4.3"],
+                default_model="grok-4.5",
                 cost_per_1k_input=0.005, cost_per_1k_output=0.015,
                 multimodal=True, env_key="XAI_API_KEY",
             )
@@ -1075,7 +1082,7 @@ class MultiLLMRouter:
             cfg = ProviderConfig(
                 name="deepseek", api_key=key,
                 base_url="https://api.deepseek.com/v1",
-                models=["deepseek-v4-pro", "deepseek-v4", "deepseek-chat", "deepseek-reasoner"],
+                models=["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"],
                 default_model="deepseek-v4-pro",
                 cost_per_1k_input=0.000025, cost_per_1k_output=0.00006,
                 multimodal=False, env_key="DEEPSEEK_API_KEY",
@@ -1174,8 +1181,8 @@ class MultiLLMRouter:
             cfg = ProviderConfig(
                 name="moonshot", api_key=key,
                 base_url="https://api.moonshot.cn/v1",
-                models=["moonshot-v1-128k", "moonshot-v1-32k", "moonshot-v1-256k"],
-                default_model="moonshot-v1-128k",
+                models=["kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k"],
+                default_model="kimi-k2.6",
                 cost_per_1k_input=0.002, cost_per_1k_output=0.002,
                 multimodal=False, env_key="MOONSHOT_API_KEY",
             )
