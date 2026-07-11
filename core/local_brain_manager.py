@@ -112,12 +112,9 @@ class LocalBrainManager:
            'http://'..."(克隆界面探测 Ollama 时那个 HTTP 报错、Ollama 明明在跑却
            判"未响应")。故空值一律回落默认地址,不再放空 URL 出门。
         """
-        raw = (raw or "").strip()
-        if not raw:
-            return LocalBrainManager.OLLAMA_DEFAULT_URL
-        if not raw.startswith(("http://", "https://")):
-            raw = f"http://{raw}"
-        return raw.rstrip("/")
+        # 收口到 core.ollama_endpoint 唯一属主(本方法保留为薄封装:测试与旧调用点仍引用它)。
+        from core.ollama_endpoint import normalize_ollama_url
+        return normalize_ollama_url(raw)
 
     def __init__(self, backend: str = "auto", ollama_url: Optional[str] = None):
         """

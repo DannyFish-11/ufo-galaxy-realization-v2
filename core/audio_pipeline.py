@@ -106,15 +106,10 @@ class AudioPipeline:
         # 本地 Ollama 音频（MiniCPM-o 4.5 全模态、或最新 Gemma 4 原生音频输入；经 Ollama 的
         # OpenAI 兼容端点 /v1/chat/completions 复用 input_audio content block，纯本地、无需云端
         # key。注意：Ollama 原生 /api/chat 的 audios 字段会被静默忽略，必须走 /v1 这条）。
-        # 兜底补协议头:用户在面板只填 host:port(如 "localhost:11434")时,
-        # 原来的写法(默认值只在 key 不存在时生效)会把这个无协议头的值原样
-        # 传给 httpx,实际请求时炸 InvalidURL(missing protocol)。
-        _ollama_base_raw = self.config.get("ollama_base", os.getenv("OLLAMA_URL", "")).strip()
-        if not _ollama_base_raw:
-            _ollama_base_raw = "http://localhost:11434"
-        elif not _ollama_base_raw.startswith(("http://", "https://")):
-            _ollama_base_raw = f"http://{_ollama_base_raw}"
-        self.ollama_base = _ollama_base_raw.rstrip("/")
+        # ollama 地址解析收口到 core.ollama_endpoint 唯一属主(空值/缺协议头都兜底):
+        # 面板 config 的 ollama_base > 环境变量 OLLAMA_URL > 默认 localhost:11434。
+        from core.ollama_endpoint import resolve_ollama_base_url
+        self.ollama_base = resolve_ollama_base_url(self.config.get("ollama_base"))
         self.local_audio_enabled = os.getenv("GALAXY_LOCAL_AUDIO", "1").strip().lower() in (
             "1", "true", "yes", "on"
         )
