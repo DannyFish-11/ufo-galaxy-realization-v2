@@ -298,6 +298,85 @@ async def ha_states():
     return {"success": True, "states": states, "count": len(states)}
 
 
+# ─── 融合入口服务(fusion_entry 统一调用) ────────────────────────────────────
+
+def _http_exc_to_dict(exc: HTTPException) -> Dict[str, Any]:
+    detail = exc.detail if isinstance(exc.detail, dict) else {"error": str(exc.detail)}
+    out = {"success": False}
+    out.update(detail)
+    return out
+
+
+class SmartHomeService:
+    """供 fusion_entry.execute(action, params) 统一调用的服务封装。
+
+    与上面的 FastAPI 端点共用同一份 HA 配置与内存设备表;方法一律返回 dict、
+    不向调用方抛 HTTPException(统一入口要的是可 JSON 化的结果,不是 HTTP 语义)。
+    此前 fusion_entry 导入的这个类并不存在,统一入口一调 Node_27 就
+    AttributeError——该类补上这条断链,让节点同时具备 HTTP(8027)与 fusion 两种身份。
+    """
+
+    async def discover(self) -> Dict[str, Any]:
+        """发现设备:配置了 HA 就拉全量实体镜像进内存设备表,否则返回内存设备。"""
+        if HA_URL and HA_TOKEN:
+            try:
+                states = await _ha_get("/states")
+            except HTTPException as exc:
+                return _http_exc_to_dict(exc)
+            for st in states or []:
+                eid = st.get("entity_id", "")
+                if not eid:
+                    continue
+                _devices[eid] = {
+                    "device_id": eid,
+                    "name": (st.get("attributes") or {}).get("friendly_name", eid),
+                    "type": eid.split(".")[0],
+                    "protocol": "home_assistant",
+                    "ip_address": None,
+                    "state": {"value": st.get("state", "")},
+                    "online": st.get("state") not in ("unavailable", "unknown"),
+                    "registered_at": datetime.now().isoformat(),
+                }
+            return {"success": True, "source": "home_assistant",
+                    "devices": list(_devices.values()), "count": len(_devices)}
+        return {"success": True, "source": "in_memory",
+                "devices": list(_devices.values()), "count": len(_devices)}
+
+    async def devices(self) -> Dict[str, Any]:
+        return await list_devices()
+
+    async def control(self, device_id: str, action: str,
+                      params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        try:
+            return await control_device(
+                ControlDeviceRequest(device_id=device_id, action=action, params=params or {})
+            )
+        except HTTPException as exc:
+            return _http_exc_to_dict(exc)
+
+    async def scene(self, scene_id: str) -> Dict[str, Any]:
+        try:
+            return await trigger_scene(TriggerSceneRequest(scene_id=scene_id))
+        except HTTPException as exc:
+            return _http_exc_to_dict(exc)
+
+    async def ha_call(self, domain: str, service: str,
+                      entity_id: Optional[str] = None,
+                      data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        try:
+            return await ha_call(
+                HACallRequest(domain=domain, service=service, entity_id=entity_id, data=data or {})
+            )
+        except HTTPException as exc:
+            return _http_exc_to_dict(exc)
+
+    async def states(self) -> Dict[str, Any]:
+        try:
+            return await ha_states()
+        except HTTPException as exc:
+            return _http_exc_to_dict(exc)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=PORT)

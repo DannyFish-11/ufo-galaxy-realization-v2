@@ -35,12 +35,38 @@ core/aip_transport.py — AIP v3 统一传输层
 """
 
 import asyncio
+import json
 import logging
+import os
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.AIPTransport")
+
+# ───────────────────── 需求感知选路(按消息实际需要,而非一律静态优先级) ─────────────────────
+# 小而频、丢一两条无妨的控制/心跳类:低延迟优先,UDP 可以上位。
+_LOSS_TOLERANT_TYPES = frozenset({
+    "heartbeat", "heartbeat_ack", "ack", "state_event", "coord_sync",
+})
+# 必达的执行/生命周期类:只走有连接语义的可靠传输,UDP 不做候选。
+_RELIABLE_TYPES = frozenset({
+    "task_assign", "task_submit", "task_result", "task_cancel", "cancel_result",
+    "goal_execution", "goal_result", "goal_execution_result", "parallel_subtask",
+    "device_register", "device_unregister", "capability_report", "capability_query",
+    "takeover_request", "takeover_response",
+    "operator_action_request", "operator_action_result",
+    "delegated_execution_signal", "reconciliation_signal", "command_result",
+})
+# 大载荷阈值:超过后窄带传输(BLE/串口/UDP/CAN/DBus)不做候选(MTU/速率不现实)。
+_NARROWBAND = frozenset({"ble", "serial", "udp", "canbus", "dbus"})
+
+
+def _bulk_threshold_bytes() -> int:
+    try:
+        return int(os.environ.get("GALAXY_TRANSPORT_BULK_BYTES", "65536") or "65536")
+    except ValueError:
+        return 65536
 
 
 class TransportAdapter(ABC):
@@ -91,6 +117,111 @@ class AIPTransport:
             "ble",              # 蓝牙 LE
             "serial",           # 串口
         ]
+        # 链路历史:(transport, target) → 尝试/成功/EWMA 延迟。由 _send_with_fallback
+        # 的真实发送结果喂入,反哺后续候选排序(表现差的链路下沉,好的上浮)。
+        self._link_stats: Dict[Tuple[str, str], Dict[str, float]] = {}
+
+    # -- 需求感知选路 --------------------------------------------------------
+
+    @staticmethod
+    def _message_needs(msg_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """从消息本身推导传输需求:必达/容损、载荷大小、优先级。选路"根据实际需要来"
+        的依据就是这三样,而不是无论什么消息都按同一张静态优先级表。"""
+        mtype = str(msg_dict.get("type", "") or "")
+        try:
+            size = len(json.dumps(msg_dict, default=str, ensure_ascii=False))
+        except Exception:  # noqa: BLE001
+            size = 0
+        return {
+            "reliable": mtype in _RELIABLE_TYPES,
+            "loss_tolerant": mtype in _LOSS_TOLERANT_TYPES,
+            "bulk": size >= _bulk_threshold_bytes(),
+            "priority": str(msg_dict.get("priority", "") or "normal"),
+            "size": size,
+        }
+
+    def _record_attempt(self, ttype: str, target: str, ok: bool, latency_ms: float) -> None:
+        """记一次真实发送结果进链路统计。全程防御,绝不影响发送主流程。"""
+        try:
+            key = (ttype, target)
+            s = self._link_stats.setdefault(
+                key, {"attempts": 0.0, "successes": 0.0, "ewma_latency_ms": 0.0}
+            )
+            s["attempts"] += 1
+            if ok:
+                s["successes"] += 1
+                prev = s["ewma_latency_ms"]
+                s["ewma_latency_ms"] = (
+                    latency_ms if prev <= 0 else (0.7 * prev + 0.3 * latency_ms)
+                )
+            if len(self._link_stats) > 2048:  # 有界,防长期运行膨胀
+                self._link_stats.pop(next(iter(self._link_stats)))
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _link_score(self, ttype: str, target: str) -> Optional[float]:
+        """链路得分 = 成功率 − 延迟惩罚;样本 <3 返回 None(不评,保持静态位置)。"""
+        s = self._link_stats.get((ttype, target))
+        if not s or s["attempts"] < 3:
+            return None
+        success_rate = s["successes"] / s["attempts"]
+        lat_pen = min(1.0, (s["ewma_latency_ms"] or 0.0) / 2000.0) * 0.2
+        return success_rate - lat_pen
+
+    def _candidate_order(
+        self, target: str, needs: Optional[Dict[str, Any]] = None
+    ) -> List[str]:
+        """按【消息实际需要】过滤 + 按【链路历史】重排候选传输。
+
+        - bulk 大载荷:剔除窄带(BLE/串口/UDP/CAN/DBus);
+        - 必达消息:剔除 UDP;
+        - 容损小控制消息:UDP 上提(低开销,丢一条无妨);
+        - critical/high 优先级:剔除已知很差(得分<0.34)的链路,除非没得剩;
+        - 历史重排:有分按分降序,无分保持静态相对位置(冷启动 = 完全静态,零行为变化);
+          GALAXY_TRANSPORT_ADAPTIVE=false 时只做需求过滤、不做历史重排。
+        """
+        order = list(self._transport_priority)
+        if needs:
+            if needs.get("bulk"):
+                filtered = [t for t in order if t not in _NARROWBAND]
+                order = filtered or order  # 全被剔光则放弃过滤,宁可窄带兜底
+            elif needs.get("reliable"):
+                order = [t for t in order if t != "udp"] or order
+            elif needs.get("loss_tolerant") and "udp" in order:
+                order.remove("udp")
+                idx = order.index("tcp") + 1 if "tcp" in order else 1
+                order.insert(idx, "udp")
+            if needs.get("priority") in ("critical", "high"):
+                def _known_bad(t: str) -> bool:
+                    sc = self._link_score(t, target)
+                    return sc is not None and sc < 0.34
+                kept = [t for t in order if not _known_bad(t)]
+                if kept:
+                    order = kept
+        if os.environ.get("GALAXY_TRANSPORT_ADAPTIVE", "true").lower() == "false":
+            return order
+
+        def _key(pair: Tuple[int, str]) -> Tuple[float, int]:
+            i, t = pair
+            sc = self._link_score(t, target)
+            return (-(0.5 if sc is None else sc), i)  # 无分按 0.5 基线,稳定保持静态位
+
+        return [t for _, t in sorted(enumerate(order), key=_key)]
+
+    def transport_stats(self) -> List[Dict[str, Any]]:
+        """可观测:导出链路统计(供面板/诊断查看选路反哺依据)。"""
+        out: List[Dict[str, Any]] = []
+        for (ttype, target), s in self._link_stats.items():
+            n = s["attempts"] or 1
+            out.append({
+                "transport": ttype, "target": target,
+                "attempts": int(s["attempts"]),
+                "success_rate": round(s["successes"] / n, 4),
+                "ewma_latency_ms": round(s["ewma_latency_ms"], 1),
+                "score": self._link_score(ttype, target),
+            })
+        out.sort(key=lambda d: (-(d["score"] if d["score"] is not None else 0.5)))
+        return out
 
     # -- 注册管理 ----------------------------------------------------------
 
@@ -132,12 +263,15 @@ class AIPTransport:
         # 1. 统一转 dict
         msg_dict = self._to_dict(message)
 
-        # 2. 确定传输类型
+        # 2. 需求感知:从消息本身推导传输需求(必达/容损/大载荷/优先级)
+        needs = self._message_needs(msg_dict)
+
+        # 3. 确定传输类型
         ttype = transport or msg_dict.get("_transport", self._default_transport)
         msg_dict["_transport"] = ttype  # 内部标记（不出现在 AIP v3 协议中）
 
-        # 3. 自动选择：如果指定传输不可用，按优先级 fallback
-        adapter = await self._select_adapter(target, preferred=ttype)
+        # 4. 自动选择：如果指定传输不可用，按【需求过滤+历史重排】后的候选 fallback
+        adapter = await self._select_adapter(target, preferred=ttype, needs=needs)
         if adapter is None:
             return {
                 "success": False,
@@ -146,8 +280,8 @@ class AIPTransport:
 
         ttype = adapter.transport_type
 
-        # 4. 发送 + PR-28 fallback 链：一个传输失败自动试下一个
-        return await self._send_with_fallback(msg_dict, target, adapter, ttype)
+        # 5. 发送 + PR-28 fallback 链：一个传输失败自动试下一个(结果记入链路统计)
+        return await self._send_with_fallback(msg_dict, target, adapter, ttype, needs=needs)
 
     async def broadcast(
         self,
@@ -197,6 +331,7 @@ class AIPTransport:
         self,
         target: str,
         preferred: str,
+        needs: Optional[Dict[str, Any]] = None,
     ) -> Optional[TransportAdapter]:
         """选择最佳适配器。
 
@@ -219,8 +354,8 @@ class AIPTransport:
                         recommended_transport, target,
                     )
                     return adapter
-            # Topology 无法推荐或推荐的不通 — 按优先级逐个探测
-            for ttype in self._transport_priority:
+            # Topology 无法推荐或推荐的不通 — 按【需求过滤+历史重排】后的候选逐个探测
+            for ttype in self._candidate_order(target, needs):
                 adapter = self._adapters.get(ttype)
                 if adapter and await adapter.is_available(target):
                     logger.debug("Auto-selected '%s' for target '%s'", ttype, target)
@@ -246,8 +381,8 @@ class AIPTransport:
         if adapter and await adapter.is_available(target):
             return adapter
 
-        # 按优先级 fallback
-        for ttype in self._transport_priority:
+        # 按【需求过滤+历史重排】后的候选 fallback
+        for ttype in self._candidate_order(target, needs):
             if ttype == preferred:
                 continue
             adapter = self._adapters.get(ttype)
@@ -283,18 +418,20 @@ class AIPTransport:
         target: str,
         first_adapter: TransportAdapter,
         first_ttype: str,
+        needs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Send with automatic fallback chain.
 
-        If the first adapter fails, try the next one in priority order.
-        Records all attempts for diagnostics.
+        If the first adapter fails, try the next one — 候选链按消息需求过滤 + 链路
+        历史重排(不再是一张静态表)。Every attempt's outcome (success/latency) is
+        recorded into link stats to feed future ordering.
         """
         attempted: List[str] = []
         errors: List[str] = []
 
         adapters_to_try = [first_adapter]
-        # Add remaining adapters in priority order
-        for ttype in self._transport_priority:
+        # 需求过滤 + 历史重排后的候选(caller 显式指定的 first_adapter 始终保留在首位)
+        for ttype in self._candidate_order(target, needs):
             adapter = self._adapters.get(ttype)
             if adapter and adapter not in adapters_to_try:
                 adapters_to_try.append(adapter)
@@ -302,10 +439,13 @@ class AIPTransport:
         for adapter in adapters_to_try:
             ttype = adapter.transport_type
             attempted.append(ttype)
+            t0 = time.monotonic()
             try:
                 result = await adapter.send(msg_dict, target)
+                latency_ms = (time.monotonic() - t0) * 1000
                 result["_transport_used"] = ttype
                 if result.get("success"):
+                    self._record_attempt(ttype, target, True, latency_ms)
                     if len(attempted) > 1:
                         logger.info(
                             "PR-28 fallback success: %s → %s for %s (tried: %s)",
@@ -313,8 +453,10 @@ class AIPTransport:
                         )
                     return result
                 # Adapter returned success=False — record reason and try next
+                self._record_attempt(ttype, target, False, latency_ms)
                 errors.append(f"{ttype}: {result.get('error', 'unknown')}")
             except Exception as exc:
+                self._record_attempt(ttype, target, False, (time.monotonic() - t0) * 1000)
                 errors.append(f"{ttype}: {exc}")
                 continue
 

@@ -30,8 +30,39 @@ router = APIRouter()
 
 @router.get("/api/devices")
 async def get_devices(dm=Depends(get_device_manager)):
-    """Return all registered devices."""
-    return dm.to_dict()
+    """Return all registered devices.
+
+    读取面统一到 UDM(SSOT):gateway 本地表只含经 WS 注册的端设备,看不见
+    直接进 UDM 的设备(HA 镜像/mDNS 发现的智能设备)。这里以本地表为基底、
+    合并 UDM 里本地没有的条目,让本端点与 /api/v1/devices 看到同一个世界;
+    UDM 不可用时行为与旧版完全一致。
+    """
+    out = dm.to_dict()
+    try:
+        from core.unified.device_manager import get_unified_device_manager
+        local_ids = {d.get("device_id") for d in out.get("devices", [])}
+        extra = []
+        for dev in get_unified_device_manager().list_devices() or []:
+            if dev.device_id in local_ids:
+                continue
+            extra.append({
+                "device_id": dev.device_id,
+                "device_name": dev.device_name,
+                "device_type": str(dev.device_type),
+                "status": str(dev.status),
+                "capabilities": list(dev.capabilities or []),
+                "metadata": dict(dev.metadata or {}),
+                "source": "udm",
+            })
+        if extra:
+            out["devices"] = list(out.get("devices", [])) + extra
+            out["total_devices"] = len(out["devices"])
+            out["online_devices"] = out.get("online_devices", 0) + sum(
+                1 for d in extra if str(d.get("status", "")).endswith("online")
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("GET /api/devices: UDM 合并跳过(非致命): %s", exc)
+    return out
 
 
 @router.get("/api/devices/connected")

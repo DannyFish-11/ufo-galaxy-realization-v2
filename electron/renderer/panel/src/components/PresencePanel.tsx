@@ -165,6 +165,14 @@ export default function PresencePanel({ phase, streaming, data, turns = [], spea
           label="任务"
           value={`${data.openclawdStatus?.activeTasks ?? 0} 活跃`}
         />
+        <Metric
+          label="设备"
+          value={`${data.openclawdStatus?.connectedDevices ?? 0} 端${
+            (data.openclawdStatus?.smartDevices ?? 0) > 0
+              ? ` · ${data.openclawdStatus?.smartDevices} 智能`
+              : ''
+          }`}
+        />
       </div>
 
       <div className="presence-section">
