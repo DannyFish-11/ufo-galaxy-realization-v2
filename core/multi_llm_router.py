@@ -749,16 +749,6 @@ class AnthropicAdapter(BaseProviderAdapter):
         return anthropic_tools
 
 
-class DeepSeekAdapter(OpenAIAdapter):
-    """DeepSeek uses OpenAI-compatible API"""
-    pass
-
-
-class GroqAdapter(OpenAIAdapter):
-    """Groq uses OpenAI-compatible API"""
-    pass
-
-
 class OllamaAdapter(BaseProviderAdapter):
     """Ollama local model adapter"""
 
@@ -842,82 +832,99 @@ class OllamaAdapter(BaseProviderAdapter):
         )
 
 
-# OpenAI-compatible adapters — no additional code needed, all reuse OpenAIAdapter
-class GoogleAdapter(OpenAIAdapter):
-    """Google Gemini via OpenAI-compatible endpoint (generativelanguage.googleapis.com)"""
-    pass
-
-
-class GrokAdapter(OpenAIAdapter):
-    """xAI Grok via OpenAI-compatible API (api.x.ai)"""
-    pass
-
-
-class MetaAdapter(OpenAIAdapter):
-    """Meta Muse Spark via OpenAI-compatible Meta Model API (api.meta.ai)"""
-    pass
-
-
-class MistralAdapter(OpenAIAdapter):
-    """Mistral AI via OpenAI-compatible API (api.mistral.ai)"""
-    pass
-
-
-class QwenAdapter(OpenAIAdapter):
-    """Alibaba Qwen via Together AI OpenAI-compatible endpoint"""
-    pass
-
-
-class ZhipuAdapter(OpenAIAdapter):
-    """Zhipu GLM via OpenAI-compatible API (open.bigmodel.cn)"""
-    pass
-
-
-class MoonshotAdapter(OpenAIAdapter):
-    """Moonshot Kimi via OpenAI-compatible API (api.moonshot.cn)"""
-    pass
-
-
-class PerplexityAdapter(OpenAIAdapter):
-    """Perplexity Sonar via OpenAI-compatible API (api.perplexity.ai)"""
-    pass
-
-
-class MiniMaxAdapter(OpenAIAdapter):
-    """MiniMax via OpenAI-compatible API (api.minimax.chat)"""
-    pass
-
-
-class StepAdapter(OpenAIAdapter):
-    """阶跃星辰 Step via OpenAI-compatible API (api.stepfun.com)"""
-    pass
-
-
-class MiMoAdapter(OpenAIAdapter):
-    """小米 MiMo via OpenAI-compatible API (api.xiaomimimo.com)"""
-    pass
-
 
 # ───────────────────── 主路由器 ─────────────────────
 
-ADAPTER_MAP = {
-    "openai":     OpenAIAdapter,
-    "anthropic":  AnthropicAdapter,
-    "google":     GoogleAdapter,
-    "xai":        GrokAdapter,
-    "mistral":    MistralAdapter,
-    "deepseek":   DeepSeekAdapter,
-    "qwen":       QwenAdapter,
-    "zhipu":      ZhipuAdapter,
-    "minimax":    MiniMaxAdapter,
-    "step":       StepAdapter,
-    "mimo":       MiMoAdapter,
-    "moonshot":   MoonshotAdapter,
-    "perplexity": PerplexityAdapter,
-    "groq":       GroqAdapter,
-    "ollama":     OllamaAdapter,
-    "hf_local":   OpenAIAdapter,
+# L1 收口:协议 → 适配器工厂。此前每个 OpenAI 兼容提供商都有一个空壳子类
+# (class DeepSeekAdapter(OpenAIAdapter): pass …共 12 个),纯冗余。现在按【协议】
+# 选适配器:openai 兼容全用 OpenAIAdapter、anthropic 用 AnthropicAdapter、
+# 本地 ollama 用 OllamaAdapter。新增一个 OpenAI 兼容提供商不再需要建类。
+_ADAPTER_BY_PROTOCOL: Dict[str, type] = {
+    "openai": OpenAIAdapter,
+    "anthropic": AnthropicAdapter,
+    "ollama": OllamaAdapter,
 }
+
+# 兼容:老代码/外部若按名取适配器类,仍可用(全部收敛到真实类,不再指向空壳)。
+ADAPTER_MAP = {
+    "openai": OpenAIAdapter, "anthropic": AnthropicAdapter, "google": OpenAIAdapter,
+    "xai": OpenAIAdapter, "meta": OpenAIAdapter, "mistral": OpenAIAdapter,
+    "deepseek": OpenAIAdapter, "qwen": OpenAIAdapter, "zhipu": OpenAIAdapter,
+    "minimax": OpenAIAdapter, "step": OpenAIAdapter, "mimo": OpenAIAdapter,
+    "moonshot": OpenAIAdapter, "perplexity": OpenAIAdapter, "groq": OpenAIAdapter,
+    "ollama": OllamaAdapter, "hf_local": OpenAIAdapter,
+}
+
+# ───────────────────────────────────────────────────────────────────────────
+# L1 声明式提供商注册表(单一属主)
+# ───────────────────────────────────────────────────────────────────────────
+# 此前 _discover_providers 里 15 个云端提供商各是一段几乎一字不差的 16 行复制
+# (key=_get_key(); if key: cfg=ProviderConfig(...); adapters[x]=XAdapter(cfg))。
+# 现把"给个 key 就注册"的标准 OpenAI/Anthropic 兼容提供商全部收敛成【一张数据表】,
+# _register_from_registry() 从表循环派生 —— 新增提供商 = 表里加一行。
+#
+# 特殊发现逻辑(本地探测/动态模型列表)的 ollama / hf_local / oneapi 不入表,仍走
+# 各自的专门发现分支。
+#
+# 字段(name/env_key/base_url/models/default_model/cost_in/cost_out 必填,其余可省):
+#   protocol   "openai"(默认) | "anthropic" —— 决定用哪个适配器
+#   alt_env    备用环境变量名列表(如 qwen 的 DASHSCOPE_API_KEY、google 的 GEMINI_API_KEY)
+#   base_env / base_key  用环境变量 / Dashboard 短键覆盖 base_url(openai 的 OPENAI_API_BASE)
+#   extra      透传给 ProviderConfig 的其它非默认字段(multimodal / supports_tools /
+#              supports_vision / max_tokens 等)
+PROVIDER_REGISTRY: List[Dict[str, Any]] = [
+    {"name": "openai", "env_key": "OPENAI_API_KEY",
+     "base_url": "https://api.openai.com/v1", "base_env": "OPENAI_API_BASE", "base_key": "openai_base",
+     "models": ["gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-4o"],
+     "default_model": "gpt-5.6", "cost_in": 0.005, "cost_out": 0.015, "extra": {"multimodal": True}},
+    {"name": "anthropic", "env_key": "ANTHROPIC_API_KEY", "protocol": "anthropic",
+     "base_url": "https://api.anthropic.com/v1",
+     "models": ["claude-opus-4-8-20250529", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+     "default_model": "claude-sonnet-5", "cost_in": 0.003, "cost_out": 0.015, "extra": {"multimodal": True}},
+    {"name": "google", "env_key": "GOOGLE_API_KEY", "alt_env": ["GEMINI_API_KEY"],
+     "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+     "models": ["gemini-3.5-flash", "gemini-3.5-pro", "gemini-2.5-pro"],
+     "default_model": "gemini-3.5-flash", "cost_in": 0.00125, "cost_out": 0.005, "extra": {"multimodal": True}},
+    {"name": "xai", "env_key": "XAI_API_KEY", "base_url": "https://api.x.ai/v1",
+     "models": ["grok-4.5", "grok-4.3"], "default_model": "grok-4.5",
+     "cost_in": 0.005, "cost_out": 0.015, "extra": {"multimodal": True}},
+    {"name": "meta", "env_key": "META_API_KEY", "base_url": "https://api.meta.ai/v1",
+     "models": ["muse-spark-1.1"], "default_model": "muse-spark-1.1",
+     "cost_in": 0.00125, "cost_out": 0.00425,
+     "extra": {"multimodal": True, "supports_vision": True, "max_tokens": 8192}},
+    {"name": "mistral", "env_key": "MISTRAL_API_KEY", "base_url": "https://api.mistral.ai/v1",
+     "models": ["mistral-large-3", "mistral-medium-3", "mistral-large-2"],
+     "default_model": "mistral-large-3", "cost_in": 0.002, "cost_out": 0.006, "extra": {"multimodal": True}},
+    {"name": "deepseek", "env_key": "DEEPSEEK_API_KEY", "base_url": "https://api.deepseek.com/v1",
+     "models": ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"],
+     "default_model": "deepseek-v4-pro", "cost_in": 0.000025, "cost_out": 0.00006},
+    {"name": "qwen", "env_key": "QWEN_API_KEY", "alt_env": ["DASHSCOPE_API_KEY"],
+     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+     "models": ["qwen3.7-max", "qwen3.7-coder", "qwen3-235b-a22b"],
+     "default_model": "qwen3.7-max", "cost_in": 0.0025, "cost_out": 0.0075, "extra": {"multimodal": True}},
+    {"name": "zhipu", "env_key": "ZHIPU_API_KEY", "base_url": "https://open.bigmodel.cn/api/paas/v4",
+     "models": ["glm-5.1", "glm-5.1-flash", "glm-4-plus"],
+     "default_model": "glm-5.1", "cost_in": 0.001, "cost_out": 0.001, "extra": {"multimodal": True}},
+    {"name": "minimax", "env_key": "MINIMAX_API_KEY", "base_url": "https://api.minimax.chat/v1",
+     "models": ["minimax-m2.7", "minimax-m2.5", "minimax-text-01"],
+     "default_model": "minimax-m2.7", "cost_in": 0.001, "cost_out": 0.004},
+    {"name": "step", "env_key": "STEP_API_KEY", "base_url": "https://api.stepfun.com/v1",
+     "models": ["step-3.7-flash", "step-3.7-turbo", "step-3.7-mini"],
+     "default_model": "step-3.7-flash", "cost_in": 0.001, "cost_out": 0.004, "extra": {"multimodal": True}},
+    {"name": "mimo", "env_key": "MIMO_API_KEY", "base_url": "https://api.xiaomimimo.com/v1",
+     "models": ["mimo-v2.5-pro", "mimo-v2.5-standard", "mimo-v2.5-lite"],
+     "default_model": "mimo-v2.5-pro", "cost_in": 0.00002, "cost_out": 0.00008},
+    {"name": "moonshot", "env_key": "MOONSHOT_API_KEY", "base_url": "https://api.moonshot.cn/v1",
+     "models": ["kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k"],
+     "default_model": "kimi-k2.6", "cost_in": 0.002, "cost_out": 0.002},
+    {"name": "perplexity", "env_key": "PERPLEXITY_API_KEY", "base_url": "https://api.perplexity.ai",
+     "models": ["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro", "sonar"],
+     "default_model": "sonar-pro", "cost_in": 0.001, "cost_out": 0.001,
+     "extra": {"supports_tools": False}},
+    {"name": "groq", "env_key": "GROQ_API_KEY", "base_url": "https://api.groq.com/openai/v1",
+     "models": ["llama-3.3-70b-versatile"], "default_model": "llama-3.3-70b-versatile",
+     "cost_in": 0.00059, "cost_out": 0.00079, "extra": {"supports_tools": True}},
+]
 
 
 # PR-515 / GAP-512-009: MultiLLMRouter is the MODEL SELECTION AUTHORITY
@@ -1030,257 +1037,52 @@ class MultiLLMRouter:
         except Exception:
             return False
 
+    def _register_from_registry(self) -> None:
+        """L1:从 PROVIDER_REGISTRY 循环注册标准 OpenAI/Anthropic 兼容提供商。
+
+        等价于此前 15 段复制粘贴的发现逻辑,单一属主:
+        - key 优先级:_get_key(短名) > env_key > alt_env 里的备用变量;
+        - key 为空或以 "your-" 占位符开头则跳过该提供商;
+        - base_url 允许被 base_key(Dashboard 短键)或 base_env(环境变量)覆盖,
+          两者都空则用表里的默认 base_url;
+        - 按 protocol 选适配器(openai/anthropic),extra 里的字段透传给 ProviderConfig。
+        """
+        for spec in PROVIDER_REGISTRY:
+            name = spec["name"]
+            key = self._get_key(name)
+            if not key:
+                for envk in [spec["env_key"], *spec.get("alt_env", [])]:
+                    key = os.environ.get(envk, "")
+                    if key:
+                        break
+            if not key or key.startswith("your-"):
+                continue
+            base = spec["base_url"]
+            base_key = spec.get("base_key")
+            base_env = spec.get("base_env")
+            if base_key or base_env:
+                override = self._get_key(base_key) if base_key else ""
+                if not override and base_env:
+                    override = os.environ.get(base_env, "")
+                override = (override or "").strip()
+                if override:
+                    base = override
+            cfg = ProviderConfig(
+                name=name, api_key=key, base_url=base,
+                models=list(spec["models"]), default_model=spec["default_model"],
+                cost_per_1k_input=spec["cost_in"], cost_per_1k_output=spec["cost_out"],
+                env_key=spec["env_key"],
+                **spec.get("extra", {}),
+            )
+            self.providers[name] = cfg
+            adapter_cls = _ADAPTER_BY_PROTOCOL.get(spec.get("protocol", "openai"), OpenAIAdapter)
+            self.adapters[name] = adapter_cls(cfg)
+
     def _discover_providers(self):
         """从配置源自动发现并注册提供商（Dashboard > ENV > defaults）（PR86）"""
 
-        # OpenAI
-        key = self._get_key("openai")
-        if not key:
-            key = os.environ.get("OPENAI_API_KEY", "")
-        if key and not key.startswith("your-"):
-            # OPENAI_API_BASE="" (面板保存空值)会让 .get(k, default) 返回 ""——
-            # 显式回退默认地址,避免 base_url 为空导致请求时炸缺协议头。
-            base = (self._get_key("openai_base") or os.environ.get("OPENAI_API_BASE", "") or "").strip()
-            if not base:
-                base = "https://api.openai.com/v1"
-            cfg = ProviderConfig(
-                name="openai", api_key=key, base_url=base,
-                models=["gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-4o"],
-                default_model="gpt-5.6",
-                cost_per_1k_input=0.005, cost_per_1k_output=0.015,
-                multimodal=True, env_key="OPENAI_API_KEY",
-            )
-            self.providers["openai"] = cfg
-            self.adapters["openai"] = OpenAIAdapter(cfg)
-
-        # Anthropic
-        key = self._get_key("anthropic")
-        if not key:
-            key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="anthropic", api_key=key,
-                base_url="https://api.anthropic.com/v1",
-                models=["claude-opus-4-8-20250529", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
-                default_model="claude-sonnet-5",
-                cost_per_1k_input=0.003, cost_per_1k_output=0.015,
-                multimodal=True, env_key="ANTHROPIC_API_KEY",
-            )
-            self.providers["anthropic"] = cfg
-            self.adapters["anthropic"] = AnthropicAdapter(cfg)
-
-        # Google Gemini (OpenAI-compatible endpoint)
-        key = self._get_key("google")
-        if not key:
-            key = os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="google", api_key=key,
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai",
-                models=["gemini-3.5-flash", "gemini-3.5-pro", "gemini-2.5-pro"],
-                default_model="gemini-3.5-flash",
-                cost_per_1k_input=0.00125, cost_per_1k_output=0.005,
-                multimodal=True, env_key="GOOGLE_API_KEY",
-            )
-            self.providers["google"] = cfg
-            self.adapters["google"] = GoogleAdapter(cfg)
-
-        # xAI Grok
-        key = self._get_key("xai")
-        if not key:
-            key = os.environ.get("XAI_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="xai", api_key=key,
-                base_url="https://api.x.ai/v1",
-                models=["grok-4.5", "grok-4.3"],
-                default_model="grok-4.5",
-                cost_per_1k_input=0.005, cost_per_1k_output=0.015,
-                multimodal=True, env_key="XAI_API_KEY",
-            )
-            self.providers["xai"] = cfg
-            self.adapters["xai"] = GrokAdapter(cfg)
-
-        # Meta Muse Spark(Meta Model API,2026-07-09 公测)
-        key = self._get_key("meta")
-        if not key:
-            key = os.environ.get("META_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="meta", api_key=key,
-                base_url="https://api.meta.ai/v1",
-                models=["muse-spark-1.1"],
-                default_model="muse-spark-1.1",
-                max_tokens=8192,
-                cost_per_1k_input=0.00125, cost_per_1k_output=0.00425,
-                multimodal=True, supports_vision=True,
-                env_key="META_API_KEY",
-            )
-            self.providers["meta"] = cfg
-            self.adapters["meta"] = MetaAdapter(cfg)
-
-        # Mistral
-        key = self._get_key("mistral")
-        if not key:
-            key = os.environ.get("MISTRAL_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="mistral", api_key=key,
-                base_url="https://api.mistral.ai/v1",
-                models=["mistral-large-3", "mistral-medium-3", "mistral-large-2"],
-                default_model="mistral-large-3",
-                cost_per_1k_input=0.002, cost_per_1k_output=0.006,
-                multimodal=True, env_key="MISTRAL_API_KEY",
-            )
-            self.providers["mistral"] = cfg
-            self.adapters["mistral"] = MistralAdapter(cfg)
-
-        # DeepSeek (V4-Pro: 2026-04-24发布, 2026-05-22永久降价75%)
-        key = self._get_key("deepseek")
-        if not key:
-            key = os.environ.get("DEEPSEEK_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="deepseek", api_key=key,
-                base_url="https://api.deepseek.com/v1",
-                models=["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"],
-                default_model="deepseek-v4-pro",
-                cost_per_1k_input=0.000025, cost_per_1k_output=0.00006,
-                multimodal=False, env_key="DEEPSEEK_API_KEY",
-            )
-            self.providers["deepseek"] = cfg
-            self.adapters["deepseek"] = DeepSeekAdapter(cfg)
-
-        # Qwen 3.7 Max (阿里云, 2026-05-20发布, 1M上下文)
-        key = self._get_key("qwen")
-        if not key:
-            key = os.environ.get("QWEN_API_KEY", "") or os.environ.get("DASHSCOPE_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="qwen", api_key=key,
-                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-                models=["qwen3.7-max", "qwen3.7-coder", "qwen3-235b-a22b"],
-                default_model="qwen3.7-max",
-                cost_per_1k_input=0.0025, cost_per_1k_output=0.0075,
-                multimodal=True, env_key="QWEN_API_KEY",
-            )
-            self.providers["qwen"] = cfg
-            self.adapters["qwen"] = QwenAdapter(cfg)
-
-        # Zhipu GLM-5.1 (智谱AI, 2026-04-08发布, 开源, 2026-05-22高速版400tokens/s)
-        key = self._get_key("zhipu")
-        if not key:
-            key = os.environ.get("ZHIPU_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="zhipu", api_key=key,
-                base_url="https://open.bigmodel.cn/api/paas/v4",
-                models=["glm-5.1", "glm-5.1-flash", "glm-4-plus"],
-                default_model="glm-5.1",
-                cost_per_1k_input=0.001, cost_per_1k_output=0.001,
-                multimodal=True, env_key="ZHIPU_API_KEY",
-            )
-            self.providers["zhipu"] = cfg
-            self.adapters["zhipu"] = ZhipuAdapter(cfg)
-
-        # MiniMax M2.7 (2026-03-18发布, 支持Agent自主规划多工具调用)
-        key = self._get_key("minimax")
-        if not key:
-            key = os.environ.get("MINIMAX_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="minimax", api_key=key,
-                base_url="https://api.minimax.chat/v1",
-                models=["minimax-m2.7", "minimax-m2.5", "minimax-text-01"],
-                default_model="minimax-m2.7",
-                cost_per_1k_input=0.001, cost_per_1k_output=0.004,
-                multimodal=False, env_key="MINIMAX_API_KEY",
-            )
-            self.providers["minimax"] = cfg
-            self.adapters["minimax"] = MiniMaxAdapter(cfg)
-
-        # Step 3.7 Flash (阶跃星辰, 2026-05-29发布并开源, 稀疏MoE 196B总参/11B激活, 原生多模态Agent)
-        key = self._get_key("step")
-        if not key:
-            key = os.environ.get("STEP_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="step", api_key=key,
-                base_url="https://api.stepfun.com/v1",
-                models=["step-3.7-flash", "step-3.7-turbo", "step-3.7-mini"],
-                default_model="step-3.7-flash",
-                cost_per_1k_input=0.001, cost_per_1k_output=0.004,
-                multimodal=True, env_key="STEP_API_KEY",
-            )
-            self.providers["step"] = cfg
-            self.adapters["step"] = StepAdapter(cfg)
-
-        # MiMo V2.5 Pro (小米, 2026-04-22公测, 256K上下文, 强化学习Agent, 2026-05-27降价99%)
-        key = self._get_key("mimo")
-        if not key:
-            key = os.environ.get("MIMO_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="mimo", api_key=key,
-                # 联网核实:小米 MiMo 官方 OpenAI 兼容端点是 api.xiaomimimo.com，
-                # 不是 api.mimo.ai(后者不解析/不是小米的域名)——key 填得再对，
-                # 域名错了也是每次都连接失败，跟没配 key 看起来一模一样。
-                base_url="https://api.xiaomimimo.com/v1",
-                models=["mimo-v2.5-pro", "mimo-v2.5-standard", "mimo-v2.5-lite"],
-                default_model="mimo-v2.5-pro",
-                cost_per_1k_input=0.00002, cost_per_1k_output=0.00008,
-                multimodal=False, env_key="MIMO_API_KEY",
-            )
-            self.providers["mimo"] = cfg
-            self.adapters["mimo"] = MiMoAdapter(cfg)
-
-        # Moonshot Kimi
-        key = self._get_key("moonshot")
-        if not key:
-            key = os.environ.get("MOONSHOT_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="moonshot", api_key=key,
-                base_url="https://api.moonshot.cn/v1",
-                models=["kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k"],
-                default_model="kimi-k2.6",
-                cost_per_1k_input=0.002, cost_per_1k_output=0.002,
-                multimodal=False, env_key="MOONSHOT_API_KEY",
-            )
-            self.providers["moonshot"] = cfg
-            self.adapters["moonshot"] = MoonshotAdapter(cfg)
-
-        # Perplexity Sonar
-        key = self._get_key("perplexity")
-        if not key:
-            key = os.environ.get("PERPLEXITY_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="perplexity", api_key=key,
-                base_url="https://api.perplexity.ai",
-                models=["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro", "sonar"],
-                default_model="sonar-pro",
-                cost_per_1k_input=0.001, cost_per_1k_output=0.001,
-                supports_tools=False, multimodal=False, env_key="PERPLEXITY_API_KEY",
-            )
-            self.providers["perplexity"] = cfg
-            self.adapters["perplexity"] = PerplexityAdapter(cfg)
-
-        # Groq
-        key = self._get_key("groq")
-        if not key:
-            key = os.environ.get("GROQ_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="groq", api_key=key,
-                base_url="https://api.groq.com/openai/v1",
-                models=["llama-3.3-70b-versatile"],
-                default_model="llama-3.3-70b-versatile",
-                cost_per_1k_input=0.00059, cost_per_1k_output=0.00079,
-                supports_tools=True, multimodal=False, env_key="GROQ_API_KEY",
-            )
-            self.providers["groq"] = cfg
-            self.adapters["groq"] = GroqAdapter(cfg)
+        # L1:标准 OpenAI/Anthropic 兼容提供商全部从 PROVIDER_REGISTRY 循环派生
+        self._register_from_registry()
 
         # Ollama (local) — PR-HA: upgraded to first-class multimodal-capable local provider
         ollama_url = self._normalize_base_url(self._get_key("ollama"))
