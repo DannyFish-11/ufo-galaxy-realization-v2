@@ -246,14 +246,23 @@ async def execute_files(request: FileExecuteRequest):
     config = LANGUAGE_CONFIG[lang]
     
     with tempfile.TemporaryDirectory() as tmpdir:
+        _tmp_real = os.path.realpath(tmpdir)
+
+        def _safe_join(base_real: str, name: str) -> str:
+            """把用户提供的文件名限制在 base 目录内(防 ../ 路径穿越)。"""
+            p = os.path.realpath(os.path.join(base_real, name))
+            if os.path.commonpath([p, base_real]) != base_real:
+                raise HTTPException(status_code=400, detail=f"非法文件路径: {name}")
+            return p
+
         # 写入所有文件
         for filename, content in request.files.items():
-            file_path = os.path.join(tmpdir, filename)
+            file_path = _safe_join(_tmp_real, filename)
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             with open(file_path, "w", encoding='utf-8') as f:
                 f.write(content)
-        
-        entry_file = os.path.join(tmpdir, request.entry_point)
+
+        entry_file = _safe_join(_tmp_real, request.entry_point)
         cmd = config["cmd"] + [entry_file]
         
         try:

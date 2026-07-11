@@ -172,8 +172,13 @@ class OpenCodeEngine:
             return False
         
         sandbox = self.sandboxes[sandbox_id]
-        filepath = os.path.join(sandbox.working_dir, filename)
-        
+        # 防路径穿越:用户提供的 filename 不得逃出沙箱工作目录
+        _base = os.path.realpath(sandbox.working_dir)
+        filepath = os.path.realpath(os.path.join(_base, filename))
+        if os.path.commonpath([filepath, _base]) != _base:
+            logger.error(f"Rejected file outside sandbox: {filename}")
+            return False
+
         try:
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             with open(filepath, 'w', encoding='utf-8') as f:
