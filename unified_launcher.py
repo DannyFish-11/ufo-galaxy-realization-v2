@@ -1964,8 +1964,17 @@ def main():
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.add_signal_handler(signal.SIGINT, _graceful_shutdown)
-        loop.add_signal_handler(signal.SIGTERM, _graceful_shutdown)
+        # loop.add_signal_handler 在 Windows(ProactorEventLoop)上 NotImplementedError;
+        # 这个异常不被外层 except KeyboardInterrupt 捕获 → 启动器直接崩。
+        # 回退到 signal.signal(Windows 上 SIGINT/SIGTERM 可用)。
+        for _sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(_sig, _graceful_shutdown)
+            except (NotImplementedError, RuntimeError):
+                try:
+                    signal.signal(_sig, lambda *_a: _graceful_shutdown())
+                except (ValueError, OSError):
+                    pass  # 非主线程等场景无法注册,忽略
         # 桌面覆盖层事件桥：订阅三态事件并推送到 Electron / WebSocket 客户端。
         # 必须在此入口路径显式启动，否则唤醒事件无法到达前端覆盖层与面板。
         try:
