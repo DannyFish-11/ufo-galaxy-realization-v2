@@ -86,6 +86,13 @@ export interface PanelData {
     msgType: string;
   }>;
 
+  // URL 哨兵抓到的"缺协议头请求 URL"记录(平时为空;有才在诊断抽屉里显示)
+  diagnostics: Array<{
+    ts: string;
+    url: string;
+    culprit: string;
+  }>;
+
   // MCP 服务器状态（星元面板花草丛）
   mcpServers: Array<{
     name: string;
@@ -162,6 +169,7 @@ const DEFAULT_PANEL_DATA: PanelData = {
     uptime: 0,
   },
   natsMessages: [],
+  diagnostics: [],
   mcpServers: [],
   skills: [],
   ambient: { seeing: false, hearing: false, action: '', rationale: '', ts: 0 },
@@ -227,6 +235,7 @@ export function usePanelData(): UsePanelDataReturn {
           meshSession: payload.mesh_session || DEFAULT_PANEL_DATA.meshSession,
           openclawdStatus: payload.openclawd_status || DEFAULT_PANEL_DATA.openclawdStatus,
           natsMessages: payload.nats_messages || DEFAULT_PANEL_DATA.natsMessages,
+          diagnostics: payload.diagnostics || DEFAULT_PANEL_DATA.diagnostics,
           mcpServers: payload.mcp_servers || DEFAULT_PANEL_DATA.mcpServers,
           skills: payload.skills || DEFAULT_PANEL_DATA.skills,
           ambient: incomingAmbient ? {

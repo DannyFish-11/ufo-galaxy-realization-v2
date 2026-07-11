@@ -23,6 +23,32 @@ export default function DiagnosticsDrawer({ open, onClose, data }: DiagnosticsDr
         </div>
 
         <div className="drawer-scroll">
+          {data.diagnostics && data.diagnostics.length > 0 && (
+            <>
+              <div className="section-header" style={{ color: '#ffb454' }}>
+                ⚠ 诊断告警 · 缺协议头 URL
+              </div>
+              <div className="nats-list">
+                {data.diagnostics.map((d, i) => (
+                  <div
+                    key={i}
+                    className="nats-row"
+                    style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}
+                  >
+                    <span className="nats-topic mono" style={{ color: '#ffb454' }}>
+                      [{d.ts}] {d.url}
+                    </span>
+                    {d.culprit && (
+                      <span className="nats-payload mono" style={{ opacity: 0.7 }}>
+                        ↳ {d.culprit}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
           <div className="section-header">NATS 消息流</div>
           <div className="nats-list">
             {data.natsMessages.map((m) => (
