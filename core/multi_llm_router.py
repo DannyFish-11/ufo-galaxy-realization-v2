@@ -9,6 +9,7 @@
 import os
 import json
 import time
+import math
 import asyncio
 import logging
 import random
@@ -1508,6 +1509,9 @@ class MultiLLMRouter:
         # 本地 ollama/hf_local 本就在偏好表最前，因此本地优先不受影响。
         if os.environ.get("GALAXY_OPENSOURCE_FIRST", "true").lower() != "false":
             preferred_order = reorder_open_source_first(list(preferred_order))
+        # L3 bandit:按历史表现(成功率/延迟/成本)自适应重排候选;样本不足自动退回
+        # 原序(冷启动零行为变化),因此不影响本地/开源优先的既有精排。
+        preferred_order = self._bandit_reorder(list(preferred_order), task_type)
         alternatives = []
 
         for provider_name in preferred_order:
@@ -2185,6 +2189,89 @@ class MultiLLMRouter:
                     cfg.error_count += 1
         except Exception:  # noqa: BLE001
             pass
+
+    # ─────────────────── L3 bandit 自适应排序 ───────────────────
+    def _provider_stats(self, task_type: Optional[TaskType] = None) -> Dict[str, Dict[str, float]]:
+        """从 call_history 聚合每个 provider 的表现:
+        {provider: {calls, successes, latency_sum, cost_sum}}。task_type 给定时只统计
+        该任务的调用(粒度更贴切);None 则统计全量历史(任务级样本不足时的兜底)。"""
+        tt = task_type.value if hasattr(task_type, "value") else task_type
+        stats: Dict[str, Dict[str, float]] = {}
+        for rec in (getattr(self, "call_history", None) or []):
+            if tt is not None and rec.get("task_type") != tt:
+                continue
+            p = rec.get("provider")
+            if not p:
+                continue
+            s = stats.setdefault(p, {"calls": 0.0, "successes": 0.0,
+                                     "latency_sum": 0.0, "cost_sum": 0.0})
+            s["calls"] += 1
+            if rec.get("success"):
+                s["successes"] += 1
+            s["latency_sum"] += float(rec.get("latency_ms", 0.0) or 0.0)
+            s["cost_sum"] += float(rec.get("cost", 0.0) or 0.0)
+        return stats
+
+    def _bandit_score(self, name: str, stats: Dict[str, Dict[str, float]], total: int,
+                      *, latency_weight: float = 0.2, cost_weight: float = 0.1,
+                      explore_c: float = 1.4) -> float:
+        """UCB1 式打分:利用项(成功率 − 延迟/成本惩罚)＋ 探索项。未试过的 provider 返回
+        +inf(乐观初始化,保证每个都至少被探索一次)。惩罚做相对归一化,避免延迟/成本的
+        绝对量级压过成功率主信号。"""
+        s = stats.get(name)
+        if not s or s["calls"] == 0:
+            return float("inf")
+        n = s["calls"]
+        success_rate = s["successes"] / n
+        avg_latency = s["latency_sum"] / n
+        avg_cost = s["cost_sum"] / n
+        lat_pen = latency_weight * min(1.0, avg_latency / 5000.0)   # 5s 封顶
+        cost_pen = cost_weight * min(1.0, avg_cost / 0.05)          # 0.05/次 封顶
+        exploit = max(0.0, success_rate - lat_pen - cost_pen)
+        explore = explore_c * math.sqrt(math.log(max(total, 1) + 1.0) / n)
+        return exploit + explore
+
+    def _bandit_reorder(self, candidates: List[str], task_type: Optional[TaskType] = None,
+                        *, min_samples: int = 5) -> List[str]:
+        """按 UCB1 打分对候选 provider 列表做自适应重排(表现好的上浮,同时保留探索)。
+        冷启动零回归:GALAXY_BANDIT_ROUTING=false 关闭;任务级样本不足退回全量历史,
+        全量也不足(< min_samples)则原样返回。稳定排序,同分保持传入顺序。"""
+        if not candidates or os.environ.get("GALAXY_BANDIT_ROUTING", "true").lower() == "false":
+            return candidates
+        stats = self._provider_stats(task_type)
+        total = int(sum(s["calls"] for s in stats.values()))
+        if total < min_samples:
+            stats = self._provider_stats(None)
+            total = int(sum(s["calls"] for s in stats.values()))
+            if total < min_samples:
+                return list(candidates)
+        scored = [self._bandit_score(n, stats, total) for n in candidates]
+        # sorted 稳定:同分保持原相对顺序;-score 让高分(含 +inf 未试过)排前。
+        order = sorted(range(len(candidates)), key=lambda i: -scored[i])
+        return [candidates[i] for i in order]
+
+    def routing_stats(self, task_type: Optional[TaskType] = None) -> List[Dict[str, Any]]:
+        """可观测:导出每个 provider 的聚合表现 + 当前 bandit 分(供面板/诊断查看
+        "反哺决策"的实际依据)。按 bandit 分降序。"""
+        stats = self._provider_stats(task_type)
+        total = int(sum(s["calls"] for s in stats.values()))
+        out: List[Dict[str, Any]] = []
+        for name, s in stats.items():
+            n = s["calls"] or 1
+            out.append({
+                "provider": name,
+                "calls": int(s["calls"]),
+                "success_rate": round(s["successes"] / n, 4),
+                "avg_latency_ms": round(s["latency_sum"] / n, 1),
+                "avg_cost": round(s["cost_sum"] / n, 6),
+                "bandit_score": self._bandit_score(name, stats, total),
+            })
+        out.sort(key=lambda d: -d["bandit_score"])
+        # +inf 不便于 JSON 序列化,导出前替换为 None 标记"未试过/待探索"。
+        for d in out:
+            if d["bandit_score"] == float("inf"):
+                d["bandit_score"] = None
+        return out
 
     # ───────── 统一调用入口 ─────────
 
