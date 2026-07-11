@@ -2273,6 +2273,134 @@ class MultiLLMRouter:
                 d["bandit_score"] = None
         return out
 
+    # ─────────────────── L4 模型名单自动同步(/models 端点对账) ───────────────────
+    @staticmethod
+    def _model_matches(configured: str, live_ids: "set") -> bool:
+        """配置里的模型名是否仍能对应到端点实际返回的某个 id。做带边界的前缀匹配,
+        以吃下版本后缀(gpt-5.6 ↔ gpt-5.6-2026-01)和 ollama 的 tag(gemma4:e2b ↔
+        gemma4:e2b:latest / 同 root),但不至于 gpt-4 误配 gpt-4o。"""
+        c = (configured or "").strip()
+        if not c:
+            return False
+        if c in live_ids:
+            return True
+        croot = c.split(":")[0]
+        for l in live_ids:
+            if l == c or l.startswith(c + "-") or c.startswith(l + "-"):
+                return True
+            if l.startswith(c + ":") or l.split(":")[0] == croot:
+                return True
+        return False
+
+    async def _fetch_live_models(self, name: str) -> Optional[List[str]]:
+        """查询单个 provider 的模型名单端点(协议感知:ollama→/api/tags,
+        anthropic→/models(x-api-key),其余 OpenAI 兼容→/models(Bearer))。
+        返回实际可用的 id 列表;不可达/异常返回 None(与"端点返回空列表"区分开)。"""
+        cfg = self.providers.get(name)
+        adapter = self.adapters.get(name)
+        if cfg is None or adapter is None or not cfg.base_url:
+            return None
+        base = cfg.base_url.rstrip("/")
+        if isinstance(adapter, OllamaAdapter):
+            url, headers = f"{base}/api/tags", {}
+        elif isinstance(adapter, AnthropicAdapter):
+            url = f"{base}/models"
+            headers = {"x-api-key": cfg.api_key, "anthropic-version": "2023-06-01"}
+        else:
+            url = f"{base}/models"
+            headers = {"Authorization": f"Bearer {cfg.api_key}"}
+        try:
+            async with httpx.AsyncClient(timeout=min(cfg.timeout or 10.0, 10.0)) as client:
+                r = await client.get(url, headers=headers)
+            if r.status_code != 200:
+                logger.debug("模型名单同步:%s HTTP %s", name, r.status_code)
+                return None
+            data = r.json()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("模型名单同步:%s 查询失败: %s", name, exc)
+            return None
+        return self._parse_model_list(data)
+
+    @staticmethod
+    def _parse_model_list(data: Any) -> List[str]:
+        """把不同端点形状统一解析成 id 列表:ollama {models:[{name}]}、
+        OpenAI {data:[{id}]}、Anthropic {data:[{id}]}、或裸列表。"""
+        ids: List[str] = []
+        if isinstance(data, dict) and "models" in data:  # ollama /api/tags
+            for m in data.get("models") or []:
+                mid = (m.get("name") if isinstance(m, dict) else "") or ""
+                if mid:
+                    ids.append(mid)
+            return ids
+        items = data.get("data", data) if isinstance(data, dict) else data
+        for it in (items or []):
+            if isinstance(it, dict):
+                mid = it.get("id") or it.get("name") or ""
+            elif isinstance(it, str):
+                mid = it
+            else:
+                mid = ""
+            if mid:
+                ids.append(mid)
+        return ids
+
+    def _reconcile_one(self, name: str, live: List[str], *, apply: bool,
+                       max_add: int) -> Dict[str, Any]:
+        """把单个 provider 的 cfg.models 与实际 live 名单对账。返回诊断报告;
+        apply=True 时就地修正 cfg(剪掉失效项、补进新发现项、必要时改 default_model)。
+        剪枝绝不把名单清空(端点抽风也不至于让 provider 失去所有模型)。"""
+        cfg = self.providers[name]
+        live_set = set(live)
+        configured = list(cfg.models)
+        valid = [m for m in configured if self._model_matches(m, live_set)]
+        stale = [m for m in configured if m not in valid]
+        # 新发现:live 里、当前配置尚未覆盖到的 id
+        newly = [l for l in live if not any(self._model_matches(m, {l}) for m in configured)]
+        report = {
+            "provider": name, "live_count": len(live),
+            "configured": configured, "valid": valid, "stale": stale,
+            "newly_available": newly[:max_add], "applied": False,
+        }
+        if not apply:
+            return report
+        new_models = valid + [m for m in newly[:max_add] if m not in valid]
+        if not new_models:
+            # 端点没给出任何能对应上的模型(可能鉴权失败/形状异常)→ 保守不动
+            report["applied"] = False
+            return report
+        cfg.models = new_models
+        if cfg.default_model not in new_models:
+            cfg.default_model = new_models[0]
+            report["default_model_repaired"] = cfg.default_model
+        report["applied"] = True
+        return report
+
+    async def sync_model_lists(self, *, apply: bool = False,
+                               only: Optional[List[str]] = None,
+                               max_add: int = 20) -> Dict[str, Any]:
+        """L4 模型名单自动同步:对每个可用 provider 查询其 /models 端点,与硬编码的
+        ProviderConfig.models 对账。apply=False(默认)只出对账报告;apply=True 就地
+        剪掉失效模型、补进新发现模型、修复失效的 default_model。不可达的 provider
+        跳过(不误删其配置名单)。并发查询,整体不阻塞。"""
+        names = [n for n in (only or list(self.providers.keys()))
+                 if n in self.providers and self.providers[n].is_available()]
+        results = await asyncio.gather(
+            *(self._fetch_live_models(n) for n in names), return_exceptions=True
+        )
+        reports: List[Dict[str, Any]] = []
+        unreachable: List[str] = []
+        for n, live in zip(names, results):
+            if isinstance(live, Exception) or live is None:
+                unreachable.append(n)
+                continue
+            reports.append(self._reconcile_one(n, live, apply=apply, max_add=max_add))
+        return {
+            "applied": apply,
+            "checked": len(names),
+            "reconciled": reports,
+            "unreachable": unreachable,
+        }
+
     # ───────── 统一调用入口 ─────────
 
     async def chat(
