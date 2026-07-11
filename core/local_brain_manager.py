@@ -116,6 +116,26 @@ class LocalBrainManager:
         from core.ollama_endpoint import normalize_ollama_url
         return normalize_ollama_url(raw)
 
+    # ollama_url 做成【读时永远归一】的属性:防御性收口——无论 __init__ 之后有没有别的
+    # 路径把它置空/塞进无协议头的裸值,每一次 `f"{self.ollama_url}/api/tags"` 取到的都
+    # 保证是带协议头的合法 URL,从根上杜绝 "Request URL is missing protocol"。真机哨兵
+    # 就是在 _auto_select_backend / _ping_ollama 这两处 `f"{self.ollama_url}/..."` 抓到
+    # 空 URL 的(旧代码里 self.ollama_url 被置成了空串),这里让它无从复发。
+    @property
+    def ollama_url(self) -> str:
+        raw = getattr(self, "_ollama_url", "") or ""
+        try:
+            from core.ollama_endpoint import normalize_ollama_url
+            return normalize_ollama_url(raw)
+        except Exception:  # noqa: BLE001
+            if raw.startswith(("http://", "https://")):
+                return raw.rstrip("/")
+            return "http://localhost:11434"
+
+    @ollama_url.setter
+    def ollama_url(self, value: Optional[str]) -> None:
+        self._ollama_url = value or ""
+
     def __init__(self, backend: str = "auto", ollama_url: Optional[str] = None):
         """
         Args:
