@@ -249,7 +249,23 @@ async def execute_files(request: FileExecuteRequest):
         _tmp_real = os.path.realpath(tmpdir)
 
         def _safe_join(base_real: str, name: str) -> str:
-            """把用户提供的文件名限制在 base 目录内(防 ../ 路径穿越)。"""
+            """把用户提供的文件名限制在 base 目录内(防 ../ 路径穿越)。
+
+            源头净化:在【构造任何路径之前】先用字符白名单 + 显式规则掐断污点
+            (绝对路径、含 .. 段、盘符、非法字符一律拒),再做归一后的 commonpath
+            兜底。两道防线,且第一道是 CodeQL 可识别的 source-level sanitizer。
+            """
+            _allowed = set(
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./-"
+            )
+            if (
+                not name
+                or any(c not in _allowed for c in name)
+                or name.startswith(("/", "\\"))
+                or ".." in name.split("/")
+                or (len(name) > 1 and name[1] == ":")  # 盘符 C:
+            ):
+                raise HTTPException(status_code=400, detail=f"非法文件路径: {name}")
             p = os.path.realpath(os.path.join(base_real, name))
             if os.path.commonpath([p, base_real]) != base_real:
                 raise HTTPException(status_code=400, detail=f"非法文件路径: {name}")

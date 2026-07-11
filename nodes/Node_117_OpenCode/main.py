@@ -172,7 +172,19 @@ class OpenCodeEngine:
             return False
         
         sandbox = self.sandboxes[sandbox_id]
-        # 防路径穿越:用户提供的 filename 不得逃出沙箱工作目录
+        # 防路径穿越:源头字符白名单(构造路径前掐断污点)+ commonpath 兜底
+        _allowed = set(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./-"
+        )
+        if (
+            not filename
+            or any(c not in _allowed for c in filename)
+            or filename.startswith(("/", "\\"))
+            or ".." in filename.split("/")
+            or (len(filename) > 1 and filename[1] == ":")
+        ):
+            logger.error(f"Rejected unsafe filename: {filename}")
+            return False
         _base = os.path.realpath(sandbox.working_dir)
         filepath = os.path.realpath(os.path.join(_base, filename))
         if os.path.commonpath([filepath, _base]) != _base:
