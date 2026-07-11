@@ -6,6 +6,7 @@ Node 09: Sandbox - 安全的代码沙箱执行环境
 健康检查始终立即返回 HTTP 200，可用语言列表在启动时预计算并缓存。
 """
 import os, subprocess, tempfile, shutil, signal
+import re
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -255,15 +256,11 @@ async def execute_files(request: FileExecuteRequest):
             (绝对路径、含 .. 段、盘符、非法字符一律拒),再做归一后的 commonpath
             兜底。两道防线,且第一道是 CodeQL 可识别的 source-level sanitizer。
             """
-            _allowed = set(
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./-"
-            )
             if (
                 not name
-                or any(c not in _allowed for c in name)
-                or name.startswith(("/", "\\"))
+                or not re.fullmatch(r"[A-Za-z0-9_./-]+", name)
+                or name.startswith("/")
                 or ".." in name.split("/")
-                or (len(name) > 1 and name[1] == ":")  # 盘符 C:
             ):
                 raise HTTPException(status_code=400, detail=f"非法文件路径: {name}")
             p = os.path.realpath(os.path.join(base_real, name))

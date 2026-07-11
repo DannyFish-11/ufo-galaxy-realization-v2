@@ -3,6 +3,7 @@ Node 117 - OpenCode (开放代码节点)
 提供代码执行、沙箱运行和多语言支持能力
 """
 import os
+import re
 import json
 import asyncio
 import logging
@@ -172,16 +173,12 @@ class OpenCodeEngine:
             return False
         
         sandbox = self.sandboxes[sandbox_id]
-        # 防路径穿越:源头字符白名单(构造路径前掐断污点)+ commonpath 兜底
-        _allowed = set(
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./-"
-        )
+        # 防路径穿越:源头正则白名单(构造路径前掐断污点)+ commonpath 兜底
         if (
             not filename
-            or any(c not in _allowed for c in filename)
-            or filename.startswith(("/", "\\"))
+            or not re.fullmatch(r"[A-Za-z0-9_./-]+", filename)
+            or filename.startswith("/")
             or ".." in filename.split("/")
-            or (len(filename) > 1 and filename[1] == ":")
         ):
             logger.error(f"Rejected unsafe filename: {filename}")
             return False
