@@ -401,7 +401,7 @@ async def analyze_screen(request: AnalyzeScreenRequest) -> Dict[str, Any]:
                 result = subprocess.run(
                     ["manus-upload-file", request.image_path],
                     capture_output=True,
-                    text=True,
+                    text=True, encoding="utf-8", errors="replace",
                     timeout=60
                 )
                 image_url = result.stdout.strip()
@@ -416,7 +416,7 @@ async def analyze_screen(request: AnalyzeScreenRequest) -> Dict[str, Any]:
                 result = subprocess.run(
                     ["manus-upload-file", tmp_path],
                     capture_output=True,
-                    text=True,
+                    text=True, encoding="utf-8", errors="replace",
                     timeout=60
                 )
                 image_url = result.stdout.strip()

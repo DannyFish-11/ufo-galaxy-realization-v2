@@ -48,7 +48,7 @@ def run_osascript(script: str, timeout: int = 30) -> dict:
     try:
         result = subprocess.run(
             ["osascript", "-e", script],
-            capture_output=True, text=True, timeout=timeout
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout
         )
         return {
             "success": result.returncode == 0,
@@ -97,7 +97,7 @@ async def execute_file(request: ExecuteFileRequest):
     try:
         result = subprocess.run(
             ["osascript", request.file_path],
-            capture_output=True, text=True, timeout=request.timeout
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=request.timeout
         )
         return {
             "success": result.returncode == 0,

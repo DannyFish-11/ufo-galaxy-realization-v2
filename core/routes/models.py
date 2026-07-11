@@ -27,14 +27,9 @@ router = APIRouter(prefix="/api/v1/models", tags=["models"])
 
 
 def _ollama_base() -> str:
-    # 注意:面板保存空配置会把 OLLAMA_URL="" 写进 os.environ(键存在但为空),
-    # 此时 .get(key, default) 返回的是 ""(不是 default)。若不处理,后面会拼出
-    # "http:" 这种坏 URL,发请求时炸 "Request URL is missing protocol"。
-    raw = os.environ.get("OLLAMA_URL", "").strip()
-    if not raw:
-        raw = "http://localhost:11434"
-    base = raw if raw.startswith(("http://", "https://")) else f"http://{raw}"
-    return base.rstrip("/")
+    # ollama 地址解析收口到 core.ollama_endpoint 唯一属主(空值/缺协议头都兜底)。
+    from core.ollama_endpoint import resolve_ollama_base_url
+    return resolve_ollama_base_url()
 
 
 @router.get("/catalog")

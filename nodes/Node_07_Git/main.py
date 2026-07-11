@@ -28,7 +28,7 @@ def run_git(repo_path: str, args: list, timeout: int = 60) -> dict:
             ['git'] + args,
             cwd=repo_path,
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
             timeout=timeout
         )
         return {
@@ -45,7 +45,7 @@ def run_git(repo_path: str, args: list, timeout: int = 60) -> dict:
 @app.get('/health')
 async def health():
     """健康检查"""
-    git_version = subprocess.run(['git', '--version'], capture_output=True, text=True)
+    git_version = subprocess.run(['git', '--version'], capture_output=True, text=True, encoding="utf-8", errors="replace")
     return {
         'status': 'healthy',
         'node_id': '07',
@@ -82,7 +82,7 @@ async def clone(url: str, path: str, branch: Optional[str] = None, depth: Option
     if depth:
         args.extend(['--depth', str(depth)])
     
-    result = subprocess.run(args, capture_output=True, text=True, timeout=300)
+    result = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
     return {
         'success': result.returncode == 0,
         'path': path,

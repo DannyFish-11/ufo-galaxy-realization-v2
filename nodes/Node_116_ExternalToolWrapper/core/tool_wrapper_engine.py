@@ -302,7 +302,7 @@ class ToolWrapperEngine:
                 [tool_name, "--version"],
                 capture_output=True,
                 timeout=5,
-                text=True
+                text=True, encoding="utf-8", errors="replace"
             )
             return result.returncode == 0
         except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -318,7 +318,7 @@ class ToolWrapperEngine:
                 ["sh", "-c", tool_knowledge.install_command],
                 capture_output=True,
                 timeout=300,  # 5分钟超时
-                text=True
+                text=True, encoding="utf-8", errors="replace"
             )
             
             execution_time = time.time() - start_time
@@ -389,7 +389,7 @@ class ToolWrapperEngine:
                 shlex.split(command),
                 capture_output=True,
                 timeout=self.config["command_timeout"],
-                text=True
+                text=True, encoding="utf-8", errors="replace"
             )
             
             execution_time = time.time() - start_time

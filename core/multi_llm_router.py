@@ -816,9 +816,15 @@ class OllamaAdapter(BaseProviderAdapter):
             "options": {"temperature": temperature, "num_predict": max_tokens},
         }
 
+        # 调用点兜底:即使 config.base_url 因某条边缘路径被置空/缺协议头,
+        # 也在此归一,绝不把坏 URL 交给 httpx(否则炸 "Request URL is missing
+        # an 'http://' or 'https://' protocol")。
+        _base = (self.config.base_url or "").strip() or "http://localhost:11434"
+        if not _base.startswith(("http://", "https://")):
+            _base = f"http://{_base}"
         t0 = time.monotonic()
         resp = await self._post_with_retry(
-            f"{self.config.base_url}/api/chat",
+            f"{_base}/api/chat",
             headers={"Content-Type": "application/json"},
             body=body,
         )

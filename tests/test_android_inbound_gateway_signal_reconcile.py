@@ -345,7 +345,7 @@ class TestGroupC_HandleTaskProgressAdvancesPhase:
         }
         reconcile_with_rt = _make_reconcile_with_runtime(rt)
         with patch.object(_tl, "_reconcile_inbound_message", reconcile_with_rt):
-            with patch.object(_tl, "_ingest_participant_truth", None):
+            with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                 _run(_tl.handle_task_progress(bridge, None, msg))
 
         rec = _find_record(rt, "ctr-c01", "ses-c01")
@@ -374,7 +374,7 @@ class TestGroupC_HandleTaskProgressAdvancesPhase:
         }
         reconcile_with_rt = _make_reconcile_with_runtime(rt)
         with patch.object(_tl, "_reconcile_inbound_message", reconcile_with_rt):
-            with patch.object(_tl, "_ingest_participant_truth", None):
+            with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                 _run(_tl.handle_task_progress(bridge, None, msg))
 
         rec = _find_record(rt, "ctr-c02", "ses-c02")
@@ -402,7 +402,7 @@ class TestGroupC_HandleTaskProgressAdvancesPhase:
             return MagicMock(was_updated=False, reject_reason="no_record", envelope=None)
 
         with patch.object(_tl, "_reconcile_inbound_message", _fake):
-            with patch.object(_tl, "_ingest_participant_truth", None):
+            with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                 _run(_tl.handle_task_progress(bridge, None, msg))
 
         assert calls, "handle_task_progress must call _reconcile_inbound_message"
@@ -440,7 +440,7 @@ class TestGroupD_HandleTaskResultAdvancesPhase:
 
         with patch.object(_tl, "_run_task_result_truth_chain", None):
             with patch.object(_tl, "_reconcile_inbound_message", reconcile_with_rt):
-                with patch.object(_tl, "_ingest_participant_truth", None):
+                with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                     with patch.object(_tl, "_evaluate_continuity_legality", None):
                         with patch(
                             "core.durable_result_idempotency.check_result_idempotency",
@@ -477,7 +477,7 @@ class TestGroupD_HandleTaskResultAdvancesPhase:
 
         with patch.object(_tl, "_run_task_result_truth_chain", None):
             with patch.object(_tl, "_reconcile_inbound_message", reconcile_with_rt):
-                with patch.object(_tl, "_ingest_participant_truth", None):
+                with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                     with patch.object(_tl, "_evaluate_continuity_legality", None):
                         with patch(
                             "core.durable_result_idempotency.check_result_idempotency",
@@ -526,7 +526,7 @@ class TestGroupE_HandleGoalExecutionResultAdvancesPhase:
 
         with patch.object(_ge, "_run_task_result_truth_chain", None):
             with patch.object(_ge, "_reconcile_goal_result", reconcile_with_rt):
-                with patch.object(_ge, "_ingest_goal_result_truth", None):
+                with patch.object(_ge, "_ingest_goal_result_via_canonical_ingress", None):
                     with patch.object(_ge, "store_task_result", None):
                         with patch(
                             "core.durable_result_idempotency.check_result_idempotency",
@@ -563,7 +563,7 @@ class TestGroupE_HandleGoalExecutionResultAdvancesPhase:
 
         with patch.object(_ge, "_run_task_result_truth_chain", None):
             with patch.object(_ge, "_reconcile_goal_result", reconcile_with_rt):
-                with patch.object(_ge, "_ingest_goal_result_truth", None):
+                with patch.object(_ge, "_ingest_goal_result_via_canonical_ingress", None):
                     with patch.object(_ge, "store_task_result", None):
                         with patch(
                             "core.durable_result_idempotency.check_result_idempotency",
@@ -607,7 +607,7 @@ class TestGroupF_HandleErrorAdvancesPhase:
         reconcile_with_rt = _make_reconcile_with_runtime(rt)
 
         with patch.object(_tl, "_reconcile_inbound_message", reconcile_with_rt):
-            with patch.object(_tl, "_ingest_participant_truth", None):
+            with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                 _run(_tl.handle_error(bridge, None, msg))
 
         rec = _find_record(rt, "ctr-f01", "ses-f01")
@@ -633,7 +633,7 @@ class TestGroupF_HandleErrorAdvancesPhase:
             return MagicMock(was_updated=False, reject_reason="no_record", envelope=None)
 
         with patch.object(_tl, "_reconcile_inbound_message", _fake):
-            with patch.object(_tl, "_ingest_participant_truth", None):
+            with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                 _run(_tl.handle_error(bridge, None, msg))
 
         assert calls, "handle_error must call _reconcile_inbound_message"
@@ -669,7 +669,7 @@ class TestGroupG_HandleTaskEndAdvancesPhase:
         reconcile_with_rt = _make_reconcile_with_runtime(rt)
 
         with patch.object(_tl, "_reconcile_inbound_message", reconcile_with_rt):
-            with patch.object(_tl, "_ingest_participant_truth", None):
+            with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                 _run(_tl.handle_task_end(bridge, None, msg))
 
         rec = _find_record(rt, "ctr-g01", "ses-g01")
@@ -689,7 +689,7 @@ class TestGroupG_HandleTaskEndAdvancesPhase:
             "status": "completed",
         }
         with patch.object(_tl, "_reconcile_inbound_message", None):
-            with patch.object(_tl, "_ingest_participant_truth", None):
+            with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                 result = _run(_tl.handle_task_end(bridge, None, msg))
 
         assert result.get("type") == "task_end_ack"
@@ -732,7 +732,7 @@ class TestGroupH_NoKeyGuard:
             "progress": 50,
         }
         with patch.object(_tl, "_reconcile_inbound_message", None):
-            with patch.object(_tl, "_ingest_participant_truth", None):
+            with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                 _run(_tl.handle_task_progress(bridge, None, msg))  # must not raise
 
     def test_h03_error_no_keys_does_not_raise(self) -> None:
@@ -744,7 +744,7 @@ class TestGroupH_NoKeyGuard:
             "error_code": "E_GENERIC",
         }
         with patch.object(_tl, "_reconcile_inbound_message", None):
-            with patch.object(_tl, "_ingest_participant_truth", None):
+            with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                 _run(_tl.handle_error(bridge, None, msg))  # must not raise
 
 
@@ -803,7 +803,7 @@ class TestGroupI_FullLifecycleThroughInboundPath:
             },
         }
         with patch.object(_tl, "_reconcile_inbound_message", reconcile_with_rt):
-            with patch.object(_tl, "_ingest_participant_truth", None):
+            with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                 _run(_tl.handle_task_progress(bridge, None, progress_msg))
 
         rec = _find_record(rt, "ctr-i01", "ses-i01")
@@ -827,7 +827,7 @@ class TestGroupI_FullLifecycleThroughInboundPath:
         }
         with patch.object(_tl, "_run_task_result_truth_chain", None):
             with patch.object(_tl, "_reconcile_inbound_message", reconcile_with_rt):
-                with patch.object(_tl, "_ingest_participant_truth", None):
+                with patch.object(_tl, "_ingest_via_canonical_ingress", None):
                     with patch.object(_tl, "_evaluate_continuity_legality", None):
                         with patch(
                             "core.durable_result_idempotency.check_result_idempotency",

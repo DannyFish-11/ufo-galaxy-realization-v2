@@ -52,7 +52,7 @@ def run_adb(args: List[str], device: Optional[str] = None, timeout: int = 30) ->
     cmd.extend(args)
     
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
         return {
             "success": result.returncode == 0,
             "stdout": result.stdout.strip(),
