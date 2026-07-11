@@ -127,6 +127,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("Galaxy")
 
+# 静默 URL 哨兵(见 core/ollama_url_sentinel):只观测不干预,缺协议头请求 URL 一出现
+# 就记精确调用栈;平时零输出、零行为影响,装不上也静默兜底。桌面壳走 unified_launcher
+# 入口时同样武装,不依赖 main.py 是否被导入。
+try:
+    from core.ollama_url_sentinel import install as _install_url_sentinel
+    _install_url_sentinel()
+except Exception:  # noqa: BLE001
+    pass
+
 
 # ============================================================================
 # 终端颜色和打印工具 — 从 core/ascii_art 导入规范实现

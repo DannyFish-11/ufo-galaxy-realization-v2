@@ -284,6 +284,15 @@ if not logging.getLogger().handlers:
     )
 logger = logging.getLogger("Galaxy")
 
+# 静默 URL 哨兵:给 httpx 加一层【只观测、不干预】的薄壳,任何缺 http(s):// 协议头的
+# 请求 URL(那个 "Request URL is missing protocol" 的根源)一出现就把精确调用栈记进日志。
+# 平时零输出、零行为影响;装不上也静默兜底,绝不影响主进程。
+try:
+    from core.ollama_url_sentinel import install as _install_url_sentinel
+    _install_url_sentinel()
+except Exception:  # noqa: BLE001
+    pass
+
 # Health / validation tracking (non-strict mode diagnostics)
 _health_status: str = "unknown"
 _failed_validations: list = []
