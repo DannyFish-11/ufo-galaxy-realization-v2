@@ -437,7 +437,7 @@ class CodeReviewer:
                 result = subprocess.run(
                     ['pylint', temp_file, '--output-format=json'],
                     capture_output=True,
-                    text=True,
+                    text=True, encoding="utf-8", errors="replace",
                     timeout=10
                 )
                 

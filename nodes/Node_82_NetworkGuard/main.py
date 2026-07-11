@@ -222,7 +222,7 @@ class NetworkGuardService:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
                 capture_output=True,
-                text=True,
+                text=True, encoding="utf-8", errors="replace",
                 timeout=5
             )
             
@@ -245,7 +245,7 @@ class NetworkGuardService:
                 result = subprocess.run(
                     ["sudo", "ufw", "status"],
                     capture_output=True,
-                    text=True,
+                    text=True, encoding="utf-8", errors="replace",
                     timeout=5
                 )
                 
@@ -260,7 +260,7 @@ class NetworkGuardService:
                 result = subprocess.run(
                     ["netsh", "advfirewall", "show", "allprofiles"],
                     capture_output=True,
-                    text=True,
+                    text=True, encoding="utf-8", errors="replace",
                     timeout=5
                 )
                 
