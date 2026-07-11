@@ -20,13 +20,43 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import traceback
-from typing import Set
+from collections import deque
+from typing import Deque, Dict, List, Set
 
 logger = logging.getLogger("Galaxy.UrlSentinel")
 
 _INSTALLED = False
 _seen: Set[str] = set()
+# 最近抓到的缺协议头 URL(供面板 DiagnosticsDrawer / 诊断端点展示,让用户看得见、
+# 能直接复制)。只留最近 20 条,去重后追加,零锁——GIL 下 deque append 足够安全。
+_catches: Deque[Dict[str, str]] = deque(maxlen=20)
+
+
+def _culprit_frame(frames: List[str]) -> str:
+    """从调用栈里挑出【最可能是罪魁】的那一帧:最深的、既不在 httpx 也不在本哨兵
+    里的应用代码帧(也就是真正拿着坏 URL 去发请求的那处)。取不到就返回空串。"""
+    try:
+        for line in reversed(frames):
+            low = line.lower()
+            if "/httpx/" in low or "ollama_url_sentinel" in low:
+                continue
+            # traceback.format_stack 的帧首行形如:  File "xxx.py", line N, in fn
+            head = line.strip().splitlines()[0].strip()
+            if head.startswith("File "):
+                return head  # 形如: File "xxx.py", line N, in fn(原样最可读)
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def recent_catches() -> List[Dict[str, str]]:
+    """返回最近抓到的缺协议头 URL 记录(最新在前),供面板/诊断端点展示。"""
+    try:
+        return list(reversed(_catches))
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _url_missing_scheme(url) -> bool:
@@ -48,6 +78,16 @@ def _report(url) -> None:
         if key in _seen:
             return
         _seen.add(key)
+        # 记进环形缓冲,供面板 DiagnosticsDrawer / 诊断端点展示(让用户看得见、能复制)
+        try:
+            culprit = _culprit_frame(frames)
+            _catches.append({
+                "ts": time.strftime("%H:%M:%S"),
+                "url": str(url),
+                "culprit": culprit,
+            })
+        except Exception:  # noqa: BLE001
+            pass
         logger.warning(
             "[URL-SENTINEL] 抓到缺协议头的请求 URL: %r —— 这正是 "
             "\"Request URL is missing an 'http://' or 'https://' protocol\" 的根源。"

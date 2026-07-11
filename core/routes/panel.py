@@ -386,6 +386,34 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception as exc:  # noqa: BLE001
             logger.debug("panel feed: 成本汇总聚合失败: %s", exc)
 
+        # URL 哨兵抓到的"缺协议头请求 URL"记录 → 面板 DiagnosticsDrawer 里直接展示,
+        # 让用户在面板上就能看到并复制,不必去翻 logs/lumiv.log。平时为空、零打扰。
+        try:
+            from core.ollama_url_sentinel import recent_catches
+            feed["diagnostics"] = [
+                {
+                    "ts": c.get("ts", ""),
+                    "url": c.get("url", ""),
+                    "culprit": c.get("culprit", ""),
+                }
+                for c in recent_catches()
+            ]
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("panel feed: 诊断哨兵聚合失败: %s", exc)
+
         return JSONResponse(content={"success": True, "feed": feed})
+
+    @router.get("/api/v1/diagnostics/url-sentinel")
+    async def get_url_sentinel() -> JSONResponse:
+        """URL 哨兵抓到的"缺协议头请求 URL"记录(纯 JSON,方便直接开浏览器看/复制)。
+
+        面板不方便时,浏览器打开 http://<host>:<port>/api/v1/diagnostics/url-sentinel
+        即可;平时为空数组。"""
+        try:
+            from core.ollama_url_sentinel import recent_catches
+            catches = recent_catches()
+        except Exception:  # noqa: BLE001
+            catches = []
+        return JSONResponse(content={"success": True, "count": len(catches), "catches": catches})
 
     return router
