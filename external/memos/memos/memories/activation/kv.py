@@ -157,22 +157,22 @@ class KVCacheMemory(BaseActMemory):
             torch.serialization.add_safe_globals([DynamicCache, KVCacheItem])
 
             # 安全反序列化 - 添加签名验证
-                with open(file_path, "rb") as f:
-                    # 读取签名和数据
-                    signature = f.read(64)  # HMAC-SHA256 签名长度
-                    data_bytes = f.read()
+            with open(file_path, "rb") as f:
+                # 读取签名和数据
+                signature = f.read(64)  # HMAC-SHA256 签名长度
+                data_bytes = f.read()
 
-                    # 验证签名 (如果存在)
-                    if signature:
-                        expected_sig = hmac.new(
-                            os.environ.get('PICKLE_SECRET_KEY', '').encode(),
-                            data_bytes,
-                            hashlib.sha256
-                        ).digest()
-                        if not hmac.compare_digest(signature, expected_sig):
-                            raise ValueError("Invalid pickle file signature - possible tampering detected")
+                # 验证签名 (如果存在)
+                if signature:
+                    expected_sig = hmac.new(
+                        os.environ.get('PICKLE_SECRET_KEY', '').encode(),
+                        data_bytes,
+                        hashlib.sha256
+                    ).digest()
+                    if not hmac.compare_digest(signature, expected_sig):
+                        raise ValueError("Invalid pickle file signature - possible tampering detected")
 
-                    data = pickle.loads(data_bytes)
+                data = pickle.loads(data_bytes)
 
             if isinstance(data, dict):
                 # Load memories, handle both old and new formats
