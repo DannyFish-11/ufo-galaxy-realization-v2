@@ -12,7 +12,7 @@ import time
 import asyncio
 import logging
 import random
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -125,6 +125,9 @@ class LLMResponse:
     cost: float = 0.0
     tool_calls: Optional[List[Dict]] = None
     raw_response: Optional[Dict] = None
+    # L2 级联路由元数据
+    cascade_stage: int = 0           # 0-based:第几档答出来的(0=最便宜那档)
+    cascade_escalated: bool = False  # 是否发生过升级(便宜档不合格才升到更贵档)
 
 
 # ───────────────────── 路由策略 ─────────────────────
@@ -2056,6 +2059,132 @@ class MultiLLMRouter:
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
         return messages
+
+    # ─────────────────── L2 级联路由(FrugalGPT) ───────────────────
+    @staticmethod
+    def _default_answer_adequate(response: "LLMResponse", min_chars: int = 1) -> bool:
+        """默认质量判据:答案非空、达到最小长度、不是明显的失败/拒答。级联路由用它
+        判断"便宜模型这次答得够不够好、要不要升级到更贵的下一档"。"""
+        try:
+            text = (response.content or "").strip()
+        except Exception:  # noqa: BLE001
+            return False
+        if len(text) < max(1, min_chars):
+            return False
+        low = text.lower()
+        bad_markers = (
+            "i cannot", "i can't help", "as an ai language model", "i'm unable to",
+            "无法回答", "抱歉，我不能", "对不起，我无法",
+            "error:", "internal server error", "rate limit",
+        )
+        if any(m in low for m in bad_markers):
+            return False
+        return True
+
+    def _cost_ordered_ladder(self, task_type: TaskType, max_stages: int = 3,
+                             require_multimodal: bool = False) -> List[Tuple[str, str]]:
+        """构造【便宜→贵】的候选梯队 [(provider, model), ...]:只取当前可用(is_available
+        且有 adapter)的提供商,按 cost_per_1k_output 升序(本地 ollama 成本 0 天然排最前),
+        require_multimodal 时只保留多模态提供商,每个用它对该任务的推荐模型(无则 default),
+        最多 max_stages 档。"""
+        avail = [
+            cfg for name, cfg in self.providers.items()
+            if name in self.adapters and cfg.is_available()
+            and (not require_multimodal or cfg.multimodal)
+        ]
+        avail.sort(key=lambda c: (c.cost_per_1k_output, c.cost_per_1k_input))
+        ladder: List[Tuple[str, str]] = []
+        for cfg in avail[:max(1, max_stages)]:
+            model = PROVIDER_MODEL_MAP.get(cfg.name, {}).get(task_type) or cfg.default_model
+            ladder.append((cfg.name, model))
+        return ladder
+
+    async def chat_cascade(
+        self,
+        messages: List[Dict],
+        task_type: TaskType = TaskType.GENERAL,
+        *,
+        judge: Optional[Callable[["LLMResponse"], bool]] = None,
+        max_stages: int = 3,
+        min_chars: int = 1,
+        require_multimodal: bool = False,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        tools: Optional[List[Dict]] = None,
+        **kwargs,
+    ) -> Optional["LLMResponse"]:
+        """L2 级联路由(FrugalGPT):便宜模型先答,过不了质量判据才升级到更贵更强的下一档。
+
+        judge(response)->bool:自定义质量判据;缺省用 _default_answer_adequate。返回第一个
+        合格答案(带 cascade_stage/cascade_escalated 元数据);全档都不合格则返回最后(最强)
+        那档的答案;完全无可用提供商返回 None。每次调用都记进 call_history 供 L3 反哺。
+        """
+        ladder = self._cost_ordered_ladder(task_type, max_stages, require_multimodal)
+        if not ladder:
+            logger.warning("级联路由:无可用提供商")
+            return None
+        verdict = judge or (lambda r: self._default_answer_adequate(r, min_chars))
+        last: Optional[LLMResponse] = None
+        for stage, (provider, model) in enumerate(ladder):
+            adapter = self.adapters.get(provider)
+            if adapter is None:
+                continue
+            try:
+                resp = await adapter.chat(
+                    messages, model, tools=tools,
+                    temperature=temperature, max_tokens=max_tokens, **kwargs,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.info("级联第 %d 档 %s:%s 调用失败,升级: %s", stage, provider, model, exc)
+                self._record_call(provider, model, task_type, None, success=False)
+                continue
+            self._record_call(provider, model, task_type, resp, success=True)
+            last = resp
+            try:
+                ok = bool(verdict(resp))
+            except Exception:  # noqa: BLE001
+                ok = True  # 判据自身出错不阻塞,视为合格
+            if ok:
+                resp.cascade_stage = stage
+                resp.cascade_escalated = stage > 0
+                self._last_provider = provider
+                logger.info("级联路由:第 %d 档 %s:%s 合格返回 %s", stage, provider, model,
+                            "(便宜档一次命中)" if stage == 0 else "(升级后命中)")
+                return resp
+            logger.info("级联第 %d 档 %s:%s 答案不合格,升级", stage, provider, model)
+        if last is not None:
+            last.cascade_stage = len(ladder) - 1
+            last.cascade_escalated = len(ladder) > 1
+        return last
+
+    def _record_call(self, provider: str, model: str, task_type: TaskType,
+                     response: Optional["LLMResponse"], success: bool) -> None:
+        """统一记 call_history(供 L3 bandit 反哺决策),字段与既有 chat() 记录对齐,并补
+        cost(成本感知排序用)。全程 try/except,绝不阻塞主流程。"""
+        try:
+            cfg = self.providers.get(provider)
+            itok = int(getattr(response, "input_tokens", 0) or 0)
+            otok = int(getattr(response, "output_tokens", 0) or 0)
+            cost = 0.0
+            if cfg:
+                cost = (itok / 1000.0) * cfg.cost_per_1k_input + (otok / 1000.0) * cfg.cost_per_1k_output
+            self.call_history.append({
+                "provider": provider, "model": model,
+                "task_type": task_type.value if hasattr(task_type, "value") else str(task_type),
+                "latency_ms": float(getattr(response, "latency_ms", 0.0) or 0.0),
+                "tokens": itok + otok, "cost": round(cost, 6),
+                "timestamp": time.time(), "success": bool(success),
+            })
+            if len(self.call_history) > 500:
+                self.call_history = self.call_history[-500:]
+            if cfg:
+                if success:
+                    cfg.success_count += 1
+                    cfg.last_used = time.time()
+                else:
+                    cfg.error_count += 1
+        except Exception:  # noqa: BLE001
+            pass
 
     # ───────── 统一调用入口 ─────────
 
