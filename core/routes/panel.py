@@ -401,7 +401,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception as exc:  # noqa: BLE001
             logger.debug("panel feed: 诊断哨兵聚合失败: %s", exc)
 
-        # 启动每阶段耗时 → 面板 DiagnosticsDrawer「⏱ 启动耗时」展示,定位"加载半天"卡在哪。
+        # 启动每阶段耗时 → 面板「⏱ 启动耗时」展示,定位"加载半天"卡在哪段。
         try:
             from core.startup_timing import recent_timings
             feed["startup_timing"] = list(recent_timings())
@@ -425,7 +425,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
     @router.get("/api/v1/diagnostics/startup-timing")
     async def get_startup_timing() -> JSONResponse:
-        """本次启动各阶段耗时(纯 JSON,浏览器直接开即可看/复制)。定位"加载半天"卡在哪段。"""
+        """本次启动各阶段耗时(纯 JSON,浏览器可直接开)。定位"加载半天"卡哪段。"""
         try:
             from core.startup_timing import recent_timings
             timings = list(recent_timings())
