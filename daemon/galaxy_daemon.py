@@ -295,7 +295,9 @@ class GalaxyDaemon:
         }
         
         if config_path and os.path.exists(config_path):
-            with open(config_path, 'r') as f:
+            # 显式 UTF-8:config.json 可能含中文;Windows 默认 cp1252 读取会
+            # UnicodeDecodeError 崩掉守护进程启动。
+            with open(config_path, 'r', encoding='utf-8') as f:
                 user_config = json.load(f)
                 default_config.update(user_config)
         
@@ -324,7 +326,10 @@ class GalaxyDaemon:
             return
         signum = self._signal_pending
         self._signal_pending = 0  # Clear before processing
-        if signum == signal.SIGHUP:
+        # Windows 上 signal.SIGHUP 属性不存在,直接 `signum == signal.SIGHUP`
+        # 会在主循环里 AttributeError 崩掉(即使 SIGHUP 从未注册,求值本身就炸)。
+        _sighup = getattr(signal, "SIGHUP", None)
+        if _sighup is not None and signum == _sighup:
             self._reload_config()
         else:
             self._shutdown_event.set()
@@ -515,7 +520,7 @@ class GalaxyDaemon:
             "timestamp": datetime.now().isoformat(),
             "metrics": [m.to_dict() for m in self.health_metrics]
         }
-        with open(filepath, 'w') as f:
+        with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
 
 

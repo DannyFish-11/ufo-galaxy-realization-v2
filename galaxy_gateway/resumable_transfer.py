@@ -226,7 +226,7 @@ class ResumableTransferManager:
         if not os.path.exists(state_file):
             return None
         
-        with open(state_file, 'r') as f:
+        with open(state_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
         session = TransferSession.from_dict(data)
@@ -238,7 +238,7 @@ class ResumableTransferManager:
         """保存会话状态"""
         state_file = os.path.join(self.state_dir, f"{session.session_id}.json")
         
-        with open(state_file, 'w') as f:
+        with open(state_file, 'w', encoding='utf-8') as f:
             json.dump(session.to_dict(), f, indent=2)
     
     def delete_session(self, session_id: str):

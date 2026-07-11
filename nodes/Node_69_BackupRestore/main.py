@@ -416,7 +416,7 @@ class BackupService:
                 with gzip.open(backup_path, "wt", encoding="utf-8") as f:
                     json.dump(backup_data, f)
             else:
-                with open(backup_path, "w") as f:
+                with open(backup_path, "w", encoding='utf-8') as f:
                     json.dump(backup_data, f)
             
             # Calculate checksum and size
@@ -523,7 +523,7 @@ class BackupService:
                 with gzip.open(backup_path, "rt", encoding="utf-8") as f:
                     backup_data = json.load(f)
             else:
-                with open(backup_path, "r") as f:
+                with open(backup_path, "r", encoding='utf-8') as f:
                     backup_data = json.load(f)
             
             # Verify checksum
@@ -640,7 +640,7 @@ class BackupService:
                 with gzip.open(backup_path, "rt", encoding="utf-8") as f:
                     data = json.load(f)
             else:
-                with open(backup_path, "r") as f:
+                with open(backup_path, "r", encoding='utf-8') as f:
                     data = json.load(f)
             readable = True
         except Exception as e:

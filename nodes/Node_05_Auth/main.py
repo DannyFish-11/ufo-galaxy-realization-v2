@@ -87,7 +87,7 @@ class AuthManager:
         users_file = os.getenv("AUTH_USERS_FILE", "/tmp/auth_users.json")
         if os.path.exists(users_file):
             try:
-                with open(users_file, 'r') as f:
+                with open(users_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     for username, user_data in data.get("users", {}).items():
                         self._users[username] = User(**user_data)
@@ -101,7 +101,7 @@ class AuthManager:
         """保存用户数据"""
         users_file = os.getenv("AUTH_USERS_FILE", "/tmp/auth_users.json")
         try:
-            with open(users_file, 'w') as f:
+            with open(users_file, 'w', encoding='utf-8') as f:
                 json.dump({"users": {k: v.dict() for k, v in self._users.items()}}, f, default=str)
         except Exception as e:
             print(f"Failed to save users: {e}")

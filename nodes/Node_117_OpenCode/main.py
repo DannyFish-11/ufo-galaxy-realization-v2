@@ -3,6 +3,7 @@ Node 117 - OpenCode (开放代码节点)
 提供代码执行、沙箱运行和多语言支持能力
 """
 import os
+import re
 import json
 import asyncio
 import logging
@@ -172,11 +173,24 @@ class OpenCodeEngine:
             return False
         
         sandbox = self.sandboxes[sandbox_id]
-        filepath = os.path.join(sandbox.working_dir, filename)
-        
+        # 防路径穿越:源头正则白名单(构造路径前掐断污点)+ commonpath 兜底
+        if (
+            not filename
+            or not re.fullmatch(r"[A-Za-z0-9_./-]+", filename)
+            or filename.startswith("/")
+            or ".." in filename.split("/")
+        ):
+            logger.error(f"Rejected unsafe filename: {filename}")
+            return False
+        _base = os.path.realpath(sandbox.working_dir)
+        filepath = os.path.realpath(os.path.join(_base, filename))
+        if os.path.commonpath([filepath, _base]) != _base:
+            logger.error(f"Rejected file outside sandbox: {filename}")
+            return False
+
         try:
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
-            with open(filepath, 'w') as f:
+            with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(content)
             sandbox.files[filename] = filepath
             return True
@@ -219,7 +233,7 @@ class OpenCodeEngine:
             filename = f"code_{execution.execution_id[:8]}{runtime.file_extension}"
             filepath = os.path.join(working_dir, filename)
             
-            with open(filepath, 'w') as f:
+            with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(code)
             
             # 编译（如果需要）

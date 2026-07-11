@@ -6,6 +6,7 @@ Node 09: Sandbox - 安全的代码沙箱执行环境
 健康检查始终立即返回 HTTP 200，可用语言列表在启动时预计算并缓存。
 """
 import os, subprocess, tempfile, shutil, signal
+import re
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -181,7 +182,7 @@ async def execute_code(request: ExecuteRequest):
     
     with tempfile.TemporaryDirectory() as tmpdir:
         code_file = os.path.join(tmpdir, f"code{config['ext']}")
-        with open(code_file, "w") as f:
+        with open(code_file, "w", encoding='utf-8') as f:
             f.write(request.code)
         
         cmd = config["cmd"] + [code_file]
@@ -246,14 +247,35 @@ async def execute_files(request: FileExecuteRequest):
     config = LANGUAGE_CONFIG[lang]
     
     with tempfile.TemporaryDirectory() as tmpdir:
+        _tmp_real = os.path.realpath(tmpdir)
+
+        def _safe_join(base_real: str, name: str) -> str:
+            """把用户提供的文件名限制在 base 目录内(防 ../ 路径穿越)。
+
+            源头净化:在【构造任何路径之前】先用字符白名单 + 显式规则掐断污点
+            (绝对路径、含 .. 段、盘符、非法字符一律拒),再做归一后的 commonpath
+            兜底。两道防线,且第一道是 CodeQL 可识别的 source-level sanitizer。
+            """
+            if (
+                not name
+                or not re.fullmatch(r"[A-Za-z0-9_./-]+", name)
+                or name.startswith("/")
+                or ".." in name.split("/")
+            ):
+                raise HTTPException(status_code=400, detail=f"非法文件路径: {name}")
+            p = os.path.realpath(os.path.join(base_real, name))
+            if os.path.commonpath([p, base_real]) != base_real:
+                raise HTTPException(status_code=400, detail=f"非法文件路径: {name}")
+            return p
+
         # 写入所有文件
         for filename, content in request.files.items():
-            file_path = os.path.join(tmpdir, filename)
+            file_path = _safe_join(_tmp_real, filename)
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, "w") as f:
+            with open(file_path, "w", encoding='utf-8') as f:
                 f.write(content)
-        
-        entry_file = os.path.join(tmpdir, request.entry_point)
+
+        entry_file = _safe_join(_tmp_real, request.entry_point)
         cmd = config["cmd"] + [entry_file]
         
         try:
