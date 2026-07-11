@@ -72,6 +72,7 @@ export interface PanelData {
     activeTasks: number;
     completedTasks: number;
     connectedDevices: number;
+    smartDevices?: number;
     lastTick: number;
     uptime: number;
   };
@@ -172,6 +173,7 @@ const DEFAULT_PANEL_DATA: PanelData = {
     activeTasks: 0,
     completedTasks: 0,
     connectedDevices: 0,
+    smartDevices: 0,
     lastTick: 0,
     uptime: 0,
   },

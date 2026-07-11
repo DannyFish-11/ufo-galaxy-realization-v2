@@ -232,11 +232,27 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 oc = st.get("openclawd", {}) or {}
                 by_state = (st.get("agent_factory", {}) or {}).get("by_state", {}) or {}
                 active_agent_states = ("working", "waiting", "splitting")
+                # 设备计数统一读 UDM(SSOT):端设备(手机/手表/PC 等非 iot)与
+                # 智能设备(iot:HA 镜像 + mDNS 发现)分开计,语义不混;UDM 不可用
+                # 时回退 legacy registered_devices 缓存(旧行为)。
+                smart_devices = 0
                 try:
-                    from core.routes._shared import registered_devices as _rd
-                    connected_devices = len(_rd)
+                    from core.unified.device_manager import get_unified_device_manager
+                    _all = get_unified_device_manager().list_devices() or []
+                    smart_devices = sum(
+                        1 for d in _all
+                        if str(getattr(d, "device_type", "")) == "iot" and d.is_online()
+                    )
+                    connected_devices = sum(
+                        1 for d in _all
+                        if str(getattr(d, "device_type", "")) != "iot" and d.is_online()
+                    )
                 except Exception:  # noqa: BLE001
-                    connected_devices = 0
+                    try:
+                        from core.routes._shared import registered_devices as _rd
+                        connected_devices = len(_rd)
+                    except Exception:  # noqa: BLE001
+                        connected_devices = 0
                 try:
                     from core.nats_bus import get_nats_bus as _get_bus
                     last_tick = int(_get_bus().get_stats().get("messages_received", 0))
@@ -249,6 +265,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     "activeTasks": sum(by_state.get(s, 0) for s in active_agent_states),
                     "completedTasks": by_state.get("completed", 0),
                     "connectedDevices": connected_devices,
+                    "smartDevices": smart_devices,
                     "lastTick": last_tick,
                     "uptime": oc.get("uptime_seconds", 0),
                 }
