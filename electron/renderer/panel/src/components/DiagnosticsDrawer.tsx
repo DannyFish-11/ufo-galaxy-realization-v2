@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import type { PanelData } from '@/hooks/usePanelData';
 
 interface DiagnosticsDrawerProps {
@@ -44,6 +45,22 @@ export default function DiagnosticsDrawer({ open, onClose, data }: DiagnosticsDr
                       </span>
                     )}
                   </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {data.startupTiming && data.startupTiming.length > 0 && (
+            <>
+              <div className="section-header">⏱ 启动耗时 · 各阶段</div>
+              <div className="kv mono">
+                {data.startupTiming.map((t, i) => (
+                  <Fragment key={i}>
+                    <span style={t.seconds >= 3 ? { color: '#ffb454' } : undefined}>{t.name}</span>
+                    <span style={t.seconds >= 3 ? { color: '#ffb454' } : undefined}>
+                      {t.seconds.toFixed(2)}s
+                    </span>
+                  </Fragment>
                 ))}
               </div>
             </>
