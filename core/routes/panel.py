@@ -401,6 +401,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception as exc:  # noqa: BLE001
             logger.debug("panel feed: 诊断哨兵聚合失败: %s", exc)
 
+        # 启动每阶段耗时 → 面板「⏱ 启动耗时」展示,定位"加载半天"卡在哪段。
+        try:
+            from core.startup_timing import recent_timings
+            feed["startup_timing"] = list(recent_timings())
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("panel feed: 启动计时聚合失败: %s", exc)
+
         return JSONResponse(content={"success": True, "feed": feed})
 
     @router.get("/api/v1/diagnostics/url-sentinel")
@@ -415,5 +422,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception:  # noqa: BLE001
             catches = []
         return JSONResponse(content={"success": True, "count": len(catches), "catches": catches})
+
+    @router.get("/api/v1/diagnostics/startup-timing")
+    async def get_startup_timing() -> JSONResponse:
+        """本次启动各阶段耗时(纯 JSON,浏览器可直接开)。定位"加载半天"卡哪段。"""
+        try:
+            from core.startup_timing import recent_timings
+            timings = list(recent_timings())
+        except Exception:  # noqa: BLE001
+            timings = []
+        return JSONResponse(content={"success": True, "count": len(timings), "timings": timings})
 
     return router

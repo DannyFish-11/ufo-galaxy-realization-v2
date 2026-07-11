@@ -93,6 +93,13 @@ export interface PanelData {
     culprit: string;
   }>;
 
+  // 启动每阶段耗时(定位"加载半天"卡在哪段)
+  startupTiming: Array<{
+    name: string;
+    seconds: number;
+    ts: string;
+  }>;
+
   // MCP 服务器状态（星元面板花草丛）
   mcpServers: Array<{
     name: string;
@@ -170,6 +177,7 @@ const DEFAULT_PANEL_DATA: PanelData = {
   },
   natsMessages: [],
   diagnostics: [],
+  startupTiming: [],
   mcpServers: [],
   skills: [],
   ambient: { seeing: false, hearing: false, action: '', rationale: '', ts: 0 },
@@ -236,6 +244,7 @@ export function usePanelData(): UsePanelDataReturn {
           openclawdStatus: payload.openclawd_status || DEFAULT_PANEL_DATA.openclawdStatus,
           natsMessages: payload.nats_messages || DEFAULT_PANEL_DATA.natsMessages,
           diagnostics: payload.diagnostics || DEFAULT_PANEL_DATA.diagnostics,
+          startupTiming: payload.startup_timing || DEFAULT_PANEL_DATA.startupTiming,
           mcpServers: payload.mcp_servers || DEFAULT_PANEL_DATA.mcpServers,
           skills: payload.skills || DEFAULT_PANEL_DATA.skills,
           ambient: incomingAmbient ? {

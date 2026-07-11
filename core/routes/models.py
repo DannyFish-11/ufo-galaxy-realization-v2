@@ -25,6 +25,17 @@ logger = logging.getLogger("Galaxy.Routes.Models")
 
 router = APIRouter(prefix="/api/v1/models", tags=["models"])
 
+# /status 短 TTL 缓存 + single-flight:面板高频且并发轮询本端点,而每次探测都要打
+# Ollama /api/tags + 每个模型 /api/show(各带秒级超时),冷启动/慢时单次可达 1s+。
+# 缓存让窗口内的重复/并发请求直接复用上次结果,不再各自重新探测(真机日志里那一串
+# "GET /api/v1/models/status took 1300ms" 就是这么堆出来的)。TTL 默认 3s,可调。
+import asyncio as _asyncio
+import time as _time
+
+_STATUS_TTL = float(os.environ.get("GALAXY_MODELS_STATUS_TTL", "3.0") or "3.0")
+_status_cache: Dict[str, Any] = {"data": None, "ts": 0.0}
+_status_lock = _asyncio.Lock()
+
 
 def _ollama_base() -> str:
     # ollama 地址解析收口到 core.ollama_endpoint 唯一属主(空值/缺协议头都兜底)。
@@ -78,7 +89,7 @@ def _probe_installed() -> Dict[str, Dict[str, Any]]:
             status = "installed"
             # 二次核实可用性
             try:
-                sr = httpx.post(f"{base}/api/show", json={"name": matched}, timeout=5.0)
+                sr = httpx.post(f"{base}/api/show", json={"name": matched}, timeout=2.0)
                 if sr.status_code != 200:
                     status = "broken"  # 列名在、打不开 → 当未装
             except Exception:  # noqa: BLE001
@@ -89,10 +100,26 @@ def _probe_installed() -> Dict[str, Dict[str, Any]]:
 
 @router.get("/status")
 async def get_status() -> Dict[str, Any]:
-    """实时安装/可用状态（前端后台静默刷新用）。"""
-    import asyncio
-    installed = await asyncio.to_thread(_probe_installed)
-    return {"models": installed}
+    """实时安装/可用状态（前端后台静默刷新用）。
+
+    短 TTL 缓存 + single-flight:窗口(默认 3s)内的重复/并发请求直接返回上次结果,
+    不再各自重新探测 Ollama。这样面板高频轮询(且多组件并发)不会把后端拖到每次
+    1s+;GALAXY_MODELS_STATUS_TTL 可调缓存时长。
+    """
+    now = _time.monotonic()
+    cached = _status_cache["data"]
+    if cached is not None and (now - float(_status_cache["ts"])) < _STATUS_TTL:
+        return {"models": cached, "cached": True}
+    async with _status_lock:
+        # 双检:等锁期间可能已有别的并发请求刷新了缓存,直接复用
+        now = _time.monotonic()
+        cached = _status_cache["data"]
+        if cached is not None and (now - float(_status_cache["ts"])) < _STATUS_TTL:
+            return {"models": cached, "cached": True}
+        installed = await _asyncio.to_thread(_probe_installed)
+        _status_cache["data"] = installed
+        _status_cache["ts"] = _time.monotonic()
+        return {"models": installed}
 
 
 class TierSelectRequest(BaseModel):

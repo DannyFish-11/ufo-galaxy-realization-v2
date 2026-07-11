@@ -1295,6 +1295,13 @@ class GalaxyUnified:
             这种文不对题的情况）。不传则总结卡显示该项名称、不附带建议。
             """
             phases_state.append((name, status, hint))
+            # 计时:每次 _emit 是某阶段收尾,记录距上一次 _emit 的耗时归到该阶段名下
+            # (隐蔽:只进 logs/lumiv.log + 面板诊断;GALAXY_PHASE_TIMING=0 可关)。
+            try:
+                from core.startup_timing import mark as _phase_mark
+                _phase_mark(name)
+            except Exception:  # noqa: BLE001
+                pass
             if verbose:
                 r.section(name)
                 for label, val, st in (details or [(name, value, status)]):
@@ -1304,6 +1311,13 @@ class GalaxyUnified:
 
         if not verbose:
             print()  # banner 与折叠阶段行之间留一行呼吸
+
+        # 立启动计时基准:此后每个 _emit(阶段收尾)的 mark 就能量出该阶段耗时。
+        try:
+            from core.startup_timing import mark_reset as _phase_mark_reset
+            _phase_mark_reset()
+        except Exception:  # noqa: BLE001
+            pass
 
         # ── 核心服务 ──
         try:

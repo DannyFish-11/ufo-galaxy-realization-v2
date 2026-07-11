@@ -857,20 +857,33 @@ def main() -> int:
     # （不在开头打断用户）。
     _apply_model_cli_args(args)
 
+    # 启动每阶段计时(隐蔽:只进 logs/lumiv.log + 面板诊断;GALAXY_PHASE_TIMING=0 可关)
+    try:
+        from core.startup_timing import phase as _phase_timer
+    except Exception:  # noqa: BLE001
+        from contextlib import contextmanager as _cm
+
+        @_cm
+        def _phase_timer(_name):  # 兜底:计时模块缺失也不影响启动
+            yield
+
     # ── Phase 0: Environment check ───────────────────────
     print_phase("[Phase 0] 环境检查")
-    env_status = phase0_env_check()
+    with _phase_timer("Phase 0 环境检查"):
+        env_status = phase0_env_check()
 
     # ── Phase 1: System pre-flight (original 7-phase) ───
     print_phase("[Phase 1] 系统预检")
-    ready = _run_orchestrator_preflight()
+    with _phase_timer("Phase 1 系统预检"):
+        ready = _run_orchestrator_preflight()
     if not ready:
         print_item("系统预检未通过，请先修复上述问题", "error")
         return 1
 
     # ── Phase 2: Ensure dependencies ─────────────────────
     print_phase("[Phase 2] 依赖确保")
-    phase2_ensure_deps(env_status)
+    with _phase_timer("Phase 2 依赖确保"):
+        phase2_ensure_deps(env_status)
 
     # ── Start unified launcher (DIRECT CALL, not subprocess)
     print_phase("[系统启动]")
