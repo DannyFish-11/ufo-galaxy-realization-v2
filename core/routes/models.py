@@ -122,6 +122,33 @@ async def get_status() -> Dict[str, Any]:
         return {"models": installed}
 
 
+class ModelSyncRequest(BaseModel):
+    apply: bool = False                     # False=只出对账报告；True=就地剪失效/补新发现
+    only: Optional[List[str]] = None        # 限定 provider（不给则全部可用 provider）
+    max_add: int = 20
+
+
+@router.post("/sync")
+async def sync_models(req: ModelSyncRequest) -> Dict[str, Any]:
+    """L4 模型名单自动同步:查询各 provider 的 /models 端点，与硬编码的
+    ProviderConfig.models 对账（apply=False 只出报告，apply=True 就地剪失效/补新发现/
+    修复失效 default_model；不可达的 provider 跳过，不误删其配置）。
+    """
+    from core.multi_llm_router import get_llm_router
+    router_ = get_llm_router()
+    return await router_.sync_model_lists(
+        apply=req.apply, only=req.only, max_add=req.max_add,
+    )
+
+
+@router.get("/routing-stats")
+async def routing_stats() -> Dict[str, Any]:
+    """L3 可观测:导出每个 provider 的历史表现 + 当前 bandit 分（反哺决策的实际依据）。"""
+    from core.multi_llm_router import get_llm_router
+    router_ = get_llm_router()
+    return {"stats": router_.routing_stats()}
+
+
 class TierSelectRequest(BaseModel):
     tier: str
     main_brain: Optional[str] = None  # single 档内可指定；不给则取档内第一个本地模型

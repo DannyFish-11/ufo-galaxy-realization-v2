@@ -36,21 +36,26 @@ from core.multi_llm_router import (  # noqa: F401
     BaseProviderAdapter,
     OpenAIAdapter,
     AnthropicAdapter,
-    DeepSeekAdapter,
-    GroqAdapter,
     OllamaAdapter,
-    GoogleAdapter,
-    GrokAdapter,
-    MistralAdapter,
-    QwenAdapter,
-    ZhipuAdapter,
-    MoonshotAdapter,
-    PerplexityAdapter,
     ProviderConfig,
     ProviderStatus,
     LLMResponse,
     RoutingDecision,
 )
+
+# L1 收口:此前每个 OpenAI 兼容提供商都有一个空壳适配器子类(DeepSeekAdapter 等,
+# 全是 `class X(OpenAIAdapter): pass`),已按【协议→适配器工厂】收敛掉。这里把旧类名
+# 保留为 OpenAIAdapter 的别名,任何历史 `from core.llm.providers import DeepSeekAdapter`
+# 仍照常可用(__all__ 里这些名字也依旧解析),只是不再是独立的空壳类。
+DeepSeekAdapter = OpenAIAdapter
+GroqAdapter = OpenAIAdapter
+GoogleAdapter = OpenAIAdapter
+GrokAdapter = OpenAIAdapter
+MistralAdapter = OpenAIAdapter
+QwenAdapter = OpenAIAdapter
+ZhipuAdapter = OpenAIAdapter
+MoonshotAdapter = OpenAIAdapter
+PerplexityAdapter = OpenAIAdapter
 
 # ── sub-package authority sentinel ────────────────────────────────────────
 LLM_PROVIDERS_AUTHORITY: str = "core.llm.providers"

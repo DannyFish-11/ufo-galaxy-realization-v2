@@ -9,10 +9,11 @@
 import os
 import json
 import time
+import math
 import asyncio
 import logging
 import random
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -125,6 +126,9 @@ class LLMResponse:
     cost: float = 0.0
     tool_calls: Optional[List[Dict]] = None
     raw_response: Optional[Dict] = None
+    # L2 级联路由元数据
+    cascade_stage: int = 0           # 0-based:第几档答出来的(0=最便宜那档)
+    cascade_escalated: bool = False  # 是否发生过升级(便宜档不合格才升到更贵档)
 
 
 # ───────────────────── 路由策略 ─────────────────────
@@ -749,16 +753,6 @@ class AnthropicAdapter(BaseProviderAdapter):
         return anthropic_tools
 
 
-class DeepSeekAdapter(OpenAIAdapter):
-    """DeepSeek uses OpenAI-compatible API"""
-    pass
-
-
-class GroqAdapter(OpenAIAdapter):
-    """Groq uses OpenAI-compatible API"""
-    pass
-
-
 class OllamaAdapter(BaseProviderAdapter):
     """Ollama local model adapter"""
 
@@ -842,82 +836,99 @@ class OllamaAdapter(BaseProviderAdapter):
         )
 
 
-# OpenAI-compatible adapters — no additional code needed, all reuse OpenAIAdapter
-class GoogleAdapter(OpenAIAdapter):
-    """Google Gemini via OpenAI-compatible endpoint (generativelanguage.googleapis.com)"""
-    pass
-
-
-class GrokAdapter(OpenAIAdapter):
-    """xAI Grok via OpenAI-compatible API (api.x.ai)"""
-    pass
-
-
-class MetaAdapter(OpenAIAdapter):
-    """Meta Muse Spark via OpenAI-compatible Meta Model API (api.meta.ai)"""
-    pass
-
-
-class MistralAdapter(OpenAIAdapter):
-    """Mistral AI via OpenAI-compatible API (api.mistral.ai)"""
-    pass
-
-
-class QwenAdapter(OpenAIAdapter):
-    """Alibaba Qwen via Together AI OpenAI-compatible endpoint"""
-    pass
-
-
-class ZhipuAdapter(OpenAIAdapter):
-    """Zhipu GLM via OpenAI-compatible API (open.bigmodel.cn)"""
-    pass
-
-
-class MoonshotAdapter(OpenAIAdapter):
-    """Moonshot Kimi via OpenAI-compatible API (api.moonshot.cn)"""
-    pass
-
-
-class PerplexityAdapter(OpenAIAdapter):
-    """Perplexity Sonar via OpenAI-compatible API (api.perplexity.ai)"""
-    pass
-
-
-class MiniMaxAdapter(OpenAIAdapter):
-    """MiniMax via OpenAI-compatible API (api.minimax.chat)"""
-    pass
-
-
-class StepAdapter(OpenAIAdapter):
-    """阶跃星辰 Step via OpenAI-compatible API (api.stepfun.com)"""
-    pass
-
-
-class MiMoAdapter(OpenAIAdapter):
-    """小米 MiMo via OpenAI-compatible API (api.xiaomimimo.com)"""
-    pass
-
 
 # ───────────────────── 主路由器 ─────────────────────
 
-ADAPTER_MAP = {
-    "openai":     OpenAIAdapter,
-    "anthropic":  AnthropicAdapter,
-    "google":     GoogleAdapter,
-    "xai":        GrokAdapter,
-    "mistral":    MistralAdapter,
-    "deepseek":   DeepSeekAdapter,
-    "qwen":       QwenAdapter,
-    "zhipu":      ZhipuAdapter,
-    "minimax":    MiniMaxAdapter,
-    "step":       StepAdapter,
-    "mimo":       MiMoAdapter,
-    "moonshot":   MoonshotAdapter,
-    "perplexity": PerplexityAdapter,
-    "groq":       GroqAdapter,
-    "ollama":     OllamaAdapter,
-    "hf_local":   OpenAIAdapter,
+# L1 收口:协议 → 适配器工厂。此前每个 OpenAI 兼容提供商都有一个空壳子类
+# (class DeepSeekAdapter(OpenAIAdapter): pass …共 12 个),纯冗余。现在按【协议】
+# 选适配器:openai 兼容全用 OpenAIAdapter、anthropic 用 AnthropicAdapter、
+# 本地 ollama 用 OllamaAdapter。新增一个 OpenAI 兼容提供商不再需要建类。
+_ADAPTER_BY_PROTOCOL: Dict[str, type] = {
+    "openai": OpenAIAdapter,
+    "anthropic": AnthropicAdapter,
+    "ollama": OllamaAdapter,
 }
+
+# 兼容:老代码/外部若按名取适配器类,仍可用(全部收敛到真实类,不再指向空壳)。
+ADAPTER_MAP = {
+    "openai": OpenAIAdapter, "anthropic": AnthropicAdapter, "google": OpenAIAdapter,
+    "xai": OpenAIAdapter, "meta": OpenAIAdapter, "mistral": OpenAIAdapter,
+    "deepseek": OpenAIAdapter, "qwen": OpenAIAdapter, "zhipu": OpenAIAdapter,
+    "minimax": OpenAIAdapter, "step": OpenAIAdapter, "mimo": OpenAIAdapter,
+    "moonshot": OpenAIAdapter, "perplexity": OpenAIAdapter, "groq": OpenAIAdapter,
+    "ollama": OllamaAdapter, "hf_local": OpenAIAdapter,
+}
+
+# ───────────────────────────────────────────────────────────────────────────
+# L1 声明式提供商注册表(单一属主)
+# ───────────────────────────────────────────────────────────────────────────
+# 此前 _discover_providers 里 15 个云端提供商各是一段几乎一字不差的 16 行复制
+# (key=_get_key(); if key: cfg=ProviderConfig(...); adapters[x]=XAdapter(cfg))。
+# 现把"给个 key 就注册"的标准 OpenAI/Anthropic 兼容提供商全部收敛成【一张数据表】,
+# _register_from_registry() 从表循环派生 —— 新增提供商 = 表里加一行。
+#
+# 特殊发现逻辑(本地探测/动态模型列表)的 ollama / hf_local / oneapi 不入表,仍走
+# 各自的专门发现分支。
+#
+# 字段(name/env_key/base_url/models/default_model/cost_in/cost_out 必填,其余可省):
+#   protocol   "openai"(默认) | "anthropic" —— 决定用哪个适配器
+#   alt_env    备用环境变量名列表(如 qwen 的 DASHSCOPE_API_KEY、google 的 GEMINI_API_KEY)
+#   base_env / base_key  用环境变量 / Dashboard 短键覆盖 base_url(openai 的 OPENAI_API_BASE)
+#   extra      透传给 ProviderConfig 的其它非默认字段(multimodal / supports_tools /
+#              supports_vision / max_tokens 等)
+PROVIDER_REGISTRY: List[Dict[str, Any]] = [
+    {"name": "openai", "env_key": "OPENAI_API_KEY",
+     "base_url": "https://api.openai.com/v1", "base_env": "OPENAI_API_BASE", "base_key": "openai_base",
+     "models": ["gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-4o"],
+     "default_model": "gpt-5.6", "cost_in": 0.005, "cost_out": 0.015, "extra": {"multimodal": True}},
+    {"name": "anthropic", "env_key": "ANTHROPIC_API_KEY", "protocol": "anthropic",
+     "base_url": "https://api.anthropic.com/v1",
+     "models": ["claude-opus-4-8-20250529", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+     "default_model": "claude-sonnet-5", "cost_in": 0.003, "cost_out": 0.015, "extra": {"multimodal": True}},
+    {"name": "google", "env_key": "GOOGLE_API_KEY", "alt_env": ["GEMINI_API_KEY"],
+     "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+     "models": ["gemini-3.5-flash", "gemini-3.5-pro", "gemini-2.5-pro"],
+     "default_model": "gemini-3.5-flash", "cost_in": 0.00125, "cost_out": 0.005, "extra": {"multimodal": True}},
+    {"name": "xai", "env_key": "XAI_API_KEY", "base_url": "https://api.x.ai/v1",
+     "models": ["grok-4.5", "grok-4.3"], "default_model": "grok-4.5",
+     "cost_in": 0.005, "cost_out": 0.015, "extra": {"multimodal": True}},
+    {"name": "meta", "env_key": "META_API_KEY", "base_url": "https://api.meta.ai/v1",
+     "models": ["muse-spark-1.1"], "default_model": "muse-spark-1.1",
+     "cost_in": 0.00125, "cost_out": 0.00425,
+     "extra": {"multimodal": True, "supports_vision": True, "max_tokens": 8192}},
+    {"name": "mistral", "env_key": "MISTRAL_API_KEY", "base_url": "https://api.mistral.ai/v1",
+     "models": ["mistral-large-3", "mistral-medium-3", "mistral-large-2"],
+     "default_model": "mistral-large-3", "cost_in": 0.002, "cost_out": 0.006, "extra": {"multimodal": True}},
+    {"name": "deepseek", "env_key": "DEEPSEEK_API_KEY", "base_url": "https://api.deepseek.com/v1",
+     "models": ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"],
+     "default_model": "deepseek-v4-pro", "cost_in": 0.000025, "cost_out": 0.00006},
+    {"name": "qwen", "env_key": "QWEN_API_KEY", "alt_env": ["DASHSCOPE_API_KEY"],
+     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+     "models": ["qwen3.7-max", "qwen3.7-coder", "qwen3-235b-a22b"],
+     "default_model": "qwen3.7-max", "cost_in": 0.0025, "cost_out": 0.0075, "extra": {"multimodal": True}},
+    {"name": "zhipu", "env_key": "ZHIPU_API_KEY", "base_url": "https://open.bigmodel.cn/api/paas/v4",
+     "models": ["glm-5.1", "glm-5.1-flash", "glm-4-plus"],
+     "default_model": "glm-5.1", "cost_in": 0.001, "cost_out": 0.001, "extra": {"multimodal": True}},
+    {"name": "minimax", "env_key": "MINIMAX_API_KEY", "base_url": "https://api.minimax.chat/v1",
+     "models": ["minimax-m2.7", "minimax-m2.5", "minimax-text-01"],
+     "default_model": "minimax-m2.7", "cost_in": 0.001, "cost_out": 0.004},
+    {"name": "step", "env_key": "STEP_API_KEY", "base_url": "https://api.stepfun.com/v1",
+     "models": ["step-3.7-flash", "step-3.7-turbo", "step-3.7-mini"],
+     "default_model": "step-3.7-flash", "cost_in": 0.001, "cost_out": 0.004, "extra": {"multimodal": True}},
+    {"name": "mimo", "env_key": "MIMO_API_KEY", "base_url": "https://api.xiaomimimo.com/v1",
+     "models": ["mimo-v2.5-pro", "mimo-v2.5-standard", "mimo-v2.5-lite"],
+     "default_model": "mimo-v2.5-pro", "cost_in": 0.00002, "cost_out": 0.00008},
+    {"name": "moonshot", "env_key": "MOONSHOT_API_KEY", "base_url": "https://api.moonshot.cn/v1",
+     "models": ["kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k"],
+     "default_model": "kimi-k2.6", "cost_in": 0.002, "cost_out": 0.002},
+    {"name": "perplexity", "env_key": "PERPLEXITY_API_KEY", "base_url": "https://api.perplexity.ai",
+     "models": ["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro", "sonar"],
+     "default_model": "sonar-pro", "cost_in": 0.001, "cost_out": 0.001,
+     "extra": {"supports_tools": False}},
+    {"name": "groq", "env_key": "GROQ_API_KEY", "base_url": "https://api.groq.com/openai/v1",
+     "models": ["llama-3.3-70b-versatile"], "default_model": "llama-3.3-70b-versatile",
+     "cost_in": 0.00059, "cost_out": 0.00079, "extra": {"supports_tools": True}},
+]
 
 
 # PR-515 / GAP-512-009: MultiLLMRouter is the MODEL SELECTION AUTHORITY
@@ -1030,257 +1041,52 @@ class MultiLLMRouter:
         except Exception:
             return False
 
+    def _register_from_registry(self) -> None:
+        """L1:从 PROVIDER_REGISTRY 循环注册标准 OpenAI/Anthropic 兼容提供商。
+
+        等价于此前 15 段复制粘贴的发现逻辑,单一属主:
+        - key 优先级:_get_key(短名) > env_key > alt_env 里的备用变量;
+        - key 为空或以 "your-" 占位符开头则跳过该提供商;
+        - base_url 允许被 base_key(Dashboard 短键)或 base_env(环境变量)覆盖,
+          两者都空则用表里的默认 base_url;
+        - 按 protocol 选适配器(openai/anthropic),extra 里的字段透传给 ProviderConfig。
+        """
+        for spec in PROVIDER_REGISTRY:
+            name = spec["name"]
+            key = self._get_key(name)
+            if not key:
+                for envk in [spec["env_key"], *spec.get("alt_env", [])]:
+                    key = os.environ.get(envk, "")
+                    if key:
+                        break
+            if not key or key.startswith("your-"):
+                continue
+            base = spec["base_url"]
+            base_key = spec.get("base_key")
+            base_env = spec.get("base_env")
+            if base_key or base_env:
+                override = self._get_key(base_key) if base_key else ""
+                if not override and base_env:
+                    override = os.environ.get(base_env, "")
+                override = (override or "").strip()
+                if override:
+                    base = override
+            cfg = ProviderConfig(
+                name=name, api_key=key, base_url=base,
+                models=list(spec["models"]), default_model=spec["default_model"],
+                cost_per_1k_input=spec["cost_in"], cost_per_1k_output=spec["cost_out"],
+                env_key=spec["env_key"],
+                **spec.get("extra", {}),
+            )
+            self.providers[name] = cfg
+            adapter_cls = _ADAPTER_BY_PROTOCOL.get(spec.get("protocol", "openai"), OpenAIAdapter)
+            self.adapters[name] = adapter_cls(cfg)
+
     def _discover_providers(self):
         """从配置源自动发现并注册提供商（Dashboard > ENV > defaults）（PR86）"""
 
-        # OpenAI
-        key = self._get_key("openai")
-        if not key:
-            key = os.environ.get("OPENAI_API_KEY", "")
-        if key and not key.startswith("your-"):
-            # OPENAI_API_BASE="" (面板保存空值)会让 .get(k, default) 返回 ""——
-            # 显式回退默认地址,避免 base_url 为空导致请求时炸缺协议头。
-            base = (self._get_key("openai_base") or os.environ.get("OPENAI_API_BASE", "") or "").strip()
-            if not base:
-                base = "https://api.openai.com/v1"
-            cfg = ProviderConfig(
-                name="openai", api_key=key, base_url=base,
-                models=["gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-4o"],
-                default_model="gpt-5.6",
-                cost_per_1k_input=0.005, cost_per_1k_output=0.015,
-                multimodal=True, env_key="OPENAI_API_KEY",
-            )
-            self.providers["openai"] = cfg
-            self.adapters["openai"] = OpenAIAdapter(cfg)
-
-        # Anthropic
-        key = self._get_key("anthropic")
-        if not key:
-            key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="anthropic", api_key=key,
-                base_url="https://api.anthropic.com/v1",
-                models=["claude-opus-4-8-20250529", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
-                default_model="claude-sonnet-5",
-                cost_per_1k_input=0.003, cost_per_1k_output=0.015,
-                multimodal=True, env_key="ANTHROPIC_API_KEY",
-            )
-            self.providers["anthropic"] = cfg
-            self.adapters["anthropic"] = AnthropicAdapter(cfg)
-
-        # Google Gemini (OpenAI-compatible endpoint)
-        key = self._get_key("google")
-        if not key:
-            key = os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="google", api_key=key,
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai",
-                models=["gemini-3.5-flash", "gemini-3.5-pro", "gemini-2.5-pro"],
-                default_model="gemini-3.5-flash",
-                cost_per_1k_input=0.00125, cost_per_1k_output=0.005,
-                multimodal=True, env_key="GOOGLE_API_KEY",
-            )
-            self.providers["google"] = cfg
-            self.adapters["google"] = GoogleAdapter(cfg)
-
-        # xAI Grok
-        key = self._get_key("xai")
-        if not key:
-            key = os.environ.get("XAI_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="xai", api_key=key,
-                base_url="https://api.x.ai/v1",
-                models=["grok-4.5", "grok-4.3"],
-                default_model="grok-4.5",
-                cost_per_1k_input=0.005, cost_per_1k_output=0.015,
-                multimodal=True, env_key="XAI_API_KEY",
-            )
-            self.providers["xai"] = cfg
-            self.adapters["xai"] = GrokAdapter(cfg)
-
-        # Meta Muse Spark(Meta Model API,2026-07-09 公测)
-        key = self._get_key("meta")
-        if not key:
-            key = os.environ.get("META_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="meta", api_key=key,
-                base_url="https://api.meta.ai/v1",
-                models=["muse-spark-1.1"],
-                default_model="muse-spark-1.1",
-                max_tokens=8192,
-                cost_per_1k_input=0.00125, cost_per_1k_output=0.00425,
-                multimodal=True, supports_vision=True,
-                env_key="META_API_KEY",
-            )
-            self.providers["meta"] = cfg
-            self.adapters["meta"] = MetaAdapter(cfg)
-
-        # Mistral
-        key = self._get_key("mistral")
-        if not key:
-            key = os.environ.get("MISTRAL_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="mistral", api_key=key,
-                base_url="https://api.mistral.ai/v1",
-                models=["mistral-large-3", "mistral-medium-3", "mistral-large-2"],
-                default_model="mistral-large-3",
-                cost_per_1k_input=0.002, cost_per_1k_output=0.006,
-                multimodal=True, env_key="MISTRAL_API_KEY",
-            )
-            self.providers["mistral"] = cfg
-            self.adapters["mistral"] = MistralAdapter(cfg)
-
-        # DeepSeek (V4-Pro: 2026-04-24发布, 2026-05-22永久降价75%)
-        key = self._get_key("deepseek")
-        if not key:
-            key = os.environ.get("DEEPSEEK_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="deepseek", api_key=key,
-                base_url="https://api.deepseek.com/v1",
-                models=["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"],
-                default_model="deepseek-v4-pro",
-                cost_per_1k_input=0.000025, cost_per_1k_output=0.00006,
-                multimodal=False, env_key="DEEPSEEK_API_KEY",
-            )
-            self.providers["deepseek"] = cfg
-            self.adapters["deepseek"] = DeepSeekAdapter(cfg)
-
-        # Qwen 3.7 Max (阿里云, 2026-05-20发布, 1M上下文)
-        key = self._get_key("qwen")
-        if not key:
-            key = os.environ.get("QWEN_API_KEY", "") or os.environ.get("DASHSCOPE_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="qwen", api_key=key,
-                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-                models=["qwen3.7-max", "qwen3.7-coder", "qwen3-235b-a22b"],
-                default_model="qwen3.7-max",
-                cost_per_1k_input=0.0025, cost_per_1k_output=0.0075,
-                multimodal=True, env_key="QWEN_API_KEY",
-            )
-            self.providers["qwen"] = cfg
-            self.adapters["qwen"] = QwenAdapter(cfg)
-
-        # Zhipu GLM-5.1 (智谱AI, 2026-04-08发布, 开源, 2026-05-22高速版400tokens/s)
-        key = self._get_key("zhipu")
-        if not key:
-            key = os.environ.get("ZHIPU_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="zhipu", api_key=key,
-                base_url="https://open.bigmodel.cn/api/paas/v4",
-                models=["glm-5.1", "glm-5.1-flash", "glm-4-plus"],
-                default_model="glm-5.1",
-                cost_per_1k_input=0.001, cost_per_1k_output=0.001,
-                multimodal=True, env_key="ZHIPU_API_KEY",
-            )
-            self.providers["zhipu"] = cfg
-            self.adapters["zhipu"] = ZhipuAdapter(cfg)
-
-        # MiniMax M2.7 (2026-03-18发布, 支持Agent自主规划多工具调用)
-        key = self._get_key("minimax")
-        if not key:
-            key = os.environ.get("MINIMAX_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="minimax", api_key=key,
-                base_url="https://api.minimax.chat/v1",
-                models=["minimax-m2.7", "minimax-m2.5", "minimax-text-01"],
-                default_model="minimax-m2.7",
-                cost_per_1k_input=0.001, cost_per_1k_output=0.004,
-                multimodal=False, env_key="MINIMAX_API_KEY",
-            )
-            self.providers["minimax"] = cfg
-            self.adapters["minimax"] = MiniMaxAdapter(cfg)
-
-        # Step 3.7 Flash (阶跃星辰, 2026-05-29发布并开源, 稀疏MoE 196B总参/11B激活, 原生多模态Agent)
-        key = self._get_key("step")
-        if not key:
-            key = os.environ.get("STEP_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="step", api_key=key,
-                base_url="https://api.stepfun.com/v1",
-                models=["step-3.7-flash", "step-3.7-turbo", "step-3.7-mini"],
-                default_model="step-3.7-flash",
-                cost_per_1k_input=0.001, cost_per_1k_output=0.004,
-                multimodal=True, env_key="STEP_API_KEY",
-            )
-            self.providers["step"] = cfg
-            self.adapters["step"] = StepAdapter(cfg)
-
-        # MiMo V2.5 Pro (小米, 2026-04-22公测, 256K上下文, 强化学习Agent, 2026-05-27降价99%)
-        key = self._get_key("mimo")
-        if not key:
-            key = os.environ.get("MIMO_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="mimo", api_key=key,
-                # 联网核实:小米 MiMo 官方 OpenAI 兼容端点是 api.xiaomimimo.com，
-                # 不是 api.mimo.ai(后者不解析/不是小米的域名)——key 填得再对，
-                # 域名错了也是每次都连接失败，跟没配 key 看起来一模一样。
-                base_url="https://api.xiaomimimo.com/v1",
-                models=["mimo-v2.5-pro", "mimo-v2.5-standard", "mimo-v2.5-lite"],
-                default_model="mimo-v2.5-pro",
-                cost_per_1k_input=0.00002, cost_per_1k_output=0.00008,
-                multimodal=False, env_key="MIMO_API_KEY",
-            )
-            self.providers["mimo"] = cfg
-            self.adapters["mimo"] = MiMoAdapter(cfg)
-
-        # Moonshot Kimi
-        key = self._get_key("moonshot")
-        if not key:
-            key = os.environ.get("MOONSHOT_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="moonshot", api_key=key,
-                base_url="https://api.moonshot.cn/v1",
-                models=["kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k"],
-                default_model="kimi-k2.6",
-                cost_per_1k_input=0.002, cost_per_1k_output=0.002,
-                multimodal=False, env_key="MOONSHOT_API_KEY",
-            )
-            self.providers["moonshot"] = cfg
-            self.adapters["moonshot"] = MoonshotAdapter(cfg)
-
-        # Perplexity Sonar
-        key = self._get_key("perplexity")
-        if not key:
-            key = os.environ.get("PERPLEXITY_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="perplexity", api_key=key,
-                base_url="https://api.perplexity.ai",
-                models=["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro", "sonar"],
-                default_model="sonar-pro",
-                cost_per_1k_input=0.001, cost_per_1k_output=0.001,
-                supports_tools=False, multimodal=False, env_key="PERPLEXITY_API_KEY",
-            )
-            self.providers["perplexity"] = cfg
-            self.adapters["perplexity"] = PerplexityAdapter(cfg)
-
-        # Groq
-        key = self._get_key("groq")
-        if not key:
-            key = os.environ.get("GROQ_API_KEY", "")
-        if key and not key.startswith("your-"):
-            cfg = ProviderConfig(
-                name="groq", api_key=key,
-                base_url="https://api.groq.com/openai/v1",
-                models=["llama-3.3-70b-versatile"],
-                default_model="llama-3.3-70b-versatile",
-                cost_per_1k_input=0.00059, cost_per_1k_output=0.00079,
-                supports_tools=True, multimodal=False, env_key="GROQ_API_KEY",
-            )
-            self.providers["groq"] = cfg
-            self.adapters["groq"] = GroqAdapter(cfg)
+        # L1:标准 OpenAI/Anthropic 兼容提供商全部从 PROVIDER_REGISTRY 循环派生
+        self._register_from_registry()
 
         # Ollama (local) — PR-HA: upgraded to first-class multimodal-capable local provider
         ollama_url = self._normalize_base_url(self._get_key("ollama"))
@@ -1703,6 +1509,9 @@ class MultiLLMRouter:
         # 本地 ollama/hf_local 本就在偏好表最前，因此本地优先不受影响。
         if os.environ.get("GALAXY_OPENSOURCE_FIRST", "true").lower() != "false":
             preferred_order = reorder_open_source_first(list(preferred_order))
+        # L3 bandit:按历史表现(成功率/延迟/成本)自适应重排候选;样本不足自动退回
+        # 原序(冷启动零行为变化),因此不影响本地/开源优先的既有精排。
+        preferred_order = self._bandit_reorder(list(preferred_order), task_type)
         alternatives = []
 
         for provider_name in preferred_order:
@@ -2254,6 +2063,391 @@ class MultiLLMRouter:
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
         return messages
+
+    # ─────────────────── L2 级联路由(FrugalGPT) ───────────────────
+    @staticmethod
+    def _default_answer_adequate(response: "LLMResponse", min_chars: int = 1) -> bool:
+        """默认质量判据:答案非空、达到最小长度、不是明显的失败/拒答。级联路由用它
+        判断"便宜模型这次答得够不够好、要不要升级到更贵的下一档"。"""
+        try:
+            text = (response.content or "").strip()
+        except Exception:  # noqa: BLE001
+            return False
+        if len(text) < max(1, min_chars):
+            return False
+        low = text.lower()
+        bad_markers = (
+            "i cannot", "i can't help", "as an ai language model", "i'm unable to",
+            "无法回答", "抱歉，我不能", "对不起，我无法",
+            "error:", "internal server error", "rate limit",
+        )
+        if any(m in low for m in bad_markers):
+            return False
+        return True
+
+    @staticmethod
+    def _capability_floor_for_complexity(complexity: float) -> int:
+        """把任务复杂度(0..1)映射到【最低能力档】。要点:难任务直接从强档起步,不在注定
+        答不好的便宜档上白白试错一轮——这正是"按任务实际情况来"而非一律盲目从最便宜档试。
+          complexity ≥ 0.70 → 档 3(前沿/强开源)
+          complexity ≥ 0.35 → 档 2(强)
+          否则              → 档 1(本地轻量也够)
+        可用 GALAXY_CASCADE_FLOOR_HI / _MID 覆写阈值。"""
+        try:
+            hi = float(os.environ.get("GALAXY_CASCADE_FLOOR_HI", "0.70") or "0.70")
+            mid = float(os.environ.get("GALAXY_CASCADE_FLOOR_MID", "0.35") or "0.35")
+        except ValueError:
+            hi, mid = 0.70, 0.35
+        if complexity >= hi:
+            return 3
+        if complexity >= mid:
+            return 2
+        return 1
+
+    def _cost_ordered_ladder(self, task_type: TaskType, max_stages: int = 3,
+                             require_multimodal: bool = False,
+                             min_tier: int = 1) -> List[Tuple[str, str]]:
+        """构造【便宜→贵】的候选梯队 [(provider, model), ...]:先按能力档下限 min_tier 过滤
+        (任务难就不带本地轻量档,避免注定失败的一轮),再在合格集合里按 cost_per_1k_output
+        升序(便宜的强开源如 deepseek 天然靠前 → 既够强又省钱),require_multimodal 时只保留
+        多模态提供商,每档用它对该任务的推荐模型(无则 default),最多 max_stages 档。
+
+        兜底:若没有任何提供商达到 min_tier(例如只配了本地模型),降级忽略下限用全量可用集合
+        ——宁可用弱档兜底,也不空手而归。"""
+        def _pool(floor: int) -> List["ProviderConfig"]:
+            return [
+                cfg for name, cfg in self.providers.items()
+                if name in self.adapters and cfg.is_available()
+                and (not require_multimodal or cfg.multimodal)
+                and _provider_quality_tier(name) >= floor
+            ]
+        avail = _pool(min_tier)
+        if not avail and min_tier > 1:
+            avail = _pool(1)  # 达不到能力下限 → 降级兜底,不返回空
+            if avail:
+                logger.info("级联路由:无提供商达能力档 %d,降级用全量可用集合兜底", min_tier)
+        avail.sort(key=lambda c: (c.cost_per_1k_output, c.cost_per_1k_input))
+        ladder: List[Tuple[str, str]] = []
+        for cfg in avail[:max(1, max_stages)]:
+            model = PROVIDER_MODEL_MAP.get(cfg.name, {}).get(task_type) or cfg.default_model
+            ladder.append((cfg.name, model))
+        return ladder
+
+    async def chat_cascade(
+        self,
+        messages: List[Dict],
+        task_type: TaskType = TaskType.GENERAL,
+        *,
+        judge: Optional[Callable[["LLMResponse"], bool]] = None,
+        max_stages: int = 3,
+        min_chars: int = 1,
+        complexity: Optional[float] = None,
+        require_multimodal: bool = False,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        tools: Optional[List[Dict]] = None,
+        **kwargs,
+    ) -> Optional["LLMResponse"]:
+        """L2 级联路由(任务感知的 FrugalGPT):按任务【实际复杂度】定起步档,再便宜→贵升级。
+
+        改造要点(不再一律从最便宜档盲试):先估任务复杂度(complexity 不给则从 messages 估),
+        映射出【最低能力档】——难任务直接从强档起步,跳过注定答不好的便宜档,省掉白试的一轮;
+        简单任务仍从最便宜档起。合格判据的最小长度也随复杂度自适应收紧(难任务不接受一句话敷衍)。
+
+        judge(response)->bool:自定义质量判据;缺省用 _default_answer_adequate。返回第一个
+        合格答案(带 cascade_stage/cascade_escalated 元数据);全档都不合格则返回最后(最强)
+        那档的答案;完全无可用提供商返回 None。每次调用都记进 call_history 供 L3 反哺。
+        """
+        if complexity is None:
+            try:
+                complexity = float(self._compute_complexity_score(messages, tools))
+            except Exception:  # noqa: BLE001
+                complexity = 0.5
+        complexity = min(1.0, max(0.0, complexity))
+        floor = self._capability_floor_for_complexity(complexity)
+        ladder = self._cost_ordered_ladder(
+            task_type, max_stages, require_multimodal, min_tier=floor,
+        )
+        if not ladder:
+            logger.warning("级联路由:无可用提供商")
+            return None
+        # 合格门槛随复杂度自适应:难任务不接受一句话敷衍(最多抬到 ~24 字)。
+        eff_min_chars = max(min_chars, int(round(complexity * 24)))
+        logger.info("级联路由:复杂度 %.2f → 能力档下限 %d,起步梯队 %s(min_chars=%d)",
+                    complexity, floor, [p for p, _ in ladder], eff_min_chars)
+        verdict = judge or (lambda r: self._default_answer_adequate(r, eff_min_chars))
+        last: Optional[LLMResponse] = None
+        for stage, (provider, model) in enumerate(ladder):
+            adapter = self.adapters.get(provider)
+            if adapter is None:
+                continue
+            try:
+                resp = await adapter.chat(
+                    messages, model, tools=tools,
+                    temperature=temperature, max_tokens=max_tokens, **kwargs,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.info("级联第 %d 档 %s:%s 调用失败,升级: %s", stage, provider, model, exc)
+                self._record_call(provider, model, task_type, None, success=False)
+                continue
+            self._record_call(provider, model, task_type, resp, success=True)
+            last = resp
+            try:
+                ok = bool(verdict(resp))
+            except Exception:  # noqa: BLE001
+                ok = True  # 判据自身出错不阻塞,视为合格
+            if ok:
+                resp.cascade_stage = stage
+                resp.cascade_escalated = stage > 0
+                self._last_provider = provider
+                logger.info("级联路由:第 %d 档 %s:%s 合格返回 %s", stage, provider, model,
+                            "(便宜档一次命中)" if stage == 0 else "(升级后命中)")
+                return resp
+            logger.info("级联第 %d 档 %s:%s 答案不合格,升级", stage, provider, model)
+        if last is not None:
+            last.cascade_stage = len(ladder) - 1
+            last.cascade_escalated = len(ladder) > 1
+        return last
+
+    def _record_call(self, provider: str, model: str, task_type: TaskType,
+                     response: Optional["LLMResponse"], success: bool) -> None:
+        """统一记 call_history(供 L3 bandit 反哺决策),字段与既有 chat() 记录对齐,并补
+        cost(成本感知排序用)。全程 try/except,绝不阻塞主流程。"""
+        try:
+            cfg = self.providers.get(provider)
+            itok = int(getattr(response, "input_tokens", 0) or 0)
+            otok = int(getattr(response, "output_tokens", 0) or 0)
+            cost = 0.0
+            if cfg:
+                cost = (itok / 1000.0) * cfg.cost_per_1k_input + (otok / 1000.0) * cfg.cost_per_1k_output
+            self.call_history.append({
+                "provider": provider, "model": model,
+                "task_type": task_type.value if hasattr(task_type, "value") else str(task_type),
+                "latency_ms": float(getattr(response, "latency_ms", 0.0) or 0.0),
+                "tokens": itok + otok, "cost": round(cost, 6),
+                "timestamp": time.time(), "success": bool(success),
+            })
+            if len(self.call_history) > 500:
+                self.call_history = self.call_history[-500:]
+            if cfg:
+                if success:
+                    cfg.success_count += 1
+                    cfg.last_used = time.time()
+                else:
+                    cfg.error_count += 1
+        except Exception:  # noqa: BLE001
+            pass
+
+    # ─────────────────── L3 bandit 自适应排序 ───────────────────
+    def _provider_stats(self, task_type: Optional[TaskType] = None) -> Dict[str, Dict[str, float]]:
+        """从 call_history 聚合每个 provider 的表现:
+        {provider: {calls, successes, latency_sum, cost_sum}}。task_type 给定时只统计
+        该任务的调用(粒度更贴切);None 则统计全量历史(任务级样本不足时的兜底)。"""
+        tt = task_type.value if hasattr(task_type, "value") else task_type
+        stats: Dict[str, Dict[str, float]] = {}
+        for rec in (getattr(self, "call_history", None) or []):
+            if tt is not None and rec.get("task_type") != tt:
+                continue
+            p = rec.get("provider")
+            if not p:
+                continue
+            s = stats.setdefault(p, {"calls": 0.0, "successes": 0.0,
+                                     "latency_sum": 0.0, "cost_sum": 0.0})
+            s["calls"] += 1
+            if rec.get("success"):
+                s["successes"] += 1
+            s["latency_sum"] += float(rec.get("latency_ms", 0.0) or 0.0)
+            s["cost_sum"] += float(rec.get("cost", 0.0) or 0.0)
+        return stats
+
+    def _bandit_score(self, name: str, stats: Dict[str, Dict[str, float]], total: int,
+                      *, latency_weight: float = 0.2, cost_weight: float = 0.1,
+                      explore_c: float = 1.4) -> float:
+        """UCB1 式打分:利用项(成功率 − 延迟/成本惩罚)＋ 探索项。未试过的 provider 返回
+        +inf(乐观初始化,保证每个都至少被探索一次)。惩罚做相对归一化,避免延迟/成本的
+        绝对量级压过成功率主信号。"""
+        s = stats.get(name)
+        if not s or s["calls"] == 0:
+            return float("inf")
+        n = s["calls"]
+        success_rate = s["successes"] / n
+        avg_latency = s["latency_sum"] / n
+        avg_cost = s["cost_sum"] / n
+        lat_pen = latency_weight * min(1.0, avg_latency / 5000.0)   # 5s 封顶
+        cost_pen = cost_weight * min(1.0, avg_cost / 0.05)          # 0.05/次 封顶
+        exploit = max(0.0, success_rate - lat_pen - cost_pen)
+        explore = explore_c * math.sqrt(math.log(max(total, 1) + 1.0) / n)
+        return exploit + explore
+
+    def _bandit_reorder(self, candidates: List[str], task_type: Optional[TaskType] = None,
+                        *, min_samples: int = 5) -> List[str]:
+        """按 UCB1 打分对候选 provider 列表做自适应重排(表现好的上浮,同时保留探索)。
+        冷启动零回归:GALAXY_BANDIT_ROUTING=false 关闭;任务级样本不足退回全量历史,
+        全量也不足(< min_samples)则原样返回。稳定排序,同分保持传入顺序。"""
+        if not candidates or os.environ.get("GALAXY_BANDIT_ROUTING", "true").lower() == "false":
+            return candidates
+        stats = self._provider_stats(task_type)
+        total = int(sum(s["calls"] for s in stats.values()))
+        if total < min_samples:
+            stats = self._provider_stats(None)
+            total = int(sum(s["calls"] for s in stats.values()))
+            if total < min_samples:
+                return list(candidates)
+        scored = [self._bandit_score(n, stats, total) for n in candidates]
+        # sorted 稳定:同分保持原相对顺序;-score 让高分(含 +inf 未试过)排前。
+        order = sorted(range(len(candidates)), key=lambda i: -scored[i])
+        return [candidates[i] for i in order]
+
+    def routing_stats(self, task_type: Optional[TaskType] = None) -> List[Dict[str, Any]]:
+        """可观测:导出每个 provider 的聚合表现 + 当前 bandit 分(供面板/诊断查看
+        "反哺决策"的实际依据)。按 bandit 分降序。"""
+        stats = self._provider_stats(task_type)
+        total = int(sum(s["calls"] for s in stats.values()))
+        out: List[Dict[str, Any]] = []
+        for name, s in stats.items():
+            n = s["calls"] or 1
+            out.append({
+                "provider": name,
+                "calls": int(s["calls"]),
+                "success_rate": round(s["successes"] / n, 4),
+                "avg_latency_ms": round(s["latency_sum"] / n, 1),
+                "avg_cost": round(s["cost_sum"] / n, 6),
+                "bandit_score": self._bandit_score(name, stats, total),
+            })
+        out.sort(key=lambda d: -d["bandit_score"])
+        # +inf 不便于 JSON 序列化,导出前替换为 None 标记"未试过/待探索"。
+        for d in out:
+            if d["bandit_score"] == float("inf"):
+                d["bandit_score"] = None
+        return out
+
+    # ─────────────────── L4 模型名单自动同步(/models 端点对账) ───────────────────
+    @staticmethod
+    def _model_matches(configured: str, live_ids: "set") -> bool:
+        """配置里的模型名是否仍能对应到端点实际返回的某个 id。做带边界的前缀匹配,
+        以吃下版本后缀(gpt-5.6 ↔ gpt-5.6-2026-01)和 ollama 的 tag(gemma4:e2b ↔
+        gemma4:e2b:latest / 同 root),但不至于 gpt-4 误配 gpt-4o。"""
+        c = (configured or "").strip()
+        if not c:
+            return False
+        if c in live_ids:
+            return True
+        croot = c.split(":")[0]
+        for lid in live_ids:
+            if lid == c or lid.startswith(c + "-") or c.startswith(lid + "-"):
+                return True
+            if lid.startswith(c + ":") or lid.split(":")[0] == croot:
+                return True
+        return False
+
+    async def _fetch_live_models(self, name: str) -> Optional[List[str]]:
+        """查询单个 provider 的模型名单端点(协议感知:ollama→/api/tags,
+        anthropic→/models(x-api-key),其余 OpenAI 兼容→/models(Bearer))。
+        返回实际可用的 id 列表;不可达/异常返回 None(与"端点返回空列表"区分开)。"""
+        cfg = self.providers.get(name)
+        adapter = self.adapters.get(name)
+        if cfg is None or adapter is None or not cfg.base_url:
+            return None
+        base = cfg.base_url.rstrip("/")
+        if isinstance(adapter, OllamaAdapter):
+            url, headers = f"{base}/api/tags", {}
+        elif isinstance(adapter, AnthropicAdapter):
+            url = f"{base}/models"
+            headers = {"x-api-key": cfg.api_key, "anthropic-version": "2023-06-01"}
+        else:
+            url = f"{base}/models"
+            headers = {"Authorization": f"Bearer {cfg.api_key}"}
+        try:
+            async with httpx.AsyncClient(timeout=min(cfg.timeout or 10.0, 10.0)) as client:
+                r = await client.get(url, headers=headers)
+            if r.status_code != 200:
+                logger.debug("模型名单同步:%s HTTP %s", name, r.status_code)
+                return None
+            data = r.json()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("模型名单同步:%s 查询失败: %s", name, exc)
+            return None
+        return self._parse_model_list(data)
+
+    @staticmethod
+    def _parse_model_list(data: Any) -> List[str]:
+        """把不同端点形状统一解析成 id 列表:ollama {models:[{name}]}、
+        OpenAI {data:[{id}]}、Anthropic {data:[{id}]}、或裸列表。"""
+        ids: List[str] = []
+        if isinstance(data, dict) and "models" in data:  # ollama /api/tags
+            for m in data.get("models") or []:
+                mid = (m.get("name") if isinstance(m, dict) else "") or ""
+                if mid:
+                    ids.append(mid)
+            return ids
+        items = data.get("data", data) if isinstance(data, dict) else data
+        for it in (items or []):
+            if isinstance(it, dict):
+                mid = it.get("id") or it.get("name") or ""
+            elif isinstance(it, str):
+                mid = it
+            else:
+                mid = ""
+            if mid:
+                ids.append(mid)
+        return ids
+
+    def _reconcile_one(self, name: str, live: List[str], *, apply: bool,
+                       max_add: int) -> Dict[str, Any]:
+        """把单个 provider 的 cfg.models 与实际 live 名单对账。返回诊断报告;
+        apply=True 时就地修正 cfg(剪掉失效项、补进新发现项、必要时改 default_model)。
+        剪枝绝不把名单清空(端点抽风也不至于让 provider 失去所有模型)。"""
+        cfg = self.providers[name]
+        live_set = set(live)
+        configured = list(cfg.models)
+        valid = [m for m in configured if self._model_matches(m, live_set)]
+        stale = [m for m in configured if m not in valid]
+        # 新发现:live 里、当前配置尚未覆盖到的 id
+        newly = [lid for lid in live if not any(self._model_matches(m, {lid}) for m in configured)]
+        report = {
+            "provider": name, "live_count": len(live),
+            "configured": configured, "valid": valid, "stale": stale,
+            "newly_available": newly[:max_add], "applied": False,
+        }
+        if not apply:
+            return report
+        new_models = valid + [m for m in newly[:max_add] if m not in valid]
+        if not new_models:
+            # 端点没给出任何能对应上的模型(可能鉴权失败/形状异常)→ 保守不动
+            report["applied"] = False
+            return report
+        cfg.models = new_models
+        if cfg.default_model not in new_models:
+            cfg.default_model = new_models[0]
+            report["default_model_repaired"] = cfg.default_model
+        report["applied"] = True
+        return report
+
+    async def sync_model_lists(self, *, apply: bool = False,
+                               only: Optional[List[str]] = None,
+                               max_add: int = 20) -> Dict[str, Any]:
+        """L4 模型名单自动同步:对每个可用 provider 查询其 /models 端点,与硬编码的
+        ProviderConfig.models 对账。apply=False(默认)只出对账报告;apply=True 就地
+        剪掉失效模型、补进新发现模型、修复失效的 default_model。不可达的 provider
+        跳过(不误删其配置名单)。并发查询,整体不阻塞。"""
+        names = [n for n in (only or list(self.providers.keys()))
+                 if n in self.providers and self.providers[n].is_available()]
+        results = await asyncio.gather(
+            *(self._fetch_live_models(n) for n in names), return_exceptions=True
+        )
+        reports: List[Dict[str, Any]] = []
+        unreachable: List[str] = []
+        for n, live in zip(names, results):
+            if isinstance(live, Exception) or live is None:
+                unreachable.append(n)
+                continue
+            reports.append(self._reconcile_one(n, live, apply=apply, max_add=max_add))
+        return {
+            "applied": apply,
+            "checked": len(names),
+            "reconciled": reports,
+            "unreachable": unreachable,
+        }
 
     # ───────── 统一调用入口 ─────────
 
