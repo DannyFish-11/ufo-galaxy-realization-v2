@@ -2,7 +2,8 @@
 Node 27: SmartHome - 智能家居控制服务节点
 ==========================================
 通过 Home Assistant REST API 及内存设备注册表提供智能家居控制功能。
-支持 Home Assistant 直连、Tuya 配置，并提供本地 in-memory 设备回退。
+支持 Home Assistant 直连（长尾厂商如 Tuya 经 HA 集成桥接），并提供本地
+in-memory 设备回退。
 """
 import os
 import logging
@@ -26,9 +27,9 @@ PORT = 8027
 
 HA_URL = os.getenv("HOME_ASSISTANT_URL", "").rstrip("/")
 HA_TOKEN = os.getenv("HOME_ASSISTANT_TOKEN", "")
-TUYA_API_KEY = os.getenv("TUYA_API_KEY", "")
-TUYA_API_SECRET = os.getenv("TUYA_API_SECRET", "")
-TUYA_REGION = os.getenv("TUYA_REGION", "cn")
+# Tuya 假接入已删除:此前只读 env 就在 /status 汇报 "tuya_configured",
+# 代码里没有任何 Tuya SDK/HTTP 调用——纯假信号。长尾厂商设备一律经
+# Home Assistant 桥接(HA 有成熟的 Tuya 集成),不在本节点重复造轮子。
 
 # In-memory device registry and scene store (fallback / standalone mode).
 # _devices: {device_id: {device_id, name, type, protocol, ip_address, state, online, registered_at}}
@@ -138,7 +139,6 @@ async def health():
         "name": "SmartHome",
         "port": PORT,
         "ha_configured": bool(HA_URL and HA_TOKEN),
-        "tuya_configured": bool(TUYA_API_KEY and TUYA_API_SECRET),
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -148,8 +148,6 @@ async def status():
     integrations: List[str] = []
     if HA_URL and HA_TOKEN:
         integrations.append("home_assistant")
-    if TUYA_API_KEY and TUYA_API_SECRET:
-        integrations.append("tuya")
     if not integrations:
         integrations.append("in_memory_mock")
 
@@ -160,8 +158,6 @@ async def status():
         "config_summary": {
             "ha_url": HA_URL or None,
             "ha_token_set": bool(HA_TOKEN),
-            "tuya_key_set": bool(TUYA_API_KEY),
-            "tuya_region": TUYA_REGION,
         },
         "device_count": len(_devices),
         "scene_count": len(_scenes),

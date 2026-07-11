@@ -12,7 +12,7 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export default function MeshView({ data }: { data: PanelData }) {
-  const { topologyNodes, meshSession, nodeTopology } = data;
+  const { topologyNodes, meshSession, nodeTopology, smartDeviceList } = data;
 
   return (
     <div className="view-scroll">
@@ -51,6 +51,22 @@ export default function MeshView({ data }: { data: PanelData }) {
                 <div className="row-meta mono">{n.role} · {n.id}</div>
               </div>
               <div className="row-right mono">{n.messageCount.toLocaleString()} msg</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="section-header">智能设备</div>
+        <div className="card-list">
+          {smartDeviceList.length === 0
+            ? <div className="empty-hint">暂无智能设备 · 配置 Home Assistant 或局域网 mDNS 发现后自动出现</div>
+            : smartDeviceList.map((d) => (
+            <div key={d.deviceId} className="row-card">
+              <span className={`dot tone-${d.online ? 'success' : 'danger'}`} />
+              <div className="row-main">
+                <div className="row-title">{d.name}</div>
+                <div className="row-meta mono">{d.domain || d.protocol} · {d.deviceId}</div>
+              </div>
+              <div className="row-right mono">{d.state || (d.online ? 'online' : 'offline')}</div>
             </div>
           ))}
         </div>

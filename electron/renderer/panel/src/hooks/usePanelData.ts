@@ -88,6 +88,16 @@ export interface PanelData {
   }>;
 
   // URL 哨兵抓到的"缺协议头请求 URL"记录(平时为空;有才在诊断抽屉里显示)
+  // 智能设备明细(UDM iot:HA 镜像 + mDNS 发现),维态 tab 渲染
+  smartDeviceList: Array<{
+    deviceId: string;
+    name: string;
+    domain: string;
+    state: string;
+    online: boolean;
+    protocol: string;
+  }>;
+
   diagnostics: Array<{
     ts: string;
     url: string;
@@ -178,6 +188,7 @@ const DEFAULT_PANEL_DATA: PanelData = {
     uptime: 0,
   },
   natsMessages: [],
+  smartDeviceList: [],
   diagnostics: [],
   startupTiming: [],
   mcpServers: [],
@@ -245,6 +256,7 @@ export function usePanelData(): UsePanelDataReturn {
           meshSession: payload.mesh_session || DEFAULT_PANEL_DATA.meshSession,
           openclawdStatus: payload.openclawd_status || DEFAULT_PANEL_DATA.openclawdStatus,
           natsMessages: payload.nats_messages || DEFAULT_PANEL_DATA.natsMessages,
+          smartDeviceList: payload.smart_devices || DEFAULT_PANEL_DATA.smartDeviceList,
           diagnostics: payload.diagnostics || DEFAULT_PANEL_DATA.diagnostics,
           startupTiming: payload.startup_timing || DEFAULT_PANEL_DATA.startupTiming,
           mcpServers: payload.mcp_servers || DEFAULT_PANEL_DATA.mcpServers,

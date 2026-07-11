@@ -272,6 +272,31 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception as exc:  # noqa: BLE001
             logger.debug("panel feed: OpenClawd 状态聚合失败: %s", exc)
 
+        # 智能设备明细(UDM SSOT 里的 iot 设备:HA 镜像 + mDNS 发现),在线优先,
+        # 封顶 50 条防大家庭刷爆 feed。面板「维态·设备网格」tab 据此渲染明细。
+        try:
+            from core.unified.device_manager import get_unified_device_manager
+            _iot = [
+                d for d in (get_unified_device_manager().list_devices() or [])
+                if str(getattr(d, "device_type", "")) == "iot"
+            ]
+            _iot.sort(key=lambda d: (not d.is_online(), d.device_name or d.device_id))
+            feed["smart_devices"] = [
+                {
+                    "deviceId": d.device_id,
+                    "name": d.device_name or d.device_id,
+                    "domain": (d.metadata or {}).get("ha_domain")
+                    or (d.metadata or {}).get("service_type", ""),
+                    "state": (d.metadata or {}).get("ha_state", ""),
+                    "online": d.is_online(),
+                    "protocol": (d.metadata or {}).get("protocol", ""),
+                }
+                for d in _iot[:50]
+            ]
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("panel feed: 智能设备明细聚合失败: %s", exc)
+            feed["smart_devices"] = []
+
         # 节点/设备拓扑（真实设备列表 + 边）
         try:
             from core.routes._shared import registered_devices
