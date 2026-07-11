@@ -71,7 +71,7 @@ def already_running() -> bool:
     if not os.path.exists(path):
         return False
     try:
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             existing_pid = int(f.read().strip())
         os.kill(existing_pid, 0)  # 存活则不抛异常;POSIX/Windows 均可用
         return True
@@ -86,7 +86,7 @@ def already_running() -> bool:
 def write_lock(pid: int) -> None:
     """子进程成功拉起后写入其 pid,供其余启动路径的 already_running() 探测到。"""
     try:
-        with open(lock_path(), "w") as f:
+        with open(lock_path(), "w", encoding='utf-8') as f:
             f.write(str(pid))
     except OSError:
         pass

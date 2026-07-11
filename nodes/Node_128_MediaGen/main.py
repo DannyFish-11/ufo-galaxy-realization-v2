@@ -182,7 +182,7 @@ class MediaGenService:
                 self.logger.warning(f"图片 API 调用失败: {e}")
 
         # Fallback
-        with open(file_path, "w") as f:
+        with open(file_path, "w", encoding='utf-8') as f:
             f.write(f"Placeholder image for task {task_id}")
         return file_path
 
@@ -211,7 +211,7 @@ class MediaGenService:
         # Fallback: 静音 WAV
         import wave, struct
         wav_path = file_path.replace(".mp3", ".wav")
-        with wave.open(wav_path, "w") as wf:
+        with wave.open(wav_path, "w", encoding='utf-8') as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(16000)
@@ -234,7 +234,7 @@ class MediaGenService:
         except Exception as e:
             self.logger.warning(f"ffmpeg 视频生成失败: {e}")
 
-        with open(file_path, "w") as f:
+        with open(file_path, "w", encoding='utf-8') as f:
             f.write(f"Simulated MP4 video for task {task_id}")
         return file_path
 

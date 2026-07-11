@@ -443,7 +443,7 @@ class OpenCodeEngine:
                 config_data["api_key"] = self.config.api_key
             
             # 写入文件
-            with open(config_path, "w") as f:
+            with open(config_path, "w", encoding='utf-8') as f:
                 json.dump(config_data, f, indent=2)
             
             return True

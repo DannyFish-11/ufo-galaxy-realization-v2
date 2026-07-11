@@ -135,7 +135,7 @@ class SecurityEnforcer:
         
         if path and os.path.exists(path):
             try:
-                with open(path, 'r') as f:
+                with open(path, 'r', encoding='utf-8') as f:
                     custom_whitelist = json.load(f)
                     # Merge with defaults
                     default_whitelist["rules"].extend(custom_whitelist.get("rules", []))

@@ -53,7 +53,7 @@ class CalendarManager:
         """加载事件"""
         if os.path.exists(CALENDAR_FILE):
             try:
-                with open(CALENDAR_FILE, 'r') as f:
+                with open(CALENDAR_FILE, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     for event_data in data.get("events", []):
                         event = Event(**event_data)
@@ -64,7 +64,7 @@ class CalendarManager:
     def _save_events(self):
         """保存事件"""
         try:
-            with open(CALENDAR_FILE, 'w') as f:
+            with open(CALENDAR_FILE, 'w', encoding='utf-8') as f:
                 json.dump({"events": [e.dict() for e in self.events.values()]}, f, default=str)
         except Exception as e:
             print(f"Failed to save events: {e}")

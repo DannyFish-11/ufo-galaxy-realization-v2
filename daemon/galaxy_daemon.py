@@ -295,7 +295,9 @@ class GalaxyDaemon:
         }
         
         if config_path and os.path.exists(config_path):
-            with open(config_path, 'r') as f:
+            # 显式 UTF-8:config.json 可能含中文;Windows 默认 cp1252 读取会
+            # UnicodeDecodeError 崩掉守护进程启动。
+            with open(config_path, 'r', encoding='utf-8') as f:
                 user_config = json.load(f)
                 default_config.update(user_config)
         
@@ -518,7 +520,7 @@ class GalaxyDaemon:
             "timestamp": datetime.now().isoformat(),
             "metrics": [m.to_dict() for m in self.health_metrics]
         }
-        with open(filepath, 'w') as f:
+        with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
 
 

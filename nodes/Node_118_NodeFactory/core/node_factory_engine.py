@@ -464,7 +464,7 @@ def test_health():
             # Python 文件语法检查
             if file_path.endswith(".py"):
                 try:
-                    with open(file_path, "r") as f:
+                    with open(file_path, "r", encoding='utf-8') as f:
                         code = f.read()
                     compile(code, file_path, "exec")
                     results[file_type] = True

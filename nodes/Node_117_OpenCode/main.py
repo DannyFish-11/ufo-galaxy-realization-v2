@@ -176,7 +176,7 @@ class OpenCodeEngine:
         
         try:
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
-            with open(filepath, 'w') as f:
+            with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(content)
             sandbox.files[filename] = filepath
             return True
@@ -219,7 +219,7 @@ class OpenCodeEngine:
             filename = f"code_{execution.execution_id[:8]}{runtime.file_extension}"
             filepath = os.path.join(working_dir, filename)
             
-            with open(filepath, 'w') as f:
+            with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(code)
             
             # 编译（如果需要）

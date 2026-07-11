@@ -274,7 +274,7 @@ class NodeFactory:
                     import tempfile
                     work_dir = tempfile.mkdtemp(prefix=f"galaxy_node_{instance.name}_")
                     code_path = os.path.join(work_dir, "main.py")
-                    with open(code_path, "w") as f:
+                    with open(code_path, "w", encoding='utf-8') as f:
                         f.write(blueprint.code_template.replace(
                             "port=8000", f"port={port}"
                         ))

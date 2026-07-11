@@ -78,7 +78,7 @@ class SecretVault:
         vault_file = os.getenv("SECRETVAULT_FILE", "/tmp/secretvault.json")
         if os.path.exists(vault_file):
             try:
-                with open(vault_file, 'r') as f:
+                with open(vault_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     for key, secret_data in data.get("secrets", {}).items():
                         self._secrets[key] = Secret(**secret_data)
@@ -89,7 +89,7 @@ class SecretVault:
         """保存密钥到文件"""
         vault_file = os.getenv("SECRETVAULT_FILE", "/tmp/secretvault.json")
         try:
-            with open(vault_file, 'w') as f:
+            with open(vault_file, 'w', encoding='utf-8') as f:
                 json.dump({"secrets": {k: v.dict() for k, v in self._secrets.items()}}, f, default=str)
         except Exception as e:
             print(f"Failed to save secrets: {e}")

@@ -135,7 +135,7 @@ class FFmpegManager:
         """合并视频"""
         # 创建临时文件列表
         list_file = self.work_dir / "merge_list.txt"
-        with open(list_file, 'w') as f:
+        with open(list_file, 'w', encoding='utf-8') as f:
             for path in input_paths:
                 f.write(f"file '{path}'\n")
 

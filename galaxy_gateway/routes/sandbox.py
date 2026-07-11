@@ -272,8 +272,10 @@ async def sandbox_execute(req: SandboxExecuteRequest):
                 raise HTTPException(400, f"Unsupported language: {req.language}")
 
             # 4. 执行（带资源限制）
-            result = subprocess.run(
-                cmd,
+            # preexec_fn 只有 POSIX 支持;Windows 上传它 subprocess.run 会直接
+            # ValueError。资源限制本身也依赖 POSIX 的 resource 模块,故仅在
+            # _RESOURCE_AVAILABLE(即非 Windows)时才挂 preexec_fn。
+            _run_kwargs = dict(
                 cwd=tmpdir,
                 capture_output=True,
                 text=True,
@@ -281,10 +283,12 @@ async def sandbox_execute(req: SandboxExecuteRequest):
                 errors="replace",
                 timeout=req.timeout,
                 input=req.stdin or "",
-                preexec_fn=lambda: _set_resource_limits(
-                    req.memory_limit_mb, req.cpu_limit_seconds
-                ),
             )
+            if _RESOURCE_AVAILABLE:
+                _run_kwargs["preexec_fn"] = lambda: _set_resource_limits(
+                    req.memory_limit_mb, req.cpu_limit_seconds
+                )
+            result = subprocess.run(cmd, **_run_kwargs)
 
             elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
 

@@ -181,7 +181,7 @@ async def execute_code(request: ExecuteRequest):
     
     with tempfile.TemporaryDirectory() as tmpdir:
         code_file = os.path.join(tmpdir, f"code{config['ext']}")
-        with open(code_file, "w") as f:
+        with open(code_file, "w", encoding='utf-8') as f:
             f.write(request.code)
         
         cmd = config["cmd"] + [code_file]
@@ -250,7 +250,7 @@ async def execute_files(request: FileExecuteRequest):
         for filename, content in request.files.items():
             file_path = os.path.join(tmpdir, filename)
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, "w") as f:
+            with open(file_path, "w", encoding='utf-8') as f:
                 f.write(content)
         
         entry_file = os.path.join(tmpdir, request.entry_point)
