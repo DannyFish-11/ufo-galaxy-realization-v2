@@ -2285,10 +2285,10 @@ class MultiLLMRouter:
         if c in live_ids:
             return True
         croot = c.split(":")[0]
-        for l in live_ids:
-            if l == c or l.startswith(c + "-") or c.startswith(l + "-"):
+        for lid in live_ids:
+            if lid == c or lid.startswith(c + "-") or c.startswith(lid + "-"):
                 return True
-            if l.startswith(c + ":") or l.split(":")[0] == croot:
+            if lid.startswith(c + ":") or lid.split(":")[0] == croot:
                 return True
         return False
 
@@ -2355,7 +2355,7 @@ class MultiLLMRouter:
         valid = [m for m in configured if self._model_matches(m, live_set)]
         stale = [m for m in configured if m not in valid]
         # 新发现:live 里、当前配置尚未覆盖到的 id
-        newly = [l for l in live if not any(self._model_matches(m, {l}) for m in configured)]
+        newly = [lid for lid in live if not any(self._model_matches(m, {lid}) for m in configured)]
         report = {
             "provider": name, "live_count": len(live),
             "configured": configured, "valid": valid, "stale": stale,
