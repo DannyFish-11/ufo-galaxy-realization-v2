@@ -606,6 +606,39 @@ _RESOURCE_BUILTIN_TOOLS: List[Dict] = [
 ]
 
 
+# 记忆召回工具(JIT 检索):把长期记忆检索从"回答前一次性注入 top-3"升级为
+# 主脑可【迭代调用】的工具——查什么、换词再查、何时够了由模型自己决定
+# (agent-as-retriever / just-in-time context loading 模式)。一次性注入仍保留
+# 作为基线,本工具用于模型判断需要更深检索的场合。
+_MEMORY_BUILTIN_TOOLS: List[Dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "memory__recall",
+            "description": (
+                "检索长期记忆(语义+跨模态)。当问题涉及过去的对话、用户偏好、既往决定"
+                "或历史事实,且当前上下文里没有答案时使用。可多次调用:先用最具体的"
+                "名词/关键词查,没查到就换同义词或相关词再查,直到找到足够信息或确认"
+                "记忆中确实没有。返回按相关度排序的记忆片段。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "检索词;具体名词/关键词效果最好,可换词重试",
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "返回条数,默认 5,最大 20",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+]
+
 # PR-HITL: agent-callable "ask the human" tool.  Lets the LLM decide, during its
 # own reasoning, to ask a human a question and block for the answer via the real
 # decision loop (request_human_decision → device notification → human_input).
@@ -6880,6 +6913,14 @@ class OpenClawd:
         # ── Agent-callable human-decision tool (PR-HITL) ─────────────────────
         tools.extend(_ASK_HUMAN_BUILTIN_TOOLS)
 
+        # ── 记忆召回工具(JIT 检索;仅在统一记忆启用时暴露,避免广告死工具) ──
+        try:
+            from core.memory import get_unified_memory
+            if get_unified_memory().enabled:
+                tools.extend(_MEMORY_BUILTIN_TOOLS)
+        except Exception as _mem_exc:  # noqa: BLE001
+            logger.debug("memory__recall 工具收集跳过: %s", _mem_exc)
+
         return tools
 
     async def _dispatch_tool_call(self, tool_name: str, arguments: dict) -> dict:
@@ -6897,9 +6938,18 @@ class OpenClawd:
         Returns:
             {"success": bool, "result": Any, "error": Optional[str]}
         """
+        # openclawd 原生内置工具族直接走 inline 处理器,不委派 CanonicalDispatcher:
+        # dispatcher 按设计只认 mcp/skill/node/device/github 前缀,未知前缀一律判
+        # "未知工具前缀"错误——此前 academic/engineer/resource/ask_human 一经委派
+        # 即死(inline 处理器永远轮不到),memory 是新加入的同族。
+        _INLINE_ONLY_PREFIXES = (
+            "memory__", "academic__", "engineer__", "resource__", "ask_human__",
+        )
+        _is_inline_only = tool_name.startswith(_INLINE_ONLY_PREFIXES)
+
         # PR-001: Primary path — delegate to CanonicalDispatcher.
         _dispatcher = getattr(self, "_capability_dispatcher", None)
-        if _dispatcher is not None:
+        if _dispatcher is not None and not _is_inline_only:
             try:
                 _dr = await _dispatcher.dispatch(
                     tool_name,
@@ -7102,6 +7152,11 @@ class OpenClawd:
                 action = tool_name[8:]  # strip "github__"
                 return await self._dispatch_github_tool(action, arguments)
 
+            elif tool_name.startswith("memory__"):
+                # 记忆召回工具(JIT 检索): memory__recall
+                action = tool_name[len("memory__"):]
+                return await self._dispatch_memory_tool(action, arguments)
+
             elif tool_name.startswith("academic__"):
                 # Academic system resource tools: academic__search, academic__ingest, academic__recall
                 action = tool_name[10:]  # strip "academic__"
@@ -7242,6 +7297,59 @@ class OpenClawd:
     # ========================================================================
     # Academic System Resource Tools — academic__search / __ingest / __recall
     # ========================================================================
+
+    async def _dispatch_memory_tool(self, action: str, arguments: dict) -> dict:
+        """记忆召回工具执行器: memory__recall。
+
+        主脑在工具循环里迭代调用——查什么、换词再查、何时够了由模型决定
+        (JIT 检索),区别于回答前的一次性 top-3 注入(那条基线仍保留)。
+        recall 是同步实现,走 to_thread 不阻塞事件循环;全程 best-effort,
+        记忆层不可用时返回空结果而非报错,绝不因记忆问题打断对话。
+        """
+        if action != "recall":
+            return {"success": False, "error": f"未知 memory 工具: memory__{action}"}
+        query = str(arguments.get("query", "") or "").strip()
+        if not query:
+            return {"success": False, "error": "query 不能为空"}
+        try:
+            top_k = max(1, min(int(arguments.get("top_k", 5) or 5), 20))
+        except (TypeError, ValueError):
+            top_k = 5
+        try:
+            import asyncio
+            from core.memory import get_unified_memory
+            um = get_unified_memory()
+            if not um.enabled:
+                return {"success": True,
+                        "result": {"hits": [], "count": 0, "note": "长期记忆未启用"}}
+            hits = await asyncio.to_thread(um.recall, query, top_k=top_k)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("memory__recall 检索失败(返回空结果): %s", exc)
+            return {"success": True,
+                    "result": {"hits": [], "count": 0, "note": f"检索失败: {exc}"}}
+        rows = [
+            {
+                "content": (h.content or "")[:500],
+                "score": round(float(getattr(h, "score", 0.0) or 0.0), 4),
+                "source": getattr(h, "source", ""),
+                "modality": getattr(h, "modality", "text"),
+            }
+            for h in (hits or [])
+            if getattr(h, "content", "")
+        ]
+        # 证据链留痕:与 facade recall 同款,事后可回放"这次参考了哪些记忆"
+        try:
+            from core.session_manager import record_evidence, EvidenceKind
+            _sid = getattr(self, "_current_session_id", "") or ""
+            if _sid:
+                record_evidence(
+                    _sid, EvidenceKind.NOTE, actor="memory.tool_recall",
+                    payload={"event": "tool_recall", "query": query[:200],
+                             "hits": len(rows)},
+                )
+        except Exception:  # noqa: BLE001
+            pass
+        return {"success": True, "result": {"hits": rows, "count": len(rows)}}
 
     async def _dispatch_academic_tool(self, action: str, arguments: dict) -> dict:
         """Dispatch academic system resource tool calls.
