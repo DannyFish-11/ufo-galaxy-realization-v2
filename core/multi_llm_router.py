@@ -2085,17 +2085,47 @@ class MultiLLMRouter:
             return False
         return True
 
+    @staticmethod
+    def _capability_floor_for_complexity(complexity: float) -> int:
+        """把任务复杂度(0..1)映射到【最低能力档】。要点:难任务直接从强档起步,不在注定
+        答不好的便宜档上白白试错一轮——这正是"按任务实际情况来"而非一律盲目从最便宜档试。
+          complexity ≥ 0.70 → 档 3(前沿/强开源)
+          complexity ≥ 0.35 → 档 2(强)
+          否则              → 档 1(本地轻量也够)
+        可用 GALAXY_CASCADE_FLOOR_HI / _MID 覆写阈值。"""
+        try:
+            hi = float(os.environ.get("GALAXY_CASCADE_FLOOR_HI", "0.70") or "0.70")
+            mid = float(os.environ.get("GALAXY_CASCADE_FLOOR_MID", "0.35") or "0.35")
+        except ValueError:
+            hi, mid = 0.70, 0.35
+        if complexity >= hi:
+            return 3
+        if complexity >= mid:
+            return 2
+        return 1
+
     def _cost_ordered_ladder(self, task_type: TaskType, max_stages: int = 3,
-                             require_multimodal: bool = False) -> List[Tuple[str, str]]:
-        """构造【便宜→贵】的候选梯队 [(provider, model), ...]:只取当前可用(is_available
-        且有 adapter)的提供商,按 cost_per_1k_output 升序(本地 ollama 成本 0 天然排最前),
-        require_multimodal 时只保留多模态提供商,每个用它对该任务的推荐模型(无则 default),
-        最多 max_stages 档。"""
-        avail = [
-            cfg for name, cfg in self.providers.items()
-            if name in self.adapters and cfg.is_available()
-            and (not require_multimodal or cfg.multimodal)
-        ]
+                             require_multimodal: bool = False,
+                             min_tier: int = 1) -> List[Tuple[str, str]]:
+        """构造【便宜→贵】的候选梯队 [(provider, model), ...]:先按能力档下限 min_tier 过滤
+        (任务难就不带本地轻量档,避免注定失败的一轮),再在合格集合里按 cost_per_1k_output
+        升序(便宜的强开源如 deepseek 天然靠前 → 既够强又省钱),require_multimodal 时只保留
+        多模态提供商,每档用它对该任务的推荐模型(无则 default),最多 max_stages 档。
+
+        兜底:若没有任何提供商达到 min_tier(例如只配了本地模型),降级忽略下限用全量可用集合
+        ——宁可用弱档兜底,也不空手而归。"""
+        def _pool(floor: int) -> List["ProviderConfig"]:
+            return [
+                cfg for name, cfg in self.providers.items()
+                if name in self.adapters and cfg.is_available()
+                and (not require_multimodal or cfg.multimodal)
+                and _provider_quality_tier(name) >= floor
+            ]
+        avail = _pool(min_tier)
+        if not avail and min_tier > 1:
+            avail = _pool(1)  # 达不到能力下限 → 降级兜底,不返回空
+            if avail:
+                logger.info("级联路由:无提供商达能力档 %d,降级用全量可用集合兜底", min_tier)
         avail.sort(key=lambda c: (c.cost_per_1k_output, c.cost_per_1k_input))
         ladder: List[Tuple[str, str]] = []
         for cfg in avail[:max(1, max_stages)]:
@@ -2111,23 +2141,41 @@ class MultiLLMRouter:
         judge: Optional[Callable[["LLMResponse"], bool]] = None,
         max_stages: int = 3,
         min_chars: int = 1,
+        complexity: Optional[float] = None,
         require_multimodal: bool = False,
         temperature: float = 0.7,
         max_tokens: int = 4096,
         tools: Optional[List[Dict]] = None,
         **kwargs,
     ) -> Optional["LLMResponse"]:
-        """L2 级联路由(FrugalGPT):便宜模型先答,过不了质量判据才升级到更贵更强的下一档。
+        """L2 级联路由(任务感知的 FrugalGPT):按任务【实际复杂度】定起步档,再便宜→贵升级。
+
+        改造要点(不再一律从最便宜档盲试):先估任务复杂度(complexity 不给则从 messages 估),
+        映射出【最低能力档】——难任务直接从强档起步,跳过注定答不好的便宜档,省掉白试的一轮;
+        简单任务仍从最便宜档起。合格判据的最小长度也随复杂度自适应收紧(难任务不接受一句话敷衍)。
 
         judge(response)->bool:自定义质量判据;缺省用 _default_answer_adequate。返回第一个
         合格答案(带 cascade_stage/cascade_escalated 元数据);全档都不合格则返回最后(最强)
         那档的答案;完全无可用提供商返回 None。每次调用都记进 call_history 供 L3 反哺。
         """
-        ladder = self._cost_ordered_ladder(task_type, max_stages, require_multimodal)
+        if complexity is None:
+            try:
+                complexity = float(self._compute_complexity_score(messages, tools))
+            except Exception:  # noqa: BLE001
+                complexity = 0.5
+        complexity = min(1.0, max(0.0, complexity))
+        floor = self._capability_floor_for_complexity(complexity)
+        ladder = self._cost_ordered_ladder(
+            task_type, max_stages, require_multimodal, min_tier=floor,
+        )
         if not ladder:
             logger.warning("级联路由:无可用提供商")
             return None
-        verdict = judge or (lambda r: self._default_answer_adequate(r, min_chars))
+        # 合格门槛随复杂度自适应:难任务不接受一句话敷衍(最多抬到 ~24 字)。
+        eff_min_chars = max(min_chars, int(round(complexity * 24)))
+        logger.info("级联路由:复杂度 %.2f → 能力档下限 %d,起步梯队 %s(min_chars=%d)",
+                    complexity, floor, [p for p, _ in ladder], eff_min_chars)
+        verdict = judge or (lambda r: self._default_answer_adequate(r, eff_min_chars))
         last: Optional[LLMResponse] = None
         for stage, (provider, model) in enumerate(ladder):
             adapter = self.adapters.get(provider)
