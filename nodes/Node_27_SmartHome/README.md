@@ -8,9 +8,7 @@
 ## 环境变量
 - `HOME_ASSISTANT_URL`: Home Assistant 地址（如 `http://homeassistant.local:8123`）
 - `HOME_ASSISTANT_TOKEN`: HA 长期访问令牌
-- `TUYA_API_KEY`: Tuya API Key（可选）
-- `TUYA_API_SECRET`: Tuya API Secret（可选）
-- `TUYA_REGION`: Tuya 区域（默认 `cn`）
+- Tuya 等长尾厂商设备:经 Home Assistant 桥接（HA 自带 Tuya 集成），本节点不直连
 
 ## API
 - `GET /health` - 健康检查
