@@ -848,6 +848,25 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning(f"HA 桥启动失败(非致命): {e}")
 
     # ====================================================================
+    # 15a-3. LAN mDNS 发现（Matter 阶段1:_matter._tcp 等服务浏览进 UDM）
+    # ====================================================================
+    # Node_71 发现栈的接线落地版:多服务类型 mDNS 浏览(自家 _galaxy._tcp +
+    # Matter/_hap/_googlecast),发现即镜像进统一设备模型并发 DEVICE_UPDATED。
+    # zeroconf 缺失或 GALAXY_LAN_DISCOVERY=0 时优雅跳过。
+    try:
+        from core.lan_discovery import get_lan_discovery, lan_discovery_enabled
+
+        if lan_discovery_enabled():
+            _lan_info = get_lan_discovery().start()
+            results["lan_discovery"] = {"status": "ok", **_lan_info}
+            logger.info("LAN mDNS 发现已启动")
+        else:
+            results["lan_discovery"] = {"status": "disabled"}
+    except Exception as e:
+        results["lan_discovery"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"LAN mDNS 发现启动失败(非致命): {e}")
+
+    # ====================================================================
     # 15b. MCP Bridge（外部语言 MCP 服务器桥接）
     # ====================================================================
     try:
@@ -1220,6 +1239,13 @@ async def shutdown_subsystems():
         await _shutdown_with_timeout("HA 桥", get_ha_bridge().stop())
     except Exception as e:
         logger.warning(f"HA 桥停止失败: {e}")
+
+    # 0a-4. LAN mDNS 发现（bootstrap 15a-3 里启动;同步 close,不需 await）
+    try:
+        from core.lan_discovery import get_lan_discovery
+        get_lan_discovery().stop()
+    except Exception as e:
+        logger.warning(f"LAN mDNS 发现停止失败: {e}")
 
     # 0b. 节点发现服务
     try:

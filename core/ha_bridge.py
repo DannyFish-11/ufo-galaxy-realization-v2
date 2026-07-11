@@ -153,14 +153,14 @@ class HABridge:
                 },
                 "source": "ha_bridge",
             }
-            if dm.get_device(device_id) is not None:
-                dm.upsert_device_state(device_id, patch, source="ha_bridge")
-            else:
-                dm.register_device_from_dict(device_id, {"device_type": "iot", **patch})
-                if not online:
-                    # register_device 语义是"注册即在线";离线实体注册后再经
-                    # SSOT 状态写入口(upsert)落回 offline,不绕过统一写路径。
-                    dm.upsert_device_state(device_id, {"status": "offline"}, source="ha_bridge")
+            if dm.get_device(device_id) is None:
+                # 注册只立最小身份;register_device_from_dict 会把"多余键"整体
+                # 当 metadata(嵌套错位),且其语义为"注册即在线"——完整状态
+                # (status/metadata/capabilities)一律走下面的 SSOT upsert。
+                dm.register_device_from_dict(device_id, {
+                    "device_type": "iot", "device_name": patch["device_name"],
+                })
+            dm.upsert_device_state(device_id, patch, source="ha_bridge")
             return True
         except Exception as exc:  # noqa: BLE001
             logger.debug("HA 桥:镜像实体 %s 失败: %s", entity_id, exc)
