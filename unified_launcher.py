@@ -31,7 +31,8 @@ try:
     for _k, _v in (_dotenv_values(
         _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".env")
     ) or {}).items():
-        if _v and _k not in _os.environ:
+        # 值以 # 开头 = dotenv 把「空值+行内注释」整段当值(毒值),视同未配置
+        if _v and not _v.lstrip().startswith("#") and _k not in _os.environ:
             _os.environ[_k] = _v
 except Exception:
     pass

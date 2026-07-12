@@ -22,8 +22,12 @@ try:
     # missing an 'http://' or 'https://' protocol"、Ollama 明明在跑却判"服务
     # 未响应/模型未就绪")、Redis "must specify scheme"、NATS "invalid
     # hostname"。这里改为只加载【非空】值,空值视同未配置,让代码默认值生效。
+    # 另一类毒值:python-dotenv 会把「KEY=   # 注释」这种【空值+行内注释】整段
+    # 注释当成值(实测 1.2.2:OLLAMA_URL= # e.g. http://... → '# e.g. http://...'),
+    # 经 normalize 补协议头后变成 http://#... 的怪 URL,骗过全部 startswith 检查。
+    # 值以 # 开头一律视同未配置(合法配置值不可能以 # 开头)。
     for _k, _v in (dotenv_values(_env_path) or {}).items():
-        if _v and _k not in os.environ:
+        if _v and not _v.lstrip().startswith("#") and _k not in os.environ:
             os.environ[_k] = _v
 except Exception:
     pass

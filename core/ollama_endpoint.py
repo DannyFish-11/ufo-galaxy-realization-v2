@@ -26,14 +26,20 @@ OLLAMA_DEFAULT_URL = "http://localhost:11434"
 
 
 def normalize_ollama_url(raw: Optional[str]) -> str:
-    """把任意 ollama 地址输入归一为合法 URL(空/缺协议头都兜底)。
+    """把任意 ollama 地址输入归一为合法 URL(空/缺协议头/垃圾值都兜底)。
 
     - 空 / None / 纯空白  → ``http://localhost:11434``
     - ``localhost:11434`` → ``http://localhost:11434``(补协议头)
     - ``http(s)://...``   → 原样(去尾部斜杠)
+    - **垃圾值**(含空白符、或以 ``#`` 开头)→ 默认地址。真机根因:python-dotenv
+      会把「``OLLAMA_URL=   # e.g. http://...``」这种【空值+行内注释】整段注释当成
+      值('# e.g. http://localhost:11434'),此前本函数给它补协议头后变成
+      ``http://# e.g. ...``——以 http:// 开头骗过全部 startswith 检查,httpx 却把
+      # 后全解析成 fragment、host 为空,最终发出缺协议头请求。URL 里不可能有
+      裸空格、也不可能以 # 开头,一律判垃圾回落默认。
     """
     val = (raw or "").strip()
-    if not val:
+    if not val or val.startswith("#") or any(ch.isspace() for ch in val):
         return OLLAMA_DEFAULT_URL
     if not val.startswith(("http://", "https://")):
         val = f"http://{val}"
