@@ -34,6 +34,17 @@ _engine_failed = False
 _last_text = ""
 _last_ts = 0.0
 _active_speaker: Optional[Any] = None  # 当前 StreamingSpeaker（供 barge-in 打断）
+_runtime_warned = False  # 运行期合成/播放失败首次升 WARNING(此后降 debug 防刷屏)
+
+
+def _log_speak_failure(kind: str, exc: BaseException) -> None:
+    """朗读运行期失败:首次 WARNING(用户看得见"为什么不说话"),后续 debug。"""
+    global _runtime_warned
+    if not _runtime_warned:
+        _runtime_warned = True
+        logger.warning("%s失败(语音降级为静默;同类失败此后仅记 debug): %s", kind, exc)
+    else:
+        logger.debug("%s失败(降级): %s", kind, exc)
 
 
 def _streaming_enabled() -> bool:
@@ -77,6 +88,11 @@ def _get_engine() -> Optional[Any]:
 
     def _try_edge():
         try:
+            # EdgeTTSEngine 构造器不校验依赖(edge_tts 懒导入在 synthesize 里),
+            # 缺包时构造照样"成功"→ 选择器误以为引擎可用,既不落到 melo/piper,
+            # 也不触发下面的"TTS 引擎不可用"告警,最终每次合成静默失败——
+            # 真机表现就是"字出来了、一句话都不说"。故在这里先验一次导入。
+            import edge_tts  # noqa: F401
             from core.tts import EdgeTTSEngine
             voice = os.getenv("GALAXY_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
             return EdgeTTSEngine(voice=voice)
@@ -162,8 +178,20 @@ def speak_response(text: str, *, source: str = "") -> None:
             _active_speaker = speaker
             try:
                 await speaker.speak(spoken)
+                # StreamingSpeaker 对每句的合成/播放失败都内部吞掉(debug)后跳过,
+                # 缺 edge-tts / 无音频设备时 speak() 会"成功"返回但一句没播——
+                # 从外面看就是彻底静默。这里兜底:整段零句播出且不是被打断,升告警。
+                if speaker.chunks_spoken == 0 and not getattr(speaker, "_interrupted", False):
+                    _log_speak_failure(
+                        "流式语音输出",
+                        RuntimeError(
+                            "整段一句都未播出——每句合成/播放均失败。"
+                            "常见原因:未安装 edge-tts(pip install edge-tts)、"
+                            "无法访问微软 TTS 服务、或无音频设备"
+                        ),
+                    )
             except Exception as exc:  # noqa: BLE001
-                logger.debug("流式语音输出失败(降级): %s", exc)
+                _log_speak_failure("流式语音输出", exc)
             finally:
                 if _active_speaker is speaker:
                     _active_speaker = None
@@ -175,7 +203,7 @@ def speak_response(text: str, *, source: str = "") -> None:
         try:
             await engine.synthesize_and_play(spoken)
         except Exception as exc:  # noqa: BLE001
-            logger.debug("语音输出失败(降级): %s", exc)
+            _log_speak_failure("语音输出", exc)
         finally:
             if _set_speaking is not None:
                 _set_speaking(False)

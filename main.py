@@ -560,6 +560,10 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         "jsonschema": "jsonschema",          # 事件总线 schema 校验
         "huggingface_hub": "huggingface-hub",  # 本地模型 HF 下载 + Ollama 回退
         "tqdm": "tqdm",                       # 模型下载进度条
+        # 语音输出(TTS)默认引擎。此前不在自动安装名单、requirements-windows.txt
+        # 也没有 → 真机全新克隆缺包,speech_output 每次合成静默失败,表现为
+        # "回复文字出来了、一句话都不说"。包本身很小(纯 HTTP 客户端)。
+        "edge_tts": "edge-tts",
     }
     for mod_name, pip_name in core_modules.items():
         try:

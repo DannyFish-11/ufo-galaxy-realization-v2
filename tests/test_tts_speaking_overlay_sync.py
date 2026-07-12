@@ -70,6 +70,12 @@ async def test_speak_response_toggles_overlay_speaking_during_playback(monkeypat
     try:
         monkeypatch.setattr(so, "_get_engine", lambda: _FakeEngine())
         monkeypatch.setattr(so, "speak_enabled", lambda: True)
+        # 本测试钉的是【整段批处理】路径的 set_ai_speaking 前后同步
+        # (_FakeEngine 只实现 synthesize_and_play)。分句流式成为默认后,
+        # 不关掉流式会走 StreamingSpeaker → 假引擎缺 synthesize/_play_audio
+        # → 零句播出,断言恒失败。流式路径的 on_speaking 同步由
+        # StreamingSpeaker 自身的测试覆盖。
+        monkeypatch.setenv("GALAXY_TTS_STREAMING", "0")
 
         so.speak_response("今天天气不错", source="voice")
         await asyncio.sleep(0.05)  # 播放已开始，尚未结束
