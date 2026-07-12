@@ -39,7 +39,9 @@ def _culprit_frame(frames: List[str]) -> str:
     里的应用代码帧(也就是真正拿着坏 URL 去发请求的那处)。取不到就返回空串。"""
     try:
         for line in reversed(frames):
-            low = line.lower()
+            # 统一分隔符再匹配:Windows 栈里是 site-packages\httpx\_client.py,
+            # 只查 "/httpx/" 会漏排 → 界面上"罪魁"显示成 httpx 内部帧(真机复现)。
+            low = line.lower().replace("\\", "/")
             if "/httpx/" in low or "ollama_url_sentinel" in low:
                 continue
             # traceback.format_stack 的帧首行形如:  File "xxx.py", line N, in fn
