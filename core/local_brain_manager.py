@@ -297,7 +297,8 @@ class LocalBrainManager:
                 import httpx
 
                 resp = httpx.get(
-                    f"{self.ollama_url}/api/tags", timeout=3.0
+                    f"{self._hardened_base_url('_auto_select_backend')}/api/tags",
+                    timeout=3.0,
                 )
                 if resp.status_code == 200:
                     logger.info(
@@ -482,7 +483,10 @@ class LocalBrainManager:
             try:
                 import httpx
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    await client.delete(f"{self.ollama_url}/api/delete", json={"name": ""}, timeout=5.0)
+                    await client.delete(
+                        f"{self._hardened_base_url('_probe_delete')}/api/delete",
+                        json={"name": ""}, timeout=5.0,
+                    )
             except Exception as exc:
                 logger.debug("Ollama cleanup delete failed: %s", exc)
 
@@ -612,7 +616,7 @@ class LocalBrainManager:
             import httpx
             async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.delete(
-                    f"{self.ollama_url}/api/delete",
+                    f"{self._hardened_base_url('_delete_model')}/api/delete",
                     json={"name": model_name},
                     timeout=30.0,
                 )
@@ -715,12 +719,37 @@ class LocalBrainManager:
 
     # ───────── 内部方法 ─────────
 
+    def _hardened_base_url(self, call_site: str) -> str:
+        """调用点级钢板 + 自取证:真机哨兵仍抓到本类发出缺协议头请求(镜像版本
+        与主干在兜底层可能不一致/或环境注入怪值),而调用栈照不到 property 内部。
+        这里在【消费端】再归一一次;若发现归一前后不一致,把原始值 repr + 环境
+        变量 repr 打进日志——下次复现时罪魁真值自己现形,不再靠猜。"""
+        raw = ""
+        try:
+            raw = self.ollama_url  # property(读时归一)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[URL-取证:%s] 读 ollama_url 属性即异常: %r", call_site, exc)
+        try:
+            from core.ollama_endpoint import normalize_ollama_url
+            base = normalize_ollama_url(raw)
+        except Exception:  # noqa: BLE001
+            base = raw if str(raw).startswith(("http://", "https://")) else "http://localhost:11434"
+        if base != raw:
+            logger.warning(
+                "[URL-取证:%s] ollama_url 读出异常值 raw=%r(归一后=%r);"
+                "os.environ['OLLAMA_URL']=%r, _ollama_url=%r —— 请把本行日志发回排查。",
+                call_site, raw, base,
+                os.environ.get("OLLAMA_URL"), getattr(self, "_ollama_url", None),
+            )
+        return base
+
     async def _ping_ollama(self) -> bool:
         """Ping Ollama 服务"""
         try:
             import httpx
+            base = self._hardened_base_url("_ping_ollama")
             async with httpx.AsyncClient(timeout=3.0) as client:
-                resp = await client.get(f"{self.ollama_url}/api/tags")
+                resp = await client.get(f"{base}/api/tags")
                 return resp.status_code == 200
         except Exception as exc:
             logger.debug("Ollama health check failed: %s", exc)
@@ -831,7 +860,7 @@ class LocalBrainManager:
         try:
             import httpx
             async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{self.ollama_url}/api/tags")
+                resp = await client.get(f"{self._hardened_base_url('_list_models')}/api/tags")
                 if resp.status_code == 200:
                     data = resp.json()
                     self.available_models = [
@@ -847,7 +876,7 @@ class LocalBrainManager:
             import httpx
             async with httpx.AsyncClient(timeout=300.0) as client:
                 resp = await client.post(
-                    f"{self.ollama_url}/api/pull",
+                    f"{self._hardened_base_url('_pull_model')}/api/pull",
                     json={"name": model_name, "stream": False},
                 )
                 if resp.status_code == 200:
