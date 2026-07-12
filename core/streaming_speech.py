@@ -428,6 +428,16 @@ class IncrementalSpeaker:
         finally:
             if self._speaking:
                 self._mark_speaking(False)
+            # 可见化兜底:句子确实入过队、却一句都没播出去(且不是被打断)——
+            # 每句的合成/播放失败都被内部按 debug 吞掉,不升这条 WARNING 的话
+            # 用户看到的就是"彻底静默零线索"(真机复现过)。
+            if (self.chunks_enqueued > 0 and self.chunks_spoken == 0
+                    and not self._interrupted):
+                logger.warning(
+                    "增量朗读:%d 句全部合成/播放失败,一句未播出——常见原因:"
+                    "TTS 引擎不可用(edge-tts 无法访问微软服务/缺包)且所有兜底"
+                    "引擎均失败、或无音频设备。", self.chunks_enqueued,
+                )
 
     async def _play_one(self, handle: str) -> None:
         try:
