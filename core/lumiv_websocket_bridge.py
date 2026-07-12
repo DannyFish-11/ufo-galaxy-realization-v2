@@ -78,6 +78,11 @@ class GalaxyPresenceBridge:
     # 桥接已启动
     _started: bool = False
 
+    # 推代替拉:panel feed 推送的防抖状态(同一时刻至多一个待推任务;
+    # 两次推送最小间隔可经 GALAXY_PANEL_PUSH_MIN_INTERVAL 调,默认 1s)
+    _push_pending: bool = False
+    _last_push_ts: float = 0.0
+
     @classmethod
     def get_instance(cls) -> "GalaxyPresenceBridge":
         if cls._instance is None:
@@ -112,6 +117,13 @@ class GalaxyPresenceBridge:
             # 订阅自发注意力事件 → 面板在场栏实时显示"在看/在听 + 决策理由"。
             bus.subscribe("ambient.observed", self._on_ambient_observed)
             bus.subscribe("ambient.decision", self._on_ambient_decision)
+
+            # 推代替拉:通配订阅全部状态事件(None=wildcard)。任何影响面板数据的
+            # 事件(设备/任务/技能/mesh/模型…)发生时,防抖后把【整份 panel feed】
+            # 主动推给已连接的面板客户端——事件→UI 毫秒级,不再等 Electron 主进程
+            # 的 5s 慢轮询(慢轮询降频保留为断线兜底)。相位/意图/ambient 已有上面
+            # 的专用低延迟通道,在回调里跳过以免高频 tick 触发整份 feed 重推。
+            bus.subscribe(None, self._on_any_event)
 
             logger.info("GalaxyPresenceBridge started — subscribed to StateEventBus (IPC HTTP + WS fallback)")
         except Exception as exc:
@@ -161,6 +173,98 @@ class GalaxyPresenceBridge:
         if isinstance(p, dict):
             return p
         return event if isinstance(event, dict) else {}
+
+    # ── 推代替拉:任意状态事件 → 防抖推送整份 panel feed ──
+
+    def _on_any_event(self, event: Any) -> None:
+        """通配回调:面板数据相关的事件发生时,安排一次防抖 feed 推送。
+
+        - 相位/意图/ambient 已有上面的专用低延迟通道(且 intent 高频),跳过;
+        - 没有面板客户端连接时零开销直接返回;
+        - 回调可能来自无事件循环的线程(如 HA 桥线程),拿不到 loop 就静默放弃
+          ——下一个来自 loop 线程的事件会补上,慢轮询兜底也仍在。
+        """
+        try:
+            # StateEvent 的字段名是 .type(存的是枚举的字符串值),不是 event_type。
+            # 用【正向白名单】而非黑名单:系统里有周期性心跳类事件(如多模态
+            # ingress 总线 200ms tick),黑名单挡不全会退化成"每秒必推"。只有
+            # 真正改变面板数据的事件族才触发推送。
+            et = str(getattr(event, "type", "") or getattr(event, "event_type", "") or "")
+            if not et.startswith((
+                "device.", "task.", "skill.", "executor.", "mesh.",
+                "hitl.", "shell.", "entry_mode.",
+            )):
+                return
+            if not self._clients:
+                return
+            asyncio.get_running_loop()
+        except Exception:  # noqa: BLE001
+            return
+        try:
+            asyncio.create_task(self._debounced_feed_push())
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def _debounced_feed_push(self) -> None:
+        """防抖:同一时刻至多一个待推任务;攒一小撮突发事件合并成一次推送,
+        且两次推送至少间隔 GALAXY_PANEL_PUSH_MIN_INTERVAL(默认 1s)。"""
+        cls = type(self)
+        if cls._push_pending:
+            return
+        cls._push_pending = True
+        try:
+            import os as _os
+            import time as _t
+            try:
+                min_iv = float(_os.environ.get("GALAXY_PANEL_PUSH_MIN_INTERVAL", "1.0") or "1.0")
+            except ValueError:
+                min_iv = 1.0
+            wait = max(0.3, min_iv - (_t.time() - cls._last_push_ts))
+            await asyncio.sleep(wait)
+            await self._push_panel_feed()
+            cls._last_push_ts = _t.time()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("panel feed 防抖推送失败(非致命): %s", exc)
+        finally:
+            cls._push_pending = False
+
+    async def _push_panel_feed(self) -> None:
+        """构建整份 panel feed 并推给全部已连接面板客户端(与 HTTP 路由共用同一
+        构建器,推/拉两条通道数据形状恒一致)。orjson 可用时用它序列化提速。"""
+        if not self._clients:
+            return
+        try:
+            from core.routes.panel import build_panel_feed
+            feed = await build_panel_feed()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("panel feed 构建失败(不推送): %s", exc)
+            return
+        text: Optional[str] = None
+        try:
+            import orjson
+            text = orjson.dumps({"type": "panel_feed", "feed": feed}).decode()
+        except Exception:  # noqa: BLE001
+            pass
+        # 内容哈希去重:feed 没实质变化就不发帧(触发事件≠数据一定变了,
+        # 例如 heartbeat 型 device.updated;也天然抑制任何漏网的高频源)。
+        try:
+            import hashlib
+            import json as _json
+            basis = text if text is not None else _json.dumps(feed, sort_keys=True, default=str)
+            digest = hashlib.sha1(basis.encode()).hexdigest()
+            if digest == getattr(type(self), "_last_feed_hash", ""):
+                return
+            type(self)._last_feed_hash = digest
+        except Exception:  # noqa: BLE001
+            pass
+        for ws in list(self._clients):
+            try:
+                if text is not None:
+                    await ws.send_text(text)
+                else:
+                    await ws.send_json({"type": "panel_feed", "feed": feed})
+            except Exception:  # noqa: BLE001
+                self._clients.discard(ws)
 
     def _on_ambient_observed(self, event: Any) -> None:
         """自发注意力：门控放行、正在观察一帧（看/听）。"""

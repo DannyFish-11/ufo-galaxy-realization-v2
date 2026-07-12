@@ -25,16 +25,24 @@ logger = logging.getLogger("Galaxy.Routes.Models")
 
 router = APIRouter(prefix="/api/v1/models", tags=["models"])
 
-# /status 短 TTL 缓存 + single-flight:面板高频且并发轮询本端点,而每次探测都要打
-# Ollama /api/tags + 每个模型 /api/show(各带秒级超时),冷启动/慢时单次可达 1s+。
-# 缓存让窗口内的重复/并发请求直接复用上次结果,不再各自重新探测(真机日志里那一串
-# "GET /api/v1/models/status took 1300ms" 就是这么堆出来的)。TTL 默认 3s,可调。
+# /status 三层延迟防线(真机日志实证驱动):
+#   1) stale-while-revalidate:只要有过任何一次结果,请求【立即】返回缓存(过期则
+#      标 stale 并拉起一个后台刷新任务),永远不让 HTTP 请求等在探测后面。此前只有
+#      "TTL 内直返"——Ollama 冷加载时单次探测可爬到 10s+,TTL(3s)一过,每一批并发
+#      轮询都整批排队等完整探测(真机:6 条请求同时 11.4s)。
+#   2) 探测本身并行化:此前 /api/show 逐模型【串行】,目录 4 个本地模型 × 2s 超时
+#      再加 /api/tags 3s,最坏 11s——正是真机看到的量级。现改 async 并发 gather,
+#      最坏 ≈ max(单次超时) 而非求和。
+#   3) 总预算封顶:整个探测包 GALAXY_MODELS_PROBE_BUDGET(默认 4s)的 wait_for;
+#      超时返回全目录 unknown 态(键集恒等于目录,形状不破),后台继续补真值。
 import asyncio as _asyncio
 import time as _time
 
 _STATUS_TTL = float(os.environ.get("GALAXY_MODELS_STATUS_TTL", "3.0") or "3.0")
+_PROBE_BUDGET = float(os.environ.get("GALAXY_MODELS_PROBE_BUDGET", "4.0") or "4.0")
 _status_cache: Dict[str, Any] = {"data": None, "ts": 0.0}
 _status_lock = _asyncio.Lock()
+_refresh_task: Any = None  # 在飞的后台刷新任务(同一时刻至多一个)
 
 
 def _ollama_base() -> str:
@@ -53,11 +61,25 @@ async def get_catalog() -> Dict[str, Any]:
     return snap
 
 
-def _probe_installed() -> Dict[str, Dict[str, Any]]:
+def _catalog_placeholder(status: str = "unknown") -> Dict[str, Dict[str, Any]]:
+    """全目录占位结果(探测超预算/彻底失败时用):键集恒等于目录本地模型集,
+    形状不破(面板与测试都依赖 models 键集 == choice_order 本地项)。"""
+    from core.model_catalog import choice_order, get_model
+    out: Dict[str, Dict[str, Any]] = {}
+    for tag in choice_order():
+        spec = get_model(tag)
+        if spec is None or spec.source != "local":
+            continue
+        out[tag] = {"status": status, "ollama_reachable": False, "matched": ""}
+    return out
+
+
+async def _probe_installed_async() -> Dict[str, Dict[str, Any]]:
     """探测本地 Ollama 已安装且【可用】的模型（/api/tags 列名 + /api/show 二次核实）。
 
     只看 /api/tags 会把"能列名但打不开的残缺 manifest"误判为已装（真机复现过：
-    会永久拦住后续重试）。故对每个候选再 /api/show 核实一次。
+    会永久拦住后续重试）。故对每个候选再 /api/show 核实一次——**并行**核实:
+    Ollama 冷加载时每个调用都在超时线下爬行,串行会把延迟累加成 10s+。
     """
     import httpx
     from core.model_catalog import choice_order, get_model
@@ -65,37 +87,80 @@ def _probe_installed() -> Dict[str, Dict[str, Any]]:
     base = _ollama_base()
     installed_names: List[str] = []
     reachable = False
-    try:
-        r = httpx.get(f"{base}/api/tags", timeout=3.0)
-        if r.status_code == 200:
-            reachable = True
-            installed_names = [m.get("name", "") for m in r.json().get("models", [])]
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("Ollama /api/tags 不可达: %s", exc)
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        try:
+            r = await client.get(f"{base}/api/tags")
+            if r.status_code == 200:
+                reachable = True
+                installed_names = [m.get("name", "") for m in r.json().get("models", [])]
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Ollama /api/tags 不可达: %s", exc)
 
-    out: Dict[str, Dict[str, Any]] = {}
-    for tag in choice_order():
-        spec = get_model(tag)
-        if spec is None or spec.source != "local":
-            continue
-        root = tag.split(":")[0]
-        matched = next(
-            (h for h in installed_names
-             if h == tag or h.startswith(tag + ":") or h.split(":")[0] == root),
-            None,
-        )
-        status = "absent"
-        if matched:
-            status = "installed"
-            # 二次核实可用性
+        out: Dict[str, Dict[str, Any]] = {}
+        to_verify: List[tuple] = []
+        for tag in choice_order():
+            spec = get_model(tag)
+            if spec is None or spec.source != "local":
+                continue
+            root = tag.split(":")[0]
+            matched = next(
+                (h for h in installed_names
+                 if h == tag or h.startswith(tag + ":") or h.split(":")[0] == root),
+                None,
+            )
+            out[tag] = {
+                "status": "installed" if matched else "absent",
+                "ollama_reachable": reachable,
+                "matched": matched or "",
+            }
+            if matched:
+                to_verify.append((tag, matched))
+
+        async def _verify(tag: str, matched: str) -> None:
             try:
-                sr = httpx.post(f"{base}/api/show", json={"name": matched}, timeout=2.0)
+                sr = await client.post(
+                    f"{base}/api/show", json={"name": matched}, timeout=2.0
+                )
                 if sr.status_code != 200:
-                    status = "broken"  # 列名在、打不开 → 当未装
+                    out[tag]["status"] = "broken"  # 列名在、打不开 → 当未装
             except Exception:  # noqa: BLE001
-                status = "installed"  # 核实失败不武断降级，保留 installed
-        out[tag] = {"status": status, "ollama_reachable": reachable, "matched": matched or ""}
+                pass  # 核实失败不武断降级，保留 installed
+
+        if to_verify:
+            await _asyncio.gather(*(_verify(t, m) for t, m in to_verify))
     return out
+
+
+def _probe_installed() -> Dict[str, Dict[str, Any]]:
+    """同步兼容封装(旧调用点/测试仍可用);内部走并行异步探测。"""
+    return _asyncio.run(_probe_installed_async())
+
+
+def _kick_refresh() -> None:
+    """拉起(至多一个)后台刷新任务:探测在后台跑,任何 HTTP 请求都不等它。"""
+    global _refresh_task
+    if _refresh_task is not None and not _refresh_task.done():
+        return
+    async def _refresh() -> None:
+        global _refresh_task
+        try:
+            # 后台刷新不阻塞任何请求,预算放宽到前台的 3 倍:Ollama 冷加载爬行时
+            # (真机:每个调用都在超时线下爬),前台预算内探不完,后台得能兜住,
+            # 否则缓存永远填不上、面板一直显示占位态。探测自身有单调用超时,
+            # 天然有界(tags 3s + show 2s 并行 ≈ 最坏 5-6s)。
+            data = await _asyncio.wait_for(
+                _probe_installed_async(), timeout=_PROBE_BUDGET * 3
+            )
+            _status_cache["data"] = data
+            _status_cache["ts"] = _time.monotonic()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("models/status 后台刷新失败/超预算(下次请求再试): %s", exc)
+        finally:
+            _refresh_task = None
+    try:
+        _refresh_task = _asyncio.get_running_loop().create_task(_refresh())
+    except RuntimeError:  # 无运行中事件循环(同步测试环境)则跳过后台刷新
+        _refresh_task = None
 
 
 @router.get("/status")
@@ -108,15 +173,24 @@ async def get_status() -> Dict[str, Any]:
     """
     now = _time.monotonic()
     cached = _status_cache["data"]
-    if cached is not None and (now - float(_status_cache["ts"])) < _STATUS_TTL:
-        return {"models": cached, "cached": True}
+    if cached is not None:
+        stale = (now - float(_status_cache["ts"])) >= _STATUS_TTL
+        if stale:
+            _kick_refresh()  # stale-while-revalidate:后台刷,本请求不等
+        return {"models": cached, "cached": True, "stale": stale}
+    # 首次(进程内从未探测过):唯一一次同步探测,也有总预算封顶
     async with _status_lock:
-        # 双检:等锁期间可能已有别的并发请求刷新了缓存,直接复用
-        now = _time.monotonic()
         cached = _status_cache["data"]
-        if cached is not None and (now - float(_status_cache["ts"])) < _STATUS_TTL:
+        if cached is not None:  # 等锁期间别的请求已填上
             return {"models": cached, "cached": True}
-        installed = await _asyncio.to_thread(_probe_installed)
+        try:
+            installed = await _asyncio.wait_for(
+                _probe_installed_async(), timeout=_PROBE_BUDGET
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("models/status 首次探测超预算(%s),返回占位并后台续探", exc)
+            _kick_refresh()
+            return {"models": _catalog_placeholder(), "probing": True}
         _status_cache["data"] = installed
         _status_cache["ts"] = _time.monotonic()
         return {"models": installed}

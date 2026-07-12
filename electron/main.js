@@ -464,7 +464,9 @@ app.whenReady().then(async () => {
                 panelWindow.webContents.send('presence-state', feed);
             }
         } catch (e) { /* 网关未就绪等，静默重试下一轮 */ }
-    }, 5000);
+    // 推代替拉:面板数据主通道已改为后端 WS 推送(state_event 防抖触发整份 feed,
+    // 事件→UI 毫秒级)。本轮询降频为【断线兜底对账】,30s 一次足够。
+    }, 30000);
 });
 
 // ═══════════════════════════════════════════
