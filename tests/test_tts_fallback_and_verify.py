@@ -230,7 +230,9 @@ class _FakeVerifyAdapter:
     async def chat(self, messages, model, **kwargs):
         from core.multi_llm_router import LLMResponse
         if not self._ok:
-            raise RuntimeError("401 Unauthorized")
+            import httpx
+            resp = httpx.Response(401, request=httpx.Request("POST", "http://x"))
+            raise httpx.HTTPStatusError("unauthorized", request=resp.request, response=resp)
         return LLMResponse(content="p", provider="deepseek", model=model,
                            input_tokens=1, output_tokens=1, latency_ms=210.0)
 
@@ -270,9 +272,12 @@ class TestVerifyProviderEndpoint:
         assert out["provider"] == "deepseek"
         assert out["latency_ms"] == 210.0
 
-    def test_bad_key_reports_error(self):
+    def test_bad_key_reports_sanitized_error(self):
+        """错误回执脱敏:401 映射为可读文案,绝不透传原始异常串(CodeQL)。"""
         out = self._post({"env_key": "DEEPSEEK_API_KEY"}, _FakeVerifyRouter(ok=False))
-        assert out["ok"] is False and "401" in out["error"]
+        assert out["ok"] is False
+        assert "401" in out["error"] and "密钥无效" in out["error"]
+        assert "Traceback" not in out["error"] and "unauthorized" not in out["error"]
 
     def test_unconfigured_provider_reports_disabled(self):
         out = self._post({"provider": "deepseek"}, _FakeVerifyRouter(enabled=False))

@@ -241,8 +241,26 @@ async def verify_provider(req: ProviderVerifyRequest) -> Dict[str, Any]:
         )
         return {"ok": True, "provider": name, "model": resp.model,
                 "latency_ms": round(float(resp.latency_ms or 0.0), 1)}
+    except _asyncio.TimeoutError:
+        return {"ok": False, "provider": name,
+                "error": "验证超时(15s)——服务不可达或网络阻断"}
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "provider": name, "error": str(exc)[:300]}
+        # 不把原始异常串直接回给调用方(CodeQL: 异常可能携带栈/内部信息)。
+        # 分类成用户能行动的脱敏文案;完整异常只进服务端日志。
+        logger.info("verify-provider %s 试调失败: %s", name, exc)
+        try:
+            import httpx
+            if isinstance(exc, httpx.HTTPStatusError):
+                code = exc.response.status_code
+                hint = {
+                    401: "密钥无效(401)", 403: "无权限(403)",
+                    404: "接口或模型不存在(404)", 429: "限流(429)",
+                }.get(code, f"HTTP {code}")
+                return {"ok": False, "provider": name, "error": hint}
+        except Exception:  # noqa: BLE001
+            pass
+        return {"ok": False, "provider": name,
+                "error": f"连接失败({type(exc).__name__})——检查网络/Key/服务地址"}
 
 
 class ModelSyncRequest(BaseModel):
