@@ -155,6 +155,54 @@ def print_status(message: str, status: str = "info"):
     print_status_row(message, status=status)
 
 
+def _url_sentinel_audit() -> Tuple[str, str, str, List[Dict[str, str]]]:
+    """收集克隆界面「启动自检」要展示的取证数据(全 best-effort,绝不抛)。
+
+    返回 (代码版本, OLLAMA_URL 环境值 repr, 解析后地址, 哨兵抓到的记录列表)。
+    真机排查两大痛点直接摆上界面:1) 镜像新旧一眼可辨(代码版本);2) URL 哨兵
+    抓到的缺协议头请求不再只进日志——用户在克隆界面就能看到 URL + 罪魁 file:line。
+    """
+    version = "unknown"
+    try:
+        r = subprocess.run(
+            ["git", "log", "-1", "--format=%h %cd", "--date=format:%Y-%m-%d %H:%M"],
+            capture_output=True, text=True, timeout=3,
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            version = r.stdout.strip()
+    except Exception:  # noqa: BLE001
+        pass
+    env_repr = repr(os.environ.get("OLLAMA_URL"))
+    try:
+        from core.ollama_endpoint import resolve_ollama_base_url
+        resolved = resolve_ollama_base_url()
+    except Exception:  # noqa: BLE001
+        resolved = "?"
+    catches: List[Dict[str, str]] = []
+    try:
+        from core.ollama_url_sentinel import recent_catches
+        catches = recent_catches()
+    except Exception:  # noqa: BLE001
+        pass
+    return version, env_repr, resolved, catches
+
+
+def _short_culprit(culprit: str) -> str:
+    """把罪魁帧 `File "D:\\...\\x.py", line N, in fn` 压成 `x.py:N in fn`(界面可读)。"""
+    try:
+        import re
+        m = re.search(r'File "([^"]+)", line (\d+)(?:, in (\S+))?', culprit or "")
+        if m:
+            # 兼容两种路径分隔符:日志可能来自 Windows(D:\x\y.py)也可能来自 POSIX
+            name = re.split(r"[\\/]", m.group(1))[-1]
+            fn = f" in {m.group(3)}" if m.group(3) else ""
+            return f"{name}:{m.group(2)}{fn}"
+    except Exception:  # noqa: BLE001
+        pass
+    return (culprit or "")[:60]
+
+
 async def _ensure_recommended_model():
     """Ensure at least one recommended model is available (PR-I3)"""
     try:
@@ -1417,6 +1465,38 @@ class GalaxyUnified:
             ai_brain_phase_idx = len(phases_state)
             _emit("AI 大脑", "启动失败", "fail")
             logger.error(f"Local brain: {exc}")
+
+        # ── 启动自检 · URL 哨兵(审查结果直接摆上克隆界面,不用翻日志)──
+        # 关键信息放在折叠行里(默认可见);-v 展开逐条明细 + 取证值(代码版本/
+        # 环境变量/解析后地址)。抓到告警时进末尾总结卡并附操作建议。
+        try:
+            _ver, _env_repr, _resolved, _catches = _url_sentinel_audit()
+            _audit_details: List[Tuple[str, str, str]] = [
+                ("代码版本", _ver, "ok" if _ver != "unknown" else "warn"),
+                ("OLLAMA_URL(env)", _env_repr, "ok"),
+                ("解析后地址", _resolved, "ok"),
+            ]
+            if _catches:
+                for _c in _catches[:5]:
+                    _audit_details.append((
+                        "缺协议头请求",
+                        f"url={_c.get('url', '')!r} ← {_short_culprit(_c.get('culprit', ''))}",
+                        "fail",
+                    ))
+                _first = _catches[0]
+                _emit(
+                    "启动自检 · URL哨兵",
+                    f"⚠ 抓到 {len(_catches)} 条缺协议头请求 · 首条 "
+                    f"url={_first.get('url', '')!r} ← {_short_culprit(_first.get('culprit', ''))}",
+                    "warn",
+                    details=_audit_details,
+                    hint="把「启动自检 · URL哨兵」这行(含 url 与 file:line)复制/截图发回即可精确定位",
+                )
+            else:
+                _emit("启动自检 · URL哨兵", f"零告警 · 代码版本 {_ver} · Ollama {_resolved}",
+                      "ok", details=_audit_details)
+        except Exception as exc:
+            logger.debug("URL 哨兵自检展示失败(非致命): %s", exc)
 
         # ── 节点系统 ──
         try:
