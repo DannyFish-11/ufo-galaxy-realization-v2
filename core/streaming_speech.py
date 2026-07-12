@@ -202,3 +202,240 @@ class StreamingSpeaker:
                 self._on_speaking(on)
             except Exception:  # noqa: BLE001
                 pass
+
+
+def extract_speakable_prefix(buf: str, *, min_chars: int = _MIN_CHUNK_CHARS) -> tuple:
+    """从【仍在增长】的缓冲里切出已完整的句子前缀。返回 (chunks, remainder)。
+
+    与 :func:`split_into_speakable_chunks` 同一套句界规则,区别在于增量语义:
+    - 非 ASCII 句末标点(。！？；…!?;\\n)出现即句界——它们不歧义。
+    - ASCII 句点只有在【后面已经看到空白】时才算句界;句点落在缓冲末尾时
+      下一个字符还没生成(可能是 3.14 的小数点),必须继续等。
+    - 完整前缀不足 min_chars 时整段继续攒(避免"好。"这种独句频繁启停播放器)。
+
+    纯函数;chunks 已经过 split_into_speakable_chunks 的短句合并。
+    """
+    if not buf:
+        return [], buf
+    last_boundary = -1
+    n = len(buf)
+    for i, ch in enumerate(buf):
+        if ch in _SENTENCE_END:
+            last_boundary = i
+        elif ch == "." and i + 1 < n and buf[i + 1].isspace():
+            last_boundary = i
+    if last_boundary < 0:
+        return [], buf
+    prefix = buf[: last_boundary + 1]
+    remainder = buf[last_boundary + 1:]
+    if len(prefix.strip(_SENTENCE_END + " ")) < min_chars:
+        return [], buf  # 攒够再切
+    return split_into_speakable_chunks(prefix, min_chars=min_chars), remainder
+
+
+class IncrementalSpeaker:
+    """边生成边念:LLM token 流喂进来,凑满一句立即合成播放,与后续生成并行。
+
+    与 :class:`StreamingSpeaker`(拿到【整段】后分句流式)互补——本类面向
+    【文本还在生成中】的场景:感知延迟 ≈ 第一句生成时长 + 第一句合成时长,
+    而不是整段生成时长。
+
+    生命周期::
+
+        speaker = IncrementalSpeaker(synth, play, stop=..., on_speaking=...)
+        speaker.start()            # 需要运行中的事件循环
+        speaker.feed("增量文本")    # 任意次;凑满句界自动入队
+        speaker.reset()            # 作废未播内容(级联换档/工具轮/failover)
+        speaker.finish()           # 冲刷尾句;播放在后台自然收尾(不阻塞)
+        await speaker.interrupt()  # barge-in:立即闭嘴并不再接受新文本
+
+    代数(generation)机制:reset()/interrupt() 令代数 +1;队列里、合成中、
+    等待播放的旧代内容一律作废丢弃(discard 回调清理已合成未播的临时文件)。
+    合成/播放/打断全部依赖注入,单测无需真实 TTS。
+    """
+
+    def __init__(
+        self,
+        synth: SynthFn,
+        play: PlayFn,
+        stop: Optional[StopFn] = None,
+        on_speaking: Optional[Callable[[bool], None]] = None,
+        discard: Optional[Callable[[str], Any]] = None,
+        min_chars: int = _MIN_CHUNK_CHARS,
+    ) -> None:
+        self._synth = synth
+        self._play = play
+        self._stop = stop
+        self._on_speaking = on_speaking
+        self._discard = discard
+        self._min_chars = min_chars
+        self._buf = ""
+        self._queue: "asyncio.Queue" = asyncio.Queue()
+        self._player_task: Optional[asyncio.Task] = None
+        self._gen = 0
+        self._finished = False
+        self._interrupted = False
+        self._speaking = False
+        self.chunks_spoken = 0
+        self.chunks_enqueued = 0
+
+    # ── 对外状态 ──
+    @property
+    def speaking(self) -> bool:
+        return self._speaking
+
+    @property
+    def spoke_anything(self) -> bool:
+        return self.chunks_enqueued > 0
+
+    # ── 生命周期 ──
+    def start(self) -> bool:
+        """拉起后台播放循环。无运行中事件循环返回 False(调用方降级)。"""
+        if self._player_task is not None:
+            return True
+        try:
+            self._player_task = asyncio.get_running_loop().create_task(self._player())
+        except RuntimeError:
+            return False
+        return True
+
+    def feed(self, text: str) -> None:
+        """喂一段增量文本;已完整的句子立即入队合成播放。"""
+        if not text or self._finished or self._interrupted:
+            return
+        self._buf += text
+        chunks, self._buf = extract_speakable_prefix(self._buf, min_chars=self._min_chars)
+        for c in chunks:
+            self._enqueue(c)
+
+    def reset(self) -> None:
+        """作废缓冲与队列中所有未播内容(播放中的立即掐断),等待新一代文本。"""
+        self._gen += 1
+        self._buf = ""
+        self._drain_queue()
+        self._schedule_stop()
+
+    def finish(self) -> None:
+        """文本生成结束:冲刷尾句(无句末标点的残段也念),播放后台自然收尾。"""
+        if self._finished:
+            return
+        tail = self._buf.strip()
+        self._buf = ""
+        if tail and not self._interrupted:
+            self._enqueue(tail)
+        self._finished = True
+        try:
+            self._queue.put_nowait(None)  # 哨兵:队列尽头
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def interrupt(self) -> None:
+        """barge-in:立即闭嘴,不再接受任何新文本。"""
+        self._interrupted = True
+        self._gen += 1
+        self._buf = ""
+        self._drain_queue()
+        if not self._finished:
+            self._finished = True
+            try:
+                self._queue.put_nowait(None)
+            except Exception:  # noqa: BLE001
+                pass
+        if self._stop is not None:
+            try:
+                await self._stop()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("打断增量播放失败(非致命): %s", exc)
+
+    # ── 内部 ──
+    def _enqueue(self, text: str) -> None:
+        try:
+            self._queue.put_nowait((self._gen, text))
+            self.chunks_enqueued += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("增量句入队失败(跳过): %s", exc)
+
+    def _drain_queue(self) -> None:
+        try:
+            while not self._queue.empty():
+                item = self._queue.get_nowait()
+                if item is None:  # 别吞掉收尾哨兵
+                    self._queue.put_nowait(None)
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _schedule_stop(self) -> None:
+        if self._stop is None:
+            return
+        try:
+            asyncio.get_running_loop().create_task(self._stop())
+        except RuntimeError:
+            pass
+
+    async def _discard_handle(self, handle: Optional[str]) -> None:
+        if handle is None or self._discard is None:
+            return
+        try:
+            res = self._discard(handle)
+            if asyncio.iscoroutine(res):
+                await res
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("丢弃未播放句柄失败(非致命): %s", exc)
+
+    def _mark_speaking(self, on: bool) -> None:
+        self._speaking = on
+        if self._on_speaking is not None:
+            try:
+                self._on_speaking(on)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("on_speaking 回调失败(非致命): %s", exc)
+
+    async def _player(self) -> None:
+        """后台消费队列:合成下一句与播放当前句重叠,句间近无缝。"""
+        prev_play: Optional[asyncio.Task] = None
+        try:
+            while True:
+                item = await self._queue.get()
+                if item is None:
+                    break
+                gen, text = item
+                if gen != self._gen:
+                    continue  # reset/interrupt 之前的旧句,作废
+                try:
+                    handle = await self._synth(text)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("增量合成一句失败(跳过): %s", exc)
+                    continue
+                if prev_play is not None:
+                    try:
+                        await prev_play
+                    except Exception:  # noqa: BLE001
+                        pass
+                if gen != self._gen:  # 等待上一句播放期间被作废
+                    await self._discard_handle(handle)
+                    continue
+                if not self._speaking:
+                    self._mark_speaking(True)
+                prev_play = asyncio.ensure_future(self._play_one(handle))
+            if prev_play is not None:
+                try:
+                    await prev_play
+                except Exception:  # noqa: BLE001
+                    pass
+        finally:
+            if self._speaking:
+                self._mark_speaking(False)
+
+    async def _play_one(self, handle: str) -> None:
+        try:
+            await self._play(handle)
+            self.chunks_spoken += 1
+        except asyncio.CancelledError:
+            await self._discard_handle(handle)
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("增量播放一句失败(跳过): %s", exc)
+            await self._discard_handle(handle)

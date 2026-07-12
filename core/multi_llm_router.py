@@ -644,6 +644,21 @@ class OpenAIAdapter(BaseProviderAdapter):
         if response_format:
             body["response_format"] = response_format
 
+        # 真流式:消费端挂了 TokenStream 且不是结构化输出请求时,SSE 边生成边吐字。
+        # 任何流式失败都作废已流出内容并退回下面的非流式老路径(行为兜底不变)。
+        _sink = kwargs.get("stream")
+        if _sink is not None and response_format is None:
+            try:
+                return await self._chat_streaming(
+                    headers=headers, body=body, model=model, sink=_sink,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.info("OpenAI 兼容流式失败,退回非流式: %s", exc)
+                try:
+                    _sink.reset()
+                except Exception:  # noqa: BLE001
+                    pass
+
         t0 = time.monotonic()
         resp = await self._post_with_retry(
             f"{self.config.base_url}/chat/completions",
@@ -667,6 +682,83 @@ class OpenAIAdapter(BaseProviderAdapter):
             latency_ms=latency,
             tool_calls=tool_calls,
             raw_response=data,
+        )
+
+    @staticmethod
+    def _merge_tool_call_delta(acc: Dict[int, Dict[str, Any]], delta_tc: Dict[str, Any]) -> None:
+        """把一条流式 tool_call 增量并进按 index 聚合的累积表。
+
+        OpenAI 流式协议:tool_calls 增量按 ``index`` 定位;首个增量带 id/name,
+        后续增量只带 ``function.arguments`` 的字符串片段,需按序拼接。
+        """
+        idx = int(delta_tc.get("index", 0) or 0)
+        slot = acc.setdefault(idx, {
+            "id": "", "type": "function",
+            "function": {"name": "", "arguments": ""},
+        })
+        if delta_tc.get("id"):
+            slot["id"] = delta_tc["id"]
+        if delta_tc.get("type"):
+            slot["type"] = delta_tc["type"]
+        fn = delta_tc.get("function") or {}
+        if fn.get("name"):
+            slot["function"]["name"] = fn["name"]
+        if fn.get("arguments"):
+            slot["function"]["arguments"] += fn["arguments"]
+
+    async def _chat_streaming(self, *, headers, body, model, sink) -> LLMResponse:
+        """OpenAI 兼容 SSE 真流式:content 增量喂 sink,tool_calls 增量按 index 组装。
+
+        只把【正文】流出给用户;工具调用参数片段绝不进 sink。usage 仅在服务端支持
+        ``stream_options.include_usage`` 时可得,拿不到就记 0(成本统计的已知取舍)。
+        """
+        stream_body = {**body, "stream": True,
+                       "stream_options": {"include_usage": True}}
+        client = await self._get_client()
+        t0 = time.monotonic()
+        content_parts: List[str] = []
+        tool_acc: Dict[int, Dict[str, Any]] = {}
+        usage: Dict[str, Any] = {}
+        async with client.stream(
+            "POST", f"{self.config.base_url}/chat/completions",
+            headers=headers, json=stream_body,
+        ) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                line = (line or "").strip()
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if not payload or payload == "[DONE]":
+                    continue
+                try:
+                    chunk = json.loads(payload)
+                except (ValueError, TypeError):
+                    continue
+                if isinstance(chunk.get("usage"), dict):
+                    usage = chunk["usage"]
+                choices = chunk.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta") or {}
+                piece = delta.get("content")
+                if piece:
+                    content_parts.append(piece)
+                    sink.feed(piece)
+                for delta_tc in (delta.get("tool_calls") or []):
+                    if isinstance(delta_tc, dict):
+                        self._merge_tool_call_delta(tool_acc, delta_tc)
+        latency = (time.monotonic() - t0) * 1000
+        tool_calls = [tool_acc[i] for i in sorted(tool_acc)] or None
+        return LLMResponse(
+            content="".join(content_parts),
+            provider=self.config.name,
+            model=model,
+            input_tokens=int(usage.get("prompt_tokens", 0) or 0),
+            output_tokens=int(usage.get("completion_tokens", 0) or 0),
+            latency_ms=latency,
+            tool_calls=tool_calls,
+            raw_response=None,  # 流式无整包 JSON;下游一律以 LLMResponse 字段为准
         )
 
 
@@ -816,6 +908,23 @@ class OllamaAdapter(BaseProviderAdapter):
         _base = (self.config.base_url or "").strip() or "http://localhost:11434"
         if not _base.startswith(("http://", "https://")):
             _base = f"http://{_base}"
+
+        # 真流式:消费端挂了 TokenStream 时走 NDJSON 流(CPU 慢速生成下体感差异
+        # 最大的一段——首句几秒就能上屏,不用等整段几十秒)。失败作废已流出内容,
+        # 退回下面的非流式老路径。
+        _sink = kwargs.get("stream")
+        if _sink is not None:
+            try:
+                return await self._chat_streaming(
+                    base=_base, body=body, model=model, sink=_sink,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.info("Ollama 流式失败,退回非流式: %s", exc)
+                try:
+                    _sink.reset()
+                except Exception:  # noqa: BLE001
+                    pass
+
         t0 = time.monotonic()
         resp = await self._post_with_retry(
             f"{_base}/api/chat",
@@ -833,6 +942,44 @@ class OllamaAdapter(BaseProviderAdapter):
             output_tokens=data.get("eval_count", 0),
             latency_ms=latency,
             raw_response=data,
+        )
+
+    async def _chat_streaming(self, *, base, body, model, sink) -> LLMResponse:
+        """Ollama /api/chat NDJSON 真流式:每行一个 JSON 块,message.content 是增量;
+        末块 done=true 携带 prompt_eval_count/eval_count(token 统计不丢)。"""
+        stream_body = {**body, "stream": True}
+        client = await self._get_client()
+        t0 = time.monotonic()
+        content_parts: List[str] = []
+        final: Dict[str, Any] = {}
+        async with client.stream(
+            "POST", f"{base}/api/chat",
+            headers={"Content-Type": "application/json"}, json=stream_body,
+        ) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                line = (line or "").strip()
+                if not line:
+                    continue
+                try:
+                    chunk = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                piece = (chunk.get("message") or {}).get("content", "")
+                if piece:
+                    content_parts.append(piece)
+                    sink.feed(piece)
+                if chunk.get("done"):
+                    final = chunk
+        latency = (time.monotonic() - t0) * 1000
+        return LLMResponse(
+            content="".join(content_parts),
+            provider=self.config.name,
+            model=model,
+            input_tokens=int(final.get("prompt_eval_count", 0) or 0),
+            output_tokens=int(final.get("eval_count", 0) or 0),
+            latency_ms=latency,
+            raw_response=final or None,
         )
 
 
@@ -2176,11 +2323,15 @@ class MultiLLMRouter:
         logger.info("级联路由:复杂度 %.2f → 能力档下限 %d,起步梯队 %s(min_chars=%d)",
                     complexity, floor, [p for p, _ in ladder], eff_min_chars)
         verdict = judge or (lambda r: self._default_answer_adequate(r, eff_min_chars))
+        # 真流式:级联升级会作废上一档已流出的草稿(消费端清屏/掐断朗读重来)。
+        _sink = kwargs.get("stream")
         last: Optional[LLMResponse] = None
         for stage, (provider, model) in enumerate(ladder):
             adapter = self.adapters.get(provider)
             if adapter is None:
                 continue
+            if _sink is not None and _sink.chars:
+                _sink.reset()  # 上一档流出过内容 → 换档前作废
             try:
                 resp = await adapter.chat(
                     messages, model, tools=tools,
@@ -2500,6 +2651,9 @@ class MultiLLMRouter:
         candidates = [f"{decision.provider}:{decision.model}"]
         candidates.extend(decision.alternatives)
 
+        # 真流式:failover 换 provider 前作废已流出的半截内容(消费端清屏重来)。
+        _sink = kwargs.get("stream")
+
         for candidate in candidates:
             prov_name, mdl = candidate.split(":", 1) if ":" in candidate else (candidate, None)
             if prov_name not in self.adapters:
@@ -2593,6 +2747,11 @@ class MultiLLMRouter:
 
             except Exception as e:
                 logger.debug("Fallback triggered: %s", e)
+                if _sink is not None and _sink.chars:
+                    try:
+                        _sink.reset()  # 半截草稿作废,下一个候选重新流
+                    except Exception:  # noqa: BLE001
+                        pass
                 self.providers[prov_name].error_count += 1
                 self.providers[prov_name].last_error = str(e)
                 if cb:
