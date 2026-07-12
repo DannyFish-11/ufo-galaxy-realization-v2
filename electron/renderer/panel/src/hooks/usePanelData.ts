@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { getBackendUrl } from '@/lib/api';
 import type { Phase } from '@/types/phase';
 
 // ── AIP v3 类型定义 ──────────────────────────────
@@ -205,12 +206,11 @@ export function usePanelData(): UsePanelDataReturn {
   const handlerRef = useRef<((() => void)) | null>(null);
 
   useEffect(() => {
-    // 检查 IPC 通道是否可用
-    if (typeof window === 'undefined' || !(window as any).galaxyAPI?.onBackendState) {
-      console.warn('[Panel] IPC channel not available, using defaults');
-      setLoading(false);
-      setError('IPC not available');
-      return;
+    // IPC 通道可用性(缺失时不再放弃——退化为 WS-only 模式,浏览器预览也能拿到数据)
+    const ipcAvailable =
+      typeof window !== 'undefined' && !!(window as any).galaxyAPI?.onBackendState;
+    if (!ipcAvailable) {
+      console.warn('[Panel] IPC channel not available, WS-only mode');
     }
 
     // 注册 IPC 状态回调
@@ -277,15 +277,43 @@ export function usePanelData(): UsePanelDataReturn {
       }
     };
 
-    // 注册 IPC 状态回调，保存 cleanup 函数以防止内存泄漏
-    const cleanup = (window as any).galaxyAPI.onBackendState(handleState);
+    // 注册 IPC 状态回调（兜底通道），保存 cleanup 函数以防止内存泄漏
+    const cleanup = ipcAvailable
+      ? (window as any).galaxyAPI.onBackendState(handleState)
+      : null;
     if (cleanup) handlerRef.current = cleanup;
     setLoading(false);
 
+    // 推代替拉（主通道）:直连后端 /ws/desktop-presence,消费 panel_feed 推送帧。
+    // 后端在任意状态事件(设备/任务/技能/mesh…)后防抖推送【整份 feed】——
+    // 事件→UI 毫秒级;Electron 主进程的慢轮询(已降频 30s)只作断线兜底。
+    let ws: WebSocket | null = null;
+    let wsRetry: ReturnType<typeof setTimeout> | undefined;
+    let disposed = false;
+    const connectWs = async () => {
+      try {
+        const base = await getBackendUrl();
+        if (disposed) return;
+        ws = new WebSocket(base.replace(/^http/, 'ws') + '/ws/desktop-presence');
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg?.type === 'panel_feed' && msg.feed) handleState(msg.feed);
+          } catch { /* 非 JSON / 其它帧类型忽略(state_event 由 useWebSocket 消费) */ }
+        };
+        ws.onclose = () => { if (!disposed) wsRetry = setTimeout(connectWs, 3000); };
+        ws.onerror = () => { try { ws?.close(); } catch { /* noop */ } };
+      } catch { if (!disposed) wsRetry = setTimeout(connectWs, 3000); }
+    };
+    connectWs();
+
     return () => {
-      // 调用 cleanup 函数取消 IPC 订阅
+      // 取消 IPC 订阅 + 关闭 WS 推送通道
       if (handlerRef.current) handlerRef.current();
       handlerRef.current = null;
+      disposed = true;
+      if (wsRetry) clearTimeout(wsRetry);
+      try { ws?.close(); } catch { /* noop */ }
     };
   }, []);
 
