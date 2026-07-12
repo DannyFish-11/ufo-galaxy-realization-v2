@@ -895,11 +895,22 @@ class OllamaAdapter(BaseProviderAdapter):
     async def chat(self, messages, model, tools=None,
                    temperature=0.7, max_tokens=4096,
                    response_format=None, **kwargs) -> LLMResponse:
+        # 模型常驻不卸载(-1):Ollama 默认几分钟不用就卸出内存,下次请求整段
+        # 冷加载——真机"等待窗口未响应/像冷启动"的来源。按请求带上,即使
+        # ollama serve 是安装器自启的(拿不到我们 spawn 时的环境变量)也生效。
+        # 纯数字须转 int(JSON number;裸 "-1" 字符串无时长单位会解析失败),
+        # "10m" 之类的时长字符串原样透传。
+        _keep_alive: Any = os.environ.get("GALAXY_OLLAMA_KEEP_ALIVE", "-1")
+        try:
+            _keep_alive = int(_keep_alive)
+        except (TypeError, ValueError):
+            pass
         body = {
             "model": model,
             "messages": self._to_ollama_messages(messages),
             "stream": False,
             "options": {"temperature": temperature, "num_predict": max_tokens},
+            "keep_alive": _keep_alive,
         }
 
         # 调用点兜底:即使 config.base_url 因某条边缘路径被置空/缺协议头,

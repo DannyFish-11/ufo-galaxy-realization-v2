@@ -196,6 +196,73 @@ async def get_status() -> Dict[str, Any]:
         return {"models": installed}
 
 
+class ProviderVerifyRequest(BaseModel):
+    provider: Optional[str] = None   # 提供商名(如 "deepseek");与 env_key 二选一
+    env_key: Optional[str] = None    # 或环境变量键(如 "DEEPSEEK_API_KEY"),后端反查
+
+
+@router.post("/verify-provider")
+async def verify_provider(req: ProviderVerifyRequest) -> Dict[str, Any]:
+    """真实连通性验证:用该提供商的 default_model 发一次 1-token 试调。
+
+    面板"保存 API Key"之后调这里,把「保存成功」升级成「保存且**能用**」——
+    此前保存只代表写进了 .env,Key 错的/网络不通的要等到真正对话失败才暴露,
+    用户没法判断"到底好了没有"。试调成本≈零(max_tokens=1),15s 封顶。
+    """
+    from core.multi_llm_router import PROVIDER_REGISTRY, get_llm_router
+    router_ = get_llm_router()
+
+    name = (req.provider or "").strip().lower()
+    if not name and req.env_key:
+        key = req.env_key.strip()
+        if key in ("OLLAMA_URL", "OLLAMA_MODEL"):
+            name = "ollama"
+        else:
+            for entry in PROVIDER_REGISTRY:
+                if entry.get("env_key") == key or key in (entry.get("alt_env") or []):
+                    name = entry["name"]
+                    break
+    if not name:
+        return {"ok": False,
+                "error": f"无法识别提供商(provider={req.provider!r}, env_key={req.env_key!r})"}
+
+    adapter = router_.adapters.get(name)
+    cfg = router_.providers.get(name)
+    if adapter is None or cfg is None:
+        return {"ok": False, "provider": name,
+                "error": "提供商未启用——Key 可能没保存成功或路由未刷新"}
+    try:
+        resp = await _asyncio.wait_for(
+            adapter.chat(
+                [{"role": "user", "content": "ping"}], cfg.default_model,
+                max_tokens=1, temperature=0.0,
+            ),
+            timeout=15.0,
+        )
+        return {"ok": True, "provider": name, "model": resp.model,
+                "latency_ms": round(float(resp.latency_ms or 0.0), 1)}
+    except _asyncio.TimeoutError:
+        return {"ok": False, "provider": name,
+                "error": "验证超时(15s)——服务不可达或网络阻断"}
+    except Exception as exc:  # noqa: BLE001
+        # 不把原始异常串直接回给调用方(CodeQL: 异常可能携带栈/内部信息)。
+        # 分类成用户能行动的脱敏文案;完整异常只进服务端日志。
+        logger.info("verify-provider %s 试调失败: %s", name, exc)
+        try:
+            import httpx
+            if isinstance(exc, httpx.HTTPStatusError):
+                code = exc.response.status_code
+                hint = {
+                    401: "密钥无效(401)", 403: "无权限(403)",
+                    404: "接口或模型不存在(404)", 429: "限流(429)",
+                }.get(code, f"HTTP {code}")
+                return {"ok": False, "provider": name, "error": hint}
+        except Exception:  # noqa: BLE001
+            pass
+        return {"ok": False, "provider": name,
+                "error": f"连接失败({type(exc).__name__})——检查网络/Key/服务地址"}
+
+
 class ModelSyncRequest(BaseModel):
     apply: bool = False                     # False=只出对账报告；True=就地剪失效/补新发现
     only: Optional[List[str]] = None        # 限定 provider（不给则全部可用 provider）

@@ -71,16 +71,24 @@ def _max_chars() -> int:
         return 600
 
 
+# 运行期被证实失败的引擎类型(如 edge 合成时无法访问微软服务):拉黑后重选,
+# 引擎链自动落到下一个。选择期看不出这类失败——构造/导入都成功,坏在合成那一刻。
+_failed_engine_types: set = set()
+
+
 def _get_engine() -> Optional[Any]:
     global _engine, _engine_failed
     if _engine is not None or _engine_failed:
         return _engine
-    # 引擎选择:GALAXY_TTS_ENGINE = edge(默认,联网·音质好) | melo(离线·中英混读自然) |
-    # piper(离线·纯 CPU·最轻) | auto(优先 edge,无网退 melo 再退 piper)。
-    # A 档无卡断网:melo 音质更好,piper 更轻;二者都完全离线。
+    # 引擎选择:GALAXY_TTS_ENGINE = edge(默认,联网·音质好) | kokoro(离线·82M·
+    # 纯 CPU 快于实时·中文) | melo(离线·中英混读自然) | piper(离线·最轻) |
+    # sapi(Windows 自带·零依赖) | auto。每条链以 kokoro→sapi 收尾:
+    # 无论装了什么、网络如何,最后总能出声,且优先高音质离线而非机器人音。
     choice = os.getenv("GALAXY_TTS_ENGINE", "edge").strip().lower()
 
     def _try_piper():
+        if "PiperTTSEngine" in _failed_engine_types:
+            return None
         try:
             from core.tts.piper_engine import PiperTTSEngine
             eng = PiperTTSEngine()
@@ -90,6 +98,8 @@ def _get_engine() -> Optional[Any]:
             return None
 
     def _try_melo():
+        if "MeloTTSEngine" in _failed_engine_types:
+            return None
         try:
             from core.tts.melo_engine import MeloTTSEngine
             eng = MeloTTSEngine()
@@ -99,6 +109,8 @@ def _get_engine() -> Optional[Any]:
             return None
 
     def _try_edge():
+        if "EdgeTTSEngine" in _failed_engine_types:
+            return None
         try:
             # EdgeTTSEngine 构造器不校验依赖(edge_tts 懒导入在 synthesize 里),
             # 缺包时构造照样"成功"→ 选择器误以为引擎可用,既不落到 melo/piper,
@@ -112,19 +124,70 @@ def _get_engine() -> Optional[Any]:
             logger.info("Edge TTS 不可用: %s", exc)
             return None
 
+    def _try_kokoro():
+        if "KokoroTTSEngine" in _failed_engine_types:
+            return None
+        try:
+            from core.tts.kokoro_engine import KokoroTTSEngine
+            eng = KokoroTTSEngine()
+            # available() 缺模型文件时自动踢后台拉取(拉完下次选择/重启即生效)
+            return eng if eng.available() else None
+        except Exception as exc:  # noqa: BLE001
+            logger.info("Kokoro TTS 不可用: %s", exc)
+            return None
+
+    def _try_sapi():
+        if "SapiTTSEngine" in _failed_engine_types:
+            return None
+        try:
+            from core.tts.sapi_engine import SapiTTSEngine
+            eng = SapiTTSEngine()
+            return eng if eng.available() else None
+        except Exception as exc:  # noqa: BLE001
+            logger.info("SAPI TTS 不可用: %s", exc)
+            return None
+
     if choice == "melo":
-        _engine = _try_melo() or _try_piper() or _try_edge()
+        _engine = (_try_melo() or _try_piper() or _try_edge()
+                   or _try_kokoro() or _try_sapi())
     elif choice == "piper":
-        _engine = _try_piper() or _try_melo() or _try_edge()
+        _engine = (_try_piper() or _try_melo() or _try_edge()
+                   or _try_kokoro() or _try_sapi())
+    elif choice == "kokoro":
+        _engine = _try_kokoro() or _try_sapi()
+    elif choice == "sapi":
+        _engine = _try_sapi()
     elif choice == "auto":
-        _engine = _try_edge() or _try_melo() or _try_piper()
-    else:  # edge(默认)
-        _engine = _try_edge()
+        _engine = (_try_edge() or _try_kokoro() or _try_melo()
+                   or _try_piper() or _try_sapi())
+    else:  # edge(默认)——运行期失败仍可经 demote 落到离线链
+        _engine = (_try_edge() or _try_melo() or _try_piper()
+                   or _try_kokoro() or _try_sapi())
 
     if _engine is None:
         logger.warning("TTS 引擎不可用(语音输出降级;装 edge-tts / melotts / piper-tts 可启用)")
         _engine_failed = True
     return _engine
+
+
+def demote_current_engine(reason: str = "") -> Optional[Any]:
+    """当前引擎【运行期】失败(合成/网络):拉黑其类型并重选下一个可用引擎。
+
+    返回新引擎(None=链上已无可用)。选择期探不出的失败(edge 构造成功但云端
+    不可达)靠这里自愈:第一句失败 → 换引擎 → 同句重试,用户最多丢一拍。
+    """
+    global _engine, _engine_failed
+    cur = _engine
+    if cur is None:
+        return None
+    _failed_engine_types.add(type(cur).__name__)
+    logger.warning(
+        "TTS 引擎 %s 运行期失败(%s),拉黑并降级到下一引擎",
+        type(cur).__name__, (reason or "")[:120],
+    )
+    _engine = None
+    _engine_failed = False
+    return _get_engine()
 
 
 def speak_response(text: str, *, source: str = "") -> None:
@@ -169,15 +232,25 @@ def speak_response(text: str, *, source: str = "") -> None:
             # 分句流式：第一句就绪即开口，感知延迟 ≈ 第一句合成时长；可被打断。
             from core.streaming_speech import StreamingSpeaker
 
+            # 引擎经 holder 引用:合成运行期失败 → demote 换引擎 → 同句重试一次。
+            holder = {"engine": engine}
+
             async def _synth(chunk: str) -> str:
-                return await engine.synthesize(chunk)
+                try:
+                    return await holder["engine"].synthesize(chunk)
+                except Exception as exc:  # noqa: BLE001
+                    new_engine = demote_current_engine(str(exc))
+                    if new_engine is None:
+                        raise
+                    holder["engine"] = new_engine
+                    return await new_engine.synthesize(chunk)
 
             async def _play(path: str) -> None:
-                await engine._play_audio(path)
+                await holder["engine"]._play_audio(path)
                 _rm(path)
 
             async def _stop() -> None:
-                await engine.stop()
+                await holder["engine"].stop()
 
             def _rm(path: str) -> None:
                 try:
@@ -211,13 +284,20 @@ def speak_response(text: str, *, source: str = "") -> None:
                     _active_speaker = None
             return
 
-        # 回退：整段批处理（GALAXY_TTS_STREAMING=0）。
+        # 回退：整段批处理（GALAXY_TTS_STREAMING=0）。失败同样降级换引擎重试一次。
         if _set_speaking is not None:
             _set_speaking(True)
         try:
             await engine.synthesize_and_play(spoken)
         except Exception as exc:  # noqa: BLE001
-            _log_speak_failure("语音输出", exc)
+            new_engine = demote_current_engine(str(exc))
+            if new_engine is None:
+                _log_speak_failure("语音输出", exc)
+            else:
+                try:
+                    await new_engine.synthesize_and_play(spoken)
+                except Exception as exc2:  # noqa: BLE001
+                    _log_speak_failure("语音输出", exc2)
         finally:
             if _set_speaking is not None:
                 _set_speaking(False)
@@ -268,15 +348,26 @@ def begin_incremental_speech(*, source: str = "") -> Optional[Any]:
         except OSError:
             pass
 
+    # 引擎经 holder 引用:合成运行期失败(edge 云端不可达等)→ demote 换引擎
+    # → 同句重试一次;play/stop 跟随换到新引擎。用户最多丢一拍,不再整段静默。
+    holder = {"engine": engine}
+
     async def _synth(chunk: str) -> str:
-        return await engine.synthesize(chunk)
+        try:
+            return await holder["engine"].synthesize(chunk)
+        except Exception as exc:  # noqa: BLE001
+            new_engine = demote_current_engine(str(exc))
+            if new_engine is None:
+                raise
+            holder["engine"] = new_engine
+            return await new_engine.synthesize(chunk)
 
     async def _play(path: str) -> None:
-        await engine._play_audio(path)
+        await holder["engine"]._play_audio(path)
         _rm(path)
 
     async def _stop() -> None:
-        await engine.stop()
+        await holder["engine"].stop()
 
     speaker = IncrementalSpeaker(
         _synth, _play, stop=_stop, on_speaking=_set_speaking, discard=_rm,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useConfigCache } from '@/hooks/useConfigCache';
 import { useModelCatalog, type CatalogModel, type StatusEntry } from '@/hooks/useModelCatalog';
+import { getBackendUrl } from '@/lib/api';
 import './ModelsTab.css';
 
 /**
@@ -292,30 +293,69 @@ export default function ModelsTab() {
     setChanged((prev) => ({ ...prev, [k]: v }));
   }, []);
 
-  const flash = useCallback((m: string) => {
+  const flash = useCallback((m: string, ms = 2600) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast(m);
-    toastTimer.current = setTimeout(() => setToast(null), 2600);
+    toastTimer.current = setTimeout(() => setToast(null), ms);
   }, []);
 
   const dirty = Object.keys(changed).length;
+  const [saving, setSaving] = useState(false);
 
   const save = useCallback(async () => {
+    if (saving) return;
+    setSaving(true);
+    // 立即给等待态:后端启动期/拥塞时这一步可能要好几秒,没有这条用户会以为
+    // "点了没反应"(真机反馈)。
+    flash('保存中…', 30000);
     try {
       const result = await saveConfig(changed);
-      if (result.success) {
-        // 保存成功后使缓存失效并重新加载，回读服务端真值
-        invalidate();
-        flash('已保存并即时生效');
-      } else {
+      if (!result.success) {
         // 修复:之前不管真实原因是什么,一律显示"保存失败"四个字。现在把
-        // 后端/IPC 层透传上来的真实原因(未知配置键、.env 写入失败等)带出。
-        flash(result.error ? `保存失败：${result.error}` : '保存失败');
+        // 后端/IPC 层透传上来的真实原因(未知配置键、.env 写入失败等)带出,
+        // 且失败提示驻留更久,不会一闪而过。
+        flash(result.error ? `保存失败：${result.error}` : '保存失败', 8000);
+        return;
       }
+      // 保存成功后使缓存失效并重新加载，回读服务端真值
+      invalidate();
+      // 「保存成功」≠「能用」:对改动里的每个 API Key 做一次真实连通验证
+      // (后端 1-token 试调),把"到底好了没有"直接答在 toast 里。
+      const keys = Object.keys(changed).filter(
+        (k) => k.endsWith('_API_KEY') || k === 'OLLAMA_URL' || k === 'HF_TOKEN',
+      );
+      if (keys.length === 0) {
+        flash('已保存并即时生效');
+        return;
+      }
+      flash('已保存 · 正在验证连通性…', 30000);
+      const base = await getBackendUrl();
+      const results: string[] = [];
+      for (const k of keys) {
+        try {
+          const r = await fetch(`${base}/api/v1/models/verify-provider`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ env_key: k }),
+          });
+          const v = await r.json();
+          if (v.ok) {
+            results.push(`${v.provider} ✓ 可用 ${Math.round(v.latency_ms)}ms`);
+          } else {
+            results.push(`${v.provider || k} ✗ ${v.error || '验证失败'}`);
+          }
+        } catch (e) {
+          results.push(`${k} ✗ 验证请求失败：${e instanceof Error ? e.message : ''}`);
+        }
+      }
+      const anyFail = results.some((s) => s.includes('✗'));
+      flash(`已保存 · ${results.join('；')}`, anyFail ? 12000 : 6000);
     } catch (e) {
-      flash(`保存出错：${e instanceof Error ? e.message : ''}`);
+      flash(`保存出错：${e instanceof Error ? e.message : ''}`, 8000);
+    } finally {
+      setSaving(false);
     }
-  }, [changed, flash, invalidate]);
+  }, [changed, flash, invalidate, saving]);
 
   // 状态统计
   const allProviders = [...OPEN_CLOUD, ...PROPRIETARY, ...AGGREGATE];
@@ -413,11 +453,11 @@ export default function ModelsTab() {
       <footer className={`mt-foot ${dirty ? 'show' : ''}`}>
         <span className="mt-foot-info">{dirty ? `${dirty} 项改动` : '全部已保存'}</span>
         <div className="mt-foot-actions">
-          <button className="mt-btn mt-btn-ghost" onClick={() => setChanged({})} disabled={!dirty}>
+          <button className="mt-btn mt-btn-ghost" onClick={() => setChanged({})} disabled={!dirty || saving}>
             放弃
           </button>
-          <button className="mt-btn mt-btn-primary" onClick={save} disabled={!dirty}>
-            保存
+          <button className="mt-btn mt-btn-primary" onClick={save} disabled={!dirty || saving}>
+            {saving ? '保存中…' : '保存'}
           </button>
         </div>
       </footer>

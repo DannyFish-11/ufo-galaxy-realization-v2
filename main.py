@@ -565,6 +565,13 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         # "回复文字出来了、一句话都不说"。包本身很小(纯 HTTP 客户端)。
         "edge_tts": "edge-tts",
     }
+    # 高性能事件循环(平台各取所需):Windows 默认 Proactor 循环开销大(真机:
+    # 面板首开并发把循环拖出 10s 级冻结),winloop ≈5×;Linux/macOS 用 uvloop。
+    # 装不上/探针不过都自动退回默认循环(core/fast_loop.py),零风险。
+    if os.name == "nt":
+        core_modules["winloop"] = "winloop"
+    else:
+        core_modules["uvloop"] = "uvloop"
     for mod_name, pip_name in core_modules.items():
         try:
             __import__(mod_name)
@@ -916,6 +923,14 @@ def main() -> int:
         except Exception as _exc:
             logger.debug("GalaxyWebSocketBridge init skipped (non-fatal): %s", _exc)
         await lumiv.start()
+
+    # 高性能事件循环(Windows: winloop ≈5×默认 Proactor;Linux/macOS: uvloop)。
+    # 必须在 asyncio.run 之前装策略;内置子进程探针,失败自动还原默认(宁慢勿哑)。
+    try:
+        from core.fast_loop import install_fast_loop
+        install_fast_loop()
+    except Exception:
+        pass  # 缺包/异常都走默认循环,零影响
 
     try:
         asyncio.run(_run())

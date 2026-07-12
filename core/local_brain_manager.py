@@ -792,6 +792,17 @@ class LocalBrainManager:
             else:
                 _popen_kwargs["start_new_session"] = True
 
+            # 延迟优化默认值(用户显式设过的环境变量绝不覆盖):
+            #   KEEP_ALIVE=-1  模型常驻内存不卸载——此前默认几分钟就卸,下次请求
+            #                  整个冷加载,正是真机"等待窗口未响应/像在冷启动"的来源;
+            #   FLASH_ATTENTION=1 + KV_CACHE_TYPE=q8_0  KV 缓存减半、质量无损
+            #                  (收益主要在 GPU,CPU 也无害)。
+            _serve_env = {**_os.environ}
+            _serve_env.setdefault("OLLAMA_KEEP_ALIVE", "-1")
+            _serve_env.setdefault("OLLAMA_FLASH_ATTENTION", "1")
+            _serve_env.setdefault("OLLAMA_KV_CACHE_TYPE", "q8_0")
+            _popen_kwargs["env"] = _serve_env
+
             subprocess.Popen([ollama_cmd, "serve"], **_popen_kwargs)
             logger.info("Ollama 服务已作为常驻进程启动(日志: logs/ollama.log)")
             return True
