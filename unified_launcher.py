@@ -2064,6 +2064,14 @@ def main():
     # 启动 Electron GUI（在 Python 服务之后启动，作为独立桌面表层）
     _start_electron_gui()
 
+    # 高性能事件循环(Windows: winloop / 其它: uvloop);须在 new_event_loop 之前
+    # 装策略。内置子进程探针,失败自动还原默认(宁慢勿哑)。
+    try:
+        from core.fast_loop import install_fast_loop
+        install_fast_loop()
+    except Exception:  # noqa: BLE001
+        pass
+
     # 启动系统 — register async signal handlers inside the running loop
     try:
         loop = asyncio.new_event_loop()

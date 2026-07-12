@@ -80,9 +80,10 @@ def _get_engine() -> Optional[Any]:
     global _engine, _engine_failed
     if _engine is not None or _engine_failed:
         return _engine
-    # 引擎选择:GALAXY_TTS_ENGINE = edge(默认,联网·音质好) | melo(离线·中英混读自然) |
-    # piper(离线·纯 CPU·最轻) | sapi(Windows 自带·零依赖离线) | auto(edge→melo→piper→sapi)。
-    # 每条链都以 sapi 收尾:Windows 上无论装了什么、网络如何,最后总能出声。
+    # 引擎选择:GALAXY_TTS_ENGINE = edge(默认,联网·音质好) | kokoro(离线·82M·
+    # 纯 CPU 快于实时·中文) | melo(离线·中英混读自然) | piper(离线·最轻) |
+    # sapi(Windows 自带·零依赖) | auto。每条链以 kokoro→sapi 收尾:
+    # 无论装了什么、网络如何,最后总能出声,且优先高音质离线而非机器人音。
     choice = os.getenv("GALAXY_TTS_ENGINE", "edge").strip().lower()
 
     def _try_piper():
@@ -123,6 +124,18 @@ def _get_engine() -> Optional[Any]:
             logger.info("Edge TTS 不可用: %s", exc)
             return None
 
+    def _try_kokoro():
+        if "KokoroTTSEngine" in _failed_engine_types:
+            return None
+        try:
+            from core.tts.kokoro_engine import KokoroTTSEngine
+            eng = KokoroTTSEngine()
+            # available() 缺模型文件时自动踢后台拉取(拉完下次选择/重启即生效)
+            return eng if eng.available() else None
+        except Exception as exc:  # noqa: BLE001
+            logger.info("Kokoro TTS 不可用: %s", exc)
+            return None
+
     def _try_sapi():
         if "SapiTTSEngine" in _failed_engine_types:
             return None
@@ -135,15 +148,21 @@ def _get_engine() -> Optional[Any]:
             return None
 
     if choice == "melo":
-        _engine = _try_melo() or _try_piper() or _try_edge() or _try_sapi()
+        _engine = (_try_melo() or _try_piper() or _try_edge()
+                   or _try_kokoro() or _try_sapi())
     elif choice == "piper":
-        _engine = _try_piper() or _try_melo() or _try_edge() or _try_sapi()
+        _engine = (_try_piper() or _try_melo() or _try_edge()
+                   or _try_kokoro() or _try_sapi())
+    elif choice == "kokoro":
+        _engine = _try_kokoro() or _try_sapi()
     elif choice == "sapi":
         _engine = _try_sapi()
     elif choice == "auto":
-        _engine = _try_edge() or _try_melo() or _try_piper() or _try_sapi()
+        _engine = (_try_edge() or _try_kokoro() or _try_melo()
+                   or _try_piper() or _try_sapi())
     else:  # edge(默认)——运行期失败仍可经 demote 落到离线链
-        _engine = _try_edge() or _try_melo() or _try_piper() or _try_sapi()
+        _engine = (_try_edge() or _try_melo() or _try_piper()
+                   or _try_kokoro() or _try_sapi())
 
     if _engine is None:
         logger.warning("TTS 引擎不可用(语音输出降级;装 edge-tts / melotts / piper-tts 可启用)")

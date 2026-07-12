@@ -63,6 +63,11 @@ opencv-python>=4.8.0
 numpy>=1.26.3
 sounddevice>=0.4.0
 edge-tts>=6.1.0
+# 离线高质量 TTS(Kokoro-82M ONNX):edge-tts 云端不可达时的首选兜底,纯 CPU 快于实时
+kokoro-onnx>=0.4.0
+# 高性能事件循环:Windows 用 winloop(≈5×默认 Proactor),其它平台用 uvloop
+uvloop>=0.19; sys_platform != 'win32'
+winloop>=0.1.6; sys_platform == 'win32'
 matplotlib>=3.8.0
 
 # ============================================================================
