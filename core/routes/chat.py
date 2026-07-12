@@ -536,32 +536,39 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
             return JSONResponse(resp.to_json_response())
 
-    # ── SSE streaming surface (panel A 方案: 逐字流式) ──────────────────────
+    # ── SSE streaming surface (真流式: token 边生成边到) ────────────────────
     # POST /api/v1/chat/stream — same compatibility-adapter role as /api/v1/chat,
-    # but emits the result as a Server-Sent Events stream so the desktop panel can
-    # render a token-by-token "实时生成" effect with a streaming caret.
+    # but emits the result as a Server-Sent Events stream.
+    #
+    # 真流式链路:本端点在请求上下文挂 TokenStream(core.llm_stream)→ openclawd
+    # 的答案生成点(_react_loop)把它显式传给路由层 → 适配器(Ollama NDJSON /
+    # OpenAI SSE)边生成边 feed → 这里逐帧转发给前端;同一份增量同时喂
+    # IncrementalSpeaker(边生成边念)。级联换档/failover/工具轮会发 reset 帧,
+    # 前端清空当前气泡、TTS 掐断未播句子,新一代内容重新流。
     #
     # Contract (each line is an SSE frame, JSON payload after ``data: ``):
-    #   data: {"type":"meta",  "session_id","model","runtime_session_id"}
     #   data: {"type":"phase", "phase":"liminal"}        # presence hint
-    #   data: {"type":"delta", "text":"片段"}            # repeated
+    #   data: {"type":"delta", "text":"片段"}            # repeated,真增量
+    #   data: {"type":"reset"}                           # 作废已流出内容(可能出现)
+    #   data: {"type":"meta",  "session_id","model","runtime_session_id"}
     #   data: {"type":"done",  "response","intent","success","suggestions",
-    #          "visible_action_surface","session_id","model"}
+    #          "visible_action_surface","session_id","model"}   # response 为权威全文
     #   data: {"type":"error", "error":"..."}
     #
-    # NOTE: the underlying runtime (DesktopPresenceRuntime → OpenClawd) currently
-    # computes the full answer atomically; this surface chunks that answer for a
-    # progressive feel. The SSE contract is stable, so when the runtime gains real
-    # incremental generation it can stream deltas here without a client change.
-    _STREAM_CHUNK_CHARS = 2      # 每帧推送的字符数(中文逐字观感)
-    _STREAM_CHUNK_DELAY = 0.012  # 帧间隔(秒);流畅且不过量
+    # done.response 是【边界过滤后】的权威全文——前端以它对账替换累积增量
+    # (ConversationView 的 done 分支本就如此),因此即使流出内容与最终前台文本
+    # 有出入(hidden/visible 边界降级),最终展示一定正确。
+    # 兜底:整条链路没流出任何增量时(适配器不支持流式/辅助路径),退回旧的
+    # "整段假流式"逐字观感,行为与真流式前完全一致。
+    _STREAM_CHUNK_CHARS = 2      # 假流式兜底:每帧字符数(中文逐字观感)
+    _STREAM_CHUNK_DELAY = 0.012  # 假流式兜底:帧间隔(秒)
 
     def _sse(payload: Dict[str, Any]) -> str:
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     @router.post("/api/v1/chat/stream")
     async def chat_stream(req: ChatRequest):
-        """SSE 流式对话 — 兼容适配器表面,委派 DesktopPresenceRuntime → OpenClawd。"""
+        """SSE 真流式对话 — 委派 DesktopPresenceRuntime → OpenClawd,token 级转发。"""
 
         async def _gen() -> AsyncIterator[str]:
             # 收到即进入"思考"态提示(前端在场带据此脉动)。
@@ -573,18 +580,39 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 _emit_conv("user", req.message or "", source="text", turn_id=_turn_id)
             except Exception:
                 _emit_conv = None  # type: ignore
+
             try:
-                from core.desktop_presence_runtime import get_desktop_presence_runtime
-                runtime = get_desktop_presence_runtime()
-                # 硬超时:无论"没配模型/模型不可达/首调初始化慢/提供商挂起",
-                # 都必须在有限时间内给前端一个 error 帧并收流,绝不让面板"一直转圈圈"。
-                # 可用 GALAXY_CHAT_TIMEOUT_S 调整(默认 90s)。
-                try:
-                    _chat_timeout = float(os.environ.get("GALAXY_CHAT_TIMEOUT_S", "90") or "90")
-                except (TypeError, ValueError):
-                    _chat_timeout = 90.0
-                result = await asyncio.wait_for(
-                    runtime.handle_request(
+                _chat_timeout = float(os.environ.get("GALAXY_CHAT_TIMEOUT_S", "90") or "90")
+            except (TypeError, ValueError):
+                _chat_timeout = 90.0
+
+            from core.llm_stream import TokenStream, use_stream
+
+            frames: "asyncio.Queue" = asyncio.Queue()
+            sink = TokenStream(
+                on_delta=lambda t: frames.put_nowait(("delta", t)),
+                on_reset=lambda: frames.put_nowait(("reset", None)),
+            )
+            # 边生成边念:能建则建;建成后在请求上下文里抑制收尾的整段重念。
+            speaker = None
+            try:
+                from core.speech_output import (
+                    begin_incremental_speech,
+                    suppress_final_speak_in_context,
+                )
+                speaker = begin_incremental_speech(source="chat")
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("增量朗读建立失败(退回整段): %s", exc)
+
+            async def _run():
+                # 在【任务自身上下文】里挂 sink/抑制标记:contextvars 随 await 链
+                # 传播到 openclawd 的答案生成点;任务结束自动消散,不污染别的请求。
+                with use_stream(sink):
+                    if speaker is not None:
+                        suppress_final_speak_in_context()
+                    from core.desktop_presence_runtime import get_desktop_presence_runtime
+                    runtime = get_desktop_presence_runtime()
+                    return await runtime.handle_request(
                         message=req.message,
                         source="chat",
                         device_id=req.device_id,
@@ -594,9 +622,38 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         required_capabilities=req.required_capabilities,
                         multimodal_context=req.multimodal_context,
                         entry_mode="local",
-                    ),
-                    timeout=_chat_timeout,
-                )
+                    )
+
+            task = asyncio.get_running_loop().create_task(_run())
+            deadline = asyncio.get_running_loop().time() + _chat_timeout
+            streamed_chars = 0
+            manifested = False
+            try:
+                # 消费循环:增量帧即到即转;runtime 任务完成且队列排空后出循环。
+                while True:
+                    if task.done() and frames.empty():
+                        break
+                    if asyncio.get_running_loop().time() >= deadline:
+                        raise asyncio.TimeoutError
+                    try:
+                        kind, payload = await asyncio.wait_for(frames.get(), timeout=0.1)
+                    except asyncio.TimeoutError:
+                        continue  # 无新帧:回头看任务是否已完成/超时
+                    if kind == "delta":
+                        if not manifested:
+                            manifested = True
+                            yield _sse({"type": "phase", "phase": "manifest"})
+                        streamed_chars += len(payload)
+                        yield _sse({"type": "delta", "text": payload})
+                        if speaker is not None:
+                            speaker.feed(payload)
+                    elif kind == "reset":
+                        streamed_chars = 0
+                        yield _sse({"type": "reset"})
+                        if speaker is not None:
+                            speaker.reset()
+
+                result = task.result()  # 异常在此抛出,统一走下面的 except
                 metadata = result.get("metadata", {})
                 if not isinstance(metadata, dict):
                     metadata = {}
@@ -618,23 +675,36 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 model = metadata.get("model", "")
                 runtime_session_id = result.get("runtime_session_id", "")
 
-                # meta 帧:会话/模型先到,前端可立即落位。
                 yield _sse({
                     "type": "meta",
                     "session_id": session_id,
                     "model": model,
                     "runtime_session_id": runtime_session_id,
                 })
-                # 输出态:开始吐字。
-                yield _sse({"type": "phase", "phase": "manifest"})
 
                 text = foreground_response or ""
                 # 一体化：AI 回应实时推给面板"实时上下文"视图。
                 if _emit_conv is not None:
                     _emit_conv("ai", text, source="text", turn_id=_turn_id)
-                for i in range(0, len(text), _STREAM_CHUNK_CHARS):
-                    yield _sse({"type": "delta", "text": text[i:i + _STREAM_CHUNK_CHARS]})
-                    await asyncio.sleep(_STREAM_CHUNK_DELAY)
+
+                if streamed_chars == 0 and text:
+                    # 兜底:没有任何真增量(非流式适配器/边界降级为全新文本)。
+                    # 退回逐字假流式,观感与真流式前完全一致。
+                    if not manifested:
+                        yield _sse({"type": "phase", "phase": "manifest"})
+                    for i in range(0, len(text), _STREAM_CHUNK_CHARS):
+                        yield _sse({"type": "delta", "text": text[i:i + _STREAM_CHUNK_CHARS]})
+                        await asyncio.sleep(_STREAM_CHUNK_DELAY)
+
+                # 边生成边念收尾:真增量场景冲刷尾句;零增量场景把权威全文整段
+                # 喂进去再收尾(等价旧的"生成完再念",但走同一台增量播放器)。
+                if speaker is not None:
+                    try:
+                        if streamed_chars == 0 and text:
+                            speaker.feed(text)
+                        speaker.finish()
+                    except Exception:  # noqa: BLE001
+                        pass
 
                 yield _sse({
                     "type": "done",
@@ -651,6 +721,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 yield _sse({"type": "phase", "phase": "silent"})
             except asyncio.TimeoutError:
                 logger.error("chat_stream 超时(%.0fs)——终止本轮并收流", _chat_timeout)
+                task.cancel()
+                if speaker is not None:
+                    try:
+                        await speaker.interrupt()
+                    except Exception:  # noqa: BLE001
+                        pass
                 yield _sse({
                     "type": "error",
                     "error": (
@@ -661,8 +737,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 yield _sse({"type": "phase", "phase": "silent"})
             except Exception as exc:  # noqa: BLE001 — surface any failure to the client
                 logger.error("chat_stream 处理异常: %s", exc, exc_info=True)
+                task.cancel()
+                if speaker is not None:
+                    try:
+                        await speaker.interrupt()
+                    except Exception:  # noqa: BLE001
+                        pass
                 yield _sse({"type": "error", "error": str(exc)})
                 yield _sse({"type": "phase", "phase": "silent"})
+            finally:
+                # 客户端断连(生成器被提前关闭)时清场:取消在飞的 runtime 任务、
+                # 掐断朗读。正常完成路径这里全是无害的空操作。
+                if not task.done():
+                    task.cancel()
+                    if speaker is not None:
+                        try:
+                            await speaker.interrupt()
+                        except Exception:  # noqa: BLE001
+                            pass
 
         return StreamingResponse(
             _gen(),

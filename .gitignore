@@ -14,6 +14,11 @@ downloads/
 eggs/
 .eggs/
 lib/
+# 例外:面板前端源码目录 src/lib 被上面的 Python 构建残留规则 lib/ 误伤——
+# api.ts(SSE 客户端)因此从未进过仓库,克隆方只能用预编译 dist、无法从源码
+# 构建面板。显式放行。
+!electron/renderer/panel/src/lib/
+!electron/renderer/panel/src/lib/**
 lib64/
 parts/
 sdist/

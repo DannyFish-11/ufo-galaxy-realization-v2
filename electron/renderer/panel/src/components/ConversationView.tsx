@@ -121,6 +121,11 @@ export default function ConversationView({ onStreamPhase }: ConversationViewProp
             case 'delta':
               if (ev.text) patchAi((p) => ({ ...p, content: p.content + ev.text }));
               break;
+            case 'reset':
+              // 后端作废已流出的草稿(级联换档/failover/工具轮):清空当前气泡,
+              // 新一代内容随后重新流入。done.response 仍是权威全文兜底。
+              patchAi((p) => ({ ...p, content: '' }));
+              break;
             case 'done':
               patchAi((p) => ({
                 ...p,

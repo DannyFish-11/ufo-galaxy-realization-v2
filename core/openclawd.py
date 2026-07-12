@@ -7896,6 +7896,15 @@ class OpenClawd:
         _consecutive_same: Dict[str, int] = {}  # 连续同名工具计数
         _last_tool_name = ""
 
+        # 真流式:这里是【答案生成点】——消费端(/chat/stream)若在请求上下文里挂了
+        # TokenStream,只在这一处显式取出并传给路由层,让最终回答边生成边流出。
+        # 内部辅助 LLM 调用(意图分类/决策解析等)不传 sink,内部推理绝不漏进用户气泡。
+        try:
+            from core.llm_stream import current_stream as _current_token_stream
+            _token_sink = _current_token_stream()
+        except Exception:  # noqa: BLE001
+            _token_sink = None
+
         async def _inner_loop():
             nonlocal last_response, total_tokens
             nonlocal _total_tool_calls, _last_tool_name
@@ -7909,6 +7918,7 @@ class OpenClawd:
                     tools=tools if tools else None,
                     task_type=task_type,
                     max_tokens=4096,
+                    **({"stream": _token_sink} if _token_sink is not None else {}),
                 )
                 last_response = response
                 total_tokens += response.input_tokens + response.output_tokens
@@ -7916,6 +7926,11 @@ class OpenClawd:
                 if not response.tool_calls:
                     # 无工具调用 → 最终回复
                     break
+
+                # 工具轮:本轮若流出过正文("我来查一下…"之类的过场话),在执行工具、
+                # 进入下一轮生成前作废——最终答案由下一轮重新流,不与过场话拼接。
+                if _token_sink is not None and _token_sink.chars:
+                    _token_sink.reset()
 
                 # 先把 assistant 的 tool_calls 消息追加到 messages
                 assistant_msg: Dict[str, Any] = {

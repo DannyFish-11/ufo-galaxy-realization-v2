@@ -16,12 +16,24 @@ core/speech_output.py — 集中式语音输出(TTS)
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import os
 import time
 from typing import Any, Optional
 
 logger = logging.getLogger("Galaxy.SpeechOutput")
+
+# 真流式请求上下文里已经有 IncrementalSpeaker 在边生成边念时,请求收尾处
+# handle_request 的集中 speak_response 必须闭嘴,否则同一回答念两遍。
+# 用 contextvars:只在建立了增量朗读会话的那条请求链路上抑制,语音回路/
+# ambient/其它请求完全不受影响。
+_suppress_final = contextvars.ContextVar("galaxy_suppress_final_speak", default=False)
+
+
+def suppress_final_speak_in_context() -> None:
+    """在当前请求上下文里抑制集中式 speak_response(增量朗读已接管)。"""
+    _suppress_final.set(True)
 
 
 def speak_enabled() -> bool:
@@ -125,6 +137,8 @@ def speak_response(text: str, *, source: str = "") -> None:
     global _last_text, _last_ts
     if not speak_enabled():
         return
+    if _suppress_final.get():  # 本请求已由增量朗读(边生成边念)接管,不再整段重念
+        return
     text = (text or "").strip()
     if not text:
         return
@@ -217,6 +231,70 @@ def speak_response(text: str, *, source: str = "") -> None:
             asyncio.run(_run())
         except Exception:  # noqa: BLE001
             pass
+
+
+def begin_incremental_speech(*, source: str = "") -> Optional[Any]:
+    """建立【边生成边念】会话(真流式 TTS)。
+
+    供流式消费端(/chat/stream)在 token 开始流出前调用:拿到会话后把每段增量
+    feed() 进来,凑满一句立即合成播放;级联换档/failover/工具轮时 reset();
+    生成结束 finish()。返回 None 表示不可用(朗读关闭/引擎缺失/测试来源/无事件
+    循环),调用方直接跳过即可——一切行为退回"生成完再念"的旧路径。
+
+    会话建立成功后,调用方【必须】随后在同一请求上下文里执行
+    :func:`suppress_final_speak_in_context`,否则 handle_request 收尾的集中
+    speak_response 会把整段再念一遍。
+    """
+    if not speak_enabled() or source in ("e2e", "test"):
+        return None
+    if not _streaming_enabled():
+        return None  # 用户显式选择整段批处理,尊重
+    engine = _get_engine()
+    if engine is None:
+        return None
+    try:
+        from core.streaming_speech import IncrementalSpeaker
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("IncrementalSpeaker 不可用(降级整段): %s", exc)
+        return None
+    try:
+        from core.lumiv_websocket_bridge import set_ai_speaking as _set_speaking
+    except Exception:  # noqa: BLE001
+        _set_speaking = None  # type: ignore
+
+    def _rm(path: str) -> None:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+    async def _synth(chunk: str) -> str:
+        return await engine.synthesize(chunk)
+
+    async def _play(path: str) -> None:
+        await engine._play_audio(path)
+        _rm(path)
+
+    async def _stop() -> None:
+        await engine.stop()
+
+    speaker = IncrementalSpeaker(
+        _synth, _play, stop=_stop, on_speaking=_set_speaking, discard=_rm,
+    )
+    if not speaker.start():
+        return None  # 无运行中事件循环(同步环境),降级整段
+    global _active_speaker
+    _active_speaker = speaker  # 供 barge-in(interrupt_speech)掐断
+
+    def _clear_active(_task) -> None:
+        global _active_speaker
+        if _active_speaker is speaker:
+            _active_speaker = None
+    try:
+        speaker._player_task.add_done_callback(_clear_active)
+    except Exception:  # noqa: BLE001
+        pass
+    return speaker
 
 
 def interrupt_speech() -> None:
