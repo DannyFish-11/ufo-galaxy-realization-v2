@@ -453,11 +453,19 @@ class TestShellCoreBoundary:
         assert hasattr(DesktopPresenceRuntime, "snapshot_continuous_perception")
         assert callable(DesktopPresenceRuntime.snapshot_continuous_perception)
 
-    def test_snapshot_continuous_perception_returns_none_when_bus_not_running(self):
+    def test_snapshot_continuous_perception_returns_none_when_bus_opted_out(self):
+        # 连续宿主感知现为规范默认路径(MULTIMODAL_INGEST_CANONICAL_
+        # DEFAULT_PATH,裸构造 runtime 即自动起 bus);"裸构造=无 bus" 是
+        # 默认开之前的退役契约。text-only/受限部署是显式 opt-out——钉
+        # opt-out 形态下 snapshot 返回 None。
+        from unittest.mock import patch
         from core.desktop_presence_runtime import DesktopPresenceRuntime
-        runtime = DesktopPresenceRuntime()
-        result = runtime.snapshot_continuous_perception()
-        # Without an active ingest bus, returns None
+        with patch.object(DesktopPresenceRuntime, "_try_start_ingest_bus",
+                          lambda self: None):
+            runtime = DesktopPresenceRuntime()
+        with patch("core.multimodal.ingest_runtime.get_ingest_bus",
+                   return_value=None):
+            result = runtime.snapshot_continuous_perception()
         assert result is None
 
     def test_openclawd_has_build_canonical_perception_state_helper(self):
@@ -634,14 +642,18 @@ class TestOpenClawdIntegration:
             return {"success": True, "response": "ok", "intent": "chat",
                     "metadata": {}, "execution_path": "local"}
 
-        with patch.object(oc, "_get_kernel", return_value=None):
-            with patch.object(oc, "sync_device_capabilities", return_value=0):
-                with patch.object(oc, "_parse_intent", return_value=None):
-                    with patch.object(oc, "_dispatch_chat", side_effect=_mock_chat):
-                        result = await oc.process(
-                            message="hello",
-                            runtime_session_id="rs-cps-test",
-                        )
+        # 连续感知默认开(规范路径):text-only 形态须显式 opt-out,
+        # 否则进程内已存在的 ingest bus 会让 has_continuous_perception=True。
+        with patch("core.multimodal.ingest_runtime.get_ingest_bus",
+                   return_value=None):
+            with patch.object(oc, "_get_kernel", return_value=None):
+                with patch.object(oc, "sync_device_capabilities", return_value=0):
+                    with patch.object(oc, "_parse_intent", return_value=None):
+                        with patch.object(oc, "_dispatch_chat", side_effect=_mock_chat):
+                            result = await oc.process(
+                                message="hello",
+                                runtime_session_id="rs-cps-test",
+                            )
 
         assert result.get("success") is True
         meta = result.get("metadata", {})

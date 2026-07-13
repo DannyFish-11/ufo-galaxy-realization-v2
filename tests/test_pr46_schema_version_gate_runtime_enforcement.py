@@ -373,6 +373,14 @@ class TestTaskResultGateEnforcement:
                 "core.durable_result_idempotency.record_result_idempotency",
                 return_value=None,
             ),
+            # 本类钉的是 schema 门语义,不是真相链选择:统一 ingress 正常
+            # 运行时 legacy 真相链被有意跳过(if not _unified_result_
+            # ingress_ran)。令 ingress 不可用,走"falls back to legacy
+            # truth chain"分支,使 _run_task_result_truth_chain 可观察。
+            patch(
+                "core.unified_result_ingress.ingest_result_async",
+                side_effect=RuntimeError("ingress unavailable (test)"),
+            ),
         ):
             self._run(handle_task_result(bridge, _make_websocket(), message))
 
@@ -441,6 +449,14 @@ class TestTaskResultGateEnforcement:
             patch(
                 "core.durable_result_idempotency.record_result_idempotency",
                 return_value=None,
+            ),
+            # 本类钉的是 schema 门语义,不是真相链选择:统一 ingress 正常
+            # 运行时 legacy 真相链被有意跳过(if not _unified_result_
+            # ingress_ran)。令 ingress 不可用,走"falls back to legacy
+            # truth chain"分支,使 _run_task_result_truth_chain 可观察。
+            patch(
+                "core.unified_result_ingress.ingest_result_async",
+                side_effect=RuntimeError("ingress unavailable (test)"),
             ),
         ):
             self._run(handle_task_result(bridge, _make_websocket(), message))

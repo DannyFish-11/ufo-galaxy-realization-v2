@@ -378,17 +378,56 @@ def _check_runtime_contract(main_py: Path) -> Tuple[bool, bool]:
     return bool(_HEALTH_PATTERNS.search(content)), bool(_STATUS_PATTERNS.search(content))
 
 
+_GIT_TRACKED_CACHE: Optional[frozenset] = None
+
+
+def _git_tracked_paths(repo_root: Path) -> frozenset:
+    """Return the set of git-tracked relative paths (cached; empty on failure)."""
+    global _GIT_TRACKED_CACHE  # noqa: PLW0603
+    if _GIT_TRACKED_CACHE is None:
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["git", "ls-files"],
+                cwd=str(repo_root),
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            _GIT_TRACKED_CACHE = frozenset(
+                line.strip() for line in out.stdout.splitlines() if line.strip()
+            )
+        except Exception:
+            _GIT_TRACKED_CACHE = frozenset()
+    return _GIT_TRACKED_CACHE
+
+
 def _check_hygiene(node_dir: Path) -> List[str]:
     """
     Return a list of runtime-generated artifact paths found directly inside
     the node directory (non-recursive scan).
+
+    Git 感知(与 check_repo_hygiene 同一裁决):测试/运行进程会在 import
+    时生成 __pycache__ 等产物,这类**未被 git 跟踪**的本地产物不算仓库
+    卫生违规;被 git 跟踪(即被提交进仓库)的运行时产物才是真违规。
     """
     violations: List[str] = []
     try:
+        repo_root = node_dir.parent.parent
+        tracked = _git_tracked_paths(repo_root)
         for child in node_dir.iterdir():
-            if child.name in _HYGIENE_NAMES:
-                violations.append(child.name)
-            elif child.suffix in _HYGIENE_SUFFIXES:
+            is_artifact = (
+                child.name in _HYGIENE_NAMES or child.suffix in _HYGIENE_SUFFIXES
+            )
+            if not is_artifact:
+                continue
+            rel = child.relative_to(repo_root).as_posix()
+            if child.is_dir():
+                child_tracked = any(t.startswith(rel + "/") for t in tracked)
+            else:
+                child_tracked = rel in tracked
+            if child_tracked or not tracked:
+                # tracked 为空集 == git 不可用:保守起见退回原行为(全报)。
                 violations.append(child.name)
     except Exception:
         pass

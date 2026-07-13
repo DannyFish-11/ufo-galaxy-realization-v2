@@ -318,7 +318,9 @@ def test_34_run_audit_every_entry_has_valid_action(audit_report):
 
 
 def test_35_run_audit_nominal_count_gte_130(audit_report):
-    assert audit_report.nominal_count >= 130
+    # 节点数收敛为 125(全量审计口径,见 node_dependencies.json)——
+    # 130 是收敛前的旧地板。
+    assert audit_report.nominal_count >= 125
 
 
 def test_36_run_audit_orchestrated_count_gte_90(audit_report):
