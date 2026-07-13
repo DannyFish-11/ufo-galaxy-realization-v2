@@ -892,6 +892,42 @@ class OllamaAdapter(BaseProviderAdapter):
             out.append(new_m)
         return out
 
+    @staticmethod
+    def _normalize_tool_calls(raw_calls: Any) -> Optional[List[Dict]]:
+        """Ollama 原生 tool_calls → OpenAI 形状(下游 ReAct 统一按此消费)。
+
+        差异:Ollama 的 function.arguments 是 **dict**(OpenAI 是 JSON 字符串),
+        且不带 id。这里统一转字符串 + 合成 id,让 openclawd 的
+        ``json.loads(fn["arguments"])`` 两家通吃。
+        """
+        if not raw_calls:
+            return None
+        out: List[Dict] = []
+        for i, tc in enumerate(raw_calls):
+            fn = (tc or {}).get("function") or {}
+            args = fn.get("arguments")
+            if isinstance(args, (dict, list)):
+                args = json.dumps(args, ensure_ascii=False)
+            elif not isinstance(args, str):
+                args = "{}"
+            out.append({
+                "id": tc.get("id") or f"ollama_call_{i}_{fn.get('name', '')}",
+                "type": "function",
+                "function": {"name": fn.get("name", ""), "arguments": args},
+            })
+        return out or None
+
+    @staticmethod
+    def _is_tools_unsupported_error(exc: Exception) -> bool:
+        """Ollama 对无工具模板的模型(如 gemma 系)回 400 'does not support tools'。"""
+        try:
+            if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+                return (exc.response.status_code == 400
+                        and "tool" in exc.response.text.lower())
+        except Exception:  # noqa: BLE001
+            pass
+        return False
+
     async def chat(self, messages, model, tools=None,
                    temperature=0.7, max_tokens=4096,
                    response_format=None, **kwargs) -> LLMResponse:
@@ -905,13 +941,29 @@ class OllamaAdapter(BaseProviderAdapter):
             _keep_alive = int(_keep_alive)
         except (TypeError, ValueError):
             pass
+        _options: Dict[str, Any] = {"temperature": temperature, "num_predict": max_tokens}
+        # num_ctx 显式设置:系统提示+工具定义+记忆+历史很容易超过模型默认上下文
+        # (常为 4096),一旦溢出 Ollama 滑窗截断 → 前缀 KV 缓存每轮全废 → 每轮
+        # ReAct 全量重预填,CPU 机上就是"越聊越慢"。默认 8192;设 0/空 则不传
+        # (回到模型默认)。
+        try:
+            _num_ctx = int(os.environ.get("GALAXY_OLLAMA_NUM_CTX", "8192"))
+            if _num_ctx > 0:
+                _options["num_ctx"] = _num_ctx
+        except (TypeError, ValueError):
+            _options["num_ctx"] = 8192
         body = {
             "model": model,
             "messages": self._to_ollama_messages(messages),
             "stream": False,
-            "options": {"temperature": temperature, "num_predict": max_tokens},
+            "options": _options,
             "keep_alive": _keep_alive,
         }
+        # 原生 function calling:Ollama /api/chat 支持 OpenAI 形状的 tools
+        # (qwen/minicpm/llama3.1 等带工具模板的模型)。此前适配器收了 tools
+        # 却不发——本地主脑从来"看不到"工具,整个 ReAct 工具层对 Ollama 是哑的。
+        if tools:
+            body["tools"] = tools
 
         # 调用点兜底:即使 config.base_url 因某条边缘路径被置空/缺协议头,
         # 也在此归一,绝不把坏 URL 交给 httpx(否则炸 "Request URL is missing
@@ -930,6 +982,20 @@ class OllamaAdapter(BaseProviderAdapter):
                     base=_base, body=body, model=model, sink=_sink,
                 )
             except Exception as exc:  # noqa: BLE001
+                if self._is_tools_unsupported_error(exc) and "tools" in body:
+                    # 模型无工具模板(gemma 系):去工具重试流式——宁可这轮没有
+                    # 工具,也不能整个请求 400 哑掉。上层日志可见,便于用户换模型。
+                    logger.warning(
+                        "Ollama 模型 %s 不支持原生工具,本轮去工具重试"
+                        "(需要工具请换 qwen/minicpm 等带工具模板的模型)", model,
+                    )
+                    body = {k: v for k, v in body.items() if k != "tools"}
+                    try:
+                        return await self._chat_streaming(
+                            base=_base, body=body, model=model, sink=_sink,
+                        )
+                    except Exception as exc2:  # noqa: BLE001
+                        exc = exc2
                 logger.info("Ollama 流式失败,退回非流式: %s", exc)
                 try:
                     _sink.reset()
@@ -937,21 +1003,37 @@ class OllamaAdapter(BaseProviderAdapter):
                     pass
 
         t0 = time.monotonic()
-        resp = await self._post_with_retry(
-            f"{_base}/api/chat",
-            headers={"Content-Type": "application/json"},
-            body=body,
-        )
+        try:
+            resp = await self._post_with_retry(
+                f"{_base}/api/chat",
+                headers={"Content-Type": "application/json"},
+                body=body,
+            )
+        except httpx.HTTPStatusError as exc:
+            if not (self._is_tools_unsupported_error(exc) and "tools" in body):
+                raise
+            logger.warning(
+                "Ollama 模型 %s 不支持原生工具,本轮去工具重试"
+                "(需要工具请换 qwen/minicpm 等带工具模板的模型)", model,
+            )
+            body = {k: v for k, v in body.items() if k != "tools"}
+            resp = await self._post_with_retry(
+                f"{_base}/api/chat",
+                headers={"Content-Type": "application/json"},
+                body=body,
+            )
         latency = (time.monotonic() - t0) * 1000
         data = resp.json()
 
+        _msg = data.get("message", {}) or {}
         return LLMResponse(
-            content=data.get("message", {}).get("content", ""),
+            content=_msg.get("content", ""),
             provider=self.config.name,
             model=model,
             input_tokens=data.get("prompt_eval_count", 0),
             output_tokens=data.get("eval_count", 0),
             latency_ms=latency,
+            tool_calls=self._normalize_tool_calls(_msg.get("tool_calls")),
             raw_response=data,
         )
 
@@ -962,11 +1044,15 @@ class OllamaAdapter(BaseProviderAdapter):
         client = await self._get_client()
         t0 = time.monotonic()
         content_parts: List[str] = []
+        raw_tool_calls: List[Dict] = []
         final: Dict[str, Any] = {}
         async with client.stream(
             "POST", f"{base}/api/chat",
             headers={"Content-Type": "application/json"}, json=stream_body,
         ) as resp:
+            if getattr(resp, "status_code", 200) >= 400:
+                # 让 chat() 的"模型不支持工具 → 去工具重试"能拿到响应体判因
+                await resp.aread()
             resp.raise_for_status()
             async for line in resp.aiter_lines():
                 line = (line or "").strip()
@@ -976,10 +1062,16 @@ class OllamaAdapter(BaseProviderAdapter):
                     chunk = json.loads(line)
                 except (ValueError, TypeError):
                     continue
-                piece = (chunk.get("message") or {}).get("content", "")
+                _cmsg = chunk.get("message") or {}
+                piece = _cmsg.get("content", "")
                 if piece:
                     content_parts.append(piece)
                     sink.feed(piece)
+                # 工具调用块:Ollama 流式在(通常是末尾的)块上整只给出
+                # message.tool_calls,不是 OpenAI 式碎片增量——直接收集,
+                # 绝不喂 sink(工具调用不是正文)。
+                if _cmsg.get("tool_calls"):
+                    raw_tool_calls.extend(_cmsg["tool_calls"])
                 if chunk.get("done"):
                     final = chunk
         latency = (time.monotonic() - t0) * 1000
@@ -990,6 +1082,7 @@ class OllamaAdapter(BaseProviderAdapter):
             input_tokens=int(final.get("prompt_eval_count", 0) or 0),
             output_tokens=int(final.get("eval_count", 0) or 0),
             latency_ms=latency,
+            tool_calls=self._normalize_tool_calls(raw_tool_calls),
             raw_response=final or None,
         )
 

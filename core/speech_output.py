@@ -147,7 +147,24 @@ def _get_engine() -> Optional[Any]:
             logger.info("SAPI TTS 不可用: %s", exc)
             return None
 
-    if choice == "melo":
+    def _try_indextts():
+        if "IndexTTSEngine" in _failed_engine_types:
+            return None
+        try:
+            from core.tts.indextts_engine import IndexTTSEngine
+            eng = IndexTTSEngine()
+            return eng if eng.available() else None
+        except Exception as exc:  # noqa: BLE001
+            logger.info("IndexTTS 不可用: %s", exc)
+            return None
+
+    if choice == "indextts":
+        # 质量档(零样本克隆+情绪,自回归大模型):仅显式选择才启用,不进
+        # 任何默认回退链——CPU 合成一句数秒到数十秒,拿它当日常对话嗓音会
+        # 显著加重延迟。不可用/运行期失败仍落回默认链,绝不整段静默。
+        _engine = (_try_indextts() or _try_edge() or _try_melo()
+                   or _try_piper() or _try_kokoro() or _try_sapi())
+    elif choice == "melo":
         _engine = (_try_melo() or _try_piper() or _try_edge()
                    or _try_kokoro() or _try_sapi())
     elif choice == "piper":

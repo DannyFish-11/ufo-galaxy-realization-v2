@@ -277,7 +277,7 @@ class GalaxyRenderer {
         text = 'Galaxy';
       } else if (this.currentDepth < 0.65) {
         progress = 1;
-        text = this.speaking ? '倾听中...' : 'Galaxy';
+        text = this.speaking ? '说话中...' : 'Galaxy';
       } else {
         progress = Math.max(0, 1 - (this.currentDepth - 0.65) / 0.18);
         text = '执行中...';

@@ -131,11 +131,15 @@ class GalaxyPresenceBridge:
 
     # ── StateEventBus 回调 ──
 
+    # 注:speaking 的生命周期由 core.speech_output 的 set_ai_speaking(播放起止)
+    # 全权管理——相位切换【绝不】把它踩掉。此前 phase.silent/manifest 一到就强制
+    # _speaking=False:响应文本一好 runtime 就回 SILENT,而 TTS 还在播,结果
+    # "嘴在动、动画已灭"。相位事件只管相位。
+
     def _on_phase_silent(self, payload: Dict[str, Any]) -> None:
         self._current_mode = "static"
         self._current_depth = MODE_DEPTH_MAP["static"]
         self._intent = 0.0
-        self._speaking = False
         asyncio.create_task(self._broadcast_state())
 
     def _on_phase_liminal(self, event: Any) -> None:
@@ -144,14 +148,13 @@ class GalaxyPresenceBridge:
         self._current_depth = MODE_DEPTH_MAP["liminal"]
         # intent 从 payload 中提取，如果没有则默认 0.5
         self._intent = p.get("intent_strength", 0.5)
-        self._speaking = p.get("speaking", False)
+        self._speaking = p.get("speaking", self._speaking)
         asyncio.create_task(self._broadcast_state())
 
     def _on_phase_manifest(self, payload: Dict[str, Any]) -> None:
         self._current_mode = "manifest"
         self._current_depth = MODE_DEPTH_MAP["manifest"]
         self._intent = 1.0
-        self._speaking = False
         asyncio.create_task(self._broadcast_state())
 
     def _on_intent_update(self, event: Any) -> None:
@@ -350,12 +353,18 @@ class GalaxyPresenceBridge:
 
     def _build_message(self) -> Dict[str, Any]:
         """构建与前端兼容的 state_event 消息。"""
+        # 说话地板:TTS 还在播时即使相位已回 SILENT(depth 0.05),也维持一个
+        # 可见的在场深度——说完(set_ai_speaking(False) 广播)才落回相位深度,
+        # 由渲染端弹簧自然缓落。消除"话没说完、画面先睡"的割裂。
+        _depth = self._current_depth
+        if self._speaking:
+            _depth = max(_depth, MODE_DEPTH_MAP["liminal"])
         return {
             "type": "state_event",
             "event_category": "ambient_tick",
             "payload": {
                 "phase": self._current_mode,
-                "depth_factor": round(self._current_depth, 4),
+                "depth_factor": round(_depth, 4),
                 "intent": round(self._intent, 4),
                 "speaking": self._speaking,
                 "mode": self._current_mode,

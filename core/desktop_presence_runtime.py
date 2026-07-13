@@ -93,6 +93,7 @@ Usage::
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
 from enum import Enum
@@ -785,6 +786,37 @@ class DesktopPresenceRuntime:
         except Exception as _ph_err:
             logger.debug("policy hint resolution failed (non-fatal): %s", _ph_err)
 
+        # LIMINAL → MANIFEST 的触发点(三态语义对齐):
+        # MANIFEST = 主体开始【真实落手/对外表达】。此前拿到执行车道就立刻
+        # advance——LLM 的整段思考(CPU 机上可达数十秒)全被标成 manifest,
+        # 阈限态几毫秒就被跳过,推演/认知期(含 Gecko 预演)在视觉上不存在。
+        # 现在:流式请求在**第一个 token 流出**的瞬间才进 MANIFEST,思考期
+        # 停留在 LIMINAL(continuum tick 的意图呼吸映射正好驱动"思考中"动画);
+        # 非流式调用保持原时序(advance 后派发)。GALAXY_MANIFEST_ON_FIRST_TOKEN=0
+        # 可整体回退旧行为。
+        def _enter_manifest() -> None:
+            if rsession.tristate is not TriState.LIMINAL:
+                return
+            rsession.advance(TriState.MANIFEST)
+            self._update_presence_mode(
+                tri_state=rsession.tristate.value,
+                task_active=True,
+                sensing_active=bool(multimodal_context) or stream_sensing_active,
+                execution_active=True,
+                user_interaction=source in {"chat", "voice", "operator"},
+            )
+
+        _manifest_sink = None
+        _manifest_orig_on_delta = None
+        if os.environ.get("GALAXY_MANIFEST_ON_FIRST_TOKEN", "1").strip().lower() not in (
+            "0", "false", "no", "off",
+        ):
+            try:
+                from core.llm_stream import current_stream as _current_token_stream
+                _manifest_sink = _current_token_stream()
+            except Exception:  # noqa: BLE001
+                _manifest_sink = None
+
         lane_snapshot = None
         try:
             lane_manager = get_session_execution_lane_manager()
@@ -792,15 +824,19 @@ class DesktopPresenceRuntime:
                 conversation_session_id,
                 control_session_id=control_session_id,
             ) as lane:
-                # LIMINAL → MANIFEST: OpenClawd has branched; subject enters manifest
-                rsession.advance(TriState.MANIFEST)
-                self._update_presence_mode(
-                    tri_state=rsession.tristate.value,
-                    task_active=True,
-                    sensing_active=bool(multimodal_context) or stream_sensing_active,
-                    execution_active=True,
-                    user_interaction=source in {"chat", "voice", "operator"},
-                )
+                if _manifest_sink is not None:
+                    # 首输出驱动:包装 sink 的 on_delta,第一段文本流出即进 MANIFEST。
+                    # 请求结束(下面 finally)恢复原回调,绝不泄漏到请求之外。
+                    _manifest_orig_on_delta = _manifest_sink._on_delta
+
+                    def _hooked_on_delta(text: str, _orig=_manifest_orig_on_delta) -> None:
+                        _enter_manifest()
+                        _orig(text)
+
+                    _manifest_sink._on_delta = _hooked_on_delta
+                else:
+                    # 非流式:保持原时序(LIMINAL → MANIFEST → 派发)
+                    _enter_manifest()
                 _dispatch_presence_runtime_hint = self._current_presence_runtime_hint()
                 _presence_mode = _dispatch_presence_runtime_hint["presence_mode"]
                 _stream_runtime_status = (
@@ -852,6 +888,18 @@ class DesktopPresenceRuntime:
                 "error": str(exc),
             }
         finally:
+            # 恢复被首输出钩子包装的 sink 回调(请求结束后 sink 可能还被
+            # 消费端复用于伪流式兜底,绝不让钩子在死会话上触发)
+            if _manifest_sink is not None and _manifest_orig_on_delta is not None:
+                try:
+                    _manifest_sink._on_delta = _manifest_orig_on_delta
+                except Exception:  # noqa: BLE001
+                    pass
+            # 整个请求零输出(异常/空响应):补齐 canonical 相位序
+            # LIMINAL→MANIFEST→SILENT,下游消费者(审计/跨设备同步)的
+            # 三段轨迹不变——与旧行为等价,不多不少。
+            if rsession.tristate is TriState.LIMINAL:
+                _enter_manifest()
             # MANIFEST → SILENT: subject returns to rest (even on error)
             rsession.advance(TriState.SILENT)
             self._update_presence_mode(
