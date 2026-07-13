@@ -846,7 +846,134 @@ class AnthropicAdapter(BaseProviderAdapter):
 
 
 class OllamaAdapter(BaseProviderAdapter):
-    """Ollama local model adapter"""
+    """Ollama local model adapter
+
+    工具调用双协议:
+      1. **原生 function calling**(qwen/minicpm/llama3.1 等带工具模板的模型):
+         tools 随请求体,解析 message.tool_calls。
+      2. **文本协议兜底**(gemma 系等无工具模板的模型,Ollama 回 400
+         "does not support tools"):把工具清单注入系统消息,约定模型用一行
+         JSON ``{"tool_call": {"name": ..., "arguments": {...}}}`` 表达调用,
+         从回复文本解析并归一成 OpenAI 形状——gemma 也能真正调工具
+         (表达力略逊原生,但完整可用)。一旦某模型判定为无模板,按模型名
+         缓存,后续请求直接走文本协议,不再吃 400 往返。
+    """
+
+    #: 已判定不支持原生工具的模型(进程内缓存,免每次吃 400)
+    _text_protocol_models: set = set()
+
+    _TEXT_TOOL_INSTRUCTION = (
+        "你可以调用以下工具来完成任务。工具清单(JSON Schema):\n{tool_specs}\n"
+        "调用规则:需要调用工具时,只输出一行 JSON(不要任何其它文字、"
+        "不要代码围栏):\n"
+        '{{"tool_call": {{"name": "<工具名>", "arguments": {{<参数>}}}}}}\n'
+        "工具结果会以 [工具结果] 消息回给你;不需要工具时直接正常回答。"
+    )
+
+    @classmethod
+    def _tools_prompt(cls, tools: List[Dict]) -> str:
+        specs = []
+        for t in tools or []:
+            fn = t.get("function") if isinstance(t, dict) else None
+            if isinstance(fn, dict):
+                specs.append({
+                    "name": fn.get("name", ""),
+                    "description": (fn.get("description") or "")[:200],
+                    "parameters": fn.get("parameters") or {},
+                })
+        return cls._TEXT_TOOL_INSTRUCTION.format(
+            tool_specs=json.dumps(specs, ensure_ascii=False))
+
+    @classmethod
+    def _inject_text_tools(cls, messages: List[Dict], tools: List[Dict]) -> List[Dict]:
+        """把工具清单作为系统消息注入(紧跟首条 system 之后,前缀尽量稳定)。"""
+        tool_msg = {"role": "system", "content": cls._tools_prompt(tools)}
+        out = list(messages)
+        idx = 1 if (out and out[0].get("role") == "system") else 0
+        out.insert(idx, tool_msg)
+        return out
+
+    @staticmethod
+    def _textualize_tool_history(messages: List[Dict]) -> List[Dict]:
+        """文本协议模型看不懂 role=tool / assistant.tool_calls——把工具轮历史
+        转成纯文本(assistant 的调用还原成它当初输出的 JSON 行;tool 结果转
+        user 的 [工具结果] 消息),模板不炸、上下文语义不丢。"""
+        out: List[Dict] = []
+        for m in messages:
+            if not isinstance(m, dict):
+                out.append(m)
+                continue
+            role = m.get("role")
+            if role == "assistant" and m.get("tool_calls"):
+                lines = []
+                for tc in m["tool_calls"]:
+                    fn = (tc or {}).get("function") or {}
+                    args = fn.get("arguments")
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except (ValueError, TypeError):
+                            args = {}
+                    lines.append(json.dumps(
+                        {"tool_call": {"name": fn.get("name", ""),
+                                       "arguments": args or {}}},
+                        ensure_ascii=False))
+                content = (m.get("content") or "").strip()
+                out.append({"role": "assistant",
+                            "content": (content + "\n" if content else "") + "\n".join(lines)})
+            elif role == "tool":
+                out.append({"role": "user",
+                            "content": f"[工具结果] {m.get('content', '')}"})
+            else:
+                out.append(m)
+        return out
+
+    @staticmethod
+    def _parse_text_tool_calls(content: str) -> Optional[List[Dict]]:
+        """从回复文本解析 {"tool_call": {...}} 调用(容忍前后缀文字/代码围栏),
+        归一成 OpenAI 形状。没有合法调用返回 None(当普通回答)。"""
+        if not content or '"tool_call"' not in content:
+            return None
+        calls: List[Dict] = []
+        i = 0
+        while True:
+            k = content.find('"tool_call"', i)
+            if k < 0:
+                break
+            start = content.rfind("{", 0, k)
+            if start < 0:
+                i = k + 11
+                continue
+            depth = 0
+            end = -1
+            for j in range(start, len(content)):
+                if content[j] == "{":
+                    depth += 1
+                elif content[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = j
+                        break
+            if end < 0:
+                break
+            try:
+                obj = json.loads(content[start:end + 1])
+                tc = obj.get("tool_call") or {}
+                name = tc.get("name", "")
+                if name:
+                    calls.append({
+                        "id": f"ollama_text_call_{len(calls)}_{name}",
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "arguments": json.dumps(
+                                tc.get("arguments") or {}, ensure_ascii=False),
+                        },
+                    })
+            except (ValueError, TypeError):
+                pass
+            i = end + 1 if end >= 0 else k + 11
+        return calls or None
 
     @staticmethod
     def _to_ollama_messages(messages):
@@ -972,6 +1099,15 @@ class OllamaAdapter(BaseProviderAdapter):
         if not _base.startswith(("http://", "https://")):
             _base = f"http://{_base}"
 
+        # 已知无工具模板的模型(gemma 系,进程内缓存):直接走文本协议,
+        # 不再吃一次 400 往返。
+        if tools and model in type(self)._text_protocol_models:
+            return await self._chat_text_protocol(
+                base=_base, messages=messages, model=model, tools=tools,
+                options=_options, keep_alive=_keep_alive,
+                sink=kwargs.get("stream"),
+            )
+
         # 真流式:消费端挂了 TokenStream 时走 NDJSON 流(CPU 慢速生成下体感差异
         # 最大的一段——首句几秒就能上屏,不用等整段几十秒)。失败作废已流出内容,
         # 退回下面的非流式老路径。
@@ -983,19 +1119,19 @@ class OllamaAdapter(BaseProviderAdapter):
                 )
             except Exception as exc:  # noqa: BLE001
                 if self._is_tools_unsupported_error(exc) and "tools" in body:
-                    # 模型无工具模板(gemma 系):去工具重试流式——宁可这轮没有
-                    # 工具,也不能整个请求 400 哑掉。上层日志可见,便于用户换模型。
-                    logger.warning(
-                        "Ollama 模型 %s 不支持原生工具,本轮去工具重试"
-                        "(需要工具请换 qwen/minicpm 等带工具模板的模型)", model,
+                    # 模型无工具模板(gemma 系):切文本协议重试——工具清单注入
+                    # 提示词、从文本解析 JSON 调用,gemma 也能真正调工具。
+                    logger.info(
+                        "Ollama 模型 %s 不支持原生工具,切文本协议工具兜底", model,
                     )
-                    body = {k: v for k, v in body.items() if k != "tools"}
                     try:
-                        return await self._chat_streaming(
-                            base=_base, body=body, model=model, sink=_sink,
-                        )
-                    except Exception as exc2:  # noqa: BLE001
-                        exc = exc2
+                        _sink.reset()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    return await self._chat_text_protocol(
+                        base=_base, messages=messages, model=model, tools=tools,
+                        options=_options, keep_alive=_keep_alive, sink=_sink,
+                    )
                 logger.info("Ollama 流式失败,退回非流式: %s", exc)
                 try:
                     _sink.reset()
@@ -1012,15 +1148,13 @@ class OllamaAdapter(BaseProviderAdapter):
         except httpx.HTTPStatusError as exc:
             if not (self._is_tools_unsupported_error(exc) and "tools" in body):
                 raise
-            logger.warning(
-                "Ollama 模型 %s 不支持原生工具,本轮去工具重试"
-                "(需要工具请换 qwen/minicpm 等带工具模板的模型)", model,
+            logger.info(
+                "Ollama 模型 %s 不支持原生工具,切文本协议工具兜底", model,
             )
-            body = {k: v for k, v in body.items() if k != "tools"}
-            resp = await self._post_with_retry(
-                f"{_base}/api/chat",
-                headers={"Content-Type": "application/json"},
-                body=body,
+            return await self._chat_text_protocol(
+                base=_base, messages=messages, model=model, tools=tools,
+                options=_options, keep_alive=_keep_alive,
+                sink=kwargs.get("stream"),
             )
         latency = (time.monotonic() - t0) * 1000
         data = resp.json()
@@ -1034,6 +1168,54 @@ class OllamaAdapter(BaseProviderAdapter):
             output_tokens=data.get("eval_count", 0),
             latency_ms=latency,
             tool_calls=self._normalize_tool_calls(_msg.get("tool_calls")),
+            raw_response=data,
+        )
+
+    async def _chat_text_protocol(
+        self, *, base, messages, model, tools,
+        options, keep_alive, sink=None,
+    ) -> LLMResponse:
+        """文本协议工具兜底:无工具模板模型(gemma 系)的完整工具调用通路。
+
+        - 工具清单注入系统消息;工具轮历史文本化(模板不炸);
+        - 非流式请求(避免半截 JSON 泄进面板气泡);
+        - 回复里解析到 {"tool_call": ...} → 归一成 OpenAI 形状返回给 ReAct;
+          没解析到 → 普通回答,整段补喂 sink(伪流式,面板仍有字)。
+        """
+        type(self)._text_protocol_models.add(model)
+        msgs = self._inject_text_tools(self._textualize_tool_history(messages), tools)
+        body = {
+            "model": model,
+            "messages": self._to_ollama_messages(msgs),
+            "stream": False,
+            "options": options,
+            "keep_alive": keep_alive,
+        }
+        t0 = time.monotonic()
+        resp = await self._post_with_retry(
+            f"{base}/api/chat",
+            headers={"Content-Type": "application/json"},
+            body=body,
+        )
+        latency = (time.monotonic() - t0) * 1000
+        data = resp.json()
+        _msg = data.get("message", {}) or {}
+        content = _msg.get("content", "") or ""
+        tool_calls = self._parse_text_tool_calls(content)
+        if tool_calls is None and sink is not None:
+            try:
+                sink.feed(content)
+            except Exception:  # noqa: BLE001
+                pass
+        return LLMResponse(
+            # 解析到调用时正文置空:JSON 调用行是协议载荷,不是给用户看的话
+            content="" if tool_calls else content,
+            provider=self.config.name,
+            model=model,
+            input_tokens=data.get("prompt_eval_count", 0),
+            output_tokens=data.get("eval_count", 0),
+            latency_ms=latency,
+            tool_calls=tool_calls,
             raw_response=data,
         )
 

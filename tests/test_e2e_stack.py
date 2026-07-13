@@ -80,27 +80,6 @@ def api_client() -> TestClient:
         yield client
 
 
-@pytest.fixture(scope="module")
-def dashboard_client() -> TestClient:
-    """
-    TestClient backed by the dashboard backend app.
-
-    Exercises the /api/v1/observability/live-status aggregated endpoint
-    introduced in PR-95.
-    """
-    # Avoid importing dashboard.backend.main at module level — it performs
-    # side-effects (ASCII art print, logger setup) that we want scoped.
-    import importlib
-    import types
-
-    # Import the dashboard app object
-    dashboard_main = importlib.import_module("dashboard.backend.main")
-    app = dashboard_main.app
-
-    with TestClient(app, raise_server_exceptions=False) as client:
-        yield client
-
-
 # ---------------------------------------------------------------------------
 # 1. Device registration and capability sync
 # ---------------------------------------------------------------------------
@@ -312,92 +291,13 @@ class TestObservabilityEndpoints:
 # ---------------------------------------------------------------------------
 
 class TestDashboardLiveStatusEndpoint:
-    """
-    Verify that the /api/v1/observability/live-status endpoint added in PR-95
-    returns all four sub-sections required by the front-end LiveStatusPanel.
+    """终态(用户裁决):dashboard/ 整体删除。/api/v1/observability/live-status
+    是退役 dashboard 后端(PR-95)的聚合端点,全仓库无其它定义/消费——随
+    目录一并退役;canonical 观测面由 core 观测路由套件专钉。"""
 
-    This test uses the dashboard backend app directly.
-    """
-
-    def test_live_status_returns_all_sections(
-        self, dashboard_client: TestClient
-    ) -> None:
-        """GET /api/v1/observability/live-status → all four panel sections."""
-        r = dashboard_client.get("/api/v1/observability/live-status")
-        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
-        data: Dict[str, Any] = r.json()
-
-        required_keys = (
-            "timestamp",
-            "capability_load",
-            "gateway_trace",
-            "device_health",
-            "model_route",
+    def test_dashboard_backend_retired(self):
+        import pathlib
+        root = pathlib.Path(__file__).parent.parent
+        assert not (root / "dashboard").exists(), (
+            "dashboard/ 已按用户裁决整体退役删除,不得复活"
         )
-        for key in required_keys:
-            assert key in data, (
-                f"Missing section {key!r} in live-status response: {list(data.keys())}"
-            )
-
-    def test_live_status_capability_load_shape(
-        self, dashboard_client: TestClient
-    ) -> None:
-        """capability_load section has count (int) and tools (list)."""
-        data = dashboard_client.get(
-            "/api/v1/observability/live-status"
-        ).json()
-        cap = data["capability_load"]
-        assert "count" in cap, f"Missing count in capability_load: {cap}"
-        assert "tools" in cap, f"Missing tools in capability_load: {cap}"
-        assert isinstance(cap["count"], int)
-        assert isinstance(cap["tools"], list)
-
-    def test_live_status_device_health_shape(
-        self, dashboard_client: TestClient
-    ) -> None:
-        """device_health section has registered (int), online (int), devices (list)."""
-        data = dashboard_client.get(
-            "/api/v1/observability/live-status"
-        ).json()
-        dh = data["device_health"]
-        assert "registered" in dh, f"Missing registered in device_health: {dh}"
-        assert "online" in dh, f"Missing online in device_health: {dh}"
-        assert "devices" in dh, f"Missing devices in device_health: {dh}"
-        assert isinstance(dh["registered"], int)
-        assert isinstance(dh["online"], int)
-        assert isinstance(dh["devices"], list)
-
-    def test_live_status_model_route_shape(
-        self, dashboard_client: TestClient
-    ) -> None:
-        """model_route section has default_model, active_provider, fallbacks."""
-        data = dashboard_client.get(
-            "/api/v1/observability/live-status"
-        ).json()
-        mr = data["model_route"]
-        assert "default_model" in mr, f"Missing default_model in model_route: {mr}"
-        assert "active_provider" in mr, f"Missing active_provider in model_route: {mr}"
-        assert "fallbacks" in mr, f"Missing fallbacks in model_route: {mr}"
-        assert isinstance(mr["fallbacks"], list)
-
-    def test_live_status_gateway_trace_shape(
-        self, dashboard_client: TestClient
-    ) -> None:
-        """gateway_trace section has stats (dict) and recent_calls (list)."""
-        data = dashboard_client.get(
-            "/api/v1/observability/live-status"
-        ).json()
-        gt = data["gateway_trace"]
-        assert "stats" in gt, f"Missing stats in gateway_trace: {gt}"
-        assert "recent_calls" in gt, f"Missing recent_calls in gateway_trace: {gt}"
-        assert isinstance(gt["recent_calls"], list)
-
-    def test_live_status_timestamp_is_numeric(
-        self, dashboard_client: TestClient
-    ) -> None:
-        """timestamp must be a positive number (Unix epoch)."""
-        data = dashboard_client.get(
-            "/api/v1/observability/live-status"
-        ).json()
-        assert isinstance(data["timestamp"], (int, float))
-        assert data["timestamp"] > 0

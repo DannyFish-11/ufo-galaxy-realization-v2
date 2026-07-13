@@ -198,19 +198,17 @@ class TestLegacyResidueIsolation:
     """Legacy surfaces must carry isolation markers and not claim active authority."""
 
     def test_dashboard_legacy_surface_md_exists(self) -> None:
-        p = _repo_file("dashboard/LEGACY_SURFACE.md")
-        assert p.exists(), "dashboard/LEGACY_SURFACE.md must exist"
+        # 终态(用户裁决):dashboard/ 整体删除(ui_surface_authority: DELETED,
+        # do not recreate),过渡期隔离标记随之退役,不得复活。
+        assert not _repo_file("dashboard").exists(), "dashboard/ 已退役删除,不得复活"
 
     def test_dashboard_legacy_surface_md_contains_legacy_marker(self) -> None:
-        content = _repo_file("dashboard/LEGACY_SURFACE.md").read_text().lower()
-        assert "legacy" in content
+        assert not _repo_file("dashboard/LEGACY_SURFACE.md").exists()
 
     def test_dashboard_legacy_surface_md_references_canonical_surface(self) -> None:
-        content = _repo_file("dashboard/LEGACY_SURFACE.md").read_text()
-        # 遗留面已改指【规范面板端点】(PR-PANEL-CANONICAL),不再指 status_board_v2。
-        assert "canonical panel" in content or "PR-PANEL-CANONICAL" in content, (
-            "dashboard/LEGACY_SURFACE.md must point to the canonical replacement"
-        )
+        # canonical 面板端点契约仍由 core 路由套件专钉;此处只钉退役终态
+        assert not _repo_file("dashboard/frontend").exists()
+
 
     def test_status_board_py_fully_decommissioned(self) -> None:
         # 收口已推进到终态:windows_client/status_board.py 被整体拆除,

@@ -175,20 +175,17 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
     # Group 4: dashboard demotion
     # ------------------------------------------------------------------
 
+    # 终态(用户裁决):dashboard/ 整体删除(ui_surface_authority: DELETED,
+    # do not recreate)。原哨兵/文档标记检查随之收敛为退役终态钉。
     def test_20_dashboard_has_legacy_authority_sentinel(self):
-        content = _read("dashboard/backend/main.py")
-        self.assertIn("DASHBOARD_LEGACY_SURFACE_AUTHORITY", content,
-                      "dashboard/backend/main.py must define DASHBOARD_LEGACY_SURFACE_AUTHORITY")
+        self.assertFalse(_exists("dashboard/backend/main.py"),
+                         "dashboard/backend/main.py 已随目录退役删除,不得复活")
 
     def test_21_dashboard_legacy_sentinel_contains_legacy_surface(self):
-        content = _read("dashboard/backend/main.py")
-        self.assertIn("LEGACY_SURFACE", content,
-                      "DASHBOARD_LEGACY_SURFACE_AUTHORITY must contain 'LEGACY_SURFACE'")
+        self.assertFalse(_exists("dashboard"))
 
     def test_22_dashboard_docstring_contains_legacy_marker(self):
-        content = _read("dashboard/backend/main.py")
-        self.assertIn("LEGACY UI SURFACE", content,
-                      "dashboard/backend/main.py docstring must contain 'LEGACY UI SURFACE'")
+        self.assertFalse(_exists("dashboard/LEGACY_SURFACE.md"))
 
     # ------------------------------------------------------------------
     # Group 5: monitoring.py does NOT own health/diagnostics routes
@@ -248,7 +245,9 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
         client = TestClient(app)
 
         # The route should exist (200 or 5xx is fine — we test route registration)
-        paths = [r.path for r in app.routes]
+        # FastAPI 0.137 懒挂载:经统一助手摊平后再内省(见 route_introspection)
+        from tests.route_introspection import route_paths
+        paths = route_paths(app)
         self.assertIn("/api/v1/health/unified", paths,
                       "/api/v1/health/unified must be registered in aggregated router")
 
@@ -261,7 +260,8 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
         router = create_api_routes()
         app.include_router(router)
 
-        paths = [r.path for r in app.routes]
+        from tests.route_introspection import route_paths
+        paths = route_paths(app)
         self.assertIn("/api/v1/concurrency/status", paths,
                       "/api/v1/concurrency/status must be registered in aggregated router")
 
