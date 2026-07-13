@@ -414,8 +414,13 @@ class TestTaskLifecycleIntegration:
         env = self._make_envelope()
         mgr.mark_running(env)
 
-        assert len(received) == 1
-        assert received[0].payload["lifecycle_status"] == "running"
+        # Block-1 起为【双发】:旧 payload 事件(带 lifecycle_status) + 类型化
+        # TaskState 事件(emit_state,带 phase 等全字段)。两者同类型不同形状。
+        assert len(received) == 2
+        legacy = [e for e in received if "lifecycle_status" in e.payload]
+        typed = [e for e in received if "phase" in e.payload]
+        assert len(legacy) == 1 and len(typed) == 1
+        assert legacy[0].payload["lifecycle_status"] == "running"
 
     def test_mark_done_emits_task_done(self):
         from core.task_lifecycle import TaskLifecycleManager
@@ -428,8 +433,11 @@ class TestTaskLifecycleIntegration:
         env = mgr.mark_running(env)
         mgr.mark_done(env, result_summary="ok")
 
-        assert len(received) == 1
-        assert received[0].payload["lifecycle_status"] == "done"
+        # 双发契约(见 test_mark_running_emits_task_started 注释)。
+        assert len(received) == 2
+        legacy = [e for e in received if "lifecycle_status" in e.payload]
+        assert len(legacy) == 1
+        assert legacy[0].payload["lifecycle_status"] == "done"
 
     def test_mark_failed_emits_task_failed(self):
         from core.task_lifecycle import TaskLifecycleManager
@@ -442,8 +450,11 @@ class TestTaskLifecycleIntegration:
         env = mgr.mark_running(env)
         mgr.mark_failed(env, error="something went wrong")
 
-        assert len(received) == 1
-        assert received[0].payload["lifecycle_status"] == "failed"
+        # 双发契约(见 test_mark_running_emits_task_started 注释)。
+        assert len(received) == 2
+        legacy = [e for e in received if "lifecycle_status" in e.payload]
+        assert len(legacy) == 1
+        assert legacy[0].payload["lifecycle_status"] == "failed"
 
     def test_trace_id_carried_in_lifecycle_event(self):
         from core.task_lifecycle import TaskLifecycleManager

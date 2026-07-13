@@ -17,6 +17,50 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _neutralize_capability_inference(monkeypatch):
+    """本套件钉的是【执行器错误语义层】(超时/断连/信封校验的结构化错误码),
+    不是能力门(那由 tests/unit/routing/ 的专门套件覆盖)。PR-CAP-DEFAULT 之后
+    显式 device_id 默认也会从 tool_name 推断能力并走能力图硬门——裸测试环境
+    里能力图为空,所有用例会在到达执行器之前就被 CAPABILITY_MISMATCH 拒掉
+    (本文件此前常年基线红的根因)。把推断中和为"无能力要求",让
+    信封→执行器链路按本套件的本意跑通;能力门语义不受影响,仍由其专门套件钉。"""
+    import core.capability_aware_routing_default as card
+    monkeypatch.setattr(card, "infer_dispatch_capabilities", lambda tool: [])
+    # 第二道门:V3 canonical slot authority(注册有效性/传输存活等多维评估)。
+    # 单测无真实 WebSocket 传输,按 test_pr2_task_envelope_pipeline 的既定钉法
+    # 放行槽评估——本套件钉的是槽门【之后】的执行器错误语义,槽门语义由
+    # test_pr2_task_envelope_pipeline / pr13_failure_domains 等专门套件钉。
+    from core.canonical_dispatch_slot_authority import (
+        CanonicalDispatchSlot,
+        CanonicalDispatchSlotStatus,
+        CanonicalDispatchSlotsResult,
+    )
+    import core.canonical_dispatch_slot_authority as _slot_mod
+
+    def _approve_all(device_ids, execution_mode, **_kw):
+        slots = [
+            CanonicalDispatchSlot(
+                device_id=d,
+                execution_mode=execution_mode,
+                slot_approved=True,
+                status=CanonicalDispatchSlotStatus.SLOT_APPROVED.value,
+                reason="test override — executor-semantics suite",
+            )
+            for d in device_ids
+        ]
+        return CanonicalDispatchSlotsResult(
+            execution_mode=execution_mode,
+            approved_slots=slots,
+            blocked_slots=[],
+            can_proceed=True,
+            block_reason="",
+        )
+
+    monkeypatch.setattr(_slot_mod, "get_canonical_dispatch_slots", _approve_all)
+
+
+
 # ============================================================================
 # 1. route_command — 完整 trace ID
 # ============================================================================

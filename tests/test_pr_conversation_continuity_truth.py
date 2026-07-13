@@ -831,7 +831,9 @@ def test_96_all_dimensions_includes_conversation_continuity():
 
 
 def test_97_all_dimensions_returns_ten():
-    assert len(AcceptanceDimensionId.all_dimensions()) == 10
+    # 维度集有意增长(见 test_pr17_v2_system_final_acceptance_verdict 的说明):
+    # 钉当前精确数,误删被抓住,新增须连同此数一起有意更新。
+    assert len(AcceptanceDimensionId.all_dimensions()) == 18
 
 
 def test_98_from_string_returns_conversation_continuity():

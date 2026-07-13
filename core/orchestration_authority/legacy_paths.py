@@ -945,10 +945,13 @@ def emit_legacy_guardrail(
     status_tag = entry.status.value if entry else "unregistered"
     # PR-R9-CLEAN: Demoted from WARNING to DEBUG to reduce console clutter.
     # Legacy compatibility paths are tracked in __init__.py lifecycle events.
+    # trace_id 补回日志:参数收了却不打,等于丢了本函数存在的关联价值——
+    # 排查"是谁在走遗留路径"时无法回溯到具体请求。
     logger.debug(
-        "LEGACY GUARDRAIL | caller=%r | status=%s | %s",
+        "LEGACY GUARDRAIL | caller=%r | status=%s | trace_id=%s | %s",
         caller,
         status_tag,
+        trace_id or "-",
         recommendation,
     )
 

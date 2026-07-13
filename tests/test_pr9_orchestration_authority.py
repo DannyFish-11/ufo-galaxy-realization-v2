@@ -221,27 +221,28 @@ class TestLegacyGuardrail:
     def test_emit_legacy_guardrail_logs_warning(self, caplog):
         from core.orchestration_authority import emit_legacy_guardrail
 
-        with caplog.at_level(logging.WARNING, logger="Galaxy.OrchestrationAuthority"):
+        # PR-R9-CLEAN 后守卫日志为 DEBUG 级、前缀 "LEGACY GUARDRAIL"。
+        with caplog.at_level(logging.DEBUG, logger="Galaxy.OrchestrationAuthority"):
             emit_legacy_guardrail(
                 "nodes.Node_110_SmartOrchestrator.server",
                 trace_id="trace_test_001",
             )
 
-        assert any("LEGACY PATH GUARDRAIL" in m for m in caplog.messages)
+        assert any("LEGACY GUARDRAIL" in m for m in caplog.messages)
         assert any("trace_test_001" in m for m in caplog.messages)
 
     def test_emit_legacy_guardrail_unregistered_path(self, caplog):
         from core.orchestration_authority import emit_legacy_guardrail
 
-        with caplog.at_level(logging.WARNING, logger="Galaxy.OrchestrationAuthority"):
+        with caplog.at_level(logging.DEBUG, logger="Galaxy.OrchestrationAuthority"):
             emit_legacy_guardrail("some.unregistered.path")
 
-        assert any("LEGACY PATH GUARDRAIL" in m for m in caplog.messages)
+        assert any("LEGACY GUARDRAIL" in m for m in caplog.messages)
 
     def test_emit_legacy_guardrail_override_recommendation(self, caplog):
         from core.orchestration_authority import emit_legacy_guardrail
 
-        with caplog.at_level(logging.WARNING, logger="Galaxy.OrchestrationAuthority"):
+        with caplog.at_level(logging.DEBUG, logger="Galaxy.OrchestrationAuthority"):
             emit_legacy_guardrail(
                 "nodes.Node_81_Orchestrator.main",
                 override_recommendation="Custom migration guide here.",

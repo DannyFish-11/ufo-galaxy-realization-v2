@@ -845,7 +845,8 @@ class TestProjectionSentinel:
             from core.routes.projection import NODE_BOUNDARY_RUNTIME_ALIGNED_PR8
         except ImportError as e:
             pytest.skip(f"projection not importable: {e}")
-        assert "NodeFabricRegistry" in NODE_BOUNDARY_RUNTIME_ALIGNED_PR8
+        # NodeFabricRegistry 已退役;哨兵现声明 node_boundary_runtime 为规范权威。
+        assert "node_boundary_runtime" in NODE_BOUNDARY_RUNTIME_ALIGNED_PR8
 
     def test_sentinel_has_pr8_v1_prefix(self):
         try:

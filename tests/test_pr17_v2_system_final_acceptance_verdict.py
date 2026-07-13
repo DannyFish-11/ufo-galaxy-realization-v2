@@ -260,8 +260,12 @@ class TestAcceptanceDimensionId:
     def test_enum_has_multi_device_canonical_governance(self):
         assert AcceptanceDimensionId.multi_device_canonical_governance
 
-    def test_exactly_ten_members(self):
-        assert len(list(AcceptanceDimensionId)) == 10
+    def test_exact_member_count(self):
+        # 维度集是【有意增长】的验收面(pr17 后各批次新增 8 维:任务连续性/人为
+        # 干预/离线可运营/证据闭环/遥测新鲜度/资源压力/并发冲突/时序语义/身份
+        # 署名等)。此处钉【当前精确数】:误删维度会被抓住;新增维度时应连同
+        # 本数字一起有意更新,而不是让本测试常年红着失去防护力。
+        assert len(list(AcceptanceDimensionId)) == 18
 
 
 # ===========================================================================
@@ -304,8 +308,11 @@ class TestAllDimensions:
         dims = AcceptanceDimensionId.all_dimensions()
         assert isinstance(dims, list)
 
-    def test_all_dimensions_has_ten_entries(self):
-        assert len(AcceptanceDimensionId.all_dimensions()) == 10
+    def test_all_dimensions_matches_enum(self):
+        # all_dimensions() 必须与枚举完全同构(数量与成员),不随维度增长而漂移。
+        dims = AcceptanceDimensionId.all_dimensions()
+        assert len(dims) == len(list(AcceptanceDimensionId)) == 18
+        assert set(dims) == set(AcceptanceDimensionId)
 
     def test_all_dimensions_order(self):
         dims = AcceptanceDimensionId.all_dimensions()
@@ -664,7 +671,8 @@ class TestSystemAcceptanceReportFromDict:
         restored = SystemAcceptanceReport.from_dict(original.to_dict())
         assert restored.verdict == SystemAcceptanceVerdict.fully_operational
         assert restored.is_fully_operational is True
-        assert len(restored.checklist) == 10
+        # 往返不丢项:恢复后的清单与输入清单等长(随维度集自然增长)。
+        assert len(restored.checklist) == len(checklist)
 
 
 # ===========================================================================

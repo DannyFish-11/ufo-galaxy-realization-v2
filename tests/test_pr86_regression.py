@@ -241,7 +241,11 @@ class TestDeviceRegistrationVisible:
         oc = OpenClawd()
 
         # 构造一个包含设备能力的 mock DeviceRegistry
+        # 新契约:device_id 在记录【内部】(收口后 devices 是记录列表,不再以
+        # dict 键当 id;缺 device_id 会注册成 "gateway____cap" 空 id 键——本测试
+        # 此前基线红的根因)。
         mock_device = {
+            "device_id": "device_001",
             "device_name": "Android_01",
             "device_type": "android",
             "capabilities": ["screenshot", "touch", "keyboard"],
@@ -264,7 +268,14 @@ class TestDeviceRegistrationVisible:
         mock_cap_reg_cls = MagicMock()
         mock_cap_reg_cls.get_instance = MagicMock(return_value=cap_reg)
 
-        with patch("core.device_registry.DeviceRegistry", mock_device_registry_cls):
+        # 强制走 DeviceRegistry 回退分支:UDM 是进程级单例,全量跑时会被其它
+        # 测试注册的设备污染(优先级 A 非空则 mock 完全不生效,计数漂移)。
+        def _udm_unavailable():
+            raise RuntimeError("UDM disabled for this test")
+
+        with patch("core.unified.device_manager.get_unified_device_manager",
+                   _udm_unavailable), \
+             patch("core.device_registry.DeviceRegistry", mock_device_registry_cls):
             with patch("core.agent.capability_registry.CapabilityRegistry", mock_cap_reg_cls):
                 with patch.object(cap_reg, "register", side_effect=_capture_register):
                     count = oc.sync_device_capabilities()
