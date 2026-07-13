@@ -57,15 +57,15 @@ class MCPCallRequest(BaseModel):
 async def mcp_load(req: MCPLoadRequest):
     """
     加载 MCP 服务器
-    
+
     用户可以加载任何符合 MCP 标准的服务器
-    
+
     示例:
     {
         "name": "filesystem",
         "command": "npx -y @modelcontextprotocol/server-filesystem /path/to/dir"
     }
-    
+
     {
         "name": "my-server",
         "command": "node /path/to/my-mcp-server.js",
@@ -74,7 +74,7 @@ async def mcp_load(req: MCPLoadRequest):
     """
     try:
         from core.mcp_loader import mcp_loader
-        
+
         result = await mcp_loader.load(
             name=req.name,
             command=req.command,
@@ -83,9 +83,9 @@ async def mcp_load(req: MCPLoadRequest):
             cwd=req.cwd,
             auto_start=req.auto_start,
         )
-        
+
         return JSONResponse(result)
-        
+
     except Exception as e:
         logger.error(f"加载 MCP 服务器失败: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -96,11 +96,11 @@ async def mcp_unload(req: MCPUnloadRequest):
     """卸载 MCP 服务器"""
     try:
         from core.mcp_loader import mcp_loader
-        
+
         result = await mcp_loader.unload(req.server_id)
-        
+
         return JSONResponse(result)
-        
+
     except Exception as e:
         logger.error(f"卸载 MCP 服务器失败: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -111,15 +111,15 @@ async def mcp_list():
     """列出所有已加载的 MCP 服务器"""
     try:
         from core.mcp_loader import mcp_loader
-        
+
         servers = mcp_loader.list_servers()
-        
+
         return JSONResponse({
             "success": True,
             "servers": servers,
             "count": len(servers),
         })
-        
+
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
@@ -129,17 +129,17 @@ async def mcp_get(server_id: str):
     """获取 MCP 服务器详情"""
     try:
         from core.mcp_loader import mcp_loader
-        
+
         server = mcp_loader.get_server(server_id)
-        
+
         if not server:
             return JSONResponse({"success": False, "error": "服务器不存在"}, status_code=404)
-        
+
         return JSONResponse({
             "success": True,
             "server": server,
         })
-        
+
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
@@ -149,16 +149,16 @@ async def mcp_tools(server_id: str):
     """列出 MCP 服务器的工具"""
     try:
         from core.mcp_loader import mcp_loader
-        
+
         tools = await mcp_loader.list_tools(server_id)
-        
+
         return JSONResponse({
             "success": True,
             "server_id": server_id,
             "tools": tools,
             "count": len(tools),
         })
-        
+
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
@@ -168,15 +168,15 @@ async def mcp_call(server_id: str, req: MCPCallRequest):
     """调用 MCP 工具"""
     try:
         from core.mcp_loader import mcp_loader
-        
+
         result = await mcp_loader.call_tool(
             server_id=server_id,
             tool_name=req.tool_name,
             arguments=req.arguments,
         )
-        
+
         return JSONResponse(result)
-        
+
     except Exception as e:
         logger.error(f"调用 MCP 工具失败: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -206,19 +206,19 @@ class SkillExecuteRequest(BaseModel):
 async def skill_load(req: SkillLoadRequest):
     """
     加载技能
-    
+
     用户可以加载任何技能目录
-    
+
     示例:
     {
         "path": "/path/to/my-skill"
     }
-    
+
     技能目录结构:
     my-skill/
     ├── skill.json      # 技能定义
     └── handler.py      # 处理函数
-    
+
     skill.json 格式:
     {
         "id": "my-skill",
@@ -234,14 +234,14 @@ async def skill_load(req: SkillLoadRequest):
     """
     try:
         from core.skill_loader import skill_loader
-        
+
         result = await skill_loader.load(
             path=req.path,
             skill_id=req.skill_id,
         )
-        
+
         return JSONResponse(result)
-        
+
     except Exception as e:
         logger.error(f"加载技能失败: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -251,17 +251,17 @@ async def skill_load(req: SkillLoadRequest):
 async def skill_load_package(path: str):
     """
     加载技能包 (包含多个技能)
-    
+
     示例:
     POST /api/v1/skill/load-package?path=/path/to/skills
     """
     try:
         from core.skill_loader import skill_loader
-        
+
         result = await skill_loader.load_package(path)
-        
+
         return JSONResponse(result)
-        
+
     except Exception as e:
         logger.error(f"加载技能包失败: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -272,11 +272,11 @@ async def skill_unload(req: SkillUnloadRequest):
     """卸载技能"""
     try:
         from core.skill_loader import skill_loader
-        
+
         result = await skill_loader.unload(req.skill_id)
-        
+
         return JSONResponse(result)
-        
+
     except Exception as e:
         logger.error(f"卸载技能失败: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -287,15 +287,15 @@ async def skill_list(tag: str = None):
     """列出所有已加载的技能"""
     try:
         from core.skill_loader import skill_loader
-        
+
         skills = skill_loader.list_skills(tag=tag)
-        
+
         return JSONResponse({
             "success": True,
             "skills": skills,
             "count": len(skills),
         })
-        
+
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
@@ -305,17 +305,17 @@ async def skill_get(skill_id: str):
     """获取技能详情"""
     try:
         from core.skill_loader import skill_loader
-        
+
         skill = skill_loader.get_skill(skill_id)
-        
+
         if not skill:
             return JSONResponse({"success": False, "error": "技能不存在"}, status_code=404)
-        
+
         return JSONResponse({
             "success": True,
             "skill": skill,
         })
-        
+
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
@@ -325,11 +325,11 @@ async def skill_execute(skill_id: str, req: SkillExecuteRequest):
     """执行技能"""
     try:
         from core.skill_loader import skill_loader
-        
+
         result = await skill_loader.execute(skill_id, **req.params)
-        
+
         return JSONResponse(result)
-        
+
     except Exception as e:
         logger.error(f"执行技能失败: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -340,16 +340,16 @@ async def skill_search(query: str):
     """搜索技能"""
     try:
         from core.skill_loader import skill_loader
-        
+
         results = skill_loader.search(query)
-        
+
         return JSONResponse({
             "success": True,
             "query": query,
             "results": results,
             "count": len(results),
         })
-        
+
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
@@ -359,14 +359,14 @@ async def skill_stats():
     """获取技能统计"""
     try:
         from core.skill_loader import skill_loader
-        
+
         stats = skill_loader.get_stats()
-        
+
         return JSONResponse({
             "success": True,
             "stats": stats,
         })
-        
+
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 

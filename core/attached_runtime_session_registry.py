@@ -1705,6 +1705,7 @@ def classify_reconnect_outcome(
 # Core API — update_session_posture  (Android posture gating)
 # ---------------------------------------------------------------------------
 
+
 ANDROID_POSTURE_GATING_UPDATE_AUTHORITY: str = (
     "POLICY::ANDROID_POSTURE_GATING_UPDATE_AUTHORITY: "
     "update_session_posture() is the canonical API for updating the posture "

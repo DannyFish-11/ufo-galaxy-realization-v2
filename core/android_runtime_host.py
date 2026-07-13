@@ -495,4 +495,3 @@ capability unless they explicitly register with it.  This constant is the
 canonical machine-checkable expression of the default-off status described
 by :data:`ANDROID_LOCAL_AI_UNAVAILABLE_BY_DEFAULT`.
 """
-

@@ -129,4 +129,3 @@ def build_dual_repo_progress_report(*, force_rebuild: bool = True) -> Dict[str, 
 
     payload["summary_zh"] = _build_summary_zh(payload)
     return payload
-

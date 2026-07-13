@@ -40,18 +40,18 @@ logger = logging.getLogger("Galaxy.ModelRolePolicy")
 class ModelRole(str, Enum):
     """Component roles in the Galaxy decision pipeline."""
 
-    PRIMARY      = "primary"       # OpenClawd — sole decision authority
+    PRIMARY = "primary"       # OpenClawd — sole decision authority
     ORCHESTRATOR = "orchestrator"  # E2E / Gateway — plan scheduling only
-    EXECUTOR     = "executor"      # HybridExecutor / WindowsArbiter — action dispatch
-    TRANSPORT    = "transport"     # WebSocket / relay — message delivery
+    EXECUTOR = "executor"      # HybridExecutor / WindowsArbiter — action dispatch
+    TRANSPORT = "transport"     # WebSocket / relay — message delivery
 
 
 class DecisionAuthority(str, Enum):
     """Levels of decision authority."""
 
-    FULL    = "full"     # May perform primary intent resolution + model selection
+    FULL = "full"     # May perform primary intent resolution + model selection
     EXECUTE = "execute"  # May only execute a pre-formed decision
-    RELAY   = "relay"    # May only forward messages unchanged
+    RELAY = "relay"    # May only forward messages unchanged
 
 
 # ---------------------------------------------------------------------------

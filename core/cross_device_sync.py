@@ -29,6 +29,7 @@ except ImportError:
 # Per-device latency tracker (adaptive prioritization)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class DeviceLatencyProfile:
     """Observed latency profile for a single device."""
@@ -128,6 +129,7 @@ _latency_tracker = _LatencyTracker()
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def emit_cross_device_phase_sync(
     old_phase: str,

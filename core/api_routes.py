@@ -552,7 +552,6 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             },
         )
 
-
     # -----------------------------------------------------------------------
     # NOTE (Batch PR-4): All /api/v1/* inline route handlers below this point
     # were dead code — they were already covered by the sub-module routers

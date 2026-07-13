@@ -65,6 +65,7 @@ except ImportError:  # pragma: no cover
     _CANONICAL_NODE_COUNT_AVAILABLE = False
     _get_node_count_from_canonical_source = None  # type: ignore[assignment]
 
+
 # 支持的 API Key 白名单
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create system & config routes router."""

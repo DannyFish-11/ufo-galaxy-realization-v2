@@ -325,6 +325,7 @@ _TERMINAL_SESSION_STATES: frozenset = frozenset({"replaced", "invalidated"})
 # (wrapped to allow coordinator use even when some modules are unavailable)
 # ---------------------------------------------------------------------------
 
+
 def _try_import_session_registry():
     """Return (classify_reconnect_outcome, get_session_registry) or (None, None)."""
     try:

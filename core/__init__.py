@@ -58,21 +58,26 @@ from .node_protocol import (
 
 # --- 基础设施 ---
 
+
 def get_device_agent_manager():
     from .device_agent_manager import DeviceAgentManager
     return DeviceAgentManager()
+
 
 def get_device_status_api():
     from .device_status_api import app as device_status_app
     return device_status_app
 
+
 def get_microsoft_ufo_integration():
     from .microsoft_ufo_integration import GalaxyIntegrationService
     return GalaxyIntegrationService()
 
+
 def get_system_load_monitor():
     from .system_load_monitor import SystemLoadMonitor
     return SystemLoadMonitor()
+
 
 def get_vision_pipeline(config=None):
     from .vision_pipeline import get_vision_pipeline as _get
@@ -80,35 +85,42 @@ def get_vision_pipeline(config=None):
 
 # --- 新增核心子系统 ---
 
+
 async def get_cache_manager(redis_url: str = ""):
     """获取全局缓存管理器实例（异步初始化）"""
     from .cache import get_cache
     return await get_cache(redis_url)
+
 
 def get_monitoring():
     """获取全局监控管理器"""
     from .monitoring import get_monitoring_manager
     return get_monitoring_manager()
 
+
 def get_performance_monitor():
     """获取全局性能监控器"""
     from .performance import PerformanceMonitor
     return PerformanceMonitor.instance()
+
 
 def get_command_router(**kwargs):
     """获取全局命令路由器"""
     from .command_router import get_command_router as _get
     return _get(**kwargs)
 
+
 def get_intent_parser():
     """获取 AI 意图解析器"""
     from .ai_intent import get_intent_parser as _get
     return _get()
 
+
 def get_conversation_memory(**kwargs):
     """获取对话记忆"""
     from .ai_intent import get_conversation_memory as _get
     return _get(**kwargs)
+
 
 def get_smart_recommender(**kwargs):
     """获取智能推荐器"""

@@ -82,21 +82,21 @@ class CommandVerb(str, Enum):
     :attr:`QUERY`     — read-only status query; no side effects.
     """
 
-    EXECUTE   = "execute"
-    CANCEL    = "cancel"
+    EXECUTE = "execute"
+    CANCEL = "cancel"
     INTERRUPT = "interrupt"
-    QUERY     = "query"
+    QUERY = "query"
 
 
 class CancelReason(str, Enum):
     """Standardised reasons for a cancel/interrupt verb."""
 
-    USER_REQUEST     = "user_request"
-    TIMEOUT          = "timeout"
-    HEALTH_DEGRADED  = "health_degraded"
-    POLICY_REJECTED  = "policy_rejected"
-    SUPERSEDED       = "superseded"
-    UNKNOWN          = "unknown"
+    USER_REQUEST = "user_request"
+    TIMEOUT = "timeout"
+    HEALTH_DEGRADED = "health_degraded"
+    POLICY_REJECTED = "policy_rejected"
+    SUPERSEDED = "superseded"
+    UNKNOWN = "unknown"
 
 
 # ---------------------------------------------------------------------------

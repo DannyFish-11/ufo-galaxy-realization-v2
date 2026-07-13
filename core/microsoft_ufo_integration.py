@@ -93,13 +93,13 @@ class UIElement:
     parent_id: Optional[str] = None
     children_ids: List[str] = None
     properties: Dict[str, Any] = None
-    
+
     def __post_init__(self):
         if self.children_ids is None:
             self.children_ids = []
         if self.properties is None:
             self.properties = {}
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "element_id": self.element_id,
@@ -126,7 +126,7 @@ class UIActionResult:
     screenshot: Optional[str] = None  # Base64 编码的截图
     duration_ms: int = 0
     error: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "success": self.success,
@@ -145,42 +145,42 @@ class UIActionResult:
 
 class BaseUIAutomator(ABC):
     """UI 自动化基类"""
-    
+
     def __init__(self):
         self.is_initialized = False
         self.current_window = None
         self.element_cache: Dict[str, UIElement] = {}
-    
+
     @abstractmethod
     async def initialize(self) -> bool:
         """初始化自动化引擎"""
         pass
-    
+
     @abstractmethod
     async def get_active_window(self) -> Optional[UIElement]:
         """获取当前活动窗口"""
         pass
-    
+
     @abstractmethod
     async def find_element(self, selector: Dict[str, Any]) -> Optional[UIElement]:
         """查找 UI 元素"""
         pass
-    
+
     @abstractmethod
     async def find_elements(self, selector: Dict[str, Any]) -> List[UIElement]:
         """查找多个 UI 元素"""
         pass
-    
+
     @abstractmethod
     async def execute_action(self, action: UIAction, element_id: Optional[str], params: Dict[str, Any]) -> UIActionResult:
         """执行 UI 动作"""
         pass
-    
+
     @abstractmethod
     async def capture_screen(self, region: Optional[Tuple[int, int, int, int]] = None) -> Optional[str]:
         """截取屏幕"""
         pass
-    
+
     @abstractmethod
     async def get_element_tree(self, root_id: Optional[str] = None) -> Dict[str, Any]:
         """获取 UI 元素树"""
@@ -194,16 +194,16 @@ class BaseUIAutomator(ABC):
 class MicrosoftUFOAutomator(BaseUIAutomator):
     """
     微软 UFO UI 自动化器
-    
+
     深度集成微软 UFO 的 UI 控制能力
     """
-    
+
     def __init__(self):
         super().__init__()
         self.puppeteer = None
         self._ControlReceiver = None
         self.ufo_available = False
-    
+
     async def initialize(self, process_name: str = "explorer.exe",
                          app_root_name: str = "Desktop") -> bool:
         """初始化微软 UFO
@@ -241,7 +241,7 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
         except Exception as e:
             logger.error(f"Failed to initialize Microsoft UFO: {e}")
             return await self._initialize_fallback()
-    
+
     async def _initialize_fallback(self) -> bool:
         """初始化降级方案"""
         try:
@@ -254,7 +254,7 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
             # warning，避免新克隆启动刷出吓人的红色 ERROR。
             logger.warning("pyautogui 未安装，GUI 自动化回退不可用(可选功能，不影响启动)")
             return False
-    
+
     async def get_active_window(self) -> Optional[UIElement]:
         """获取当前活动窗口
 
@@ -290,13 +290,13 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
         """查找多个 UI 元素（同上限制）"""
         logger.warning("find_elements: ControlReceiver does not support search by selector")
         return []
-    
+
     def _convert_ufo_element(self, ufo_element) -> UIElement:
         """转换微软 UFO 元素为统一格式"""
         try:
             rect = ufo_element.rectangle() if hasattr(ufo_element, 'rectangle') else None
             bounds = (rect.left, rect.top, rect.width(), rect.height()) if rect else (0, 0, 0, 0)
-            
+
             return UIElement(
                 element_id=str(ufo_element.control_id()) if hasattr(ufo_element, 'control_id') else "unknown",
                 element_type=UIElementType.CUSTOM,
@@ -313,22 +313,22 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
                 element_type=UIElementType.CUSTOM,
                 name="Unknown"
             )
-    
+
     async def execute_action(self, action: UIAction, element_id: Optional[str], params: Dict[str, Any]) -> UIActionResult:
         """执行 UI 动作"""
         import time
         start_time = time.time()
-        
+
         try:
             if self.ufo_available and self.puppeteer:
                 result = await self._execute_with_ufo(action, element_id, params)
             else:
                 result = await self._execute_with_fallback(action, element_id, params)
-            
+
             duration_ms = int((time.time() - start_time) * 1000)
             result.duration_ms = duration_ms
             return result
-            
+
         except Exception as e:
             return UIActionResult(
                 success=False,
@@ -337,7 +337,7 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
                 error=str(e),
                 duration_ms=int((time.time() - start_time) * 1000)
             )
-    
+
     async def _execute_with_ufo(self, action: UIAction, element_id: Optional[str], params: Dict[str, Any]) -> UIActionResult:
         """使用微软 UFO AppPuppeteer 的 execute_command 执行动作"""
         try:
@@ -408,60 +408,60 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
 
         except Exception as e:
             return UIActionResult(success=False, action=action, error=str(e))
-    
+
     async def _execute_with_fallback(self, action: UIAction, element_id: Optional[str], params: Dict[str, Any]) -> UIActionResult:
         """使用 pyautogui 执行动作（降级方案）"""
         try:
             import pyautogui
-            
+
             if action == UIAction.CLICK:
                 x, y = params.get("x"), params.get("y")
                 if x is not None and y is not None:
                     pyautogui.click(x, y)
                     return UIActionResult(success=True, action=action, message=f"Clicked at ({x}, {y})")
-            
+
             elif action == UIAction.TYPE:
                 text = params.get("text", "")
                 pyautogui.write(text)
                 return UIActionResult(success=True, action=action, message=f"Typed: {text[:20]}...")
-            
+
             elif action == UIAction.HOTKEY:
                 keys = params.get("keys", [])
                 pyautogui.hotkey(*keys)
                 return UIActionResult(success=True, action=action, message=f"Hotkey: {'+'.join(keys)}")
-            
+
             elif action == UIAction.SCROLL:
                 amount = params.get("amount", 3)
                 direction = params.get("direction", "down")
                 scroll_amount = -amount if direction == "down" else amount
                 pyautogui.scroll(scroll_amount)
                 return UIActionResult(success=True, action=action, message=f"Scrolled {direction}")
-            
+
             return UIActionResult(success=False, action=action, error=f"Unsupported action: {action.value}")
-            
+
         except Exception as e:
             return UIActionResult(success=False, action=action, error=str(e))
-    
+
     async def capture_screen(self, region: Optional[Tuple[int, int, int, int]] = None) -> Optional[str]:
         """截取屏幕"""
         try:
             import pyautogui
             import base64
             from io import BytesIO
-            
+
             if region:
                 screenshot = pyautogui.screenshot(region=region)
             else:
                 screenshot = pyautogui.screenshot()
-            
+
             buffer = BytesIO()
             screenshot.save(buffer, format='PNG')
             return base64.b64encode(buffer.getvalue()).decode('utf-8')
-            
+
         except Exception as e:
             logger.error(f"Failed to capture screen: {e}")
             return None
-    
+
     async def get_element_tree(self, root_id: Optional[str] = None) -> Dict[str, Any]:
         """获取 UI 元素树
 
@@ -477,100 +477,100 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
 class GalaxyIntegrationService:
     """
     Galaxy 与微软 UFO 的集成服务
-    
+
     提供统一的 UI 自动化接口，供节点系统调用
     """
-    
+
     _instance = None
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self):
         if self._initialized:
             return
-        
+
         self.automator: Optional[MicrosoftUFOAutomator] = None
         self._initialized = True
-    
+
     async def initialize(self) -> bool:
         """初始化集成服务"""
         self.automator = MicrosoftUFOAutomator()
         return await self.automator.initialize()
-    
+
     async def click(self, x: int, y: int) -> Dict[str, Any]:
         """点击指定位置"""
         if not self.automator:
             return {"error": "Automator not initialized"}
-        
+
         result = await self.automator.execute_action(
             UIAction.CLICK,
             None,
             {"x": x, "y": y}
         )
         return result.to_dict()
-    
+
     async def type_text(self, text: str) -> Dict[str, Any]:
         """输入文本"""
         if not self.automator:
             return {"error": "Automator not initialized"}
-        
+
         result = await self.automator.execute_action(
             UIAction.TYPE,
             None,
             {"text": text}
         )
         return result.to_dict()
-    
+
     async def hotkey(self, *keys: str) -> Dict[str, Any]:
         """执行快捷键"""
         if not self.automator:
             return {"error": "Automator not initialized"}
-        
+
         result = await self.automator.execute_action(
             UIAction.HOTKEY,
             None,
             {"keys": list(keys)}
         )
         return result.to_dict()
-    
+
     async def find_and_click(self, selector: Dict[str, Any]) -> Dict[str, Any]:
         """查找元素并点击"""
         if not self.automator:
             return {"error": "Automator not initialized"}
-        
+
         element = await self.automator.find_element(selector)
         if not element:
             return {"error": "Element not found", "selector": selector}
-        
+
         # 计算元素中心点
         x = element.bounds[0] + element.bounds[2] // 2
         y = element.bounds[1] + element.bounds[3] // 2
-        
+
         result = await self.automator.execute_action(
             UIAction.CLICK,
             element.element_id,
             {"x": x, "y": y}
         )
         return result.to_dict()
-    
+
     async def get_screen_info(self) -> Dict[str, Any]:
         """获取屏幕信息"""
         if not self.automator:
             return {"error": "Automator not initialized"}
-        
+
         window = await self.automator.get_active_window()
         screenshot = await self.automator.capture_screen()
-        
+
         return {
             "active_window": window.to_dict() if window else None,
             "screenshot": screenshot,
             "ufo_available": self.automator.ufo_available
         }
-    
+
     async def execute_task(self, task_description: str, app_name: str = None) -> Dict[str, Any]:
         """
         执行自然语言描述的任务
@@ -625,59 +625,59 @@ def create_ufo_api():
     """创建 UFO 集成 API"""
     from fastapi import FastAPI
     from pydantic import BaseModel
-    
+
     app = FastAPI(title="Galaxy - Microsoft UFO Integration", version="2.0")
-    
+
     class ClickRequest(BaseModel):
         x: int
         y: int
-    
+
     class TypeRequest(BaseModel):
         text: str
-    
+
     class HotkeyRequest(BaseModel):
         keys: List[str]
-    
+
     class FindAndClickRequest(BaseModel):
         name: Optional[str] = None
         automation_id: Optional[str] = None
         class_name: Optional[str] = None
         control_type: Optional[str] = None
-    
+
     class TaskRequest(BaseModel):
         task: str
         app_name: Optional[str] = None
-    
+
     @app.post("/ufo/initialize")
     async def initialize():
         success = await ufo_integration.initialize()
         return {"success": success}
-    
+
     @app.post("/ufo/click")
     async def click(request: ClickRequest):
         return await ufo_integration.click(request.x, request.y)
-    
+
     @app.post("/ufo/type")
     async def type_text(request: TypeRequest):
         return await ufo_integration.type_text(request.text)
-    
+
     @app.post("/ufo/hotkey")
     async def hotkey(request: HotkeyRequest):
         return await ufo_integration.hotkey(*request.keys)
-    
+
     @app.post("/ufo/find_and_click")
     async def find_and_click(request: FindAndClickRequest):
         selector = request.dict(exclude_none=True)
         return await ufo_integration.find_and_click(selector)
-    
+
     @app.get("/ufo/screen")
     async def get_screen():
         return await ufo_integration.get_screen_info()
-    
+
     @app.post("/ufo/task")
     async def execute_task(request: TaskRequest):
         return await ufo_integration.execute_task(request.task, request.app_name)
-    
+
     return app
 
 
@@ -687,21 +687,21 @@ def create_ufo_api():
 
 async def main():
     """示例：如何使用 UFO 集成服务"""
-    
+
     # 初始化
     success = await ufo_integration.initialize()
     print(f"Initialization: {'Success' if success else 'Failed'}")
-    
+
     if success:
         # 获取屏幕信息
         screen_info = await ufo_integration.get_screen_info()
         print(f"Active window: {screen_info.get('active_window', {}).get('name', 'Unknown')}")
         print(f"UFO available: {screen_info.get('ufo_available', False)}")
-        
+
         # 执行点击
         result = await ufo_integration.click(100, 100)
         print(f"Click result: {result}")
-        
+
         # 执行快捷键
         result = await ufo_integration.hotkey("ctrl", "c")
         print(f"Hotkey result: {result}")

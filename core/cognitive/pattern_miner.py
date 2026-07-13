@@ -74,6 +74,7 @@ _ACTIVATION_BOOST_ON_HIT = 0.15   # activation increase when pattern is validate
 _ACTIVATION_BOOST_ON_ACCESS = 0.05  # activation increase when pattern is queried
 _MAX_PATTERNS = 200               # cap to prevent unbounded growth
 
+
 # Recursive abstraction levels
 class AbstractionLevel(int, Enum):
     """Hierarchy of pattern abstraction."""

@@ -7762,7 +7762,8 @@ class OpenClawd:
         except Exception as exc:
             return None
         try:
-            import json, os
+            import json
+            import os
 
             registry_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "node_registry.json")
             with open(registry_path, "r", encoding="utf-8") as f:

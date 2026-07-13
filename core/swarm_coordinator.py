@@ -834,7 +834,6 @@ class SwarmCoordinator:
             )
             return []
 
-
     async def _dispatch_one(self, manifest) -> Dict[str, Any]:
         """Delegate a single :class:`SwarmAgentManifest` to the substrate.
 

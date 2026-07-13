@@ -43,7 +43,7 @@ class ProviderCategory(str, Enum):
     DIRECT = "direct_models"    # API key → provider's own endpoint
     ONEAPI = "oneapi"           # Routed through a OneAPI aggregator node
     TOOLS = "tools"             # Tool/service nodes (OCR, search, DB, …)
-    NODE_BACKED = "node_backed" # Galaxy node that wraps an LLM service
+    NODE_BACKED = "node_backed"  # Galaxy node that wraps an LLM service
     LOCAL = "local"             # Locally-running model (Ollama, vLLM, …)
     REMOTE = "remote"           # Remote/third-party endpoint not in the above
     UNKNOWN = "unknown"         # Fallback when category cannot be determined

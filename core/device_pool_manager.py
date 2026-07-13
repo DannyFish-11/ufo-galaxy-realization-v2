@@ -74,11 +74,12 @@ DEVICE_POOL_CAPABILITY_ASSIMILATION_LAYER_INTEGRATED: str = (
 # Enumerations
 # ---------------------------------------------------------------------------
 
+
 class SchedulingStrategy(str, Enum):
     """Available device-selection strategies."""
     ROUND_ROBIN = "round_robin"
-    LEAST_CONN  = "least_conn"
-    ADAPTIVE    = "adaptive"
+    LEAST_CONN = "least_conn"
+    ADAPTIVE = "adaptive"
 
 
 # ---------------------------------------------------------------------------

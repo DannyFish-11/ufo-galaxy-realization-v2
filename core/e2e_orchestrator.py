@@ -64,8 +64,6 @@ execution chain (OpenClawd → CommandRouter → DeviceRouter).  It MUST NOT act
 as an independent orchestration authority."""
 
 
-
-
 # ---------------------------------------------------------------------------
 # PR-5: DAG execution helpers
 # ---------------------------------------------------------------------------
@@ -516,4 +514,3 @@ async def process_wake_event(
     except Exception as e:
         logger.error(f"唤醒事件处理失败: {e}")
         return {"session_id": "", "status": "error", "error": str(e)}
-

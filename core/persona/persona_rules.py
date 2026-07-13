@@ -92,6 +92,7 @@ AMBIENT_ENERGY_DELTA: float = 0.05
 # Mood label derivation thresholds
 # ---------------------------------------------------------------------------
 
+
 def derive_mood(urgency: float, focus: float, energy: float, trust_level: float) -> str:
     """Derive a qualitative mood label from the numeric state.
 

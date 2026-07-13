@@ -256,7 +256,7 @@ class ContextCompressor:
 
         if recalled_memories:
             mem_texts = [f"- {m['content'][:100]}" for m in recalled_memories]
-            system_content_parts.append(f"[相关记忆]\n" + "\n".join(mem_texts))
+            system_content_parts.append("[相关记忆]\n" + "\n".join(mem_texts))
 
         if system_content_parts:
             system_content_parts.append(

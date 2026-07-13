@@ -115,6 +115,7 @@ APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED: str = (
     "CapabilityRegistry → AppExecutionCapabilityRegistry"
 )
 
+
 class ExecutionLevel(str, Enum):
     A2A = "a2a"          # Agent-to-Agent (API/MCP direct call)
     GUI = "gui"          # GUI Automation (accessibility, ADB)

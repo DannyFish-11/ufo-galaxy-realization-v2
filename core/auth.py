@@ -48,6 +48,7 @@ _no_token_warning_issued: bool = False
 # Gateway auth-enabled flag
 # ---------------------------------------------------------------------------
 
+
 def is_auth_enabled() -> bool:
     """Return True when GALAXY_AUTH_ENABLED is explicitly enabled.
 
@@ -116,6 +117,7 @@ def validate_auth_config() -> None:
 # Startup validation — called explicitly during launcher startup sequence.
 # Do NOT run at import time to avoid blocking module loading before .env is read.
 _auth_config_validated = False
+
 
 def ensure_auth_config_validated() -> None:
     """Run auth validation once at startup. Idempotent."""

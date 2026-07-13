@@ -482,6 +482,7 @@ class HardwareComputeProfiler:
 
 _profiler: Optional[HardwareComputeProfiler] = None
 
+
 def get_hardware_profiler() -> HardwareComputeProfiler:
     global _profiler
     if _profiler is None:

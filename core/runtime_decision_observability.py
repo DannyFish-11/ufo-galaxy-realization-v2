@@ -173,6 +173,7 @@ def _diagnostic_semantics() -> Dict[str, List[str]]:
 # Authority sentinels
 # ---------------------------------------------------------------------------
 
+
 RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY: str = (
     "RUNTIME_DECISION_OBSERVABILITY::CANONICAL_AUTHORITY: "
     "core.runtime_decision_observability is the canonical unified runtime "

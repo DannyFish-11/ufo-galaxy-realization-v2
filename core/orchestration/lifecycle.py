@@ -56,11 +56,11 @@ def _is_local_device(device_id: str) -> bool:
 # ---------------------------------------------------------------------------
 
 class _SubtaskStatus(str, enum.Enum):
-    PENDING   = "pending"
-    RUNNING   = "running"
-    SUCCESS   = "success"
-    FAILED    = "failed"
-    TIMEOUT   = "timeout"
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    TIMEOUT = "timeout"
     CANCELLED = "cancelled"
 
 
@@ -216,11 +216,11 @@ class ParallelGroupTracker:
                 "latency_ms":    latency_ms,
             })
 
-        succeeded  = sum(1 for e in entries if e.status == _SubtaskStatus.SUCCESS)
-        cancelled  = sum(1 for e in entries if e.status == _SubtaskStatus.CANCELLED)
+        succeeded = sum(1 for e in entries if e.status == _SubtaskStatus.SUCCESS)
+        cancelled = sum(1 for e in entries if e.status == _SubtaskStatus.CANCELLED)
         # "failed" here includes both FAILED and TIMEOUT statuses (any non-success,
         # non-cancelled terminal state). Matches the ParallelResult.failed field semantics.
-        failed     = len(entries) - succeeded - cancelled
+        failed = len(entries) - succeeded - cancelled
 
         if succeeded == len(entries):
             summary = "success"

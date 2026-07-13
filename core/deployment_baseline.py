@@ -264,7 +264,7 @@ def _check_startup_tier_model_importable(
         from launcher.node_startup import NodeSystemLauncher
 
         req.status = BaselineCheckStatus.PASSED
-        req.detail = f"startup_tier_model importable; NodeSystemLauncher accessible"
+        req.detail = "startup_tier_model importable; NodeSystemLauncher accessible"
     except Exception as exc:
         logger.debug("Fallback triggered: %s", exc)
         req.status = BaselineCheckStatus.FAILED

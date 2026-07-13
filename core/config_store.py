@@ -74,6 +74,7 @@ _DEFAULT_SECRETS_PATH = _REPO_ROOT / "runtime" / "secrets.env"
 # Errors
 # ---------------------------------------------------------------------------
 
+
 class SecretInConfigError(ValueError):
     """Raised when a caller attempts to write a secret key into config.json."""
 

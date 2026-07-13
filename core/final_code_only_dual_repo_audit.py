@@ -81,6 +81,7 @@ logger = logging.getLogger(__name__)
 # Runtime dependency availability guard
 # ---------------------------------------------------------------------------
 
+
 def _runtime_dep_available(package: str) -> bool:
     """Return True if *package* can be imported (i.e. is installed).
 
@@ -126,6 +127,7 @@ def _deployment_dep_error(exc: Exception) -> bool:
 # ---------------------------------------------------------------------------
 # Methodology statement
 # ---------------------------------------------------------------------------
+
 
 AUDIT_METHODOLOGY: str = (
     "FINAL_CODE_ONLY_DUAL_REPO_AUDIT_METHODOLOGY_V1: "

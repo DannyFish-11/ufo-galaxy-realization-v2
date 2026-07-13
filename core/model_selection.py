@@ -26,6 +26,7 @@ logger = logging.getLogger("Galaxy.ModelSelection")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _CHOICE_FILE = PROJECT_ROOT / ".galaxy_model"
 
+
 # 可选主脑清单不再在此硬编码 —— 统一派生自 core.model_catalog（唯一真相源）。
 # 此前这里、ModelsTab.tsx、config.py 各存一份必须手动同步的清单，漏改即漂移。
 # 现在三处全部从 catalog 派生。展示标签/模态说明也取自 catalog 的 ModelSpec。
@@ -301,10 +302,10 @@ def background_pull(tag: str) -> None:
         # `ollama create` 才能把下载的 GGUF 导入成本地模型,同样依赖这个命令)
         # 也一起被跳过,但控制台【什么提示都没有】,用户只会觉得"什么都没发生"。
         # 这里改成至少打印一句清楚的原因,不再彻底沉默。
-        print(f"     未检测到 ollama 命令,跳过本地主脑模型拉取与 HuggingFace 回退"
-              f"(两者都需要 ollama 命令来导入/运行模型)。"
-              f"可先在「模型」tab 填一个云端 API Key 作为主力兜底，"
-              f"或安装 Ollama: https://ollama.com/download")
+        print("     未检测到 ollama 命令,跳过本地主脑模型拉取与 HuggingFace 回退"
+              "(两者都需要 ollama 命令来导入/运行模型)。"
+              "可先在「模型」tab 填一个云端 API Key 作为主力兜底，"
+              "或安装 Ollama: https://ollama.com/download")
         return
 
     def _pull() -> None:
@@ -364,8 +365,8 @@ def background_pull(tag: str) -> None:
                           f"或从 https://ollama.com/download/windows 下载最新安装包直接覆盖安装"
                           f"(会保留已下载的模型)。升级后重跑 `ollama pull {tag}` 应该就能成功。")
                 elif _too_old is False:
-                    print(f"     Ollama 版本本身不算旧，拉取失败更可能是网络/registry 问题，"
-                          f"或该 tag 确实不在库里——继续尝试 HuggingFace 回退。")
+                    print("     Ollama 版本本身不算旧，拉取失败更可能是网络/registry 问题，"
+                          "或该 tag 确实不在库里——继续尝试 HuggingFace 回退。")
             except Exception:
                 pass
 
@@ -383,9 +384,9 @@ def background_pull(tag: str) -> None:
                     save_choice(local_tag)
                     print(f"  ✓ 本地主脑模型已就绪(HuggingFace 回退导入):{local_tag}")
                     return
-                print(f"     HuggingFace 回退候选也都试过,未能导入成功。")
+                print("     HuggingFace 回退候选也都试过,未能导入成功。")
 
-            print(f"     可先在「模型」tab 填一个云端 API Key(DeepSeek/通义/Claude…)作为主力兜底,")
+            print("     可先在「模型」tab 填一个云端 API Key(DeepSeek/通义/Claude…)作为主力兜底,")
             print(f"     或手动确认版本、升级 Ollama 后重试 `ollama pull {tag}`。")
         except Exception as exc:  # noqa: BLE001
             print(f"  ⚠ 本地主脑模型拉取异常:{tag} — {exc}")

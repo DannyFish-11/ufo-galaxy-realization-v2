@@ -637,6 +637,7 @@ class FormationRebalanceEngine:
         if not candidates:
             return None
         # Sort by health score descending
+
         def _score(m: FormationMember) -> float:
             sig = health_map.get(getattr(m, "device_id", ""))
             return sig.health_score if sig is not None else 1.0

@@ -85,7 +85,6 @@ _REGISTRY_ROLE = (
 )
 
 
-
 def _get_udm():
     """Lazily return the UnifiedDeviceManager singleton (avoids circular imports)."""
     try:
@@ -132,37 +131,37 @@ class DeviceRegistry:
     not re-acquire authoritative online status until they register again through
     the normal UDM write path.
     """
-    
+
     _instance = None
     _instance_lock = threading.Lock()
-    
+
     def __init__(self):
         # 设备存储
         self.devices: Dict[str, Device] = {}
-        
+
         # 设备分组
         self.groups: Dict[str, List[str]] = {}  # group_name -> [device_ids]
-        
+
         # 设备标签索引
         self.tag_index: Dict[str, List[str]] = {}  # tag -> [device_ids]
-        
+
         # 能力索引
         self.capability_index: Dict[str, List[str]] = {}  # capability -> [device_ids]
-        
+
         # 持久化路径
         self.storage_path = Path("data/devices.json")
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # 事件回调
         self._on_device_registered: List[Callable] = []
         self._on_device_offline: List[Callable] = []
         self._on_device_online: List[Callable] = []
-        
+
         # 加载已保存的设备
         self._load()
-        
+
         logger.info(f"设备注册管理器初始化，已加载 {len(self.devices)} 个设备")
-    
+
     @classmethod
     def get_instance(cls) -> "DeviceRegistry":
         # NOTE: This singleton is used for process-wide state sharing.
@@ -174,11 +173,11 @@ class DeviceRegistry:
                 if cls._instance is None:
                     cls._instance = DeviceRegistry()
         return cls._instance
-    
+
     # ========================================================================
     # 设备注册
     # ========================================================================
-    
+
     async def register(
         self,
         device_id: str = None,
@@ -324,20 +323,20 @@ class DeviceRegistry:
 
         # 存储本地缓存
         self.devices[device_id] = device
-        
+
         # 更新索引
         self._update_indexes(device)
-        
+
         # 保存
         self._save()
-        
+
         # 触发事件
         await self._emit_event("registered", device)
-        
+
         logger.info("DeviceRegistry.register: new local record created for %s (%s)", device_id, device_type)
-        
+
         return device
-    
+
     async def unregister(self, device_id: str) -> bool:
         """注销设备"""
         # ── SSOT: write to UDM first ─────────────────────────────────────
@@ -354,17 +353,17 @@ class DeviceRegistry:
         device = self.devices.pop(device_id, None)
         if device is None:
             return False
-        
+
         # 更新索引
         self._remove_from_indexes(device)
-        
+
         # 保存
         self._save()
-        
+
         logger.info(f"设备注销: {device_id}")
-        
+
         return True
-    
+
     def get(self, device_id: str) -> Optional[Device]:
         """Return a local compatibility record for *device_id*.
 
@@ -398,7 +397,7 @@ class DeviceRegistry:
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
         return local
-    
+
     async def get_or_create(self, device_id: str, **kwargs) -> Device:
         """获取或创建设备"""
         device = self.devices.get(device_id)
@@ -409,11 +408,11 @@ class DeviceRegistry:
 
         # 创建新设备
         return await self.register(device_id=device_id, **kwargs)
-    
+
     # ========================================================================
     # 设备发现
     # ========================================================================
-    
+
     async def discover(
         self,
         device_type: str = None,
@@ -424,19 +423,19 @@ class DeviceRegistry:
     ) -> List[Device]:
         """
         发现设备
-        
+
         Args:
             device_type: 设备类型过滤
             capability: 能力过滤
             group: 分组过滤
             tag: 标签过滤
             online_only: 只返回在线设备
-        
+
         Returns:
             设备列表
         """
         results = list(self.devices.values())
-        
+
         # 按类型过滤
         if device_type:
             try:
@@ -444,28 +443,28 @@ class DeviceRegistry:
                 results = [d for d in results if d.device_type == dev_type]
             except ValueError:
                 pass
-        
+
         # 按能力过滤
         if capability:
             device_ids = self.capability_index.get(capability, [])
             results = [d for d in results if d.device_id in device_ids]
-        
+
         # 按分组过滤
         if group:
             device_ids = self.groups.get(group, [])
             results = [d for d in results if d.device_id in device_ids]
-        
+
         # 按标签过滤
         if tag:
             device_ids = self.tag_index.get(tag, [])
             results = [d for d in results if d.device_id in device_ids]
-        
+
         # 只返回在线设备
         if online_only:
             results = [d for d in results if d.is_online()]
-        
+
         return results
-    
+
     def list_devices(
         self,
         device_type: str = None,
@@ -489,23 +488,23 @@ class DeviceRegistry:
                 logger.warning("Exception suppressed: %s", exc)
 
         results = list(self.devices.values())
-        
+
         if device_type:
             try:
                 dev_type = DeviceType(device_type.lower())
                 results = [d for d in results if d.device_type == dev_type]
             except ValueError:
                 pass
-        
+
         if status:
             results = [d for d in results if d.status == status]
-        
+
         return results
-    
+
     # ========================================================================
     # 设备状态管理
     # ========================================================================
-    
+
     async def update_status(
         self,
         device_id: str,
@@ -516,7 +515,7 @@ class DeviceRegistry:
         device = self.devices.get(device_id)
         if not device:
             return False
-        
+
         # ── SSOT: write to UDM first ─────────────────────────────────────
         udm = _get_udm()
         if udm is not None:
@@ -538,14 +537,14 @@ class DeviceRegistry:
 
         now = time.time()
         device.last_seen = now
-        
+
         if heartbeat:
             device.last_heartbeat = now
-        
+
         if status:
             old_status = device.status
             device.status = status
-            
+
             # 触发状态变化事件
             if old_status != status:
                 if status == DeviceStatus.ONLINE:
@@ -575,13 +574,13 @@ class DeviceRegistry:
                             "DeviceRegistry.update_status: harness notification failed — %s",
                             _harn_exc,
                         )
-        
+
         return True
-    
+
     async def heartbeat(self, device_id: str) -> bool:
         """设备心跳"""
         return await self.update_status(device_id, heartbeat=True)
-    
+
     async def check_offline_devices(self, timeout: float = 60.0):
         """Mark timed-out devices as OFFLINE in the local compatibility cache.
 
@@ -594,7 +593,7 @@ class DeviceRegistry:
         liveness decisions.
         """
         now = time.time()
-        
+
         for device in self.devices.values():
             if device.status == DeviceStatus.ONLINE:
                 if now - device.last_heartbeat > timeout:
@@ -673,11 +672,11 @@ class DeviceRegistry:
                             "DeviceRegistry.check_offline_devices: attached session detach non-fatal — %s",
                             _asr_exc,
                         )
-    
+
     # ========================================================================
     # 能力协商
     # ========================================================================
-    
+
     def negotiate_capability(
         self,
         capability: str,
@@ -686,14 +685,14 @@ class DeviceRegistry:
     ) -> Optional[Device]:
         """
         协商设备能力
-        
+
         找到具有指定能力的最佳设备
-        
+
         Args:
             capability: 能力名称
             device_id: 指定设备 ID (可选)
             prefer_online: 优先在线设备
-        
+
         Returns:
             设备对象
         """
@@ -703,131 +702,131 @@ class DeviceRegistry:
             if device and device.is_capability_available(capability):
                 return device
             return None
-        
+
         # 从能力索引查找
         device_ids = self.capability_index.get(capability, [])
-        
+
         candidates = []
         for did in device_ids:
             device = self.devices.get(did)
             if device and device.is_capability_available(capability):
                 candidates.append(device)
-        
+
         if not candidates:
             return None
-        
+
         # 优先在线设备
         if prefer_online:
             online = [d for d in candidates if d.is_online()]
             if online:
                 candidates = online
-        
+
         # 选择成功率最高的设备
         candidates.sort(
             key=lambda d: d.successful_commands / max(d.total_commands, 1),
             reverse=True,
         )
-        
+
         return candidates[0]
-    
+
     def get_available_capabilities(self) -> List[str]:
         """获取所有可用能力"""
         return list(self.capability_index.keys())
-    
+
     # ========================================================================
     # 分组和标签
     # ========================================================================
-    
+
     def add_to_group(self, device_id: str, group: str) -> bool:
         """添加设备到分组"""
         device = self.devices.get(device_id)
         if not device:
             return False
-        
+
         if group not in device.groups:
             device.groups.append(group)
-        
+
         if group not in self.groups:
             self.groups[group] = []
-        
+
         if device_id not in self.groups[group]:
             self.groups[group].append(device_id)
-        
+
         self._save()
         return True
-    
+
     def remove_from_group(self, device_id: str, group: str) -> bool:
         """从分组移除设备"""
         device = self.devices.get(device_id)
         if not device:
             return False
-        
+
         if group in device.groups:
             device.groups.remove(group)
-        
+
         if group in self.groups and device_id in self.groups[group]:
             self.groups[group].remove(device_id)
-        
+
         self._save()
         return True
-    
+
     def add_tag(self, device_id: str, tag: str) -> bool:
         """添加标签"""
         device = self.devices.get(device_id)
         if not device:
             return False
-        
+
         if tag not in device.tags:
             device.tags.append(tag)
-        
+
         if tag not in self.tag_index:
             self.tag_index[tag] = []
-        
+
         if device_id not in self.tag_index[tag]:
             self.tag_index[tag].append(device_id)
-        
+
         self._save()
         return True
-    
+
     def remove_tag(self, device_id: str, tag: str) -> bool:
         """移除标签"""
         device = self.devices.get(device_id)
         if not device:
             return False
-        
+
         if tag in device.tags:
             device.tags.remove(tag)
-        
+
         if tag in self.tag_index and device_id in self.tag_index[tag]:
             self.tag_index[tag].remove(device_id)
-        
+
         self._save()
         return True
-    
+
     def get_devices_by_group(self, group: str) -> List[Device]:
         """获取分组中的设备"""
         device_ids = self.groups.get(group, [])
         return [self.devices[did] for did in device_ids if did in self.devices]
-    
+
     def get_devices_by_tag(self, tag: str) -> List[Device]:
         """获取标签下的设备"""
         device_ids = self.tag_index.get(tag, [])
         return [self.devices[did] for did in device_ids if did in self.devices]
-    
+
     # ========================================================================
     # 统计
     # ========================================================================
-    
+
     def get_stats(self) -> Dict:
         """获取统计信息"""
         online = sum(1 for d in self.devices.values() if d.is_online())
         offline = len(self.devices) - online
-        
+
         by_type = {}
         for device in self.devices.values():
             t = device.device_type.value
             by_type[t] = by_type.get(t, 0) + 1
-        
+
         return {
             "total": len(self.devices),
             "online": online,
@@ -876,7 +875,7 @@ class DeviceRegistry:
                 device_id, _err,
             )
             return None
-    
+
     def _update_indexes(self, device: Device):
         """更新索引"""
         # 更新能力索引
@@ -885,21 +884,21 @@ class DeviceRegistry:
                 self.capability_index[cap.name] = []
             if device.device_id not in self.capability_index[cap.name]:
                 self.capability_index[cap.name].append(device.device_id)
-        
+
         # 更新分组索引
         for group in device.groups:
             if group not in self.groups:
                 self.groups[group] = []
             if device.device_id not in self.groups[group]:
                 self.groups[group].append(device.device_id)
-        
+
         # 更新标签索引
         for tag in device.tags:
             if tag not in self.tag_index:
                 self.tag_index[tag] = []
             if device.device_id not in self.tag_index[tag]:
                 self.tag_index[tag].append(device.device_id)
-    
+
     def _merge_groups_and_tags(
         self,
         device: Device,
@@ -925,19 +924,19 @@ class DeviceRegistry:
             if cap.name in self.capability_index:
                 if device.device_id in self.capability_index[cap.name]:
                     self.capability_index[cap.name].remove(device.device_id)
-        
+
         # 从分组索引移除
         for group in device.groups:
             if group in self.groups:
                 if device.device_id in self.groups[group]:
                     self.groups[group].remove(device.device_id)
-        
+
         # 从标签索引移除
         for tag in device.tags:
             if tag in self.tag_index:
                 if device.device_id in self.tag_index[tag]:
                     self.tag_index[tag].remove(device.device_id)
-    
+
     def _save(self):
         """Persist the current registry state as a snapshot / projection cache.
 
@@ -956,12 +955,12 @@ class DeviceRegistry:
                 "capability_index": self.capability_index,
                 "saved_at": time.time(),
             }
-            
+
             with open(self.storage_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error("DeviceRegistry._save: failed — %s", e)
-    
+
     def _load(self):
         """Restore the compatibility index from the on-disk snapshot.
 
@@ -980,10 +979,10 @@ class DeviceRegistry:
         try:
             if not self.storage_path.exists():
                 return
-            
+
             with open(self.storage_path, encoding="utf-8") as f:
                 data = json.load(f)
-            
+
             # 加载设备（Pydantic V2 模型，自动验证和类型转换）
             for did, ddata in data.get("devices", {}).items():
                 try:
@@ -998,15 +997,15 @@ class DeviceRegistry:
                     self.devices[did] = device
                 except Exception as load_err:
                     logger.warning("DeviceRegistry._load: skipping invalid device %s — %s", did, load_err)
-            
+
             # 加载索引
             self.groups = data.get("groups", {})
             self.tag_index = data.get("tag_index", {})
             self.capability_index = data.get("capability_index", {})
-            
+
         except Exception as e:
             logger.error("DeviceRegistry._load: failed — %s", e)
-    
+
     async def _emit_event(self, event_type: str, device: Device):
         """触发事件"""
         if event_type == "registered":
@@ -1018,7 +1017,7 @@ class DeviceRegistry:
                         callback(device)
                 except Exception as e:
                     logger.error(f"事件回调失败: {e}")
-        
+
         elif event_type == "online":
             for callback in self._on_device_online:
                 try:
@@ -1028,7 +1027,7 @@ class DeviceRegistry:
                         callback(device)
                 except Exception as e:
                     logger.error(f"事件回调失败: {e}")
-        
+
         elif event_type == "offline":
             for callback in self._on_device_offline:
                 try:
@@ -1038,15 +1037,15 @@ class DeviceRegistry:
                         callback(device)
                 except Exception as e:
                     logger.error(f"事件回调失败: {e}")
-    
+
     def on_device_registered(self, callback: Callable):
         """注册设备注册事件回调"""
         self._on_device_registered.append(callback)
-    
+
     def on_device_online(self, callback: Callable):
         """注册设备上线事件回调"""
         self._on_device_online.append(callback)
-    
+
     def on_device_offline(self, callback: Callable):
         """注册设备离线事件回调"""
         self._on_device_offline.append(callback)

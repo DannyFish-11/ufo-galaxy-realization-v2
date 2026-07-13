@@ -141,6 +141,7 @@ class LegacyPathEntry:
 #: :func:`emit_legacy_guardrail`.
 LEGACY_PATH_REGISTRY: Dict[str, LegacyPathEntry] = {}
 
+
 def _register(*entries: LegacyPathEntry) -> None:
     for entry in entries:
         LEGACY_PATH_REGISTRY[entry.module_path] = entry

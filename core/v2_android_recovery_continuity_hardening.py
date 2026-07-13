@@ -1376,7 +1376,7 @@ def interpret_replay_sequence(
                 last_accepted_position=last_accepted_position,
                 classification=ReplayItemClassification.convergence_eligible,
                 diagnosis=(
-                    f"Item within expected epoch and sequence window; "
+                    "Item within expected epoch and sequence window; "
                     "classified as convergence_eligible."
                 ),
             )

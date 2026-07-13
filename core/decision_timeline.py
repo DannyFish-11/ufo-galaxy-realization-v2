@@ -733,7 +733,7 @@ def _derive_trust_safety_gating_record(
                 gated_domains = list(annotation.get("gated_domains") or [])
 
     decision_summary = (
-        f"trust/safety gating applied"
+        "trust/safety gating applied"
         + (f" (risk_tier={risk_tier})" if risk_tier else "")
         + (f" (trust={trust_label})" if trust_label else "")
     )

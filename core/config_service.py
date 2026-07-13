@@ -79,6 +79,7 @@ _PROVIDER_KEY_MAP: Dict[str, str] = {
 # Validation result
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ProviderStatus:
     """Status of a single provider from the configuration service perspective."""

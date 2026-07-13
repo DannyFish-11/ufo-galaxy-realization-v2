@@ -30,10 +30,12 @@ from abc import ABC, abstractmethod
 
 logger = logging.getLogger("NodeRegistry")
 
+
 # 延迟导入以避免循环依赖
 def _get_capability_manager():
     from .capability_manager import get_capability_manager, CapabilityStatus
     return get_capability_manager(), CapabilityStatus
+
 
 def _get_connection_manager():
     from .connection_manager import get_connection_manager
@@ -60,7 +62,7 @@ class NodeCategory(Enum):
     """节点类别"""
     CORE = "core"                   # 核心节点
     LLM = "llm"                     # LLM 相关
-    COMMUNICATION = "communication" # 通信节点
+    COMMUNICATION = "communication"  # 通信节点
     HARDWARE = "hardware"           # 硬件节点
     INTEGRATION = "integration"     # 集成节点
     UTILITY = "utility"             # 工具节点
@@ -92,24 +94,24 @@ class NodeMetadata:
     category: NodeCategory = NodeCategory.UTILITY
     description: str = ""
     author: str = "Galaxy"
-    
+
     # 依赖
     dependencies: List[str] = field(default_factory=list)
     python_packages: List[str] = field(default_factory=list)
-    
+
     # 能力
     capabilities: List[NodeCapability] = field(default_factory=list)
-    
+
     # 配置
     config_schema: Dict[str, Any] = field(default_factory=dict)
     default_config: Dict[str, Any] = field(default_factory=dict)
-    
+
     # 运行时信息
     status: NodeStatus = NodeStatus.UNKNOWN
     health_score: float = 1.0
     last_health_check: Optional[datetime] = None
     error_message: Optional[str] = None
-    
+
     # 统计
     call_count: int = 0
     success_count: int = 0
@@ -122,7 +124,7 @@ class NodeMetadata:
 
 class BaseNode(ABC):
     """节点基类 - 所有节点必须继承此类"""
-    
+
     def __init__(self, node_id: str, name: str):
         self.node_id = node_id
         self.name = name
@@ -130,31 +132,31 @@ class BaseNode(ABC):
         self.config: Dict[str, Any] = {}
         self.logger = logging.getLogger(f"Node.{name}")
         self._initialized = False
-        
+
     @abstractmethod
     async def initialize(self) -> bool:
         """初始化节点"""
         pass
-        
+
     @abstractmethod
     async def execute(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """执行节点操作"""
         pass
-        
+
     @abstractmethod
     async def health_check(self) -> Dict[str, Any]:
         """健康检查"""
         pass
-        
+
     async def shutdown(self):
         """关闭节点"""
         self._initialized = False
         self.metadata.status = NodeStatus.STOPPED
-        
+
     def get_capabilities(self) -> List[str]:
         """获取节点能力列表"""
         return [cap.name for cap in self.metadata.capabilities]
-        
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
@@ -173,61 +175,61 @@ class BaseNode(ABC):
 
 class NodeRegistry:
     """节点注册表 - 管理所有节点的注册和发现"""
-    
+
     _instance = None
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-        
+
     def __init__(self):
         if self._initialized:
             return
-            
+
         self.nodes: Dict[str, BaseNode] = {}
         self.metadata: Dict[str, NodeMetadata] = {}
         self.node_classes: Dict[str, Type[BaseNode]] = {}
         self.capability_index: Dict[str, Set[str]] = {}  # capability -> node_ids
         self.category_index: Dict[NodeCategory, Set[str]] = {}  # category -> node_ids
-        
+
         self._lock = asyncio.Lock()
         self._health_check_interval = 30  # 秒
         self._health_check_task: Optional[asyncio.Task] = None
-        
+
         self._initialized = True
         logger.info("节点注册表已初始化")
-        
+
     # ========================================================================
     # 节点注册
     # ========================================================================
-    
+
     async def register_node(self, node: BaseNode) -> bool:
         """注册节点"""
         async with self._lock:
             node_id = node.node_id
-            
+
             if node_id in self.nodes:
                 logger.warning(f"节点已存在，将覆盖: {node_id}")
-                
+
             self.nodes[node_id] = node
             self.metadata[node_id] = node.metadata
-            
+
             # 更新能力索引
             for cap in node.metadata.capabilities:
                 if cap.name not in self.capability_index:
                     self.capability_index[cap.name] = set()
                 self.capability_index[cap.name].add(node_id)
-                
+
             # 更新类别索引
             category = node.metadata.category
             if category not in self.category_index:
                 self.category_index[category] = set()
             self.category_index[category].add(node_id)
-            
+
             node.metadata.status = NodeStatus.REGISTERED
-            
+
             # ===== 集成：注册能力到能力管理器 =====
             try:
                 capability_manager, CapabilityStatus = _get_capability_manager()
@@ -243,87 +245,87 @@ class NodeRegistry:
                     )
             except Exception as e:
                 logger.warning(f"能力注册失败 (非致命): {e}")
-            
+
             logger.info(f"节点已注册: {node_id} ({node.name})")
             return True
-            
+
     async def unregister_node(self, node_id: str) -> bool:
         """注销节点"""
         async with self._lock:
             if node_id not in self.nodes:
                 return False
-                
+
             node = self.nodes[node_id]
-            
+
             # 关闭节点
             await node.shutdown()
-            
+
             # 从索引中移除
             for cap in node.metadata.capabilities:
                 if cap.name in self.capability_index:
                     self.capability_index[cap.name].discard(node_id)
-                    
+
             category = node.metadata.category
             if category in self.category_index:
                 self.category_index[category].discard(node_id)
-                
+
             del self.nodes[node_id]
             del self.metadata[node_id]
-            
+
             logger.info(f"节点已注销: {node_id}")
             return True
-            
+
     def register_node_class(self, node_id: str, node_class: Type[BaseNode]):
         """注册节点类（延迟实例化）"""
         self.node_classes[node_id] = node_class
         logger.debug(f"节点类已注册: {node_id}")
-        
+
     # ========================================================================
     # 节点发现
     # ========================================================================
-    
+
     def get_node(self, node_id: str) -> Optional[BaseNode]:
         """获取节点"""
         return self.nodes.get(node_id)
-        
+
     def get_nodes_by_capability(self, capability: str) -> List[BaseNode]:
         """按能力获取节点"""
         node_ids = self.capability_index.get(capability, set())
         return [self.nodes[nid] for nid in node_ids if nid in self.nodes]
-        
+
     def get_nodes_by_category(self, category: NodeCategory) -> List[BaseNode]:
         """按类别获取节点"""
         node_ids = self.category_index.get(category, set())
         return [self.nodes[nid] for nid in node_ids if nid in self.nodes]
-        
+
     def get_all_nodes(self) -> List[BaseNode]:
         """获取所有节点"""
         return list(self.nodes.values())
-        
+
     def get_ready_nodes(self) -> List[BaseNode]:
         """获取就绪的节点"""
         return [
             node for node in self.nodes.values()
             if node.metadata.status in [NodeStatus.READY, NodeStatus.RUNNING]
         ]
-        
+
     def find_best_node_for_capability(self, capability: str) -> Optional[BaseNode]:
         """为能力找到最佳节点"""
         nodes = self.get_nodes_by_capability(capability)
         if not nodes:
             return None
-            
+
         # 按健康分数和响应时间排序
         ready_nodes = [n for n in nodes if n.metadata.status in [NodeStatus.READY, NodeStatus.RUNNING]]
         if not ready_nodes:
             return nodes[0]  # 返回第一个可用的
-            
+
         return max(ready_nodes, key=lambda n: (n.metadata.health_score, -n.metadata.avg_response_time))
-        
+
     # ========================================================================
     # 节点调用
     # ========================================================================
-    
+
     async def call_node(self, node_id: str, action: str, params: Dict[str, Any] = None,
                         allow_failover: bool = True) -> Dict[str, Any]:
         """
@@ -416,19 +418,19 @@ class NodeRegistry:
 
         # 使用备选节点调用（禁止再次故障转移，防止循环）
         return await self.call_node(best.node_id, action, params, allow_failover=False)
-            
+
     async def call_capability(self, capability: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """按能力调用（自动选择最佳节点）"""
         node = self.find_best_node_for_capability(capability)
         if not node:
             return {"success": False, "error": f"没有节点提供此能力: {capability}"}
-            
+
         return await self.call_node(node.node_id, capability, params)
-        
+
     # ========================================================================
     # 健康检查
     # ========================================================================
-    
+
     # 连续健康检查失败次数达到此阈值时标记 ERROR
     HEALTH_FAIL_THRESHOLD = 3
 
@@ -499,37 +501,37 @@ class NodeRegistry:
             logger.debug(f"能力状态更新失败 (非致命): {e}")
 
         return {"healthy": False, "error": error}
-            
+
     async def check_all_health(self) -> Dict[str, Dict[str, Any]]:
         """检查所有节点健康"""
         results = {}
         for node_id in self.nodes:
             results[node_id] = await self.check_node_health(node_id)
         return results
-        
+
     async def start_health_monitor(self):
         """启动健康监控"""
         if self._health_check_task:
             return
-            
+
         async def monitor_loop():
             while True:
                 await asyncio.sleep(self._health_check_interval)
                 await self.check_all_health()
-                
+
         self._health_check_task = asyncio.create_task(monitor_loop())
         logger.info("健康监控已启动")
-        
+
     async def stop_health_monitor(self):
         """停止健康监控"""
         if self._health_check_task:
             self._health_check_task.cancel()
             self._health_check_task = None
-            
+
     # ========================================================================
     # 节点加载
     # ========================================================================
-    
+
     async def load_node_from_path(self, node_path: Path) -> Optional[BaseNode]:
         """从路径加载节点（安全导入，任何异常都不会影响其他节点）"""
         main_py = node_path / "main.py"
@@ -575,15 +577,15 @@ class NodeRegistry:
             failed_meta.error_message = f"[{error_type}] {str(e)[:200]}"
             self.metadata[node_id] = failed_meta
             return None
-            
+
     def _create_wrapper_node(self, node_id: str, module) -> BaseNode:
         """为旧式节点创建包装器"""
-        
+
         class WrapperNode(BaseNode):
             def __init__(self, nid: str, name: str, mod):
                 super().__init__(nid, name)
                 self.module = mod
-                
+
             async def initialize(self) -> bool:
                 if hasattr(self.module, 'initialize'):
                     if asyncio.iscoroutinefunction(self.module.initialize):
@@ -593,7 +595,7 @@ class NodeRegistry:
                 self._initialized = True
                 self.metadata.status = NodeStatus.READY
                 return True
-                
+
             async def execute(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
                 if hasattr(self.module, action):
                     func = getattr(self.module, action)
@@ -609,12 +611,12 @@ class NodeRegistry:
                         return func(action, params)
                 else:
                     raise NotImplementedError(f"节点不支持操作: {action}")
-                    
+
             async def health_check(self) -> Dict[str, Any]:
                 return {"score": 1.0, "status": "ok"}
-                
+
         return WrapperNode(node_id, node_id, module)
-        
+
     async def load_all_nodes(self, nodes_dir: Path) -> Dict[str, Any]:
         """
         加载所有节点，返回详细的加载报告
@@ -667,11 +669,11 @@ class NodeRegistry:
             logger.warning(f"  ⚠ {node_id}: {error}")
 
         return report
-        
+
     # ========================================================================
     # 状态导出
     # ========================================================================
-    
+
     def get_status(self) -> Dict[str, Any]:
         """获取注册表状态"""
         return {
@@ -679,7 +681,7 @@ class NodeRegistry:
             "ready_nodes": len(self.get_ready_nodes()),
             "capabilities": list(self.capability_index.keys()),
             "categories": {
-                cat.value: len(node_ids) 
+                cat.value: len(node_ids)
                 for cat, node_ids in self.category_index.items()
             },
             "nodes": {
@@ -692,7 +694,7 @@ class NodeRegistry:
                 for node_id, node in self.nodes.items()
             }
         }
-        
+
     def export_to_json(self) -> str:
         """导出为 JSON"""
         return json.dumps(self.get_status(), indent=2, ensure_ascii=False)
@@ -783,7 +785,7 @@ def get_all_nodes() -> List[BaseNode]:
 if __name__ == "__main__":
     async def test():
         registry = get_registry()
-        
+
         # 创建测试节点
         class TestNode(BaseNode):
             async def initialize(self) -> bool:
@@ -792,23 +794,23 @@ if __name__ == "__main__":
                     NodeCapability(name="test", description="测试能力")
                 )
                 return True
-                
+
             async def execute(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
                 return {"action": action, "params": params}
-                
+
             async def health_check(self) -> Dict[str, Any]:
                 return {"score": 1.0, "status": "healthy"}
-                
+
         # 注册测试节点
         node = TestNode("test_node", "测试节点")
         await node.initialize()
         await registry.register_node(node)
-        
+
         # 调用节点
         result = await registry.call_node("test_node", "test", {"key": "value"})
         print(f"调用结果: {result}")
-        
+
         # 打印状态
         print(f"注册表状态: {registry.export_to_json()}")
-        
+
     asyncio.run(test())

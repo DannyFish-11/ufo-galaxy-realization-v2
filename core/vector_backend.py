@@ -38,6 +38,7 @@ logger = logging.getLogger("Galaxy.VectorBackend")
 # 结果数据类
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SearchResult:
     """统一搜索结果"""

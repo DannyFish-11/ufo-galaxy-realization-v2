@@ -105,8 +105,8 @@ def _load_runtime_secrets_into_env() -> List[str]:
 
 class Severity(str, Enum):
     CRITICAL = "CRITICAL"   # Must be set; startup should be blocked
-    WARNING  = "WARNING"    # Strongly recommended; feature will be degraded
-    INFO     = "INFO"       # Informational; defaults exist
+    WARNING = "WARNING"    # Strongly recommended; feature will be degraded
+    INFO = "INFO"       # Informational; defaults exist
 
 
 # ---------------------------------------------------------------------------

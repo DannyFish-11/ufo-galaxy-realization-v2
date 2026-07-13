@@ -240,21 +240,21 @@ class GraphNodeState(str, Enum):
     are additive.
     """
     # Original PR-6 states (preserved, unchanged)
-    QUEUED     = "queued"
-    DISPATCH   = "dispatch"
-    RUNNING    = "running"
-    RESULT     = "result"
-    COMPLETED  = "completed"
-    FAILED     = "failed"
+    QUEUED = "queued"
+    DISPATCH = "dispatch"
+    RUNNING = "running"
+    RESULT = "result"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
     # PR-C extended states -- aligned with CanonicalTask.TaskLifecycle
-    ADMITTED       = "admitted"
-    PLANNED        = "planned"
-    ROUTED         = "routed"
+    ADMITTED = "admitted"
+    PLANNED = "planned"
+    ROUTED = "routed"
     PARTIAL_RESULT = "partial_result"
-    CANCELLED      = "cancelled"
-    DEGRADED       = "degraded"
-    REPLAYED       = "replayed"
+    CANCELLED = "cancelled"
+    DEGRADED = "degraded"
+    REPLAYED = "replayed"
 
 
 class GraphEdgeKind(str, Enum):
@@ -285,25 +285,25 @@ class GraphEdgeKind(str, Enum):
         Links a child node back to the aggregator node collecting results.
     """
     DEPENDENCY = "dependency_edge"
-    DISPATCH   = "dispatch_edge"
-    RESULT     = "result_edge"
-    RETRY      = "retry_edge"
-    FALLBACK   = "fallback_edge"
-    FANOUT     = "fanout_edge"
-    FANIN      = "fanin_edge"
+    DISPATCH = "dispatch_edge"
+    RESULT = "result_edge"
+    RETRY = "retry_edge"
+    FALLBACK = "fallback_edge"
+    FANOUT = "fanout_edge"
+    FANIN = "fanin_edge"
 
 
 class WorkflowContributorKind(str, Enum):
     """Sources that can contribute nodes/edges to the task graph runtime."""
-    GALAXY_ORCHESTRATOR   = "galaxy_orchestrator"
-    UNIFIED_ORCHESTRATOR  = "unified_orchestrator"
-    E2E_ORCHESTRATOR      = "e2e_orchestrator"
-    TASK_GRAPH_ENGINE     = "task_graph_engine"         # core.task_graph.TaskGraph
-    OPENCLAWD             = "openclawd"
-    SCHEDULER             = "scheduler"
-    COMMAND_ROUTER        = "command_router"
-    MASTER_BRAIN          = "master_brain"
-    UNKNOWN               = "unknown"
+    GALAXY_ORCHESTRATOR = "galaxy_orchestrator"
+    UNIFIED_ORCHESTRATOR = "unified_orchestrator"
+    E2E_ORCHESTRATOR = "e2e_orchestrator"
+    TASK_GRAPH_ENGINE = "task_graph_engine"         # core.task_graph.TaskGraph
+    OPENCLAWD = "openclawd"
+    SCHEDULER = "scheduler"
+    COMMAND_ROUTER = "command_router"
+    MASTER_BRAIN = "master_brain"
+    UNKNOWN = "unknown"
 
 
 # ---------------------------------------------------------------------------

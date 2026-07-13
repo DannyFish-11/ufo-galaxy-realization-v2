@@ -72,37 +72,37 @@ class HardwareStatus:
     camera_front: bool = False
     camera_back: bool = False
     camera_in_use: bool = False
-    
+
     # 蓝牙
     bluetooth_supported: bool = False
     bluetooth_enabled: bool = False
     bluetooth_connected_devices: List[str] = field(default_factory=list)
-    
+
     # NFC
     nfc_supported: bool = False
     nfc_enabled: bool = False
-    
+
     # 音频
     microphone_available: bool = False
     speaker_available: bool = False
     audio_volume: int = 0
     audio_muted: bool = False
-    
+
     # 网络
     wifi_connected: bool = False
     wifi_ssid: Optional[str] = None
     wifi_signal: int = 0
     mobile_data_connected: bool = False
-    
+
     # 电池
     battery_level: int = 0
     battery_charging: bool = False
-    
+
     # 传感器
     has_accelerometer: bool = False
     has_gyroscope: bool = False
     has_gps: bool = False
-    
+
     # 串口/USB
     serial_ports: List[str] = field(default_factory=list)
     usb_devices: List[str] = field(default_factory=list)
@@ -115,28 +115,28 @@ class DeviceState:
     device_name: str
     device_type: str
     category: DeviceCategory
-    
+
     # 连接状态
     is_online: bool = False
     is_connected_to_server: bool = False
     last_heartbeat: Optional[str] = None
-    
+
     # 硬件状态
     hardware: HardwareStatus = field(default_factory=HardwareStatus)
-    
+
     # 节点状态
     active_nodes: int = 0
     total_nodes: int = 0
     node_health: float = 100.0
-    
+
     # 系统信息
     os_version: str = ""
     app_version: str = ""
     ip_address: str = ""
-    
+
     # 扩展数据
     extra_data: Dict[str, Any] = field(default_factory=dict)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         result = asdict(self)
         result['category'] = self.category.value
@@ -149,26 +149,26 @@ class DeviceState:
 
 class DeviceStatusManager:
     """设备状态管理器"""
-    
+
     _instance = None
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self):
         if self._initialized:
             return
-        
+
         self._devices: Dict[str, DeviceState] = {}
         self._websocket_clients: Set[WebSocket] = set()
         self._status_history: Dict[str, List[Dict[str, Any]]] = {}
         self._initialized = True
-        
+
         logger.info("DeviceStatusManager initialized")
-    
+
     def register_device(self, device_state: DeviceState) -> bool:
         """注册设备。
 
@@ -184,7 +184,7 @@ class DeviceStatusManager:
         from core.task_utils import create_tracked_task
         create_tracked_task(self._broadcast_update("device_registered", device_state.to_dict()), name="broadcast_device_registered")
         return True
-    
+
     def unregister_device(self, device_id: str) -> bool:
         """注销设备。
 
@@ -261,73 +261,73 @@ class DeviceStatusManager:
                 device_id,
                 exc,
             )
-    
+
     def update_device_status(self, device_id: str, status_update: Dict[str, Any]) -> bool:
         """更新设备状态"""
         if device_id not in self._devices:
             return False
-        
+
         device = self._devices[device_id]
-        
+
         # 更新硬件状态
         if "hardware" in status_update:
             hw = status_update["hardware"]
             for key, value in hw.items():
                 if hasattr(device.hardware, key):
                     setattr(device.hardware, key, value)
-        
+
         # 更新其他字段
-        for key in ["is_online", "is_connected_to_server", "active_nodes", "total_nodes", 
+        for key in ["is_online", "is_connected_to_server", "active_nodes", "total_nodes",
                     "node_health", "os_version", "app_version", "ip_address"]:
             if key in status_update:
                 setattr(device, key, status_update[key])
-        
+
         # 更新心跳时间
         device.last_heartbeat = datetime.now().isoformat()
-        
+
         # 更新扩展数据
         if "extra_data" in status_update:
             device.extra_data.update(status_update["extra_data"])
-        
+
         # 记录历史
         self._record_history(device_id, device.to_dict())
-        
+
         # 广播更新
         from core.task_utils import create_tracked_task
         create_tracked_task(self._broadcast_update("device_status_updated", device.to_dict()), name="broadcast_device_status")
-        
+
         return True
-    
+
     def get_device_status(self, device_id: str) -> Optional[Dict[str, Any]]:
         """获取设备状态"""
         if device_id in self._devices:
             return self._devices[device_id].to_dict()
         return None
-    
+
     def get_all_devices(self) -> List[Dict[str, Any]]:
         """获取所有设备状态"""
         return [device.to_dict() for device in self._devices.values()]
-    
+
     def get_devices_by_category(self, category: DeviceCategory) -> List[Dict[str, Any]]:
         """按类别获取设备"""
         return [
             device.to_dict() for device in self._devices.values()
             if device.category == category
         ]
-    
+
     def get_online_devices(self) -> List[Dict[str, Any]]:
         """获取在线设备"""
         return [
             device.to_dict() for device in self._devices.values()
             if device.is_online
         ]
-    
+
     def get_status_summary(self) -> Dict[str, Any]:
         """获取状态摘要"""
         total = len(self._devices)
         online = sum(1 for d in self._devices.values() if d.is_online)
         connected = sum(1 for d in self._devices.values() if d.is_connected_to_server)
-        
+
         by_category = {}
         for cat in DeviceCategory:
             devices = [d for d in self._devices.values() if d.category == cat]
@@ -336,7 +336,7 @@ class DeviceStatusManager:
                     "total": len(devices),
                     "online": sum(1 for d in devices if d.is_online)
                 }
-        
+
         return {
             "total_devices": total,
             "online_devices": online,
@@ -344,43 +344,43 @@ class DeviceStatusManager:
             "by_category": by_category,
             "last_updated": datetime.now().isoformat()
         }
-    
+
     def _record_history(self, device_id: str, status: Dict[str, Any]):
         """记录状态历史"""
         if device_id not in self._status_history:
             self._status_history[device_id] = []
-        
+
         history = self._status_history[device_id]
         history.append({
             "timestamp": datetime.now().isoformat(),
             "status": status
         })
-        
+
         # 只保留最近 100 条记录
         if len(history) > 100:
             self._status_history[device_id] = history[-100:]
-    
+
     async def add_websocket_client(self, websocket: WebSocket):
         """添加 WebSocket 客户端"""
         self._websocket_clients.add(websocket)
         logger.info(f"WebSocket client connected. Total: {len(self._websocket_clients)}")
-    
+
     async def remove_websocket_client(self, websocket: WebSocket):
         """移除 WebSocket 客户端"""
         self._websocket_clients.discard(websocket)
         logger.info(f"WebSocket client disconnected. Total: {len(self._websocket_clients)}")
-    
+
     async def _broadcast_update(self, event_type: str, data: Dict[str, Any]):
         """广播状态更新"""
         if not self._websocket_clients:
             return
-        
+
         message = json.dumps({
             "event": event_type,
             "data": data,
             "timestamp": datetime.now().isoformat()
         })
-        
+
         disconnected = set()
         for client in self._websocket_clients:
             try:
@@ -388,7 +388,7 @@ class DeviceStatusManager:
             except Exception as e:
                 logger.error(f"Failed to send to WebSocket client: {e}")
                 disconnected.add(client)
-        
+
         # 清理断开的连接
         self._websocket_clients -= disconnected
 
@@ -481,7 +481,7 @@ async def register_device(request: RegisterDeviceRequest):
         category = DeviceCategory(request.category)
     except ValueError:
         category = DeviceCategory.CUSTOM
-    
+
     device_state = DeviceState(
         device_id=request.device_id,
         device_name=request.device_name,
@@ -490,7 +490,7 @@ async def register_device(request: RegisterDeviceRequest):
         os_version=request.os_version,
         app_version=request.app_version
     )
-    
+
     success = status_manager.register_device(device_state)
     return {"success": success, "device_id": request.device_id}
 
@@ -532,7 +532,7 @@ async def websocket_status(websocket: WebSocket):
     """WebSocket 实时状态推送"""
     await websocket.accept()
     await status_manager.add_websocket_client(websocket)
-    
+
     try:
         # 发送当前状态
         await websocket.send_json({
@@ -543,7 +543,7 @@ async def websocket_status(websocket: WebSocket):
             },
             "timestamp": datetime.now().isoformat()
         })
-        
+
         # 保持连接并处理消息
         while True:
             data = await websocket.receive_text()
@@ -560,7 +560,7 @@ async def websocket_status(websocket: WebSocket):
                         "data": status,
                         "timestamp": datetime.now().isoformat()
                     })
-                    
+
     except WebSocketDisconnect:
         await status_manager.remove_websocket_client(websocket)
     except Exception as e:

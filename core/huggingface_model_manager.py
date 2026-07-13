@@ -520,6 +520,7 @@ class HuggingFaceModelManager:
 
 _manager: Optional[HuggingFaceModelManager] = None
 
+
 def get_hf_model_manager() -> HuggingFaceModelManager:
     global _manager
     if _manager is None:

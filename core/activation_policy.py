@@ -45,21 +45,21 @@ class ActivationPolicy(enum.Enum):
 
     ON_DEMAND = "on_demand"
     """Start when UDM registers a device that matches this Node's mapping.
-    
+
     Used for heavy-weight nodes (ADB, DesktopAuto) that should only run
     when a real device is present.
     """
 
     LAZY = "lazy"
     """Start on first capability request, then keep alive.
-    
+
     Used for medium-weight nodes (BLE, Camera, NFC) that may be needed
     sporadically.
     """
 
     SHARED = "shared"
     """Lightweight shared service; start once, shared by many devices.
-    
+
     Used for protocol gateways (MQTT) that are cheap to keep running.
     """
 

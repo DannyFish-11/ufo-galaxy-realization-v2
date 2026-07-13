@@ -123,7 +123,7 @@ class KnowledgeChunk:
     chunk_id: str = ""
     content: str = ""
     source: str = ""          # 来源标识 (node_name, file_path, url)
-    source_type: str = "node" # 来源类型: node | file | url | memos | experience
+    source_type: str = "node"  # 来源类型: node | file | url | memos | experience
     relevance_score: float = 0.0
     tags: List[str] = field(default_factory=list)
     metadata: Dict = field(default_factory=dict)

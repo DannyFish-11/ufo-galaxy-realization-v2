@@ -62,6 +62,7 @@ CALLABLE_NODE_BASELINE_ESTABLISHED: str = (
 # Canonical callable-class set
 # ---------------------------------------------------------------------------
 
+
 def _build_callable_classes() -> "FrozenSet":
     """Return the frozenset of NodeArchitecturalClass values that are callable.
 

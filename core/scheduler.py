@@ -113,6 +113,7 @@ SCHEDULER_SEND_TO_DEVICE_CANONICAL_GATED: str = (
     "explicitly enabled."
 )
 
+
 class ToolDefinition(BaseModel):
     name: str
     description: str

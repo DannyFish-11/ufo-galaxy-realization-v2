@@ -85,17 +85,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def prometheus_metrics():
         """Prometheus-compatible metrics endpoint (text/plain)"""
         lines = []
-        lines.append(f"# HELP process_uptime_seconds Time since process start")
-        lines.append(f"# TYPE process_uptime_seconds gauge")
+        lines.append("# HELP process_uptime_seconds Time since process start")
+        lines.append("# TYPE process_uptime_seconds gauge")
         lines.append(f"process_uptime_seconds {_time.time() - _startup_time:.1f}")
 
         try:
             status = monitoring.health.get_status()
-            lines.append(f"# HELP galaxy_active_nodes Number of active nodes")
-            lines.append(f"# TYPE galaxy_active_nodes gauge")
+            lines.append("# HELP galaxy_active_nodes Number of active nodes")
+            lines.append("# TYPE galaxy_active_nodes gauge")
             lines.append(f"galaxy_active_nodes {status.get('nodes_active', 0)}")
-            lines.append(f"# HELP galaxy_connected_devices Number of connected devices")
-            lines.append(f"# TYPE galaxy_connected_devices gauge")
+            lines.append("# HELP galaxy_connected_devices Number of connected devices")
+            lines.append("# TYPE galaxy_connected_devices gauge")
             lines.append(f"galaxy_connected_devices {status.get('devices_connected', 0)}")
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
@@ -104,11 +104,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             import resource
             usage = resource.getrusage(resource.RUSAGE_SELF)
             rss = usage.ru_maxrss * 1024  # KB → bytes
-            lines.append(f"# HELP process_resident_memory_bytes Resident memory size in bytes")
-            lines.append(f"# TYPE process_resident_memory_bytes gauge")
+            lines.append("# HELP process_resident_memory_bytes Resident memory size in bytes")
+            lines.append("# TYPE process_resident_memory_bytes gauge")
             lines.append(f"process_resident_memory_bytes {rss}")
-            lines.append(f"# HELP process_cpu_seconds_total Total CPU time")
-            lines.append(f"# TYPE process_cpu_seconds_total counter")
+            lines.append("# HELP process_cpu_seconds_total Total CPU time")
+            lines.append("# TYPE process_cpu_seconds_total counter")
             lines.append(f"process_cpu_seconds_total {usage.ru_utime + usage.ru_stime:.2f}")
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)

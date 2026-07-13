@@ -62,6 +62,7 @@ def _source_contains(rel_path: str, tokens: List[str]) -> bool:
 # Methodology sentinel
 # ---------------------------------------------------------------------------
 
+
 AUDIT_METHODOLOGY: str = (
     "DEEPEST_DUAL_REPO_COGNITION_AUDIT_METHODOLOGY_V1: "
     "All checks derive evidence from real implementation code in "

@@ -96,7 +96,7 @@ class EmbeddedNATSServer:
                 # 镜像源列表（按优先级）
                 mirrors = [
                     "https://mirror.ghproxy.com/https://github.com",  # 2025 verified
-                    
+
                     "https://mirror.ghproxy.com/https://github.com",
                     "https://github.com",  # 直连兜底
                 ]

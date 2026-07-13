@@ -50,6 +50,7 @@ TaskLifecycleStatus = Literal["created", "running", "done", "failed"]
 # Canonical TaskEnvelope
 # ---------------------------------------------------------------------------
 
+
 class TaskEnvelope(BaseModel):
     """Canonical internal task representation used across the Agent Bus.
 

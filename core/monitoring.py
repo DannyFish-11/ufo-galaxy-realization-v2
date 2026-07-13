@@ -35,7 +35,7 @@ logger = logging.getLogger("Galaxy.Monitoring")
 class CircuitState(str, Enum):
     CLOSED = "closed"       # 正常：请求通过
     OPEN = "open"           # 熔断：请求直接拒绝
-    HALF_OPEN = "half_open" # 探测：允许少量请求试探
+    HALF_OPEN = "half_open"  # 探测：允许少量请求试探
 
 
 class CircuitBreaker:
