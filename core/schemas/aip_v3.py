@@ -27,7 +27,7 @@ import uuid
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ---------------------------------------------------------------------------
 # MsgType enum — mirrors AipModels.kt MsgType exactly
@@ -239,6 +239,14 @@ class TaskResultMsg(AIPMessage):
     error: str = Field(default="", description="Error message if status is failed/timeout/cancelled")
     duration_ms: int = Field(default=0, description="Execution duration in milliseconds")
     partial_results: List[Dict[str, Any]] = Field(default_factory=list, description="Partial results from multi-step execution")
+
+    @field_validator("duration_ms", mode="before")
+    @classmethod
+    def _coerce_duration_ms(cls, v: Any) -> Any:
+        # 多处构造点传入 (time.time()-t)*1000.0 的浮点毫秒;毫秒粒度取整即可。
+        # 否则 pydantic int_from_float 校验会在结果封装处抛错并被上游 try/except
+        # 静默吞掉,导致 TASK_RESULT 无法正常构造/上报。
+        return int(round(v)) if isinstance(v, float) else v
     ui_graph: Optional[Dict[str, Any]] = Field(
         default=None,
         description="动作后的结构化界面态(AG-UI): 序列化的 UIGraph。与 TASK_ASSIGN 的 "
@@ -281,6 +289,12 @@ class GoalExecutionResultMsg(AIPMessage):
     result: Any = Field(default=None, description="Structured result data")
     error: str = Field(default="", description="Error message if failed")
     duration_ms: int = Field(default=0, description="Total execution duration")
+
+    @field_validator("duration_ms", mode="before")
+    @classmethod
+    def _coerce_duration_ms(cls, v: Any) -> Any:
+        # 见 TaskResultMsg._coerce_duration_ms:浮点毫秒取整,避免 int_from_float 校验失败。
+        return int(round(v)) if isinstance(v, float) else v
 
 
 # ---------------------------------------------------------------------------
