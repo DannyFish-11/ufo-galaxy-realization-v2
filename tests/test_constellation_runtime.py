@@ -17,8 +17,27 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
+from types import SimpleNamespace
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+
+@contextmanager
+def _open_scheduling_gate(rt, device_id="dev_test"):
+    """给集体调度门(Layer-1 就绪)开一个测试候选。
+
+    run() 现在先过【集体】调度门:participation 层无就绪设备即 BLOCKED
+    (reason=no_orchestration_ready_devices),设备池/账本/演化器根本
+    不被咨询——这是有意的 deny-by-default。本文件各用例钉的是门后的
+    行为,须给门供一个可通过的候选。
+    """
+    with patch.object(
+        rt, "_get_orchestration_candidate_set",
+        return_value=[SimpleNamespace(device_id=device_id)],
+    ), patch.object(rt, "_is_orchestration_ready", return_value=True):
+        yield
 
 
 # ===========================================================================
@@ -137,7 +156,8 @@ class TestDAGEvolution:
         with patch.object(DAGEvolver, "on_task_failed", _spy_on_failed):
             with patch("core.constellation_runtime.ConstellationRuntime._try_node71",
                        new_callable=AsyncMock, return_value=None):
-                await rt.run(task_description="fail test")
+                with _open_scheduling_gate(rt):
+                    await rt.run(task_description="fail test")
 
         assert len(evolver_calls) > 0
 
@@ -179,7 +199,8 @@ class TestDevicePoolIntegration:
         with patch.object(rt, "_get_device_pool", return_value=mock_pool):
             with patch("core.constellation_runtime.ConstellationRuntime._try_node71",
                        new_callable=AsyncMock, return_value=None):
-                await rt.run(task_description="device test")
+                with _open_scheduling_gate(rt, device_id="dev_android_1"):
+                    await rt.run(task_description="device test")
 
         mock_pool.select_device.assert_called()
 
@@ -216,7 +237,8 @@ class TestAuditLedgerEvents:
         with patch.object(rt, "_get_audit_ledger", return_value=fresh_ledger):
             with patch("core.constellation_runtime.ConstellationRuntime._try_node71",
                        new_callable=AsyncMock, return_value=None):
-                await rt.run(task_description="audit test")
+                with _open_scheduling_gate(rt):
+                    await rt.run(task_description="audit test")
 
         event_types = [ev.event_type for ev in fresh_ledger.all_events]
         assert EventType.TASK_CREATED in event_types

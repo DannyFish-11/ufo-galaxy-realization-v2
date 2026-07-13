@@ -9297,7 +9297,11 @@ class OpenClawd:
                 tool_name=command,
                 args=payload or {},
                 remote_execution_mode=RemoteExecutionMode.command_only,
-                required_capabilities=_effective_caps,
+                # TaskEnvelope.required_capabilities 是非可空 List[str]:传 None
+                # 会让 Pydantic 校验在 try 里爆炸,整条 canonical 路由被静默
+                # 跳过、跌落 legacy websocket 兜底。与 envelope_from_command_
+                # request 同口径:空能力要求 == []。
+                required_capabilities=_effective_caps or [],
                 metadata={
                     "command_id": command_id,
                     "session_id": session_id,

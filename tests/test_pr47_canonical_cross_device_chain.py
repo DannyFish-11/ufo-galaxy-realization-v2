@@ -360,6 +360,9 @@ class TestChainExecutionRecord:
             "record_id", "task_id", "trace_id", "device_id", "route_mode",
             "steps_completed", "is_canonical", "legacy_path_used",
             "result_envelope", "dispatched_at", "completed_at", "extra",
+            # 验收闭环字段:acceptance_state / acceptance_closed 已进入
+            # ChainExecutionRecord 契约(to_dict/from_dict 双向携带)。
+            "acceptance_state", "acceptance_closed",
         }
         assert expected_keys == set(d.keys())
 
@@ -663,17 +666,22 @@ class TestLegacyPathRegistryPR7:
         assert entry.status is LegacyPathStatus.LEGACY_COMPATIBILITY
 
     def test_all_pr7_entries_have_pr7_guardrail(self):
+        # PR-S3 收拢派发权威:DeviceRouter.route_task 从 PR-7 的
+        # LEGACY_COMPATIBILITY 晋升为 ACTIVE canonical 单一派发入口,
+        # CrossDeviceCoordinator 收为其内部兜底——两者 guardrail 标记
+        # 相应升为 PR-S3(注册表 notes 有案)。"全部仍是 PR-7" 是晋升
+        # 前的退役契约。
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        pr7_paths = [
-            "galaxy_gateway.orchestrator.galaxy_orchestrator",
-            "galaxy_gateway.orchestrator.task_orchestrator.TaskOrchestrator",
-            "galaxy_gateway.device_router.DeviceRouter.route_task",
-            "galaxy_gateway.cross_device_coordinator.CrossDeviceCoordinator",
-        ]
-        for path in pr7_paths:
+        expected_guardrails = {
+            "galaxy_gateway.orchestrator.galaxy_orchestrator": "PR-7",
+            "galaxy_gateway.orchestrator.task_orchestrator.TaskOrchestrator": "PR-7",
+            "galaxy_gateway.device_router.DeviceRouter.route_task": "PR-S3",
+            "galaxy_gateway.cross_device_coordinator.CrossDeviceCoordinator": "PR-S3",
+        }
+        for path, tag in expected_guardrails.items():
             entry = LEGACY_PATH_REGISTRY[path]
-            assert entry.pr_guardrail_added == "PR-7", (
-                f"{path} should have pr_guardrail_added='PR-7'"
+            assert entry.pr_guardrail_added == tag, (
+                f"{path} should have pr_guardrail_added={tag!r}"
             )
 
     def test_pr7_entries_have_recommendation(self):
@@ -919,7 +927,9 @@ class TestGalaxyOrchestratorDemoted:
             "galaxy_gateway.orchestrator.galaxy_orchestrator.DeviceManager",
             return_value=MagicMock(),
         ):
-            with caplog.at_level(logging.WARNING, logger="Galaxy.OrchestrationAuthority"):
+            # PR-R9-CLEAN:守卫从 WARNING 降为 DEBUG(降噪),前缀统一为
+            # "LEGACY GUARDRAIL"。钉住"init 仍发守卫"这一事实,级别按现契约。
+            with caplog.at_level(logging.DEBUG, logger="Galaxy.OrchestrationAuthority"):
                 try:
                     from galaxy_gateway.orchestrator.galaxy_orchestrator import GalaxyOrchestrator
                     GalaxyOrchestrator(config={})
@@ -927,7 +937,8 @@ class TestGalaxyOrchestratorDemoted:
                     pass  # Construction errors are not what we're testing
         legacy_records = [
             r for r in caplog.records
-            if "LEGACY PATH GUARDRAIL" in r.message
+            if "LEGACY GUARDRAIL" in r.message
+            and "galaxy_gateway.orchestrator.galaxy_orchestrator" in r.message
         ]
         assert len(legacy_records) >= 1
 

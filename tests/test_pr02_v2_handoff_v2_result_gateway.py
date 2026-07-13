@@ -114,6 +114,9 @@ class TestHandlerRegistration:
 def _make_ack_message(handoff_id: str = "", device_id: str = "device-test") -> Dict[str, Any]:
     return {
         "type": "handoff_ack",
+        # PR-46 跨仓 schema 门:缺 schema_version 的上行在进 canonical
+        # 真相链之前就被 REJECT(有意加固),真实 Android 端总是带版本。
+        "schema_version": "1",
         "device_id": device_id,
         "message_id": str(uuid.uuid4()),
         "payload": {
@@ -126,6 +129,11 @@ def _make_ack_message(handoff_id: str = "", device_id: str = "device-test") -> D
 def _make_result_message(handoff_id: str = "", device_id: str = "device-test") -> Dict[str, Any]:
     return {
         "type": "handoff_result",
+        # 终局上行还须带 completion-closure 契约版本(PR-46 第二层门)。
+        "completion_closure_contract_version": "1",
+        # PR-46 跨仓 schema 门:缺 schema_version 的上行在进 canonical
+        # 真相链之前就被 REJECT(有意加固),真实 Android 端总是带版本。
+        "schema_version": "1",
         "device_id": device_id,
         "message_id": str(uuid.uuid4()),
         "payload": {
@@ -138,6 +146,11 @@ def _make_result_message(handoff_id: str = "", device_id: str = "device-test") -
 def _make_failure_message(handoff_id: str = "", device_id: str = "device-test") -> Dict[str, Any]:
     return {
         "type": "handoff_failure",
+        # 终局上行还须带 completion-closure 契约版本(PR-46 第二层门)。
+        "completion_closure_contract_version": "1",
+        # PR-46 跨仓 schema 门:缺 schema_version 的上行在进 canonical
+        # 真相链之前就被 REJECT(有意加固),真实 Android 端总是带版本。
+        "schema_version": "1",
         "device_id": device_id,
         "message_id": str(uuid.uuid4()),
         "payload": {
@@ -153,6 +166,11 @@ def _make_envelope_v2_result_message(
 ) -> Dict[str, Any]:
     return {
         "type": "handoff_envelope_v2_result",
+        # 终局上行还须带 completion-closure 契约版本(PR-46 第二层门)。
+        "completion_closure_contract_version": "1",
+        # PR-46 跨仓 schema 门:缺 schema_version 的上行在进 canonical
+        # 真相链之前就被 REJECT(有意加固),真实 Android 端总是带版本。
+        "schema_version": "1",
         "device_id": device_id,
         "message_id": str(uuid.uuid4()),
         "payload": {
