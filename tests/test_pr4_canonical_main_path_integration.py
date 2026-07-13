@@ -195,124 +195,89 @@ def _make_ack_envelope(handoff_id: str) -> MagicMock:
 class TestGroupA_CanonicalCompletionIngress:
     """Canonical completion ingress — real module validation."""
 
-    def test_A01_register_returns_pending_future(self):
+    async def test_A01_register_returns_pending_future(self):
         """register_pending_dispatch returns a non-done Future."""
         cci = CanonicalCompletionIngress()
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            fut = cci.register_pending_dispatch("hid-A01", task_id="tid-A01")
-            assert isinstance(fut, asyncio.Future)
-            assert not fut.done(), "Future should be pending after registration"
-        finally:
-            loop.close()
+        fut = cci.register_pending_dispatch("hid-A01", task_id="tid-A01")
+        assert isinstance(fut, asyncio.Future)
+        assert not fut.done(), "Future should be pending after registration"
 
-    def test_A02_complete_pending_dispatch_resolves_future(self):
+    async def test_A02_complete_pending_dispatch_resolves_future(self):
         """complete_pending_dispatch resolves the Future."""
         cci = CanonicalCompletionIngress()
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            fut = cci.register_pending_dispatch("hid-A02")
+        fut = cci.register_pending_dispatch("hid-A02")
 
-            envelope = _make_terminal_envelope("hid-A02")
-            resolved = cci.complete_pending_dispatch("hid-A02", envelope)
+        envelope = _make_terminal_envelope("hid-A02")
+        resolved = cci.complete_pending_dispatch("hid-A02", envelope)
 
-            assert resolved is True
-            assert fut.done()
-        finally:
-            loop.close()
+        assert resolved is True
+        assert fut.done()
 
-    def test_A03_resolved_future_result_is_envelope(self):
+    async def test_A03_resolved_future_result_is_envelope(self):
         """Future.result() returns the completion envelope."""
         cci = CanonicalCompletionIngress()
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            fut = cci.register_pending_dispatch("hid-A03")
-            envelope = _make_terminal_envelope("hid-A03")
-            cci.complete_pending_dispatch("hid-A03", envelope)
-            assert fut.result() is envelope
-        finally:
-            loop.close()
+        fut = cci.register_pending_dispatch("hid-A03")
+        envelope = _make_terminal_envelope("hid-A03")
+        cci.complete_pending_dispatch("hid-A03", envelope)
+        assert fut.result() is envelope
 
-    def test_A04_resolution_is_not_timeout_driven(self):
+    async def test_A04_resolution_is_not_timeout_driven(self):
         """The Future is resolved by a real signal, not by timeout."""
         cci = CanonicalCompletionIngress()
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            fut = cci.register_pending_dispatch("hid-A04")
+        fut = cci.register_pending_dispatch("hid-A04")
 
-            # Future must be pending before completion signal
-            assert not fut.done()
+        # Future must be pending before completion signal
+        assert not fut.done()
 
-            # Inject completion signal
-            envelope = _make_terminal_envelope("hid-A04")
-            cci.complete_pending_dispatch("hid-A04", envelope)
+        # Inject completion signal
+        envelope = _make_terminal_envelope("hid-A04")
+        cci.complete_pending_dispatch("hid-A04", envelope)
 
-            # Future must be done immediately — no timeout needed
-            assert fut.done()
-        finally:
-            loop.close()
+        # Future must be done immediately — no timeout needed
+        assert fut.done()
 
-    def test_A05_notify_path_resolves_future(self):
+    async def test_A05_notify_path_resolves_future(self):
         """notify() with a terminal envelope resolves the Future."""
         cci = CanonicalCompletionIngress()
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            fut = cci.register_pending_dispatch("hid-A05", task_id="tid-A05")
+        fut = cci.register_pending_dispatch("hid-A05", task_id="tid-A05")
 
-            envelope = _make_terminal_envelope("hid-A05", task_id="tid-A05")
-            resolved = cci.notify(envelope)
+        envelope = _make_terminal_envelope("hid-A05", task_id="tid-A05")
+        resolved = cci.notify(envelope)
 
-            assert resolved is True
-            assert fut.done()
-        finally:
-            loop.close()
+        assert resolved is True
+        assert fut.done()
 
-    def test_A06_multiple_registrations_resolved_independently(self):
+    async def test_A06_multiple_registrations_resolved_independently(self):
         """Multiple registrations can be resolved independently."""
         cci = CanonicalCompletionIngress()
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            fut1 = cci.register_pending_dispatch("hid-A06-1")
-            fut2 = cci.register_pending_dispatch("hid-A06-2")
+        fut1 = cci.register_pending_dispatch("hid-A06-1")
+        fut2 = cci.register_pending_dispatch("hid-A06-2")
 
-            # Resolve only fut1
-            env1 = _make_terminal_envelope("hid-A06-1")
-            cci.complete_pending_dispatch("hid-A06-1", env1)
+        # Resolve only fut1
+        env1 = _make_terminal_envelope("hid-A06-1")
+        cci.complete_pending_dispatch("hid-A06-1", env1)
 
-            assert fut1.done()
-            assert not fut2.done()
+        assert fut1.done()
+        assert not fut2.done()
 
-            # Now resolve fut2
-            env2 = _make_terminal_envelope("hid-A06-2")
-            cci.complete_pending_dispatch("hid-A06-2", env2)
+        # Now resolve fut2
+        env2 = _make_terminal_envelope("hid-A06-2")
+        cci.complete_pending_dispatch("hid-A06-2", env2)
 
-            assert fut2.done()
-        finally:
-            loop.close()
+        assert fut2.done()
 
-    def test_A07_idempotent_double_resolve_is_safe(self):
+    async def test_A07_idempotent_double_resolve_is_safe(self):
         """Calling complete_pending_dispatch twice on the same key is safe."""
         cci = CanonicalCompletionIngress()
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            fut = cci.register_pending_dispatch("hid-A07")
-            env = _make_terminal_envelope("hid-A07")
+        fut = cci.register_pending_dispatch("hid-A07")
+        env = _make_terminal_envelope("hid-A07")
 
-            r1 = cci.complete_pending_dispatch("hid-A07", env)
-            r2 = cci.complete_pending_dispatch("hid-A07", env)  # idempotent
+        r1 = cci.complete_pending_dispatch("hid-A07", env)
+        r2 = cci.complete_pending_dispatch("hid-A07", env)  # idempotent
 
-            assert r1 is True
-            assert r2 is False  # second call returns False (already resolved)
-            assert fut.done()
-        finally:
-            loop.close()
+        assert r1 is True
+        assert r2 is False  # second call returns False (already resolved)
+        assert fut.done()
 
 
 # ===========================================================================
@@ -369,58 +334,43 @@ class TestGroupB_MainPathHarness:
             """Called after successful completion — simulates orchestration continuation."""
             self.continuation_called = True
 
-    def test_B01_device_registers_and_receives_dispatch_task(self):
+    async def test_B01_device_registers_and_receives_dispatch_task(self):
         """Simulated device register + dispatch creates a pending Future."""
         cci = CanonicalCompletionIngress()
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            # Simulate device registration
-            device_id = "android-device-001"
-            task_id = "task-B01"
-            handoff_id = f"hid-{device_id}-{task_id}"
+        # Simulate device registration
+        device_id = "android-device-001"
+        task_id = "task-B01"
+        handoff_id = f"hid-{device_id}-{task_id}"
 
-            # Register dispatch
-            fut = cci.register_pending_dispatch(handoff_id, task_id=task_id)
-            assert isinstance(fut, asyncio.Future)
-            assert not fut.done()
-        finally:
-            loop.close()
+        # Register dispatch
+        fut = cci.register_pending_dispatch(handoff_id, task_id=task_id)
+        assert isinstance(fut, asyncio.Future)
+        assert not fut.done()
 
-    def test_B02_dispatch_creates_pending_registration(self):
+    async def test_B02_dispatch_creates_pending_registration(self):
         """Dispatch creates a pending completion registration."""
         cci = CanonicalCompletionIngress()
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            handoff_id = "hid-B02"
-            fut = cci.register_pending_dispatch(handoff_id)
-            assert not fut.done()
-        finally:
-            loop.close()
+        handoff_id = "hid-B02"
+        fut = cci.register_pending_dispatch(handoff_id)
+        assert not fut.done()
 
-    def test_B03_android_completion_resolves_pending_registration(self):
+    async def test_B03_android_completion_resolves_pending_registration(self):
         """Simulated Android completion resolves the pending Future."""
         cci = CanonicalCompletionIngress()
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            handoff_id = "hid-B03"
-            fut = cci.register_pending_dispatch(handoff_id)
+        handoff_id = "hid-B03"
+        fut = cci.register_pending_dispatch(handoff_id)
 
-            # Simulate Android sending completion signal
-            completion_envelope = _make_terminal_envelope(
-                handoff_id, result_payload={"status": "done", "result": "task_complete"}
-            )
-            resolved = cci.complete_pending_dispatch(handoff_id, completion_envelope)
+        # Simulate Android sending completion signal
+        completion_envelope = _make_terminal_envelope(
+            handoff_id, result_payload={"status": "done", "result": "task_complete"}
+        )
+        resolved = cci.complete_pending_dispatch(handoff_id, completion_envelope)
 
-            assert resolved is True
-            assert fut.done()
-            assert fut.result().result_payload == {"status": "done", "result": "task_complete"}
-        finally:
-            loop.close()
+        assert resolved is True
+        assert fut.done()
+        assert fut.result().result_payload == {"status": "done", "result": "task_complete"}
 
-    def test_B04_awaiting_future_completes_within_timeout(self):
+    async def test_B04_awaiting_future_completes_within_timeout(self):
         """Awaiting the Future with a real completion signal finishes before timeout."""
         cci = CanonicalCompletionIngress()
 
@@ -439,17 +389,12 @@ class TestGroupB_MainPathHarness:
             )
             return orch
 
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            orch = loop.run_until_complete(_run())
-        finally:
-            loop.close()
+        orch = await _run()
 
         assert orch.completed, "Expected completion, but dispatch timed out"
         assert not orch.timed_out
 
-    def test_B05_continuation_logic_executes_after_future_resolves(self):
+    async def test_B05_continuation_logic_executes_after_future_resolves(self):
         """Continuation (_on_continuation) is called after Future resolves."""
         cci = CanonicalCompletionIngress()
 
@@ -467,18 +412,13 @@ class TestGroupB_MainPathHarness:
             )
             return orch
 
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            orch = loop.run_until_complete(_run())
-        finally:
-            loop.close()
+        orch = await _run()
 
         assert orch.continuation_called, (
             "Continuation callback must be called after successful completion"
         )
 
-    def test_B06_without_completion_signal_wait_times_out(self):
+    async def test_B06_without_completion_signal_wait_times_out(self):
         """Without a completion signal, the await times out (not falsely resolved)."""
         cci = CanonicalCompletionIngress()
 
@@ -488,12 +428,7 @@ class TestGroupB_MainPathHarness:
             success = await orch.dispatch_and_await("hid-B06-no-signal", timeout=0.05)
             return orch, success
 
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            orch, success = loop.run_until_complete(_run())
-        finally:
-            loop.close()
+        orch, success = await _run()
 
         assert orch.timed_out, "Expected timeout when no completion signal is sent"
         assert not orch.completed
