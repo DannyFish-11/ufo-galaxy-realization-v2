@@ -259,4 +259,50 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         await mesh_coordinator.probe_all_peers()
         return JSONResponse({"status": "probed", "peers": mesh_coordinator.list_peers()})
 
+    # ── NATS worker 显示/开关(面板 Mesh 区)────────────────────────────
+    # worker 消费循环(core.worker_runtime)此前只有 GALAXY_MASTER_BRAIN_
+    # ENABLED 启动序列 opt-in 一条路;面板开关是显式用户意图,允许在
+    # env 关闭时手动拉起(诚实回报 NATS 不可用等原因,不假装启动)。
+
+    @router.get("/api/v1/mesh/worker")
+    async def mesh_worker_status():
+        """NATS worker 实时状态(running 为真实运行态,不从配置推断)。"""
+        from core.worker_runtime import get_worker_runtime, worker_enabled
+        wr = get_worker_runtime()
+        nats_connected = False
+        try:
+            from core.nats_bus import get_nats_bus
+            nats_connected = bool(get_nats_bus().is_connected())
+        except Exception:  # noqa: BLE001 — 无 NATS 时诚实 False
+            pass
+        return JSONResponse({
+            "running": bool(wr.running),
+            "worker_id": wr.worker_id,
+            "enabled_by_env": worker_enabled(),
+            "nats_connected": nats_connected,
+        })
+
+    class MeshWorkerToggleRequest(BaseModel):
+        enable: bool
+
+    @router.post("/api/v1/mesh/worker/toggle")
+    async def mesh_worker_toggle(req: MeshWorkerToggleRequest):
+        """启/停 NATS worker。启动失败按 worker_runtime 的真实 reason 回报。"""
+        from core.worker_runtime import get_worker_runtime
+        wr = get_worker_runtime()
+        if req.enable:
+            outcome = await wr.start()
+            return JSONResponse({
+                "running": bool(wr.running),
+                "worker_id": wr.worker_id,
+                **outcome,
+            })
+        await wr.stop()
+        return JSONResponse({
+            "running": bool(wr.running),
+            "worker_id": wr.worker_id,
+            "started": False,
+            "stopped": True,
+        })
+
     return router

@@ -65,6 +65,13 @@ export interface PanelData {
     createdAt: number;
   };
 
+  // NATS worker(Mesh 区显示/开关)
+  natsWorker: {
+    running: boolean;
+    workerId: string;
+    enabledByEnv: boolean;
+  };
+
   // OpenClawd 状态
   openclawdStatus: {
     runtimeState: 'RUNNING' | 'PAUSED' | 'ERROR' | 'RESTARTING';
@@ -177,6 +184,11 @@ const DEFAULT_PANEL_DATA: PanelData = {
     participants: [],
     createdAt: 0,
   },
+  natsWorker: {
+    running: false,
+    workerId: '',
+    enabledByEnv: false,
+  },
   openclawdStatus: {
     runtimeState: 'RESTARTING',
     phase: 'silent',
@@ -254,6 +266,13 @@ export function usePanelData(): UsePanelDataReturn {
           topologyNodes: payload.topology_nodes || DEFAULT_PANEL_DATA.topologyNodes,
           topologyEdges: payload.topology_edges || DEFAULT_PANEL_DATA.topologyEdges,
           meshSession: payload.mesh_session || DEFAULT_PANEL_DATA.meshSession,
+          natsWorker: payload.nats_worker
+            ? {
+                running: !!payload.nats_worker.running,
+                workerId: payload.nats_worker.worker_id || '',
+                enabledByEnv: !!payload.nats_worker.enabled_by_env,
+              }
+            : DEFAULT_PANEL_DATA.natsWorker,
           openclawdStatus: payload.openclawd_status || DEFAULT_PANEL_DATA.openclawdStatus,
           natsMessages: payload.nats_messages || DEFAULT_PANEL_DATA.natsMessages,
           smartDeviceList: payload.smart_devices || DEFAULT_PANEL_DATA.smartDeviceList,
