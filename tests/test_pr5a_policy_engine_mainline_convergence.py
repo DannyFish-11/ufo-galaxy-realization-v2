@@ -241,48 +241,60 @@ class TestCommandRouterPolicyIntegration:
 
 
 class TestDelegatedSignalHandlerConsumerWiring:
-    def test_M_handler_module_has_android_result_consumer_binding(self):
+    """PR-11-V2:consumer 接线收编进生命周期协调器,handler 只委托。
+
+    原三用例钉 handler 模块直绑 _android_result_consumer / 直呼
+    _ingest_delegated_signal——PR-11-V2 之后 ingress、状态归约与 PR-5A
+    result 转发统一由 core.android_delegated_runtime_lifecycle_coordinator
+    持有(handler 模块 docstring 有案),且 result 语义为 AndroidSignalKind
+    的 final_result/error(非字符串 "result")。改钉协调器契约。
+    """
+
+    def test_M_coordinator_owns_android_result_consumer_binding(self):
+        import core.android_delegated_runtime_lifecycle_coordinator as _co
         import galaxy_gateway.android.handlers.delegated_signal as _ds
 
-        # The module-level _android_result_consumer may be None (when import fails)
-        # but the binding should exist.
-        assert hasattr(_ds, "_android_result_consumer")
+        # 绑定在协调器上(可为 None——import 失败时,但绑定点必须存在)
+        assert hasattr(_co, "_android_result_consumer")
+        assert hasattr(_co, "_RESULT_CONSUMER_AVAILABLE")
+        # handler 不再直绑 consumer(委托收口,不得回退直连)
+        assert not hasattr(_ds, "_android_result_consumer")
 
-    def test_N_handler_forwards_result_kind_to_consumer(self):
-        """When a result-kind signal arrives and outcome.was_updated=True,
-        consume_android_behavioral_result should be called."""
-        import asyncio
-
-        import galaxy_gateway.android.handlers.delegated_signal as _ds
-
-        # Build a mock outcome
+    @staticmethod
+    def _make_ingress_outcome(kind: str):
         mock_outcome = MagicMock()
         mock_outcome.was_updated = True
         mock_outcome.reject_reason = ""
         mock_env = MagicMock()
         mock_env.signal_kind = MagicMock()
-        mock_env.signal_kind.value = "result"
+        mock_env.signal_kind.value = kind
         mock_env.contract_id = "contract_xyz"
-        mock_env.session_id = "sess_xyz"
+        mock_env.session_id = ""
         mock_env.signal_id = "sig_001"
         mock_env.emission_seq = 1
         mock_env.task_id = "task_xyz"
         mock_env.trace_id = "trace_xyz"
         mock_outcome.envelope = mock_env
-        mock_record = MagicMock()
-        mock_record.phase = MagicMock()
-        mock_record.phase.value = "result"
-        mock_outcome.record = mock_record
+        return mock_outcome
+
+    def _run_handler_with_kind(self, kind: str):
+        import asyncio
+        import core.android_delegated_runtime_lifecycle_coordinator as _co
+        import galaxy_gateway.android.handlers.delegated_signal as _ds
 
         mock_consumer = MagicMock()
         mock_consumer.consume_android_behavioral_result = MagicMock(
             return_value={"consumed": True}
         )
+        mock_outcome = self._make_ingress_outcome(kind)
 
         loop = asyncio.new_event_loop()
         try:
-            with patch.object(_ds, "_ingest_delegated_signal", return_value=mock_outcome), \
-                 patch.object(_ds, "_android_result_consumer", mock_consumer):
+            with patch.object(_co, "_EXECUTION_SIGNAL_AVAILABLE", True), \
+                 patch.object(_co, "_ingest_execution_signal",
+                              MagicMock(return_value=mock_outcome)), \
+                 patch.object(_co, "_RESULT_CONSUMER_AVAILABLE", True), \
+                 patch.object(_co, "_android_result_consumer", mock_consumer):
                 result = loop.run_until_complete(
                     _ds.handle_delegated_execution_signal(
                         bridge=MagicMock(),
@@ -292,50 +304,17 @@ class TestDelegatedSignalHandlerConsumerWiring:
                 )
         finally:
             loop.close()
+        return result, mock_consumer
 
+    def test_N_coordinator_forwards_terminal_result_kind_to_consumer(self):
+        """final_result 终局信号 → PR-5A 稳定 consumer 被调,handler 回 ACK。"""
+        result, mock_consumer = self._run_handler_with_kind("final_result")
         assert result["type"] == "delegated_execution_signal_ack"
         mock_consumer.consume_android_behavioral_result.assert_called_once()
 
-    def test_O_handler_does_not_forward_non_result_kind(self):
-        """When signal_kind is 'progress', consumer should NOT be called."""
-        import asyncio
-
-        import galaxy_gateway.android.handlers.delegated_signal as _ds
-
-        mock_outcome = MagicMock()
-        mock_outcome.was_updated = True
-        mock_outcome.reject_reason = ""
-        mock_env = MagicMock()
-        mock_env.signal_kind = MagicMock()
-        mock_env.signal_kind.value = "progress"  # NOT result
-        mock_env.contract_id = "contract_xyz"
-        mock_env.session_id = "sess_xyz"
-        mock_env.signal_id = "sig_002"
-        mock_env.emission_seq = 2
-        mock_env.task_id = "task_xyz"
-        mock_env.trace_id = "trace_xyz"
-        mock_outcome.envelope = mock_env
-        mock_record = MagicMock()
-        mock_record.phase = MagicMock()
-        mock_record.phase.value = "progress"
-        mock_outcome.record = mock_record
-
-        mock_consumer = MagicMock()
-        mock_consumer.consume_android_behavioral_result = MagicMock()
-
-        loop = asyncio.new_event_loop()
-        try:
-            with patch.object(_ds, "_ingest_delegated_signal", return_value=mock_outcome), \
-                 patch.object(_ds, "_android_result_consumer", mock_consumer):
-                result = loop.run_until_complete(
-                    _ds.handle_delegated_execution_signal(
-                        bridge=MagicMock(),
-                        websocket=MagicMock(),
-                        message={"device_id": "dev_001", "message_id": "msg_002"},
-                    )
-                )
-        finally:
-            loop.close()
-
+    def test_O_coordinator_does_not_forward_non_result_kind(self):
+        """progress 非终局信号 → consumer 不得被调。"""
+        result, mock_consumer = self._run_handler_with_kind("progress")
         assert result["type"] == "delegated_execution_signal_ack"
         mock_consumer.consume_android_behavioral_result.assert_not_called()
+
