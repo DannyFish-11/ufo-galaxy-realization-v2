@@ -1830,9 +1830,18 @@ class AndroidBridge:
             async def _aip_send(msg: Dict[str, Any]) -> None:
                 msg["_transport"] = "auto"
                 msg["version"] = "3.0"
-                result = await get_aip_transport().send(msg, device_id)
-                if not result.get("success"):
-                    raise RuntimeError(f"AIPTransport failed for {device_id}")
+                try:
+                    result = await get_aip_transport().send(msg, device_id)
+                    if not result.get("success"):
+                        raise RuntimeError(f"AIPTransport failed for {device_id}")
+                except Exception:
+                    # 与 send_to_device 同一兜底:AIPTransport 的 websocket
+                    # 适配器发往 connection_manager 注册表,而 canonical
+                    # Android 入口(_handle_android_ws)的活 socket 挂在
+                    # bridge 自己的 _devices —— 两套注册表不同,断连缓冲的
+                    # replay 必须能直发刚重连的这条 socket,否则"调度成功"
+                    # 但消息永远到不了设备。
+                    await websocket.send_json(msg)
 
             _delivered, _skipped = await _pending_delivery_buffer.flush(device_id, _aip_send)
             if _delivered or _skipped:

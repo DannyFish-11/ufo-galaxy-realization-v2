@@ -466,14 +466,21 @@ def _run_local_execution(
                 entry_mode=entry_mode,
             )
 
-        # Fallback: no OpenClawd instance available
-        logger.debug(
-            "_run_local_execution: OpenClawd instance unavailable; "
-            "returning skipped result"
+        # Fallback: no OpenClawd instance available.
+        # 诚实可见:此前用 debug 记录 —— takeover 链走完却啥也没执行、
+        # 调用方只看到 success=False 但日志里几乎无痕。提到 warning 并
+        # 附 executor_available=False,让"接管被受理但目标无执行器"这个
+        # 真实降级在生产日志与结果里都可观测(诚实申报做不到的事)。
+        logger.warning(
+            "_run_local_execution: takeover accepted but target has no "
+            "OpenClawd executor — nothing executed (executor_unavailable). "
+            "entry_mode=%s",
+            entry_mode,
         )
         return {
             "action_taken": "none",
             "success": False,
+            "executor_available": False,
             "skipped_reason": "executor_unavailable:no_openclawd_instance",
         }
     except Exception as exc:  # noqa: BLE001
