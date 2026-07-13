@@ -7910,6 +7910,13 @@ class OpenClawd:
             nonlocal _total_tool_calls, _last_tool_name
 
             for iteration in range(max_iterations):
+                # 任务成本账本:记一轮 ReAct(账本故障绝不反噬)
+                try:
+                    from core.task_cost_ledger import add_react_round
+                    add_react_round()
+                except Exception:  # noqa: BLE001
+                    pass
+
                 # 延迟优化(对话层):长任务里早期轮次的大工具结果模型早已消化,
                 # 继续全文携带只是白白加重每轮 prefill(CPU 机的延迟大头)。
                 # 保最近 K 轮完整,更早的大结果换短存根;小结果不动
@@ -7925,11 +7932,18 @@ class OpenClawd:
                 # PR-3: Use chat_with_tools() which is defined on both UnifiedLLMRouter
                 # and MultiLLMRouter, ensuring the unified policy layer is applied
                 # regardless of which router type _get_router() returns.
+                # 输出预算:本地 CPU 上"输出 token 数 ≈ 等待秒数"——上限可调
+                # (GALAXY_MAX_TOKENS_ANSWER,默认 4096 保持原行为)。
+                import os as _os_budget
+                try:
+                    _answer_budget = int(_os_budget.getenv("GALAXY_MAX_TOKENS_ANSWER", "4096"))
+                except (TypeError, ValueError):
+                    _answer_budget = 4096
                 response = await router.chat_with_tools(
                     messages=messages,
                     tools=tools if tools else None,
                     task_type=task_type,
-                    max_tokens=4096,
+                    max_tokens=_answer_budget,
                     **({"stream": _token_sink} if _token_sink is not None else {}),
                 )
                 last_response = response
@@ -8017,6 +8031,13 @@ class OpenClawd:
                     else:
                         _consecutive_same.clear()
                     _last_tool_name = tc_name
+
+                    # 任务成本账本:记一次工具调用(账本故障绝不反噬)
+                    try:
+                        from core.task_cost_ledger import add_tool_call
+                        add_tool_call()
+                    except Exception:  # noqa: BLE001
+                        pass
 
                     # 执行工具 (带计时 + 单工具超时)
                     t0 = _time.time()
@@ -8118,7 +8139,9 @@ class OpenClawd:
                         "你是 Galaxy 智能助手 (OpenClawd)，一个桌面级超级 AI 智能体。\n"
                         "你可以帮助用户进行对话、任务管理、设备控制、代码执行等操作。\n"
                         "当你需要执行操作时，请使用提供的工具。\n"
-                        "如果没有合适的工具，直接用文字回答。"
+                        "如果没有合适的工具，直接用文字回答。\n"
+                        "表达原则：直接、简洁，不复述问题、不加客套铺垫；"
+                        "要调用工具就直接调用，不要先输出长段解释。"
                     ),
                 },
             ]

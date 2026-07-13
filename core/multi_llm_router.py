@@ -2479,7 +2479,7 @@ class MultiLLMRouter:
                 "provider": provider, "model": model,
                 "task_type": task_type.value if hasattr(task_type, "value") else str(task_type),
                 "latency_ms": float(getattr(response, "latency_ms", 0.0) or 0.0),
-                "tokens": itok + otok, "cost": round(cost, 6),
+                "tokens": itok + otok, "tokens_out": otok, "cost": round(cost, 6),
                 "timestamp": time.time(), "success": bool(success),
             })
             if len(self.call_history) > 500:
@@ -2490,6 +2490,13 @@ class MultiLLMRouter:
                     cfg.last_used = time.time()
                 else:
                     cfg.error_count += 1
+            # 任务成本账本:所有 LLM 调用都经此漏斗,顺手记进当前任务账单
+            # (无在途账单时静默无操作;账本故障绝不反噬)。
+            try:
+                from core.task_cost_ledger import add_llm_usage
+                add_llm_usage(provider, itok, otok, cost)
+            except Exception:  # noqa: BLE001
+                pass
         except Exception:  # noqa: BLE001
             pass
 
@@ -2507,20 +2514,26 @@ class MultiLLMRouter:
             if not p:
                 continue
             s = stats.setdefault(p, {"calls": 0.0, "successes": 0.0,
-                                     "latency_sum": 0.0, "cost_sum": 0.0})
+                                     "latency_sum": 0.0, "cost_sum": 0.0,
+                                     "tokens_out_sum": 0.0})
             s["calls"] += 1
             if rec.get("success"):
                 s["successes"] += 1
             s["latency_sum"] += float(rec.get("latency_ms", 0.0) or 0.0)
             s["cost_sum"] += float(rec.get("cost", 0.0) or 0.0)
+            s["tokens_out_sum"] += float(rec.get("tokens_out", 0.0) or 0.0)
         return stats
 
     def _bandit_score(self, name: str, stats: Dict[str, Dict[str, float]], total: int,
                       *, latency_weight: float = 0.2, cost_weight: float = 0.1,
-                      explore_c: float = 1.4) -> float:
-        """UCB1 式打分:利用项(成功率 − 延迟/成本惩罚)＋ 探索项。未试过的 provider 返回
-        +inf(乐观初始化,保证每个都至少被探索一次)。惩罚做相对归一化,避免延迟/成本的
-        绝对量级压过成功率主信号。"""
+                      verbosity_weight: float = 0.1, explore_c: float = 1.4) -> float:
+        """UCB1 式打分:利用项(成功率 − 延迟/成本/啰嗦惩罚)＋ 探索项。未试过的 provider
+        返回 +inf(乐观初始化,保证每个都至少被探索一次)。惩罚做相对归一化,避免任何
+        单项的绝对量级压过成功率主信号。
+
+        啰嗦惩罚(token 效率,Grok 4.5 的核心洞见):同样把事办成,平均输出 token
+        越多的 provider 越吃亏——本地 CPU 上输出 token ≈ 等待秒数,云端 ≈ 账单。
+        北极星是"任务总消耗",不是单次速度。"""
         s = stats.get(name)
         if not s or s["calls"] == 0:
             return float("inf")
@@ -2528,9 +2541,11 @@ class MultiLLMRouter:
         success_rate = s["successes"] / n
         avg_latency = s["latency_sum"] / n
         avg_cost = s["cost_sum"] / n
+        avg_tokens_out = s.get("tokens_out_sum", 0.0) / n
         lat_pen = latency_weight * min(1.0, avg_latency / 5000.0)   # 5s 封顶
         cost_pen = cost_weight * min(1.0, avg_cost / 0.05)          # 0.05/次 封顶
-        exploit = max(0.0, success_rate - lat_pen - cost_pen)
+        verb_pen = verbosity_weight * min(1.0, avg_tokens_out / 2000.0)  # 2k tok/次 封顶
+        exploit = max(0.0, success_rate - lat_pen - cost_pen - verb_pen)
         explore = explore_c * math.sqrt(math.log(max(total, 1) + 1.0) / n)
         return exploit + explore
 

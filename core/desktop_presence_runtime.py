@@ -299,11 +299,24 @@ class RuntimeSession:
         while self._tick_running and self.tristate in (TriState.LIMINAL, TriState.MANIFEST):
             try:
                 cs = self._continuum_state or {}
+                intensity = float(cs.get("presence_intensity", 0.0) or 0.0)
+                # 哲学对齐:_continuum_state 由 dispatch 返回后才回填——LIMINAL
+                # 思考期它还是空的,强度恒 0,"认知强度驱动外壳"只是空转。
+                # 思考期改读【活的】持续认知场(activation/intent_strength 随
+                # notify_request 注入并自然衰减),阈限态的呼吸才有真数据。
+                if intensity <= 0.0:
+                    try:
+                        from core.cognitive.continuous_state import get_cognitive_state
+                        _snap = get_cognitive_state().snapshot()
+                        intensity = float(_snap.get("activation", 0.0) or 0.0)
+                        cs = {**cs, "intent_strength": _snap.get("intent_strength", 0.0)}
+                    except Exception:  # noqa: BLE001
+                        pass
                 _emit(
                     "continuum.state",
                     source="desktop_presence_runtime",
                     payload={
-                        "presence_intensity": round(cs.get("presence_intensity", 0.0), 4),
+                        "presence_intensity": round(intensity, 4),
                         "coherence": round(cs.get("coherence", 0.0), 4),
                         "phase": self.tristate.value,
                         "collapse_tendency": round(cs.get("collapse_tendency", 0.0), 4),
@@ -312,6 +325,20 @@ class RuntimeSession:
                     },
                     runtime_session_id=self.runtime_session_id,
                 )
+                # 哲学对齐:面板桥一直订阅着 intent.update(阈限 0.15-0.85 呼吸
+                # 映射),但全仓库【从未有人发射过它】——设计的两半从没接上。
+                # LIMINAL 期由本 tick 发射,意图强度取认知场与 continuum 的较大者。
+                if self.tristate is TriState.LIMINAL:
+                    _emit(
+                        "intent.update",
+                        source="desktop_presence_runtime",
+                        payload={
+                            "intent_strength": round(
+                                max(intensity,
+                                    float(cs.get("intent_strength", 0.0) or 0.0)), 4),
+                        },
+                        runtime_session_id=self.runtime_session_id,
+                    )
             except Exception:
                 pass
             await asyncio.sleep(0.2)
@@ -728,6 +755,16 @@ class DesktopPresenceRuntime:
         except Exception as _cfe_err:
             logger.debug("cognitive_field_engine.notify_request failed (non-fatal): %s", _cfe_err)
 
+        # 任务成本账本(北极星=任务总消耗,不是单次 TPS):开账挂上下文,
+        # 深链各层(router 记账漏斗/ReAct 轮次/工具派发)自动记账;下面 finally
+        # 结账落盘并挂进响应。账本任何故障绝不影响请求路径。
+        _bill_token = None
+        try:
+            from core.task_cost_ledger import open_task_bill
+            _bill_token = open_task_bill(rsession.runtime_session_id, source=source)
+        except Exception as _tcl_err:  # noqa: BLE001
+            logger.debug("task_cost_ledger open failed (non-fatal): %s", _tcl_err)
+
         # PR-18: Derive the cognitive execution-policy hint from live signals.
         # This is done BEFORE dispatch so the hint can be forwarded to OpenClawd
         # as an advisory signal for execution-path and delegation biasing.
@@ -912,6 +949,19 @@ class DesktopPresenceRuntime:
             )
             self._log_request_end(rsession)
             self._active_sessions.pop(rsession.runtime_session_id, None)
+
+            # 任务成本账本:结账(定格墙钟→内存环形+JSONL+一行日志),
+            # 账单挂进响应供面板/调用方直读本次任务的总消耗。
+            if _bill_token is not None:
+                try:
+                    from core.task_cost_ledger import close_task_bill
+                    _task_bill = close_task_bill(
+                        _bill_token, success=bool(result.get("success", True)),
+                    )
+                    if _task_bill:
+                        result["task_cost"] = _task_bill
+                except Exception as _tcl_err:  # noqa: BLE001
+                    logger.debug("task_cost_ledger close failed (non-fatal): %s", _tcl_err)
 
             # Block-3: Notify decay controller that execution completed so the
             # cognitive field begins its manifest→liminal→passive reabsorption.
