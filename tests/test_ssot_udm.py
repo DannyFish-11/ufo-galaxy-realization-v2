@@ -158,7 +158,8 @@ class TestWSManagerDisconnectOrder(unittest.TestCase):
             mgr.active_connections["conn1"] = ws_mock
             mgr.device_connections["dev1"] = "conn1"
 
-            mgr.disconnect("conn1")
+            import asyncio as _aio
+            _aio.run(mgr.disconnect("conn1"))  # disconnect 已 async(B4 锁保护)
 
         self.assertEqual(call_order[0], ("udm", "dev1"), "UDM must be written first")
         self.assertEqual(call_order[1], ("router", "dev1"), "Router unregister comes after UDM")
@@ -176,7 +177,8 @@ class TestWSManagerDisconnectOrder(unittest.TestCase):
             mgr.active_connections["conn2"] = MagicMock()
             mgr.device_connections["dev2"] = "conn2"
 
-            mgr.disconnect("conn2")
+            import asyncio as _aio
+            _aio.run(mgr.disconnect("conn2"))  # disconnect 已 async(B4 锁保护)
 
         self.assertNotIn("conn2", mgr.active_connections)
         self.assertNotIn("dev2", mgr.device_connections)

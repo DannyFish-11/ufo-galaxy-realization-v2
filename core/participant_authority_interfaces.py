@@ -667,6 +667,10 @@ class ParticipantResultKind(str, Enum):
     result = "result"
     reconciliation_signal = "reconciliation_signal"
     governance_artifact = "governance_artifact"
+    # 参与方恢复态(断线重连/进程重启后的状态回报)。本枚举契约是与
+    # AndroidParticipantTruthKind 1对1;具体枚举新增 recovery_state 时此处
+    # 漏同步,该类真相一律被映射成 unknown(真缺口,非测试漂移)。
+    recovery_state = "recovery_state"
     unknown = "unknown"
 
     def is_terminal_signal(self) -> bool:

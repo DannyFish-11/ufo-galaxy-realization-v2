@@ -20,6 +20,44 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _bypass_dispatch_gates(monkeypatch):
+    """trace 连续性用例钉的是 trace_id 透传,不是能力门与 V3 槽权威(各有专门
+    套件);裸环境两道门会在 handle_agent_task 之前拒掉目标设备,导致透传断言
+    落空(基线红根因)。按 test_pr2_task_envelope_pipeline 的既定钉法放行。"""
+    import core.capability_aware_routing_default as card
+    monkeypatch.setattr(card, "infer_dispatch_capabilities", lambda tool: [])
+
+    from core.canonical_dispatch_slot_authority import (
+        CanonicalDispatchSlot,
+        CanonicalDispatchSlotStatus,
+        CanonicalDispatchSlotsResult,
+    )
+    import core.canonical_dispatch_slot_authority as _slot_mod
+
+    def _approve_all(device_ids, execution_mode, **_kw):
+        slots = [
+            CanonicalDispatchSlot(
+                device_id=d,
+                execution_mode=execution_mode,
+                slot_approved=True,
+                status=CanonicalDispatchSlotStatus.SLOT_APPROVED.value,
+                reason="test override — trace-continuity suite",
+            )
+            for d in device_ids
+        ]
+        return CanonicalDispatchSlotsResult(
+            execution_mode=execution_mode,
+            approved_slots=slots,
+            blocked_slots=[],
+            can_proceed=True,
+            block_reason="",
+        )
+
+    monkeypatch.setattr(_slot_mod, "get_canonical_dispatch_slots", _approve_all)
+
+
 PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
