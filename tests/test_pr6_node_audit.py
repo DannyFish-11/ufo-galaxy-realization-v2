@@ -45,7 +45,7 @@ Validates:
   32. run_audit() every node entry has a non-empty name.
   33. run_audit() every node entry has a valid tier value.
   34. run_audit() every node entry has a valid action value.
-  35. run_audit() nominal_count >= 130 (repo has ≥130 node directories).
+  35. run_audit() nominal_count >= 125 (repo has ≥125 node directories).
   36. run_audit() orchestrated_count >= 90 (≥90 nodes in node_dependencies.json).
   37. run_audit() runnable_count >= 120 (≥120 nodes have meaningful main.py).
   38. run_audit() in_config_not_on_disk is a list.

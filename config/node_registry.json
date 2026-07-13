@@ -498,24 +498,6 @@
       "status": "active",
       "production_ready": true
     },
-    "Node_37_LinuxDBus": {
-      "id": "37",
-      "name": "LinuxDBus",
-      "path": "nodes/Node_37_LinuxDBus",
-      "has_main": true,
-      "main_size": 2443,
-      "status": "active",
-      "production_ready": true
-    },
-    "Node_38_BLE": {
-      "id": "38",
-      "name": "BLE",
-      "path": "nodes/Node_38_BLE",
-      "has_main": true,
-      "main_size": 4752,
-      "status": "active",
-      "production_ready": true
-    },
     "Node_39_SSH": {
       "id": "39",
       "name": "SSH",
@@ -531,24 +513,6 @@
       "path": "nodes/Node_40_SFTP",
       "has_main": true,
       "main_size": 4444,
-      "status": "active",
-      "production_ready": true
-    },
-    "Node_41_MQTT": {
-      "id": "41",
-      "name": "MQTT",
-      "path": "nodes/Node_41_MQTT",
-      "has_main": true,
-      "main_size": 2211,
-      "status": "active",
-      "production_ready": true
-    },
-    "Node_42_CANbus": {
-      "id": "42",
-      "name": "CANbus",
-      "path": "nodes/Node_42_CANbus",
-      "has_main": true,
-      "main_size": 1997,
       "status": "active",
       "production_ready": true
     },
@@ -603,15 +567,6 @@
       "path": "nodes/Node_125_MediaGen",
       "has_main": true,
       "main_size": 3562,
-      "status": "active",
-      "production_ready": true
-    },
-    "Node_48_Serial": {
-      "id": "48",
-      "name": "Serial",
-      "path": "nodes/Node_48_Serial",
-      "has_main": true,
-      "main_size": 3073,
       "status": "active",
       "production_ready": true
     },

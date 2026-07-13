@@ -9,7 +9,7 @@ orchestration clarity with the PR-6 canonical node audit.
 
 Validates:
   1.  node_dependencies.json covers all nominal nodes (no more config drift).
-  2.  node_dependencies.json has 130 nodes (full nominal set).
+  2.  node_dependencies.json has 125 nodes (registry-drift 收口后).
   3.  Reserved nodes (28–32) have startup_policy 'skip'.
   4.  Node_130_AutonomousCoding (stub) has startup_policy 'skip'.
   5.  All repair nodes added by PR-7 are present in node_dependencies.json.
@@ -164,9 +164,9 @@ def test_no_missing_config_entries(ndj_nodes):
     assert missing == set(), f"Nodes on disk missing from config: {sorted(missing)}"
 
 
-# 2. node_dependencies.json has 130 nodes
+# 2. node_dependencies.json has 125 nodes(registry-drift 收口后)
 def test_total_node_count(ndj_nodes):
-    assert len(ndj_nodes) == 130
+    assert len(ndj_nodes) == 125
 
 
 # 3. Reserved nodes have startup_policy 'skip'

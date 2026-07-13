@@ -1,22 +1,22 @@
 # Galaxy Node-System Audit Report
 
-> Generated: 2026-03-24T15:11:26Z
+> Generated: 2026-07-13T16:51:05Z
 > Authority: `scripts/node_audit.py` — canonical repository governance engine (PR-2)
 
 ## Summary Counts
 
 | Metric | Count |
 |--------|-------|
-| Total nodes audited | **130** |
-| Runnable nodes (has main.py + ≥100 lines) | 129 |
-| Orchestrated nodes (in node_dependencies.json) | 129 |
+| Total nodes audited | **125** |
+| Runnable nodes (has main.py + ≥100 lines) | 124 |
+| Orchestrated nodes (in node_dependencies.json) | 124 |
 | Stub nodes (main.py < 100 lines) | 1 |
 
 ## Recommended Actions
 
 | Action | Count | Meaning |
 |--------|-------|---------|
-| **keep** | 124 | Healthy, orchestrated, no issues |
+| **keep** | 119 | Healthy, orchestrated, no issues |
 | **repair** | 1 | Valuable role; fix config/impl before use |
 | **archive** | 2 | Non-trivial but not orchestrated; preserve |
 | **delete** | 3 | Placeholder/stub/duplicate with no unique value |
@@ -25,7 +25,7 @@
 
 | Category | Failing | Warning |
 |----------|---------|---------|
-| Source completeness (main.py / fusion_entry.py / README.md) | 0 | 1 |
+| Source completeness (main.py / fusion_entry.py / README.md) | 0 | 0 |
 | Syntax safety (py_compile check) | 0 | 0 |
 | Packaging (Dockerfile / requirements.txt) | 0 | 0 |
 | Registry governance (node_dependencies.json + policy) | 0 | 0 |
@@ -56,7 +56,7 @@ _None — all nominal nodes have a main.py._
 - Reserved: Node_28_Reserved, Node_29_Reserved, Node_30_Reserved, Node_31_Reserved, Node_32_Reserved
 
 ### Numbering gaps
-Missing node numbers: [129]
+Missing node numbers: [37, 38, 41, 42, 48, 129]
 
 ## Port Conflicts
 _No port conflicts detected across registry entries._
@@ -68,9 +68,7 @@ _No hygiene violations detected._
 
 Nodes missing one or more of: `main.py`, `fusion_entry.py`, `README.md`
 
-| Node | main.py | fusion_entry.py | README.md |
-|------|---------|-----------------|-----------|
-| `Node_130_AutonomousCoding` | ✓ | ✓ | ✗ |
+_All nodes have the required source artifacts._
 
 ## Nodes with Syntax Errors
 _No syntax errors detected._
@@ -91,7 +89,7 @@ _All nodes have a `requirements.txt`._
 
 | Policy Class | Total | Full Coverage | Missing Dockerfile | Missing requirements.txt |
 |-------------|-------|--------------|-------------------|--------------------------|
-| `active` | 95 | 95 | 0 | 0 |
+| `active` | 90 | 90 | 0 | 0 |
 | `optional` | 29 | 29 | 0 | 0 |
 | `skip` | 6 | 6 | 0 | 0 |
 
@@ -212,49 +210,49 @@ _All optional nodes meet the optional baseline._
 
 | Node | Lines | Group | Port | Policy | Tier | Action | src | syn | pkg | reg | rt | hyg |
 |------|-------|-------|------|--------|------|--------|-----|-----|-----|-----|----|-----|
-| `Node_00_StateMachine` | 390 | core | 8000 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_01_OneAPI` | 721 | core | 7995 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_02_Tasker` | 316 | core | 8002 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_00_StateMachine` | 415 | core | 8000 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_01_OneAPI` | 776 | core | 7995 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_02_Tasker` | 321 | core | 8002 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_03_SecretVault` | 324 | core | 8003 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_04_Router` | 480 | core | 8004 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_04_Router` | 485 | core | 8004 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_05_Auth` | 370 | core | 8005 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_06_Filesystem` | 354 | core | 8006 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_06_Filesystem` | 358 | core | 8006 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_07_Git` | 334 | core | 8007 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_08_Fetch` | 199 | core | 8008 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_09_Sandbox` | 388 | core | 7996 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_100_MemorySystem` | 690 | academic | 8100 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_08_Fetch` | 207 | core | 8008 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_09_Sandbox` | 411 | core | 7996 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_100_MemorySystem` | 694 | academic | 8100 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_101_CodeEngine` | 612 | academic | 8101 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_102_DebugOptimize` | 608 | academic | 8102 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_102_DebugOptimize` | 612 | academic | 8102 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_103_KnowledgeGraph` | 650 | academic | 8103 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_104_AgentCPM` | 804 | academic | 8104 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_105_UnifiedKnowledgeBase` | 546 | academic | 8105 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_105_UnifiedKnowledgeBase` | 602 | academic | 8105 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_106_GitHubFlow` | 491 | academic | 8106 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_107_FunctionCalling` | 462 | development | 8107 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_108_MetaCognition` | 601 | academic | 8108 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_109_ProactiveSensing` | 532 | academic | 8109 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_10_Slack` | 232 | development | 8010 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_110_SmartOrchestrator` | 664 | core | 7997 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_107_FunctionCalling` | 508 | development | 8107 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_108_MetaCognition` | 602 | academic | 8108 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_109_ProactiveSensing` | 586 | academic | 8109 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_10_Slack` | 242 | development | 8010 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_110_SmartOrchestrator` | 684 | core | 7997 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_111_ContextManager` | 593 | core | 7998 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_112_SelfHealing` | 994 | core | 7999 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_112_SelfHealing` | 1134 | core | 7999 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_113_AndroidVLM` | 278 | enhancement | 8113 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_114_DocumentIntelligence` | 321 | development | 8114 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_115_PluginManager` | 322 | development | 8115 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_116_ExternalToolWrapper` | 498 | development | 8116 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_117_OpenCode` | 472 | development | 8117 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_118_NodeFactory` | 613 | development | 8118 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_119_BenchmarkEval` | 430 | development | 8119 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_11_GitHub` | 303 | development | 8011 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_114_DocumentIntelligence` | 328 | development | 8114 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_115_PluginManager` | 329 | development | 8115 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_116_ExternalToolWrapper` | 499 | development | 8116 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_117_OpenCode` | 487 | development | 8117 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_118_NodeFactory` | 616 | development | 8118 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_119_BenchmarkEval` | 437 | development | 8119 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_11_GitHub` | 307 | development | 8011 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_120_File` | 748 | development | 8120 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_121_Web` | 561 | development | 8121 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_122_Shell` | 552 | development | 8122 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_123_Calendar` | 223 | development | 8123 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_124_LinuxDesktopAuto` | 456 | extended | 8124 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_125_MediaGen` | 409 | extended | 8125 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_126_AgentSwarm` | 981 | extended | 8126 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_125_MediaGen` | 410 | extended | 8125 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_126_AgentSwarm` | 773 | extended | 8126 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_127_BambuLab` | 172 | extended | 8127 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_128_MediaGen` | 316 | extended | 8128 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_12_Postgres` | 253 | development | 8012 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_130_AutonomousCoding` | 90 | development | 8130 | skip | stub | **repair** | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_128_MediaGen` | 321 | extended | 8128 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_12_Postgres` | 252 | development | 8012 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_130_AutonomousCoding` | 90 | development | 8130 | skip | stub | **repair** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_13_SQLite` | 230 | development | 8013 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_14_FFmpeg` | 253 | development | 8014 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_15_OCR` | 293 | development | 8015 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -266,82 +264,77 @@ _All optional nodes meet the optional baseline._
 | `Node_21_Notion` | 343 | development | 8021 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_22_BraveSearch` | 170 | development | 8022 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_23_Time` | 225 | development | 9000 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_24_Weather` | 260 | development | 8024 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_25_GoogleSearch` | 299 | development | 8025 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_24_Weather` | 263 | development | 8024 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_25_GoogleSearch` | 308 | development | 8025 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_26_Discord` | 249 | tools | 8023 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_27_SmartHome` | 303 | tools | 8027 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_28_Reserved` | 252 | development | 8028 | skip | orchestrated | **archive** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_27_SmartHome` | 378 | tools | 8027 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_28_Reserved` | 253 | development | 8028 | skip | orchestrated | **archive** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_29_Reserved` | 262 | development | 8029 | skip | orchestrated | **archive** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_30_Reserved` | 123 | development | 8030 | skip | orchestrated | **delete** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_31_Reserved` | 123 | extended | 8031 | skip | orchestrated | **delete** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_32_Reserved` | 123 | extended | 8032 | skip | orchestrated | **delete** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_33_ADB` | 499 | extended | 8033 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_30_Reserved` | 128 | development | 8030 | skip | orchestrated | **delete** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_31_Reserved` | 128 | extended | 8031 | skip | orchestrated | **delete** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_32_Reserved` | 128 | extended | 8032 | skip | orchestrated | **delete** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_33_ADB` | 528 | extended | 8033 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_34_Scrcpy` | 290 | extended | 8034 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_35_AppleScript` | 130 | extended | 8035 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_35_AppleScript` | 135 | extended | 8035 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_36_UIAWindows` | 370 | extended | 8036 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_37_LinuxDBus` | 134 | extended | 8037 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_38_BLE` | 198 | extended | 8038 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_39_SSH` | 186 | extended | 8039 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_40_SFTP` | 195 | extended | 8040 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_41_MQTT` | 236 | extended | 8041 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_42_CANbus` | 164 | extended | 8042 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_43_MAVLink` | 141 | extended | 8043 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_44_NFC` | 158 | extended | 8044 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_40_SFTP` | 200 | extended | 8040 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_43_MAVLink` | 145 | extended | 8043 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_44_NFC` | 163 | extended | 8044 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_45_DesktopAuto` | 198 | extended | 8045 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_46_Camera` | 183 | extended | 8046 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_47_Audio` | 224 | extended | 8047 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_48_Serial` | 190 | extended | 9001 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_49_OctoPrint` | 434 | extended | 8049 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_46_Camera` | 188 | extended | 8046 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_47_Audio` | 230 | extended | 8047 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_49_OctoPrint` | 435 | extended | 8049 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_50_Transformer` | 294 | extended | 8050 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_51_QuantumDispatcher` | 644 | extended | 8051 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_52_QiskitSimulator` | 595 | extended | 8052 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_53_GraphLogic` | 348 | extended | 8053 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_54_SymbolicMath` | 759 | extended | 8054 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_55_MultiModal` | 188 | extended | 8055 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_55_MultiModal` | 193 | extended | 8055 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_56_Planning` | 182 | extended | 9002 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_57_QuantumCloud` | 185 | extended | 8057 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_58_ModelRouter` | 1057 | extended | 8058 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_58_ModelRouter` | 1082 | extended | 8058 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_59_CausalInference` | 149 | extended | 8059 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_60_ReinforcementLearning` | 319 | academic | 8060 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_60_ReinforcementLearning` | 324 | academic | 8060 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_61_GeometricReasoning` | 166 | extended | 8061 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_62_ProbabilisticProgramming` | 135 | extended | 8062 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_63_FuzzyLogicEngine` | 399 | academic | 8063 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_63_FuzzyLogicEngine` | 404 | academic | 8063 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_64_Telemetry` | 823 | extended | 8064 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_65_LoggerCentral` | 633 | extended | 8065 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_66_ConfigManager` | 386 | extended | 8066 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_67_HealthMonitor` | 654 | extended | 8067 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_66_ConfigManager` | 392 | extended | 8066 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_67_HealthMonitor` | 682 | extended | 8067 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_68_Security` | 428 | extended | 8068 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_69_BackupRestore` | 759 | extended | 8069 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_70_AutonomousLearning` | 503 | academic | 8070 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_71_MultiDeviceCoordination` | 846 | extended | 8071 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_72_KnowledgeBase` | 414 | extended | 8072 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_73_Learning` | 389 | extended | 8073 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_74_DigitalTwin` | 403 | extended | 8074 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_75_DataPipeline` | 345 | extended | 8075 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_76_AlertManager` | 335 | extended | 8076 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_77_TaskScheduler` | 374 | extended | 8077 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_78_DataValidator` | 303 | extended | 8078 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_79_LocalLLM` | 798 | extended | 8079 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_80_MemorySystem` | 948 | extended | 8080 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_81_Orchestrator` | 689 | academic | 8081 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_69_BackupRestore` | 829 | extended | 8069 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_70_AutonomousLearning` | 522 | academic | 8070 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_71_MultiDeviceCoordination` | 847 | extended | 8071 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_72_KnowledgeBase` | 420 | extended | 8072 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_73_Learning` | 508 | extended | 8073 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_74_DigitalTwin` | 409 | extended | 8074 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_75_DataPipeline` | 351 | extended | 8075 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_76_AlertManager` | 340 | extended | 8076 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_77_TaskScheduler` | 380 | extended | 8077 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_78_DataValidator` | 308 | extended | 8078 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_79_LocalLLM` | 821 | extended | 8079 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_80_MemorySystem` | 1004 | extended | 8080 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_81_Orchestrator` | 693 | academic | 8081 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_82_NetworkGuard` | 445 | academic | 8082 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_83_NewsAggregator` | 468 | academic | 8083 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_84_StockTracker` | 482 | academic | 8084 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `Node_85_PromptLibrary` | 604 | academic | 8085 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_86_SpeechProcessor` | 635 | extended | 8086 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_87_ImageAnalysis` | 597 | extended | 8087 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_88_WorkflowEngine` | 597 | extended | 8088 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_89_APIGateway` | 520 | extended | 8089 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_90_MultimodalVision` | 590 | academic | 8090 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_91_MultimodalAgent` | 419 | academic | 8091 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_92_AutoControl` | 307 | academic | 8092 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_93_VideoProcessor` | 485 | extended | 8093 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_94_AudioAnalysis` | 450 | extended | 8094 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_95_WebRTC_Receiver` | 470 | academic | 8095 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_96_SmartTransportRouter` | 412 | academic | 8096 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_97_AcademicSearch` | 592 | academic | 8097 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_98_MultimodalFusion` | 318 | extended | 8098 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Node_99_EmbeddingService` | 317 | extended | 8099 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_86_SpeechProcessor` | 643 | extended | 8086 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_87_ImageAnalysis` | 606 | extended | 8087 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_88_WorkflowEngine` | 605 | extended | 8088 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_89_APIGateway` | 525 | extended | 8089 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_90_MultimodalVision` | 597 | academic | 8090 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_91_MultimodalAgent` | 425 | academic | 8091 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_92_AutoControl` | 313 | academic | 8092 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_93_VideoProcessor` | 490 | extended | 8093 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_94_AudioAnalysis` | 455 | extended | 8094 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_95_WebRTC_Receiver` | 661 | academic | 8095 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_96_SmartTransportRouter` | 425 | academic | 8096 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_97_AcademicSearch` | 633 | academic | 8097 | active | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_98_MultimodalFusion` | 345 | extended | 8098 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Node_99_EmbeddingService` | 323 | extended | 8099 | optional | orchestrated | **keep** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 **Column key:** src=source_completeness · syn=syntax_safety · pkg=packaging · reg=registry_governance · rt=runtime_contract · hyg=hygiene
 **Icon key:** ✓=pass · ~=warn · ✗=fail · ?=unknown
