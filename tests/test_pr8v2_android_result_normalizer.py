@@ -804,10 +804,10 @@ class TestGroupN_GoalExecutionResultTruthIngress:
             pytest.skip("goal_execution handler unavailable")
 
     def test_N02_ingest_goal_result_truth_binding_importable(self) -> None:
-        """_ingest_goal_result_truth module-level binding must exist."""
+        """规范摄入绑定必须存在(收口时更名为 *_via_canonical_ingress)。"""
         try:
             import galaxy_gateway.android.handlers.goal_execution as ge
-            assert hasattr(ge, "_ingest_goal_result_truth")
+            assert hasattr(ge, "_ingest_goal_result_via_canonical_ingress")
         except ImportError:
             pytest.skip("goal_execution handler unavailable")
 
@@ -827,7 +827,7 @@ class TestGroupN_GoalExecutionResultTruthIngress:
         """_try_ingest_goal_result_truth must not raise when ingress is None."""
         try:
             import galaxy_gateway.android.handlers.goal_execution as ge
-            with patch.object(ge, "_ingest_goal_result_truth", None):
+            with patch.object(ge, "_ingest_goal_result_via_canonical_ingress", None):
                 ge._try_ingest_goal_result_truth({"type": "goal_execution_result"})
         except ImportError:
             pytest.skip("goal_execution handler unavailable")
@@ -845,7 +845,7 @@ class TestGroupN_GoalExecutionResultTruthIngress:
             captured.append(msg.get("truth_kind"))
             return MagicMock(was_reconciled=False, reject_reason="", envelope=None)
 
-        with patch.object(ge, "_ingest_goal_result_truth", fake_ingress):
+        with patch.object(ge, "_ingest_goal_result_via_canonical_ingress", fake_ingress):
             ge._try_ingest_goal_result_truth({"type": "goal_execution_result"})
 
         assert captured == ["result"]

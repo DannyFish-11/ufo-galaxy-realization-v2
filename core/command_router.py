@@ -1454,7 +1454,12 @@ class CommandRouter:
                         "request_id": envelope.task_id,
                         "task_id": envelope.task_id,
                         "trace_id": envelope.trace_id,
-                        "command_id": envelope.task_id,
+                        # 与其余所有拒绝点一致:回显调用方的 command_id(此前此处
+                        # 误用 task_id,导致该路径的命令关联断链——route_command
+                        # 兼容层的 command_id 丢失)。
+                        "command_id": (envelope.metadata or {}).get(
+                            "command_id", envelope.task_id
+                        ),
                         "device_id": "",
                         "command": envelope.tool_name,
                         "via": "command_router",

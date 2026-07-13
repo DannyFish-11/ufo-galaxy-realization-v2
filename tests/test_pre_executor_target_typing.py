@@ -19,8 +19,48 @@ from __future__ import annotations
 import asyncio
 import pytest
 
+
 from core.schemas.remote_execution import ExecutorTargetType, RemoteExecutionMode
 from core.schemas.task_envelope import TaskEnvelope
+
+
+@pytest.fixture(autouse=True)
+def _bypass_dispatch_gates(monkeypatch):
+    """本套件钉的是 route_envelope 的【目标类型分流】(android/node/worker/local),
+    不是能力门与 V3 槽权威(各有专门套件)。PR-CAP-DEFAULT 与 V3 槽评估会在
+    分流之前把裸测试环境里的目标全部拒掉(本文件此前基线红的根因)。按
+    test_pr2_task_envelope_pipeline 的既定钉法放行这两道门。"""
+    import core.capability_aware_routing_default as card
+    monkeypatch.setattr(card, "infer_dispatch_capabilities", lambda tool: [])
+
+    from core.canonical_dispatch_slot_authority import (
+        CanonicalDispatchSlot,
+        CanonicalDispatchSlotStatus,
+        CanonicalDispatchSlotsResult,
+    )
+    import core.canonical_dispatch_slot_authority as _slot_mod
+
+    def _approve_all(device_ids, execution_mode, **_kw):
+        slots = [
+            CanonicalDispatchSlot(
+                device_id=d,
+                execution_mode=execution_mode,
+                slot_approved=True,
+                status=CanonicalDispatchSlotStatus.SLOT_APPROVED.value,
+                reason="test override — target-typing suite",
+            )
+            for d in device_ids
+        ]
+        return CanonicalDispatchSlotsResult(
+            execution_mode=execution_mode,
+            approved_slots=slots,
+            blocked_slots=[],
+            can_proceed=True,
+            block_reason="",
+        )
+
+    monkeypatch.setattr(_slot_mod, "get_canonical_dispatch_slots", _approve_all)
+
 
 
 # ---------------------------------------------------------------------------

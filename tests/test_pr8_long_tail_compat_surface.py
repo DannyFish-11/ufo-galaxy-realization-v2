@@ -300,7 +300,7 @@ class TestHandleFileTransfer:
         })
 
         with patch(
-            "galaxy_gateway.android.handlers.file_transfer.DeviceOrchestrator",
+            "core.device_orchestrator.DeviceOrchestrator",
             return_value=mock_orch,
         ):
             result = await handle_file_transfer(bridge, ws, msg)
@@ -330,7 +330,7 @@ class TestHandleFileTransfer:
         }
 
         with patch(
-            "galaxy_gateway.android.handlers.file_transfer.DeviceOrchestrator",
+            "core.device_orchestrator.DeviceOrchestrator",
             side_effect=ImportError("not available"),
         ):
             result = await handle_file_transfer(bridge, ws, msg)

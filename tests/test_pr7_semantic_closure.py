@@ -207,16 +207,17 @@ class TestLegacyResidueIsolation:
 
     def test_dashboard_legacy_surface_md_references_canonical_surface(self) -> None:
         content = _repo_file("dashboard/LEGACY_SURFACE.md").read_text()
-        assert "status_board_v2" in content or "windows_client" in content, (
+        # 遗留面已改指【规范面板端点】(PR-PANEL-CANONICAL),不再指 status_board_v2。
+        assert "canonical panel" in content or "PR-PANEL-CANONICAL" in content, (
             "dashboard/LEGACY_SURFACE.md must point to the canonical replacement"
         )
 
-    def test_status_board_py_has_legacy_deprecation(self) -> None:
+    def test_status_board_py_fully_decommissioned(self) -> None:
+        # 收口已推进到终态:windows_client/status_board.py 被整体拆除,
+        # 比"留着文件挂弃用说明"更强。钉住"不得复活"。
         sb_path = _repo_file("windows_client/status_board.py")
-        assert sb_path.exists(), "windows_client/status_board.py must exist"
-        content = sb_path.read_text().lower()
-        assert "deprecated" in content or "legacy" in content, (
-            "status_board.py must carry a legacy / deprecated notice"
+        assert not sb_path.exists(), (
+            "windows_client/status_board.py 已退役拆除,不应被重新引入"
         )
 
     def test_active_surface_md_references_semantic_closure_doc(self) -> None:

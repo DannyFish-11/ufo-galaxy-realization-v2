@@ -752,8 +752,13 @@ def extract_participant_truth_envelope(
 
     # Closure-bearing extraction fields are kind-gated to make non-closure
     # semantics machine-obvious and resilient to future refactors.
+    # reconciliation_signal 必须保留 phase:_reconcile_reconciliation_signal 的
+    # 相位→确认信号映射就吃 envelope.task_phase_value(见其 docstring)。此前
+    # 该 kind 新增时漏进保留名单,导致所有带相位的对账信号在抽取阶段就被清空、
+    # 一律以 "unmapped_reconciliation_phase:" 被拒(真回归,非测试漂移)。
     if truth_kind not in (
         AndroidParticipantTruthKind.task_phase,
+        AndroidParticipantTruthKind.reconciliation_signal,
         AndroidParticipantTruthKind.unknown,
     ):
         task_phase_value = ""

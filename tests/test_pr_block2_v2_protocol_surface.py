@@ -124,6 +124,10 @@ def _make_handoff_result_message(device_id: str = "device-test") -> Dict[str, An
         "type": "handoff_result",
         "device_id": device_id,
         "message_id": str(uuid.uuid4()),
+        # 跨仓 schema/version 门要求上行带 schema 与完成闭环契约双版本
+        # (缺任一即 strict_reject)。
+        "schema_version": "1",
+        "completion_closure_contract_version": "1",
         "payload": {
             "handoff_id": f"hev2_{uuid.uuid4().hex[:12]}",
             "response_kind": "result",
@@ -136,6 +140,10 @@ def _make_handoff_failure_message(device_id: str = "device-test") -> Dict[str, A
         "type": "handoff_failure",
         "device_id": device_id,
         "message_id": str(uuid.uuid4()),
+        # 跨仓 schema/version 门要求上行带 schema 与完成闭环契约双版本
+        # (缺任一即 strict_reject)。
+        "schema_version": "1",
+        "completion_closure_contract_version": "1",
         "payload": {
             "handoff_id": f"hev2_{uuid.uuid4().hex[:12]}",
             "response_kind": "failure",
@@ -151,6 +159,10 @@ def _make_handoff_envelope_v2_result_message(
         "type": "handoff_envelope_v2_result",
         "device_id": device_id,
         "message_id": str(uuid.uuid4()),
+        # 跨仓 schema/version 门要求上行带 schema 与完成闭环契约双版本
+        # (缺任一即 strict_reject)。
+        "schema_version": "1",
+        "completion_closure_contract_version": "1",
         "payload": {
             "handoff_id": f"hev2_{uuid.uuid4().hex[:12]}",
             "response_kind": "result",

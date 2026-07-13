@@ -562,8 +562,11 @@ def test_G37_rendered_board_contains_source_boundary_short_labels():
     surface = OperationalStateSurface()
     projection = _make_board_with_categories()
     result = surface.render(projection)
-    # V2-authoritative categories should show [V2] short label
-    assert "[V2]" in result, "Board render should contain [V2] boundary label"
+    # 边界标签格式已演进为 "[短标/原值]"(如 [V2/v2_authoritative]),
+    # 保留短标可读性同时带上完整边界值便于审计。
+    assert "[V2/v2_authoritative]" in result, (
+        "Board render should contain V2 boundary label in short/raw form"
+    )
 
 
 def test_G38_rendered_board_with_empty_categories_shows_fallback_message():

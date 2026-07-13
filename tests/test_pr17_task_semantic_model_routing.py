@@ -75,13 +75,23 @@ class TestSentinels:
 
 
 def _make_mock_router(reply_content: str = "ok") -> MagicMock:
-    """Build a mock LLM router whose chat() returns a simple LLMResponse-like."""
+    """Build a mock LLM router whose chat() returns a simple LLMResponse-like.
+
+    _fallback_chat 已改为优先 ``chat_with_tools``(UnifiedLLMRouter 兼容修复,
+    见 kernel.py 内注释),其次 ``chat_completion``,最后 ``chat``。三个入口
+    绑同一个 AsyncMock:无论内核走哪条路,既不会在 await 上炸(MagicMock 不可
+    await——本文件此前恒败的根因),既有的 ``router.chat.assert_*`` 断言也照常
+    生效(同一对象)。
+    """
     mock_resp = MagicMock()
     mock_resp.content = reply_content
     mock_resp.model = "test-model"
 
+    chat_mock = AsyncMock(return_value=mock_resp)
     router = MagicMock()
-    router.chat = AsyncMock(return_value=mock_resp)
+    router.chat = chat_mock
+    router.chat_with_tools = chat_mock
+    router.chat_completion = chat_mock
     router.is_available = MagicMock(return_value=True)
     return router
 
@@ -171,7 +181,7 @@ class TestTextPathTaskHintThreading:
 
         original_fallback = kernel._fallback_chat
 
-        async def capturing_fallback(message, session_id, context, user_policy, task_hint=""):
+        async def capturing_fallback(message, session_id, context, user_policy, task_hint="", **_kw):
             captured.append({"task_hint": task_hint})
             return await original_fallback(
                 message, session_id, context, user_policy, task_hint=task_hint
@@ -206,7 +216,7 @@ class TestTextPathTaskHintThreading:
 
         captured_hint: List[str] = []
 
-        async def spy_handle_chat(message, session_id, context, user_policy, task_hint=""):
+        async def spy_handle_chat(message, session_id, context, user_policy, task_hint="", **_kw):
             captured_hint.append(task_hint)
             from core.agent.kernel import KernelResponse
             return KernelResponse(success=True, mode=IntentMode.CHAT_ONLY, reply="ok")
@@ -216,7 +226,7 @@ class TestTextPathTaskHintThreading:
              patch.object(kernel, "_handle_chat", side_effect=spy_handle_chat), \
              patch("core.agent.kernel.get_agents", return_value=""), \
              patch("core.agent.kernel.get_user", return_value=""):
-            await kernel._process("解释一下这个现象", "s1", "", [])
+            await kernel._process("解释一下这个现象", "s1", "", "", "", [])
 
         assert len(captured_hint) == 1, "_handle_chat should be called once"
         assert captured_hint[0] == "REASONING", (
@@ -241,7 +251,7 @@ class TestTextPathTaskHintThreading:
                           new_callable=AsyncMock, return_value=chat_intent), \
              patch("core.agent.kernel.get_agents", return_value=""), \
              patch("core.agent.kernel.get_user", return_value=""):
-            result = await kernel._process("你好", "s1", "", [])
+            result = await kernel._process("你好", "s1", "", "", "", [])
 
         assert result.success is True
 
@@ -263,7 +273,7 @@ class TestTextPathTaskHintThreading:
                           new_callable=AsyncMock, return_value=chat_intent), \
              patch("core.agent.kernel.get_agents", return_value=""), \
              patch("core.agent.kernel.get_user", return_value=""):
-            result = await kernel._process("分析这份数据", "s1", "", [])
+            result = await kernel._process("分析这份数据", "s1", "", "", "", [])
 
         assert result.success is True
         assert result.reply == "分析结果"
