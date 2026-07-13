@@ -306,6 +306,47 @@ class TestScoringWithHealth:
 # ===========================================================================
 # C) CommandRouter — retry routing on simulated device failure
 # ===========================================================================
+# 门豁免夹具:本组钉的是【失败重试/隔离/审计事件】自愈语义,不是设备准入
+# 策略。后加入的 V3 canonical 槽权威会把假设备拦下(not registered in UDM)
+# ——按既定 sanctioned bypass 模式豁免,门策略由其守卫套件专钉。
+
+
+@pytest.fixture()
+def _bypass_dispatch_gates(monkeypatch):
+    from core.canonical_dispatch_slot_authority import (
+        CanonicalDispatchSlot,
+        CanonicalDispatchSlotStatus,
+        CanonicalDispatchSlotsResult,
+    )
+
+    def _approve_all(device_ids, execution_mode, **kwargs):
+        slots = [
+            CanonicalDispatchSlot(
+                device_id=d,
+                execution_mode=execution_mode,
+                slot_approved=True,
+                status=CanonicalDispatchSlotStatus.SLOT_APPROVED.value,
+                reason="test override — self-healing retry suite",
+            )
+            for d in device_ids
+        ]
+        return CanonicalDispatchSlotsResult(
+            execution_mode=execution_mode,
+            approved_slots=slots,
+            blocked_slots=[],
+            can_proceed=True,
+            block_reason="",
+        )
+
+    monkeypatch.setattr(
+        "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+        _approve_all,
+    )
+    monkeypatch.setattr(
+        "core.capability_aware_routing_default.infer_dispatch_capabilities",
+        lambda tool_name: [],
+    )
+
 
 class TestCommandRouterRetry:
     """Integration tests for retry-routing when a device fails."""
@@ -326,7 +367,7 @@ class TestCommandRouterRetry:
         )
 
     @pytest.mark.asyncio
-    async def test_retry_succeeds_on_second_device(self):
+    async def test_retry_succeeds_on_second_device(self, _bypass_dispatch_gates):
         """When device_1 fails, the router retries on device_2 and succeeds."""
         router = self._router()
         calls = []
@@ -399,7 +440,7 @@ class TestCommandRouterRetry:
         assert len(attempted) <= 3
 
     @pytest.mark.asyncio
-    async def test_retry_emits_audit_events(self):
+    async def test_retry_emits_audit_events(self, _bypass_dispatch_gates):
         """TASK_RETRY_SCHEDULED and TASK_RETRY_SUCCEEDED are emitted."""
         from core.control_plane.audit_ledger import AuditLedger, EventType
         from core.control_plane._globals import get_audit_ledger
@@ -438,7 +479,7 @@ class TestCommandRouterRetry:
         assert len(succeeded) >= 1
 
     @pytest.mark.asyncio
-    async def test_all_retries_fail_emits_task_retry_failed(self):
+    async def test_all_retries_fail_emits_task_retry_failed(self, _bypass_dispatch_gates):
         """TASK_RETRY_FAILED is emitted when all retries are exhausted."""
         from core.control_plane.audit_ledger import AuditLedger, EventType
 
@@ -470,7 +511,7 @@ class TestCommandRouterRetry:
         assert len(failed) >= 1
 
     @pytest.mark.asyncio
-    async def test_quarantined_device_skipped_in_retry(self):
+    async def test_quarantined_device_skipped_in_retry(self, _bypass_dispatch_gates):
         """A quarantined device is not tried even when listed as a candidate."""
         from core.control_plane.device_health_registry import DeviceHealthRegistry
 
