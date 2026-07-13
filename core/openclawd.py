@@ -7956,6 +7956,26 @@ class OpenClawd:
 
                     logger.info(f"ReAct 迭代 {iteration+1}: 调用工具 {tc_name}")
 
+                    # Gecko 阶段一:派发前参数规则校验(schema 必填/类型/enum)。
+                    # 不合法【不派发】,把结构化错误作为 tool 消息回喂,模型下一轮
+                    # 自纠——错误在校验里死,不在真实世界死;零额外 LLM 成本。
+                    try:
+                        from core.tool_call_validator import validate_tool_call
+                        _tc_check = validate_tool_call(tc_name, tc_args, tools)
+                    except Exception:  # noqa: BLE001 — 校验器自身故障绝不阻塞派发
+                        _tc_check = None
+                    if _tc_check is not None and not _tc_check.valid:
+                        logger.info(
+                            "ReAct 参数校验拦截(未派发) %s: %s",
+                            tc_name, "; ".join(_tc_check.errors)[:200],
+                        )
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "content": _tc_check.feedback_text()[:2000],
+                        })
+                        continue
+
                     # Phase 9: 频率限制检查
                     _total_tool_calls += 1
                     if _total_tool_calls > _MAX_TOOL_CALLS:
@@ -8149,6 +8169,41 @@ class OpenClawd:
             elif hasattr(router, "_compute_complexity_vector"):
                 cv = router._compute_complexity_vector(messages, tools if tools else None)
 
+            # Gecko 阶段二(阈限态预演):复杂任务先在状态化模拟环境里推演工具
+            # 调用计划——校验/模拟响应/影子状态/任务级反馈/快照重试,零真实副作用;
+            # 预演成功的轨迹作为 in-context 指导注入真实 ReAct(GATS)。任何预演
+            # 故障都降级为直接执行,绝不阻塞主流程。
+            _rehearsal_meta: Dict[str, Any] = {}
+            try:
+                from core.liminal_rehearsal import LiminalRehearsal, should_rehearse
+                _cx = float(cv.weighted_score) if cv is not None else 0.5
+                if should_rehearse(_cx, tools):
+                    rehearsal = LiminalRehearsal(
+                        router=router,
+                        real_dispatch=self._dispatch_tool_call,
+                        tools=tools,
+                    )
+                    _outcome = await rehearsal.rehearse(message)
+                    _rehearsal_meta = {
+                        "rehearsed": True,
+                        "rehearsal_success": _outcome.success,
+                        "rehearsal_attempts": _outcome.attempts,
+                        "rehearsal_steps": len(_outcome.trajectory),
+                    }
+                    guidance = _outcome.guidance_text()
+                    if guidance:
+                        messages.append({"role": "system", "content": guidance})
+                    elif _outcome.feedback_history:
+                        # 预演没跑通:把最后一条任务级反馈也给真实执行提个醒,
+                        # 至少别在同一个坑里摔第二次。
+                        messages.append({"role": "system", "content": (
+                            "[阈限态预演·未跑通提示] 模拟推演未能确认任务完成,"
+                            f"最后反馈: {_outcome.feedback_history[-1][:300]}。"
+                            "真实执行时请特别核对这一点。"
+                        )})
+            except Exception as _rh_err:  # noqa: BLE001 — 预演故障降级直接执行
+                logger.debug("阈限态预演跳过(非致命): %s", _rh_err)
+
             # 使用 ReAct 循环
             result = await self._react_loop(messages, tools)
 
@@ -8171,6 +8226,8 @@ class OpenClawd:
                     "complexity_vector": cv.model_dump() if cv else {},
                     "layers_used": layers_used,
                     "hit_max_iterations": result.get("hit_max_iterations", False),
+                    # Gecko 阶段二:预演观测(是否预演/是否跑通/几轮几步)
+                    **_rehearsal_meta,
                 },
             }
 
