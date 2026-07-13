@@ -66,13 +66,18 @@ class TestE2EOrchestrator:
 
             assert result["success"] is True
             assert result["reply"] == "Hello!"
-            mock_pipeline.execute.assert_called_once_with(
-                message="你好",
-                user_id="user_001",
-                source_device_id="phone_01",
-                session_id=None,
-                context=None,
-            )
+            # PR-UNIFIED-CONTEXT(一条会话主线):编排器有意自动供给
+            # canonical session_id,并在 context 里携带会话身份块
+            # (runtime_session_id/trace_id/control_session_id)——
+            # "session_id=None, context=None" 是收口前的退役契约。
+            mock_pipeline.execute.assert_called_once()
+            kw = mock_pipeline.execute.call_args.kwargs
+            assert kw["message"] == "你好"
+            assert kw["user_id"] == "user_001"
+            assert kw["source_device_id"] == "phone_01"
+            assert isinstance(kw["session_id"], str) and kw["session_id"]
+            assert kw["context"] and "runtime_session_id" in kw["context"][0]
+            assert kw["context"][0].get("trace_id")
 
     @pytest.mark.asyncio
     async def test_process_user_input_default_uses_constellation(self):
@@ -176,9 +181,18 @@ class TestSessionRoaming:
         assert mgr.get_session_by_device("device_B") is not None
         assert mgr.get_session_by_device("device_A") is None
 
-    def test_list_sessions(self):
+    def test_list_sessions(self, tmp_path, monkeypatch):
+        import importlib
+        import sys
         from galaxy_gateway.session_roaming import SessionRoamingManager
 
+        # 管理器构造时会从 PERSISTENCE_FILE 载入历史会话(跨进程持久化是
+        # 特性),计数断言必须在隔离的空存储上做,否则数的是磁盘残留。
+        # 注:包属性 session_roaming 被同名单例实例遮蔽,须经 sys.modules
+        # 取真模块再打补丁。
+        importlib.import_module("galaxy_gateway.session_roaming")
+        sr_mod = sys.modules["galaxy_gateway.session_roaming"]
+        monkeypatch.setattr(sr_mod, "PERSISTENCE_FILE", tmp_path / "sessions.json")
         mgr = SessionRoamingManager()
         mgr.create_session("dev_1", wake_word="hello")
         mgr.create_session("dev_2", wake_word="hey")
@@ -278,59 +292,59 @@ class TestWebSocketHandlerWiring:
 class TestSessionManager:
     """Test the unified session manager."""
 
-    def test_get_or_create_session(self):
+    async def test_get_or_create_session(self):
         from core.session_manager import SessionManager
 
         sm = SessionManager()
         sm._sessions.clear()
         sm._user_active_session.clear()
 
-        session = sm.get_or_create_session("user_001", "phone_01")
+        session = await sm.get_or_create_session("user_001", "phone_01")
         assert session.user_id == "user_001"
         assert "phone_01" in session.devices
 
         # Same user, different device → same session
-        session2 = sm.get_or_create_session("user_001", "pc_01")
+        session2 = await sm.get_or_create_session("user_001", "pc_01")
         assert session2.id == session.id
         assert "pc_01" in session2.devices
 
-    def test_add_message_and_history(self):
+    async def test_add_message_and_history(self):
         from core.session_manager import SessionManager
 
         sm = SessionManager()
         sm._sessions.clear()
         sm._user_active_session.clear()
 
-        session = sm.create_session("user_001", "phone_01")
-        sm.add_message(session.id, "user", "Hello", "phone_01")
-        sm.add_message(session.id, "assistant", "Hi!", "")
+        session = await sm.create_session("user_001", "phone_01")
+        await sm.add_message(session.id, "user", "Hello", "phone_01")
+        await sm.add_message(session.id, "assistant", "Hi!", "")
 
         history = sm.get_history(session.id)
         assert len(history) == 2
         assert history[0]["role"] == "user"
         assert history[1]["content"] == "Hi!"
 
-    def test_join_session(self):
+    async def test_join_session(self):
         from core.session_manager import SessionManager
 
         sm = SessionManager()
         sm._sessions.clear()
         sm._user_active_session.clear()
 
-        session = sm.create_session("user_001", "phone_01")
-        assert sm.join_session(session.id, "tablet_01") is True
+        session = await sm.create_session("user_001", "phone_01")
+        assert await sm.join_session(session.id, "tablet_01") is True
         assert "tablet_01" in sm.get_session(session.id).devices
 
-    def test_list_device_sessions(self):
+    async def test_list_device_sessions(self):
         from core.session_manager import SessionManager
 
         sm = SessionManager()
         sm._sessions.clear()
         sm._user_active_session.clear()
 
-        s1 = sm.create_session("user_001", "phone_01")
-        sm.join_session(s1.id, "pc_01")
-        s2 = sm.create_session("user_002", "pc_01")
+        s1 = await sm.create_session("user_001", "phone_01")
+        await sm.join_session(s1.id, "pc_01")
+        s2 = await sm.create_session("user_002", "pc_01")
 
         # pc_01 should appear in 2 sessions
         device_sessions = sm.list_device_sessions("pc_01")

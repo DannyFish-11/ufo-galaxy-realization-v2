@@ -236,12 +236,16 @@ class TestTrackingOnAccept:
         tid = f"tkv_{uuid.uuid4().hex[:10]}"
         msg = _make_accept_message(takeover_id=tid)
 
+        # PR-11-V2:tracking/审计收口生命周期协调器,直挂 _record_takeover_response
+        # 钩子已退役——改钉协调器绑定(与审计族既定改钉方向一致)。
+        coordinator = MagicMock()
         with patch(
-            "galaxy_gateway.android.handlers.takeover_response._record_takeover_response"
-        ) as mock_record:
+            "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
+            return_value=coordinator,
+        ):
             _run(handle_takeover_response(MagicMock(), None, msg))
-            mock_record.assert_called_once()
-            call_kwargs = mock_record.call_args[1]
+            coordinator.on_takeover_response.assert_called_once()
+            call_kwargs = coordinator.on_takeover_response.call_args.kwargs
             assert call_kwargs["accepted"] is True
             assert call_kwargs["takeover_id"] == tid
 
@@ -249,11 +253,13 @@ class TestTrackingOnAccept:
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
         msg = _make_accept_message(device_id="my-android-device")
 
+        coordinator = MagicMock()
         with patch(
-            "galaxy_gateway.android.handlers.takeover_response._record_takeover_response"
-        ) as mock_record:
+            "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
+            return_value=coordinator,
+        ):
             _run(handle_takeover_response(MagicMock(), None, msg))
-            call_kwargs = mock_record.call_args[1]
+            call_kwargs = coordinator.on_takeover_response.call_args.kwargs
             assert call_kwargs["device_id"] == "my-android-device"
 
 
@@ -268,12 +274,14 @@ class TestTrackingOnReject:
         tid = f"tkv_{uuid.uuid4().hex[:10]}"
         msg = _make_reject_message(takeover_id=tid)
 
+        coordinator = MagicMock()
         with patch(
-            "galaxy_gateway.android.handlers.takeover_response._record_takeover_response"
-        ) as mock_record:
+            "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
+            return_value=coordinator,
+        ):
             _run(handle_takeover_response(MagicMock(), None, msg))
-            mock_record.assert_called_once()
-            call_kwargs = mock_record.call_args[1]
+            coordinator.on_takeover_response.assert_called_once()
+            call_kwargs = coordinator.on_takeover_response.call_args.kwargs
             assert call_kwargs["accepted"] is False
             assert call_kwargs["takeover_id"] == tid
 
@@ -282,11 +290,13 @@ class TestTrackingOnReject:
         msg = _make_reject_message()
         msg["reason"] = "screen locked"
 
+        coordinator = MagicMock()
         with patch(
-            "galaxy_gateway.android.handlers.takeover_response._record_takeover_response"
-        ) as mock_record:
+            "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
+            return_value=coordinator,
+        ):
             _run(handle_takeover_response(MagicMock(), None, msg))
-            call_kwargs = mock_record.call_args[1]
+            call_kwargs = coordinator.on_takeover_response.call_args.kwargs
             assert call_kwargs["reason"] == "screen locked"
 
 
@@ -309,15 +319,12 @@ class TestTakeoverResponseSessionRecovery:
             "galaxy_gateway.android.handlers.takeover_response._lookup_session_by_device",
             return_value=SimpleNamespace(runtime_session_id=expected_session_id),
         ) as mock_lookup, patch(
-            "galaxy_gateway.android.handlers.takeover_response._record_takeover_response",
-        ) as mock_record, patch(
             "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
             return_value=coordinator,
         ):
             _run(handle_takeover_response(MagicMock(), None, msg))
 
         mock_lookup.assert_called_once_with(msg["device_id"])
-        assert mock_record.call_args.kwargs["session_id"] == expected_session_id
         assert coordinator.on_takeover_response.call_args.kwargs["session_id"] == expected_session_id
 
     def test_I02_missing_session_id_without_registry_entry_degrades_gracefully(self):
@@ -332,16 +339,11 @@ class TestTakeoverResponseSessionRecovery:
             "galaxy_gateway.android.handlers.takeover_response._lookup_session_by_device",
             return_value=None,
         ), patch(
-            "galaxy_gateway.android.handlers.takeover_response._record_takeover_response",
-        ) as mock_record, patch(
             "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
             return_value=coordinator,
         ):
             _run(handle_takeover_response(MagicMock(), None, msg))
 
-        assert mock_record.call_args.kwargs["session_id"] is None, (
-            "Tracking API normalizes missing session_id to None"
-        )
         assert coordinator.on_takeover_response.call_args.kwargs["session_id"] == "", (
             "Coordinator API preserves empty-string session_id when lookup cannot recover it"
         )
@@ -358,7 +360,7 @@ class TestTrackingDegradeGracefully:
         msg = _make_accept_message()
 
         with patch(
-            "galaxy_gateway.android.handlers.takeover_response._record_takeover_response",
+            "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
             None,
         ):
             resp = _run(handle_takeover_response(MagicMock(), None, msg))
@@ -368,9 +370,11 @@ class TestTrackingDegradeGracefully:
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
         msg = _make_reject_message()
 
+        coordinator = MagicMock()
+        coordinator.on_takeover_response.side_effect = RuntimeError("tracking failure")
         with patch(
-            "galaxy_gateway.android.handlers.takeover_response._record_takeover_response",
-            side_effect=RuntimeError("tracking failure"),
+            "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
+            return_value=coordinator,
         ):
             # Handler must not propagate the exception
             resp = _run(handle_takeover_response(MagicMock(), None, msg))
