@@ -132,133 +132,19 @@ class TestLauncherConfigManagerDeprecation:
 # B) dashboard/backend/main.py — no forbidden inline UnifiedChatResponse class
 # ---------------------------------------------------------------------------
 
-class TestDashboardForbiddenFallbackRemoved:
+class TestDashboardRetired:
+    """终态(用户裁决):dashboard/ 整体删除(ui_surface_authority: DELETED,
+    do not recreate)。原三组模式检查(禁止内联 fallback / CORS 旗标 /
+    ASCII art 旗标)的检查对象不复存在,收敛为退役终态钉。"""
 
-    def test_no_inline_unifiedchatresponse_class_in_except_block(self):
-        src = _read("dashboard/backend/main.py")
-        # The forbidden pattern is defining the class inside an except ImportError block.
-        # We look for a class definition that appears after 'except ImportError'
-        # and before the next top-level statement, within the first ~120 lines.
-        lines = src.splitlines()
-        in_except = False
-        _EXCEPT_CONTINUATION_PREFIXES = ("#", "from", "import", "class", "def", " ", "\t")
-        _UNIFIED_RESPONSE_FIELD_NAMES = (
-            "success", "response", "intent", "confidence",
-            "mode", "suggestions", "data", "error", "session_id",
-        )
-        for line in lines[:120]:
-            stripped = line.strip()
-            if stripped.startswith("except ImportError"):
-                in_except = True
-            elif in_except and stripped.startswith("class UnifiedChatResponse"):
-                pytest.fail(
-                    "dashboard/backend/main.py must NOT define UnifiedChatResponse "
-                    "as an inline fallback inside an except ImportError block. "
-                    "It is a core dependency and must be a hard import."
-                )
-            elif in_except and stripped:
-                # Determine whether we have left the except block
-                is_continuation = (
-                    stripped.startswith(_EXCEPT_CONTINUATION_PREFIXES)
-                    or stripped.startswith(_UNIFIED_RESPONSE_FIELD_NAMES)
-                )
-                if not is_continuation:
-                    in_except = False
-
-    def test_unified_response_imported_as_hard_dependency(self):
-        src = _read("dashboard/backend/main.py")
-        # Should have: `from core.unified_response import UnifiedChatResponse`
-        # NOT inside a try block
-        assert "from core.unified_response import UnifiedChatResponse" in src, (
-            "dashboard/backend/main.py must have a hard (non-try) import of UnifiedChatResponse "
-            "from core.unified_response"
+    def test_dashboard_backend_main_retired(self):
+        assert not (REPO_ROOT / "dashboard" / "backend" / "main.py").exists(), (
+            "dashboard/backend/main.py 已随目录退役删除,不得复活"
         )
 
-    def test_no_pydantic_basemodel_fallback_for_unified_response(self):
-        src = _read("dashboard/backend/main.py")
-        # The old forbidden fallback imported BaseModel as _BaseModel
-        assert "pydantic import BaseModel as _BaseModel" not in src, (
-            "The forbidden fallback that re-creates UnifiedChatResponse from pydantic.BaseModel "
-            "must have been removed from dashboard/backend/main.py"
-        )
+    def test_dashboard_package_retired(self):
+        assert not (REPO_ROOT / "dashboard").exists()
 
-
-# ---------------------------------------------------------------------------
-# C) dashboard/backend/main.py — get_cors_origins uses _AVAILABLE flag pattern
-# ---------------------------------------------------------------------------
-
-class TestDashboardCorsOriginsPattern:
-
-    def test_cors_origins_available_flag_exists(self):
-        src = _read("dashboard/backend/main.py")
-        assert "_CORS_ORIGINS_AVAILABLE" in src, (
-            "dashboard/backend/main.py must declare _CORS_ORIGINS_AVAILABLE flag "
-            "for the get_cors_origins optional dependency"
-        )
-
-    def test_cors_origins_fallback_function_not_in_except_block_with_inline_def(self):
-        """The fallback get_cors_origins() function must be paired with _CORS_ORIGINS_AVAILABLE.
-
-        Acceptable pattern:
-            except ImportError:
-                _CORS_ORIGINS_AVAILABLE = False
-
-            def get_cors_origins() -> list[str]: ...  # outside except block
-
-        Forbidden pattern:
-            except ImportError:
-                def get_cors_origins(): ...  # inline definition inside except block
-        """
-        src = _read("dashboard/backend/main.py")
-        # The _AVAILABLE flag must exist (verified by another test).
-        # Here we verify that get_cors_origins is NOT defined inside an except block
-        # without the _AVAILABLE guard.
-        lines = src.splitlines()
-        in_except = False
-        _EXCEPT_CONTINUATION_PREFIXES = (" ", "\t", "#", "def", "return", "_CORS")
-
-        for i, line in enumerate(lines):
-            stripped = line.strip()
-            if stripped.startswith("except ImportError"):
-                in_except = True
-            elif in_except and stripped.startswith("def get_cors_origins"):
-                # If we reach here, get_cors_origins is defined inside an except block.
-                # It is acceptable only if _CORS_ORIGINS_AVAILABLE is set nearby.
-                context_start = max(0, i - 15)
-                context_text = "\n".join(lines[context_start : i + 5])
-                assert "_CORS_ORIGINS_AVAILABLE" in context_text, (
-                    "get_cors_origins defined inside except ImportError block at line "
-                    f"{i + 1} must be accompanied by the _CORS_ORIGINS_AVAILABLE flag"
-                )
-            elif in_except and stripped:
-                if not stripped.startswith(_EXCEPT_CONTINUATION_PREFIXES):
-                    in_except = False
-
-
-# ---------------------------------------------------------------------------
-# D) dashboard/backend/main.py — ascii_art uses _AVAILABLE flag pattern
-# ---------------------------------------------------------------------------
-
-class TestDashboardAsciiArtPattern:
-
-    def test_ascii_art_available_flag_exists(self):
-        src = _read("dashboard/backend/main.py")
-        assert "_ASCII_ART_AVAILABLE" in src, (
-            "dashboard/backend/main.py must declare _ASCII_ART_AVAILABLE flag "
-            "for the optional core.ascii_art dependency"
-        )
-
-    def test_print_banner_fallback_not_forbidden_pattern(self):
-        """The _print_banner fallback must be paired with _ASCII_ART_AVAILABLE."""
-        src = _read("dashboard/backend/main.py")
-        assert "_ASCII_ART_AVAILABLE" in src, (
-            "_print_banner fallback function must use _ASCII_ART_AVAILABLE flag"
-        )
-
-
-# ---------------------------------------------------------------------------
-# E) core/routes/compat.py — deprecation metadata and warning
-# ---------------------------------------------------------------------------
 
 class TestCompatRouteDeprecation:
 
@@ -593,40 +479,9 @@ class TestStructuralInvariants:
         )
 
     def test_dashboard_main_does_not_define_class_in_except_importerror(self):
-        """AST-based check: no class is defined inside an except ImportError handler."""
-        src = _read("dashboard/backend/main.py")
-        try:
-            tree = ast.parse(src)
-        except SyntaxError:
-            pytest.skip("dashboard/backend/main.py has syntax errors — skipping AST check")
+        # 检查对象已退役删除;结构不变量以"不复活"为终态
+        assert not (REPO_ROOT / "dashboard").exists()
 
-        class _ExceptImportErrorClassFinder(ast.NodeVisitor):
-            def __init__(self):
-                self.violations: list[str] = []
-
-            def visit_Try(self, node: ast.Try):
-                for handler in node.handlers:
-                    # Check if it's an except ImportError or ModuleNotFoundError
-                    exc_type = handler.type
-                    if exc_type is None:
-                        continue
-                    exc_name = ""
-                    if isinstance(exc_type, ast.Name):
-                        exc_name = exc_type.id
-                    elif isinstance(exc_type, ast.Attribute):
-                        exc_name = exc_type.attr
-                    if exc_name in ("ImportError", "ModuleNotFoundError"):
-                        for stmt in handler.body:
-                            if isinstance(stmt, ast.ClassDef):
-                                self.violations.append(stmt.name)
-                self.generic_visit(node)
-
-        finder = _ExceptImportErrorClassFinder()
-        finder.visit(tree)
-        assert not finder.violations, (
-            f"dashboard/backend/main.py defines classes inside except ImportError handlers: "
-            f"{finder.violations}. These are forbidden core-dep fallbacks that must be removed."
-        )
 
     def test_core_routes_compat_no_business_logic(self):
         """Shim must not contain complex business logic (just delegation)."""

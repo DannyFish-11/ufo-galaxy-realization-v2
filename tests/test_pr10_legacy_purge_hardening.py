@@ -80,13 +80,15 @@ def _file_text(rel_path: str) -> str:
 
 
 def _import_raises_runtime_error(module_name: str) -> bool:
-    """Return True if importing *module_name* raises RuntimeError."""
+    """Return True if *module_name* is hard-disabled(桩抛 RuntimeError)
+    or fully removed(ModuleNotFoundError)——两种都是"不可用"终态;
+    部分退役模块已从桩演进为彻底删除(如 windows_client.main)。"""
     if module_name in sys.modules:
         del sys.modules[module_name]
     try:
         importlib.import_module(module_name)
         return False
-    except RuntimeError:
+    except (RuntimeError, ModuleNotFoundError):
         return True
     except Exception:
         return False
@@ -305,10 +307,12 @@ class TestLegacyMarkerFiles:
     """Legacy marker files exist at expected locations."""
 
     def test_dashboard_legacy_surface_md(self):
-        assert (_ROOT / "dashboard" / "LEGACY_SURFACE.md").exists()
+        # 终态:dashboard/ 已按 ui_surface_authority 的 DELETED 注册整体删除
+        # (用户裁决),过渡期标记文件随目录一并退役,不得复活。
+        assert not (_ROOT / "dashboard").exists()
 
     def test_dashboard_frontend_legacy_surface_md(self):
-        assert (_ROOT / "dashboard" / "frontend" / "LEGACY_SURFACE.md").exists()
+        assert not (_ROOT / "dashboard" / "frontend").exists()
 
     def test_status_board_v2_active_surface_md(self):
         assert (_ROOT / "windows_client" / "status_board_v2" / "ACTIVE_SURFACE.md").exists()

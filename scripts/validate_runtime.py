@@ -31,7 +31,9 @@ What this script checks
    - All nodes have a recognised startup_policy value
    - startup_policy counts are within expected bounds
 4. Legacy surface isolation
-   - dashboard/ is classified as a legacy surface in the layout registry
+   - dashboard/ has been DELETED outright (owner decision, aligning with
+     core.ui_surface_authority's DELETED registration) — the terminal check
+     asserts the directory does not exist and must not be recreated
    - windows_client/ (root) is classified as a legacy shell
    - windows_client/status_board_v2/ is classified as active desktop status
 5. Critical docs exist
@@ -299,18 +301,16 @@ def check_node_registry() -> None:
 def check_legacy_isolation() -> None:
     _section("4. Legacy Surface Isolation")
 
-    # dashboard/LEGACY_SURFACE.md or dashboard/frontend/LEGACY_SURFACE.md
-    legacy_markers = [
-        PROJECT_ROOT / "dashboard" / "LEGACY_SURFACE.md",
-        PROJECT_ROOT / "dashboard" / "frontend" / "LEGACY_SURFACE.md",
-    ]
-    for marker in legacy_markers:
-        r = _record(
-            f"legacy marker: {marker.relative_to(PROJECT_ROOT)}",
-            marker.exists(),
-            f"expected at {marker}",
-        )
-        _print_result(r)
+    # dashboard/ 已被整体删除(所有者裁决,与 core.ui_surface_authority 的
+    # DELETED 注册一致):终局状态是"目录不存在",不得复活。过渡期的
+    # LEGACY_SURFACE.md 标记随目录一并退役——存在即回归。
+    dashboard_dir = PROJECT_ROOT / "dashboard"
+    r = _record(
+        "dashboard/ deleted (terminal, per ui_surface_authority)",
+        not dashboard_dir.exists(),
+        f"dashboard/ must not exist; found at {dashboard_dir}",
+    )
+    _print_result(r)
 
     # windows_client root should NOT contain an ACTIVE_SURFACE.md at root
     # (active surface lives under status_board_v2/)
@@ -322,24 +322,8 @@ def check_legacy_isolation() -> None:
     )
     _print_result(r)
 
-    # dashboard/README.md should mention legacy/demoted status
-    dash_readme = PROJECT_ROOT / "dashboard" / "README.md"
-    if dash_readme.exists():
-        content = dash_readme.read_text().lower()
-        r = _record(
-            "dashboard/README.md mentions legacy/demoted status",
-            any(kw in content for kw in ("legacy", "demoted", "deprecated")),
-            "dashboard README should clarify its demoted status",
-        )
-        _print_result(r)
-    else:
-        r = _record(
-            "dashboard/README.md exists",
-            False,
-            warn_only=True,
-            detail="optional but recommended",
-        )
-        _print_result(r)
+    # dashboard/README.md 检查随目录删除一并退役:目录不存在由上面的
+    # 终局检查覆盖,README 无从谈起。
 
 
 # ---------------------------------------------------------------------------

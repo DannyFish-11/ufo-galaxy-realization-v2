@@ -271,11 +271,13 @@ class TestNodeRegistry:
 class TestLegacySurfaceIsolation:
     """Legacy surfaces carry their isolation markers and don't claim active authority."""
 
+    # 终态(用户裁决):dashboard/ 整体删除(ui_surface_authority: DELETED),
+    # 过渡期标记随目录退役,不得复活。
     def test_dashboard_legacy_surface_marker_exists(self):
-        assert (PROJECT_ROOT / "dashboard" / "LEGACY_SURFACE.md").exists()
+        assert not (PROJECT_ROOT / "dashboard").exists()
 
     def test_dashboard_frontend_legacy_surface_marker_exists(self):
-        assert (PROJECT_ROOT / "dashboard" / "frontend" / "LEGACY_SURFACE.md").exists()
+        assert not (PROJECT_ROOT / "dashboard" / "frontend").exists()
 
     def test_status_board_v2_active_surface_marker_exists(self):
         assert (
@@ -292,9 +294,8 @@ class TestLegacySurfaceIsolation:
         )
 
     def test_dashboard_legacy_surface_md_content(self):
-        marker = PROJECT_ROOT / "dashboard" / "LEGACY_SURFACE.md"
-        content = marker.read_text().lower()
-        assert any(kw in content for kw in ("legacy", "demoted", "deprecated", "dashboard"))
+        assert not (PROJECT_ROOT / "dashboard" / "LEGACY_SURFACE.md").exists()
+
 
     def test_status_board_v2_active_surface_md_content(self):
         marker = PROJECT_ROOT / "windows_client" / "status_board_v2" / "ACTIVE_SURFACE.md"

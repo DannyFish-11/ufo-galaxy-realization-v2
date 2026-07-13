@@ -532,10 +532,10 @@ _REGISTRY._register(
         canonical_replacement="core/api_routes.py",
         pr_classified="PR-8",
         notes=(
-            "dashboard/ is retained for transition-period compatibility only.  "
-            "It must not define system structure, claim status authority, "
-            "or maintain a parallel source of truth.  "
-            "See dashboard/LEGACY_SURFACE.md."
+            "dashboard/ has been DELETED outright (owner decision, aligning "
+            "with core.ui_surface_authority's DELETED registration: do not "
+            "recreate).  The transition-period retention is over; canonical "
+            "operator/user surfaces are the core panel endpoints."
         ),
     )
 )

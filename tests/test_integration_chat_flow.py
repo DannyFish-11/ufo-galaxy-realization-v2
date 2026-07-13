@@ -227,155 +227,17 @@ class TestGalaxyCoreCallNode:
 # 4. 统一响应格式测试
 # ============================================================================
 
-class TestUnifiedResponseFormat:
-    """测试 UnifiedChatResponse 格式"""
+class TestDashboardRetired:
+    """终态(用户裁决):dashboard/ 整体删除(ui_surface_authority: DELETED)。
+    原三组用例(UnifiedResponse 格式 / 现代意图集成 / 端到端 chat 流)的被测
+    对象是 dashboard/backend/main.py——对话主链路已收口到 core 路由与
+    DesktopPresenceRuntime(有各自的套件专钉),此处只钉退役不复活。"""
 
-    def test_build_unified_response(self):
-        """验证统一响应结构"""
-        sys.path.insert(0, os.path.join(PROJECT_ROOT, "dashboard", "backend"))
-        from main import _build_unified_response
-
-        resp = _build_unified_response(
-            success=True,
-            response="测试回复",
-            intent="device_control",
-            confidence=0.85,
-            suggestions=["建议1"],
-            data={"key": "value"},
+    def test_dashboard_backend_retired(self):
+        assert not os.path.exists(os.path.join(PROJECT_ROOT, "dashboard")), (
+            "dashboard/ 已按用户裁决整体退役删除,不得复活"
         )
 
-        assert resp["success"] is True
-        assert resp["response"] == "测试回复"
-        assert resp["intent"] == "device_control"
-        assert resp["confidence"] == 0.85
-        assert resp["suggestions"] == ["建议1"]
-        assert resp["data"] == {"key": "value"}
-        assert resp["error"] is None
-        assert "timestamp" in resp
-
-    def test_unified_response_error(self):
-        sys.path.insert(0, os.path.join(PROJECT_ROOT, "dashboard", "backend"))
-        from main import _build_unified_response
-
-        resp = _build_unified_response(
-            success=False,
-            response="出错了",
-            error="连接超时",
-        )
-
-        assert resp["success"] is False
-        assert resp["error"] == "连接超时"
-
-
-# ============================================================================
-# 5. Dashboard 现代意图解析集成测试
-# ============================================================================
-
-class TestDashboardModernIntentIntegration:
-    """测试 Dashboard 与现代意图解析器的集成"""
-
-    @pytest.mark.asyncio
-    async def test_get_parsed_intent_modern_available(self):
-        """现代解析器可用时使用现代解析器"""
-        sys.path.insert(0, os.path.join(PROJECT_ROOT, "dashboard", "backend"))
-        from main import get_parsed_intent_modern
-
-        result = await get_parsed_intent_modern("打开微信", "test_session")
-        assert result["type"] in ("device_control", "chat")
-        assert "confidence" in result
-        assert "suggestions" in result
-
-    @pytest.mark.asyncio
-    async def test_get_parsed_intent_fallback(self):
-        """现代解析器不可用时回退到旧版"""
-        sys.path.insert(0, os.path.join(PROJECT_ROOT, "dashboard", "backend"))
-
-        import main as dashboard_main
-        original = dashboard_main.MODERN_INTENT_AVAILABLE
-        dashboard_main.MODERN_INTENT_AVAILABLE = False
-        try:
-            result = await dashboard_main.get_parsed_intent_modern("打开微信")
-            assert result["modern"] is False
-            assert result["type"] == "device_control"
-        finally:
-            dashboard_main.MODERN_INTENT_AVAILABLE = original
-
-
-# ============================================================================
-# 6. 端到端流程模拟测试
-# ============================================================================
-
-class TestEndToEndChatFlow:
-    """模拟完整的用户请求流程"""
-
-    @pytest.mark.asyncio
-    async def test_full_chat_flow_intent_to_memory(self):
-        """验证: 用户消息 → 意图解析 → 记忆存储 的完整流程"""
-        from core.ai_intent import IntentParser, ConversationMemory
-
-        parser = IntentParser()
-        memory = ConversationMemory()
-        session_id = "e2e_test"
-
-        # 1. 用户发送消息
-        user_msg = "帮我搜索文件"
-
-        # 2. 记录用户消息
-        await memory.add_turn(session_id, "user", user_msg)
-
-        # 3. 解析意图
-        context = {"history": await memory.get_context(session_id)}
-        parsed = await parser.parse(user_msg, context=context)
-
-        # 4. 验证意图
-        assert parsed.intent in ("search", "file_operation")
-        assert parsed.confidence > 0
-
-        # 5. 模拟助手回复
-        assistant_reply = f"已完成: {parsed.intent}"
-        await memory.add_turn(session_id, "assistant", assistant_reply)
-
-        # 6. 验证记忆
-        full_context = await memory.get_context(session_id)
-        assert len(full_context) == 2
-        assert full_context[0]["role"] == "user"
-        assert full_context[1]["role"] == "assistant"
-
-    @pytest.mark.asyncio
-    async def test_multi_turn_conversation_flow(self):
-        """验证多轮对话流程"""
-        from core.ai_intent import IntentParser, ConversationMemory
-
-        parser = IntentParser()
-        memory = ConversationMemory()
-        session_id = "multi_turn_test"
-
-        messages = [
-            ("user", "你好"),
-            ("assistant", "你好！有什么可以帮你的？"),
-            ("user", "帮我打开设备"),
-            ("assistant", "已打开设备"),
-            ("user", "查看状态"),
-        ]
-
-        for role, content in messages:
-            await memory.add_turn(session_id, role, content)
-
-        # 解析最后一条消息
-        context = {"history": await memory.get_context(session_id)}
-        parsed = await parser.parse("查看状态", context=context)
-
-        assert parsed.intent == "system_status"
-        assert parsed.context_used is False  # 规则引擎不使用上下文
-
-        # 验证完整历史
-        full = await memory.get_context(session_id)
-        assert len(full) == 5
-
-
-# ============================================================================
-# 运行入口
-# ============================================================================
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v", "--tb=short"])
+    def test_canonical_chat_surface_exists(self):
+        # 对话主链路的 canonical 承载(core 路由)仍在
+        assert os.path.exists(os.path.join(PROJECT_ROOT, "core", "routes", "chat.py"))

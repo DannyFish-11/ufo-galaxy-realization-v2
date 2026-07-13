@@ -95,9 +95,12 @@ class TestOllamaNativeTools:
         assert json.loads(tc["function"]["arguments"]) == {"path": "/a"}
 
     @pytest.mark.asyncio
-    async def test_tools_unsupported_model_retries_without_tools(self):
-        """gemma 系无工具模板 → 400 'does not support tools':去工具重试,
-        宁可本轮无工具也不整个请求哑掉。"""
+    async def test_tools_unsupported_switches_to_text_protocol(self, monkeypatch):
+        """gemma 系无工具模板 → 400:切文本协议兜底——工具清单注入系统消息,
+        模型用一行 JSON 表达调用,解析归一后 gemma 也能真正调工具;且模型名
+        进缓存,后续请求直达文本协议不再吃 400。"""
+        from core.multi_llm_router import OllamaAdapter
+        monkeypatch.setattr(OllamaAdapter, "_text_protocol_models", set())
         ad = _mk_ollama_adapter()
         bodies = []
 
@@ -109,14 +112,82 @@ class TestOllamaNativeTools:
                     400, text='{"error":"gemma3 does not support tools"}',
                     request=req)
                 raise httpx.HTTPStatusError("400", request=req, response=resp)
-            return _ok_response({"message": {"content": "无工具回答"}})
+            return _ok_response({"message": {"content":
+                '{"tool_call": {"name": "node__06__list", "arguments": {"path": "/a"}}}'}})
 
         ad._post_with_retry = _fake_post
-        resp = await ad.chat([{"role": "user", "content": "q"}],
+        resp = await ad.chat([{"role": "user", "content": "列目录"}],
                              model="gemma3:4b", tools=TOOLS)
+        # 第一次吃 400,第二次文本协议:无 tools 键、系统消息里注入了工具清单
         assert len(bodies) == 2
         assert "tools" in bodies[0] and "tools" not in bodies[1]
-        assert resp.content == "无工具回答"
+        sys_msgs = [m["content"] for m in bodies[1]["messages"]
+                    if m.get("role") == "system"]
+        assert any("tool_call" in c and "node__06__list" in c for c in sys_msgs)
+        # 文本 JSON 调用被解析归一成 OpenAI 形状
+        assert resp.tool_calls and resp.tool_calls[0]["function"]["name"] == "node__06__list"
+        assert json.loads(resp.tool_calls[0]["function"]["arguments"]) == {"path": "/a"}
+        assert resp.content == ""  # 协议载荷不进用户气泡
+
+        # 模型已缓存:再次调用直达文本协议(只多一次 post,不再 400)
+        await ad.chat([{"role": "user", "content": "再来"}],
+                      model="gemma3:4b", tools=TOOLS)
+        assert len(bodies) == 3 and "tools" not in bodies[2]
+
+    @pytest.mark.asyncio
+    async def test_text_protocol_plain_answer_feeds_sink(self, monkeypatch):
+        """文本协议下没有工具调用 → 普通回答,整段补喂 sink(面板仍有字)。"""
+        from core.multi_llm_router import OllamaAdapter
+        from core.llm_stream import TokenStream
+        monkeypatch.setattr(OllamaAdapter, "_text_protocol_models", {"gemma3:4b"})
+        ad = _mk_ollama_adapter()
+
+        async def _fake_post(url, headers, body):
+            return _ok_response({"message": {"content": "普通回答,不需要工具。"}})
+
+        ad._post_with_retry = _fake_post
+        got = []
+        resp = await ad.chat([{"role": "user", "content": "你好"}],
+                             model="gemma3:4b", tools=TOOLS,
+                             stream=TokenStream(on_delta=got.append))
+        assert resp.tool_calls is None
+        assert resp.content == "普通回答,不需要工具。"
+        assert got == ["普通回答,不需要工具。"]
+
+    def test_parse_text_tool_calls_robustness(self):
+        from core.multi_llm_router import OllamaAdapter
+        parse = OllamaAdapter._parse_text_tool_calls
+        assert parse("纯文本回答") is None
+        assert parse("") is None
+        # 前后缀文字/代码围栏容忍
+        out = parse('好的,我来查:\n```json\n{"tool_call": {"name": "t1", "arguments": {"a": 1}}}\n```')
+        assert out and out[0]["function"]["name"] == "t1"
+        assert json.loads(out[0]["function"]["arguments"]) == {"a": 1}
+        # 多个调用
+        out = parse('{"tool_call": {"name": "a", "arguments": {}}}\n'
+                    '{"tool_call": {"name": "b", "arguments": {"x": 2}}}')
+        assert [c["function"]["name"] for c in out] == ["a", "b"]
+        # 坏 JSON 不炸
+        assert parse('{"tool_call": {"name": ') is None
+
+    def test_textualize_tool_history(self):
+        """工具轮历史文本化:assistant.tool_calls → JSON 行;role=tool →
+        [工具结果] user 消息——无模板模型的模板不炸、语义不丢。"""
+        from core.multi_llm_router import OllamaAdapter
+        msgs = [
+            {"role": "system", "content": "s"},
+            {"role": "user", "content": "列目录"},
+            {"role": "assistant", "content": "",
+             "tool_calls": [{"id": "c1", "type": "function",
+                             "function": {"name": "node__06__list",
+                                          "arguments": '{"path": "/a"}'}}]},
+            {"role": "tool", "tool_call_id": "c1", "content": '{"files": []}'},
+        ]
+        out = OllamaAdapter._textualize_tool_history(msgs)
+        assert all(m.get("role") != "tool" for m in out)
+        assert not any(m.get("tool_calls") for m in out)
+        assert '"tool_call"' in out[2]["content"] and "node__06__list" in out[2]["content"]
+        assert out[3]["role"] == "user" and out[3]["content"].startswith("[工具结果]")
 
     @pytest.mark.asyncio
     async def test_unrelated_400_still_raises(self):

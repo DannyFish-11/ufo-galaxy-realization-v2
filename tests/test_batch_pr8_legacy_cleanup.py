@@ -338,21 +338,18 @@ class TestGuardrailsYmlHasLegacyRegressionJob:
 class TestLegacyCompatSurfacesPresent:
     """Conditional legacy surfaces must remain and be explicitly marked."""
 
+    # 终态(用户裁决):dashboard/ 按 ui_surface_authority 的 DELETED 注册
+    # ("do not recreate")整体删除——过渡期"保留作 legacy-compat"契约随之退役。
     def test_dashboard_backend_main_exists(self):
-        assert (_ROOT / "dashboard" / "backend" / "main.py").exists(), (
-            "dashboard/backend/main.py must still exist as a legacy-compat surface"
+        assert not (_ROOT / "dashboard").exists(), (
+            "dashboard/ 已整体退役删除,不得复活"
         )
 
     def test_dashboard_backend_main_has_legacy_authority_marker(self):
-        content = _read("dashboard/backend/main.py")
-        assert "LEGACY" in content or "legacy" in content.lower(), (
-            "dashboard/backend/main.py must be marked as legacy/non-authoritative"
-        )
+        assert not (_ROOT / "dashboard" / "backend").exists()
 
     def test_dashboard_legacy_surface_md_exists(self):
-        assert (_ROOT / "dashboard" / "LEGACY_SURFACE.md").exists(), (
-            "dashboard/LEGACY_SURFACE.md must exist to document the dashboard legacy status"
-        )
+        assert not (_ROOT / "dashboard" / "LEGACY_SURFACE.md").exists()
 
     def test_core_routes_compat_py_exists(self):
         assert (_ROOT / "core" / "routes" / "compat.py").exists(), (
