@@ -477,17 +477,13 @@ class TestNodeLayerRegression:
         oc._capability_dispatcher._node_id_to_key["node_reg_ok"] = "Node_reg_ok"
 
         sentinel = {"status": "node_ok"}
-        fake_node_info = {
-            "type": "function",
-            "execute": AsyncMock(return_value=sentinel),
-            "module": None,
-        }
 
-        with patch("core.routes._helpers._load_node", return_value=fake_node_info), \
-             patch("core.routes._helpers._execute_node",
-                   new_callable=AsyncMock, return_value=sentinel), \
-             patch("core.routes._helpers.nodes_root", "/fake"), \
-             patch("os.path.exists", return_value=True):
+        # 节点执行已收口 core.node_invocation.invoke_node(canonical),
+        # core.routes._helpers 直载路径退役——桩改打 canonical 入口。
+        from types import SimpleNamespace as _SN
+        _mock_invoke = AsyncMock(return_value=_SN(
+            success=True, result=sentinel, error=None))
+        with patch("core.node_invocation.invoke_node", _mock_invoke):
             result = await oc._dispatch_tool_call("node__node_reg_ok__run", {})
 
         assert result.get("success") is True
@@ -500,17 +496,13 @@ class TestNodeLayerRegression:
         oc._node_id_to_key["node_inline_ok"] = "Node_inline_ok"
 
         sentinel = {"status": "inline_node_ok"}
-        fake_node_info = {
-            "type": "function",
-            "execute": AsyncMock(return_value=sentinel),
-            "module": None,
-        }
 
-        with patch("core.routes._helpers._load_node", return_value=fake_node_info), \
-             patch("core.routes._helpers._execute_node",
-                   new_callable=AsyncMock, return_value=sentinel), \
-             patch("core.routes._helpers.nodes_root", "/fake"), \
-             patch("os.path.exists", return_value=True):
+        # 节点执行已收口 core.node_invocation.invoke_node(canonical),
+        # core.routes._helpers 直载路径退役——桩改打 canonical 入口。
+        from types import SimpleNamespace as _SN
+        _mock_invoke = AsyncMock(return_value=_SN(
+            success=True, result=sentinel, error=None))
+        with patch("core.node_invocation.invoke_node", _mock_invoke):
             result = await oc._dispatch_tool_call("node__node_inline_ok__run", {})
 
         assert result.get("success") is True
@@ -733,17 +725,13 @@ class TestMCPLayerRegression:
         oc._node_id_to_key["after_mcp_node"] = "Node_after_mcp"
         oc._capability_dispatcher._node_id_to_key["after_mcp_node"] = "Node_after_mcp"
         sentinel = {"node_after_mcp_fail": True}
-        fake_node_info = {
-            "type": "function",
-            "execute": AsyncMock(return_value=sentinel),
-            "module": None,
-        }
 
-        with patch("core.routes._helpers._load_node", return_value=fake_node_info), \
-             patch("core.routes._helpers._execute_node",
-                   new_callable=AsyncMock, return_value=sentinel), \
-             patch("core.routes._helpers.nodes_root", "/fake"), \
-             patch("os.path.exists", return_value=True):
+        # 节点执行已收口 core.node_invocation.invoke_node(canonical),
+        # core.routes._helpers 直载路径退役——桩改打 canonical 入口。
+        from types import SimpleNamespace as _SN
+        _mock_invoke = AsyncMock(return_value=_SN(
+            success=True, result=sentinel, error=None))
+        with patch("core.node_invocation.invoke_node", _mock_invoke):
             node_result = await oc._dispatch_tool_call("node__after_mcp_node__run", {})
 
         assert node_result.get("success") is True
@@ -1121,16 +1109,12 @@ class TestFailurePaths:
         oc._node_id_to_key["degrade_node"] = "Node_degrade"
         oc._capability_dispatcher._node_id_to_key["degrade_node"] = "Node_degrade"
         sentinel = {"degrade": "node_ok"}
-        fake_node_info = {
-            "type": "function",
-            "execute": AsyncMock(return_value=sentinel),
-            "module": None,
-        }
-        with patch("core.routes._helpers._load_node", return_value=fake_node_info), \
-             patch("core.routes._helpers._execute_node",
-                   new_callable=AsyncMock, return_value=sentinel), \
-             patch("core.routes._helpers.nodes_root", "/fake"), \
-             patch("os.path.exists", return_value=True):
+        # 节点执行已收口 core.node_invocation.invoke_node(canonical),
+        # core.routes._helpers 直载路径退役——桩改打 canonical 入口。
+        from types import SimpleNamespace as _SN
+        _mock_invoke = AsyncMock(return_value=_SN(
+            success=True, result=sentinel, error=None))
+        with patch("core.node_invocation.invoke_node", _mock_invoke):
             r3 = await oc._dispatch_tool_call("node__degrade_node__run", {})
         assert r3.get("success") is True
         assert r3.get("result") == sentinel

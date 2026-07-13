@@ -368,12 +368,19 @@ def test_35_entry_to_dict_canonical_doc_key():
 def _import_provider_category():
     """Import ProviderCategory directly from the submodule to avoid pydantic chain."""
     import importlib.util
+    import sys
     spec = importlib.util.spec_from_file_location(
         "topology_types_direct",
         os.path.join(_REPO_ROOT, "core", "model_topology", "topology_types.py"),
     )
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # 标准 importlib 配方:exec 前必须登记 sys.modules——Python 3.11 起
+    # dataclass 处理会查 sys.modules[cls.__module__],缺登记直接炸。
+    sys.modules[spec.name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.modules.pop(spec.name, None)
     return mod.ProviderCategory
 
 

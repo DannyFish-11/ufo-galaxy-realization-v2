@@ -93,6 +93,7 @@ Usage::
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
 from enum import Enum
@@ -298,11 +299,24 @@ class RuntimeSession:
         while self._tick_running and self.tristate in (TriState.LIMINAL, TriState.MANIFEST):
             try:
                 cs = self._continuum_state or {}
+                intensity = float(cs.get("presence_intensity", 0.0) or 0.0)
+                # 哲学对齐:_continuum_state 由 dispatch 返回后才回填——LIMINAL
+                # 思考期它还是空的,强度恒 0,"认知强度驱动外壳"只是空转。
+                # 思考期改读【活的】持续认知场(activation/intent_strength 随
+                # notify_request 注入并自然衰减),阈限态的呼吸才有真数据。
+                if intensity <= 0.0:
+                    try:
+                        from core.cognitive.continuous_state import get_cognitive_state
+                        _snap = get_cognitive_state().snapshot()
+                        intensity = float(_snap.get("activation", 0.0) or 0.0)
+                        cs = {**cs, "intent_strength": _snap.get("intent_strength", 0.0)}
+                    except Exception:  # noqa: BLE001
+                        pass
                 _emit(
                     "continuum.state",
                     source="desktop_presence_runtime",
                     payload={
-                        "presence_intensity": round(cs.get("presence_intensity", 0.0), 4),
+                        "presence_intensity": round(intensity, 4),
                         "coherence": round(cs.get("coherence", 0.0), 4),
                         "phase": self.tristate.value,
                         "collapse_tendency": round(cs.get("collapse_tendency", 0.0), 4),
@@ -311,6 +325,20 @@ class RuntimeSession:
                     },
                     runtime_session_id=self.runtime_session_id,
                 )
+                # 哲学对齐:面板桥一直订阅着 intent.update(阈限 0.15-0.85 呼吸
+                # 映射),但全仓库【从未有人发射过它】——设计的两半从没接上。
+                # LIMINAL 期由本 tick 发射,意图强度取认知场与 continuum 的较大者。
+                if self.tristate is TriState.LIMINAL:
+                    _emit(
+                        "intent.update",
+                        source="desktop_presence_runtime",
+                        payload={
+                            "intent_strength": round(
+                                max(intensity,
+                                    float(cs.get("intent_strength", 0.0) or 0.0)), 4),
+                        },
+                        runtime_session_id=self.runtime_session_id,
+                    )
             except Exception:
                 pass
             await asyncio.sleep(0.2)
@@ -727,6 +755,16 @@ class DesktopPresenceRuntime:
         except Exception as _cfe_err:
             logger.debug("cognitive_field_engine.notify_request failed (non-fatal): %s", _cfe_err)
 
+        # 任务成本账本(北极星=任务总消耗,不是单次 TPS):开账挂上下文,
+        # 深链各层(router 记账漏斗/ReAct 轮次/工具派发)自动记账;下面 finally
+        # 结账落盘并挂进响应。账本任何故障绝不影响请求路径。
+        _bill_token = None
+        try:
+            from core.task_cost_ledger import open_task_bill
+            _bill_token = open_task_bill(rsession.runtime_session_id, source=source)
+        except Exception as _tcl_err:  # noqa: BLE001
+            logger.debug("task_cost_ledger open failed (non-fatal): %s", _tcl_err)
+
         # PR-18: Derive the cognitive execution-policy hint from live signals.
         # This is done BEFORE dispatch so the hint can be forwarded to OpenClawd
         # as an advisory signal for execution-path and delegation biasing.
@@ -785,6 +823,37 @@ class DesktopPresenceRuntime:
         except Exception as _ph_err:
             logger.debug("policy hint resolution failed (non-fatal): %s", _ph_err)
 
+        # LIMINAL → MANIFEST 的触发点(三态语义对齐):
+        # MANIFEST = 主体开始【真实落手/对外表达】。此前拿到执行车道就立刻
+        # advance——LLM 的整段思考(CPU 机上可达数十秒)全被标成 manifest,
+        # 阈限态几毫秒就被跳过,推演/认知期(含 Gecko 预演)在视觉上不存在。
+        # 现在:流式请求在**第一个 token 流出**的瞬间才进 MANIFEST,思考期
+        # 停留在 LIMINAL(continuum tick 的意图呼吸映射正好驱动"思考中"动画);
+        # 非流式调用保持原时序(advance 后派发)。GALAXY_MANIFEST_ON_FIRST_TOKEN=0
+        # 可整体回退旧行为。
+        def _enter_manifest() -> None:
+            if rsession.tristate is not TriState.LIMINAL:
+                return
+            rsession.advance(TriState.MANIFEST)
+            self._update_presence_mode(
+                tri_state=rsession.tristate.value,
+                task_active=True,
+                sensing_active=bool(multimodal_context) or stream_sensing_active,
+                execution_active=True,
+                user_interaction=source in {"chat", "voice", "operator"},
+            )
+
+        _manifest_sink = None
+        _manifest_orig_on_delta = None
+        if os.environ.get("GALAXY_MANIFEST_ON_FIRST_TOKEN", "1").strip().lower() not in (
+            "0", "false", "no", "off",
+        ):
+            try:
+                from core.llm_stream import current_stream as _current_token_stream
+                _manifest_sink = _current_token_stream()
+            except Exception:  # noqa: BLE001
+                _manifest_sink = None
+
         lane_snapshot = None
         try:
             lane_manager = get_session_execution_lane_manager()
@@ -792,15 +861,19 @@ class DesktopPresenceRuntime:
                 conversation_session_id,
                 control_session_id=control_session_id,
             ) as lane:
-                # LIMINAL → MANIFEST: OpenClawd has branched; subject enters manifest
-                rsession.advance(TriState.MANIFEST)
-                self._update_presence_mode(
-                    tri_state=rsession.tristate.value,
-                    task_active=True,
-                    sensing_active=bool(multimodal_context) or stream_sensing_active,
-                    execution_active=True,
-                    user_interaction=source in {"chat", "voice", "operator"},
-                )
+                if _manifest_sink is not None:
+                    # 首输出驱动:包装 sink 的 on_delta,第一段文本流出即进 MANIFEST。
+                    # 请求结束(下面 finally)恢复原回调,绝不泄漏到请求之外。
+                    _manifest_orig_on_delta = _manifest_sink._on_delta
+
+                    def _hooked_on_delta(text: str, _orig=_manifest_orig_on_delta) -> None:
+                        _enter_manifest()
+                        _orig(text)
+
+                    _manifest_sink._on_delta = _hooked_on_delta
+                else:
+                    # 非流式:保持原时序(LIMINAL → MANIFEST → 派发)
+                    _enter_manifest()
                 _dispatch_presence_runtime_hint = self._current_presence_runtime_hint()
                 _presence_mode = _dispatch_presence_runtime_hint["presence_mode"]
                 _stream_runtime_status = (
@@ -852,6 +925,18 @@ class DesktopPresenceRuntime:
                 "error": str(exc),
             }
         finally:
+            # 恢复被首输出钩子包装的 sink 回调(请求结束后 sink 可能还被
+            # 消费端复用于伪流式兜底,绝不让钩子在死会话上触发)
+            if _manifest_sink is not None and _manifest_orig_on_delta is not None:
+                try:
+                    _manifest_sink._on_delta = _manifest_orig_on_delta
+                except Exception:  # noqa: BLE001
+                    pass
+            # 整个请求零输出(异常/空响应):补齐 canonical 相位序
+            # LIMINAL→MANIFEST→SILENT,下游消费者(审计/跨设备同步)的
+            # 三段轨迹不变——与旧行为等价,不多不少。
+            if rsession.tristate is TriState.LIMINAL:
+                _enter_manifest()
             # MANIFEST → SILENT: subject returns to rest (even on error)
             rsession.advance(TriState.SILENT)
             self._update_presence_mode(
@@ -864,6 +949,19 @@ class DesktopPresenceRuntime:
             )
             self._log_request_end(rsession)
             self._active_sessions.pop(rsession.runtime_session_id, None)
+
+            # 任务成本账本:结账(定格墙钟→内存环形+JSONL+一行日志),
+            # 账单挂进响应供面板/调用方直读本次任务的总消耗。
+            if _bill_token is not None:
+                try:
+                    from core.task_cost_ledger import close_task_bill
+                    _task_bill = close_task_bill(
+                        _bill_token, success=bool(result.get("success", True)),
+                    )
+                    if _task_bill:
+                        result["task_cost"] = _task_bill
+                except Exception as _tcl_err:  # noqa: BLE001
+                    logger.debug("task_cost_ledger close failed (non-fatal): %s", _tcl_err)
 
             # Block-3: Notify decay controller that execution completed so the
             # cognitive field begins its manifest→liminal→passive reabsorption.

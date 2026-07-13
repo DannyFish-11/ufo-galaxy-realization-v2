@@ -107,11 +107,18 @@ def _execute_command(task_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     if arbiter is None:
         return {"success": False, "error": "execution arbiter unavailable"}
 
-    result = arbiter.route_command(
-        action=task_type,
-        params=payload,
-        device_id="local",
-    )
+    try:
+        result = arbiter.route_command(
+            action=task_type,
+            params=payload,
+            device_id="local",
+        )
+    except Exception as exc:  # noqa: BLE001
+        # 设备端契约(Acceptance Gate A):执行器崩溃绝不外抛——回错误信封,
+        # 关联 ID 由上层补齐,消息处理循环保持存活。否则一次执行器故障就会
+        # 炸断整个 WS 消息处理。
+        logger.error("[%s] 执行仲裁器异常(已兜住): %s", task_type, exc)
+        return {"success": False, "error": str(exc)}
     # Normalise to the flat dict shape callers expect
     if isinstance(result, dict) and "result" in result:
         merged = {"success": result.get("success", False)}

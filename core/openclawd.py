@@ -7910,14 +7910,40 @@ class OpenClawd:
             nonlocal _total_tool_calls, _last_tool_name
 
             for iteration in range(max_iterations):
+                # 任务成本账本:记一轮 ReAct(账本故障绝不反噬)
+                try:
+                    from core.task_cost_ledger import add_react_round
+                    add_react_round()
+                except Exception:  # noqa: BLE001
+                    pass
+
+                # 延迟优化(对话层):长任务里早期轮次的大工具结果模型早已消化,
+                # 继续全文携带只是白白加重每轮 prefill(CPU 机的延迟大头)。
+                # 保最近 K 轮完整,更早的大结果换短存根;小结果不动
+                # (不值得为它作废 Ollama 前缀 KV 缓存)。
+                try:
+                    from core.context_trim import prune_stale_tool_results
+                    _n_pruned = prune_stale_tool_results(messages)
+                    if _n_pruned:
+                        logger.debug("ReAct 上下文修剪: %d 条早期工具结果换存根", _n_pruned)
+                except Exception:  # noqa: BLE001 — 修剪失败绝不影响主流程
+                    pass
+
                 # PR-3: Use chat_with_tools() which is defined on both UnifiedLLMRouter
                 # and MultiLLMRouter, ensuring the unified policy layer is applied
                 # regardless of which router type _get_router() returns.
+                # 输出预算:本地 CPU 上"输出 token 数 ≈ 等待秒数"——上限可调
+                # (GALAXY_MAX_TOKENS_ANSWER,默认 4096 保持原行为)。
+                import os as _os_budget
+                try:
+                    _answer_budget = int(_os_budget.getenv("GALAXY_MAX_TOKENS_ANSWER", "4096"))
+                except (TypeError, ValueError):
+                    _answer_budget = 4096
                 response = await router.chat_with_tools(
                     messages=messages,
                     tools=tools if tools else None,
                     task_type=task_type,
-                    max_tokens=4096,
+                    max_tokens=_answer_budget,
                     **({"stream": _token_sink} if _token_sink is not None else {}),
                 )
                 last_response = response
@@ -8006,6 +8032,13 @@ class OpenClawd:
                         _consecutive_same.clear()
                     _last_tool_name = tc_name
 
+                    # 任务成本账本:记一次工具调用(账本故障绝不反噬)
+                    try:
+                        from core.task_cost_ledger import add_tool_call
+                        add_tool_call()
+                    except Exception:  # noqa: BLE001
+                        pass
+
                     # 执行工具 (带计时 + 单工具超时)
                     t0 = _time.time()
                     try:
@@ -8033,12 +8066,18 @@ class OpenClawd:
                         )
                     )
 
-                    # 追加 tool result 到 messages
+                    # 追加 tool result 到 messages(头+尾保留式截断:长输出的
+                    # 结论常在末尾,纯 [:N] 会把它切没;上限 env 可调)
+                    try:
+                        from core.context_trim import clip_tool_result
+                        _clipped = clip_tool_result(result_str)
+                    except Exception:  # noqa: BLE001
+                        _clipped = result_str[:4000]
                     messages.append(
                         {
                             "role": "tool",
                             "tool_call_id": tc_id,
-                            "content": result_str[:4000],
+                            "content": _clipped,
                         }
                     )
 
@@ -8100,7 +8139,9 @@ class OpenClawd:
                         "你是 Galaxy 智能助手 (OpenClawd)，一个桌面级超级 AI 智能体。\n"
                         "你可以帮助用户进行对话、任务管理、设备控制、代码执行等操作。\n"
                         "当你需要执行操作时，请使用提供的工具。\n"
-                        "如果没有合适的工具，直接用文字回答。"
+                        "如果没有合适的工具，直接用文字回答。\n"
+                        "表达原则：直接、简洁，不复述问题、不加客套铺垫；"
+                        "要调用工具就直接调用，不要先输出长段解释。"
                     ),
                 },
             ]
@@ -8160,6 +8201,21 @@ class OpenClawd:
 
             # 收集可用工具
             tools = self._collect_tools()
+
+            # 延迟优化(auto 档):工具定义是 prompt 预填的大头(实测 22 个
+            # ≈3.2k tokens)。数量在阈值(默认 24)内**原样不动**——质量优先;
+            # 超了才按与本次请求的词法相关性挑 top-K,核心工具永不裁。
+            try:
+                from core.context_trim import slim_tools
+                _n_before = len(tools)
+                tools = slim_tools(tools, message)
+                if len(tools) != _n_before:
+                    logger.info(
+                        "工具定义瘦身: %d → %d(GALAXY_TOOLS_SLIM=off 可关闭)",
+                        _n_before, len(tools),
+                    )
+            except Exception:  # noqa: BLE001 — 瘦身失败用全量,绝不影响主流程
+                pass
 
             # PR-3: 计算复杂度向量 — 通过统一入口代理 compute_complexity_vector()，
             # 避免直接访问 _backend._compute_complexity_vector()。

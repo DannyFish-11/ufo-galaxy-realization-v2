@@ -213,6 +213,54 @@ class LiveRoutingDecisionBuilder:
             )
             self._decision_bases.append(basis_rej)
 
+    def record_v3_slot_gate(
+        self,
+        approved: List[str],
+        blocked: List[str],
+        block_reason: str = "",
+    ) -> None:
+        """Record the V3 canonical dispatch-slot authority verdict.
+
+        PR-H 的调用点(command_router.route_envelope)一直在调本方法,但它
+        此前从未被实现——每次派发都在日志里吞一条 AttributeError,V3 槽门
+        (设备级派发合法性的最终权威)在活路由解释里整体缺失。补齐后,
+        路由解释与实际决策链一致:槽门放行/拦截与原因均可回溯。
+
+        Args:
+            approved:     通过 canonical 槽评估的设备 ID。
+            blocked:      被槽权威拦下的设备 ID。
+            block_reason: 拦截原因(全拦时的聚合说明)。
+        """
+        if approved:
+            self._decision_bases.append(make_decision_basis(
+                factor=DecisionFactor.AVAILABILITY,
+                signal_value=list(approved),
+                description=(
+                    f"{len(approved)} target(s) approved by V3 canonical "
+                    f"dispatch-slot authority: {list(approved)}"
+                ),
+                accepted=True,
+                weight=0.2,
+            ))
+        for dev_id in (blocked or []):
+            reason_str = block_reason or "blocked by V3 canonical dispatch-slot authority"
+            self._rejected_candidates.append(
+                RejectedCandidate(
+                    candidate_id=str(dev_id),
+                    rejection_reason=reason_str,
+                    was_available=False,
+                )
+            )
+            self._decision_bases.append(make_decision_basis(
+                factor=DecisionFactor.AVAILABILITY,
+                signal_value=False,
+                description=(
+                    f"Target '{dev_id}' blocked by V3 slot gate: {reason_str}"
+                ),
+                accepted=False,
+                weight=0.2,
+            ))
+
     def record_capability_enforcement(
         self,
         confirmed: List[str],

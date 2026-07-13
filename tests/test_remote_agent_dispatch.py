@@ -99,7 +99,9 @@ class TestRemoteDispatchEndToEnd:
             "request_id": task_id,
         }
 
-        with patch.object(cr, "route_command", return_value=mock_result) as mock_rc:
+        # PR-7:agent_execute 经 route_envelope(统一基底根)承载,
+        # route_command 为有意绕开的 compat shim。
+        with patch.object(cr, "route_envelope", return_value=mock_result) as mock_rc:
             result = await cr.dispatch_agent_remote(
                 device_id=REMOTE_DEVICE_ID,
                 agent_id=agent_id,
@@ -110,13 +112,12 @@ class TestRemoteDispatchEndToEnd:
                 task_id=task_id,
             )
 
-        # route_command must be called with command="agent_execute"
+        # route_envelope 必须携带 agent_execute 信封
         mock_rc.assert_called_once()
-        call_kwargs = mock_rc.call_args
-        assert call_kwargs.kwargs.get("command") == "agent_execute" or \
-               call_kwargs.args[1] == "agent_execute" or \
-               (len(call_kwargs.args) > 1 and call_kwargs.args[1] == "agent_execute"), \
-               f"Expected command='agent_execute', got: {call_kwargs}"
+        _env = mock_rc.call_args.args[0] if mock_rc.call_args.args \
+            else mock_rc.call_args.kwargs.get("envelope")
+        assert getattr(_env, "tool_name", None) == "agent_execute", \
+               f"Expected tool_name='agent_execute', got: {_env!r}"
 
         # Correlation IDs must be preserved
         assert result["agent_id"] == agent_id
@@ -133,11 +134,12 @@ class TestRemoteDispatchEndToEnd:
         cr = CommandRouter()
         captured_payload = {}
 
-        async def capture_route_command(device_id, command, payload, **kwargs):
-            captured_payload.update(payload)
+        async def capture_route_envelope(envelope, **kwargs):
+            # PR-7:全部字段承载于 TaskEnvelope.args
+            captured_payload.update(envelope.args or {})
             return _make_cr_result(success=True)
 
-        cr.route_command = capture_route_command
+        cr.route_envelope = capture_route_envelope
 
         trace_id = "trace_e2e_001"
         task_id = "task_e2e_001"
@@ -616,8 +618,9 @@ class TestWindowsAIPClientAgentExecute:
             "context": {},
         }
 
-        # autonomy_manager unavailable in test env
-        with patch("windows_client.windows_aip_client._get_manager", return_value=None):
+        # 执行仲裁器不可用(WindowsExecutionArbiter 已取代 WindowsAutonomyManager
+        # 直连成为设备端执行收口点)
+        with patch("windows_client.windows_aip_client._get_arbiter", return_value=None):
             result = _execute_agent_task(payload)
 
         assert result["agent_id"] == "agent_win_001"
@@ -630,9 +633,8 @@ class TestWindowsAIPClientAgentExecute:
         """_execute_agent_task must not raise even when autonomy manager throws."""
         from windows_client.windows_aip_client import _execute_agent_task
 
-        mock_manager = MagicMock()
-        mock_manager.execute_agent_task = MagicMock(side_effect=RuntimeError("simulated crash"))
-        mock_manager.execute_action = MagicMock(side_effect=RuntimeError("simulated crash"))
+        mock_arbiter = MagicMock()
+        mock_arbiter.route_command = MagicMock(side_effect=RuntimeError("simulated crash"))
 
         payload = {
             "agent_id": "agent_err",
@@ -643,7 +645,7 @@ class TestWindowsAIPClientAgentExecute:
             "agent_template": "analyst",
         }
 
-        with patch("windows_client.windows_aip_client._get_manager", return_value=mock_manager):
+        with patch("windows_client.windows_aip_client._get_arbiter", return_value=mock_arbiter):
             result = _execute_agent_task(payload)
 
         assert result["agent_id"] == "agent_err"

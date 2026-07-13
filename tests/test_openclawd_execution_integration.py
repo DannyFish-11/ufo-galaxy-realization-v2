@@ -88,6 +88,8 @@ class TestRunExecution:
         mock_executor = MagicMock(spec=DecisionExecutor)
         mock_executor.execute.return_value = ExecutionResult(action_taken="noop", success=True)
         oc._decision_executor = mock_executor
+        # PR-23 就绪门在执行器前——本组钉"执行器被咨询/入参转发",通门桩
+        oc._check_readiness = lambda *a, **k: None
         oc._run_execution({"decision": {"action_level": "observe"}})
         mock_executor.execute.assert_called_once()
 
@@ -100,6 +102,8 @@ class TestRunExecution:
             action_taken="launch_app", target="notepad.exe", success=True
         )
         oc._decision_executor = mock_executor
+        # PR-23 就绪门在执行器前——本组钉"执行器被咨询/入参转发",通门桩
+        oc._check_readiness = lambda *a, **k: None
         with caplog.at_level(logging.DEBUG, logger="core.openclawd"):
             oc._run_execution({"decision": {"action_level": "execute"}})
         # No exception — log check is optional as level may be filtered
@@ -110,6 +114,8 @@ class TestRunExecution:
         mock_executor = MagicMock(spec=DecisionExecutor)
         mock_executor.execute.side_effect = RuntimeError("executor exploded")
         oc._decision_executor = mock_executor
+        # PR-23 就绪门在执行器前——本组钉"执行器被咨询/入参转发",通门桩
+        oc._check_readiness = lambda *a, **k: None
         # Should not raise
         oc._run_execution({"decision": {"action_level": "execute"}})
 
@@ -119,6 +125,8 @@ class TestRunExecution:
         mock_executor = MagicMock(spec=DecisionExecutor)
         mock_executor.execute.return_value = ExecutionResult(action_taken="noop", success=True)
         oc._decision_executor = mock_executor
+        # PR-23 就绪门在执行器前——本组钉"执行器被咨询/入参转发",通门桩
+        oc._check_readiness = lambda *a, **k: None
         oc._run_execution(None)
         # Verify None was passed as the state_continuum positional argument
         call_args = mock_executor.execute.call_args
@@ -273,6 +281,8 @@ class TestRunExecutionEntryMode:
         mock_executor = MagicMock(spec=DecisionExecutor)
         mock_executor.execute.return_value = ExecutionResult(action_taken="noop", success=True)
         oc._decision_executor = mock_executor
+        # PR-23 就绪门在执行器前——本组钉"执行器被咨询/入参转发",通门桩
+        oc._check_readiness = lambda *a, **k: None
         state = {"decision": {"action_level": "observe"}}
         oc._run_execution(state, entry_mode="local")
         call_kwargs = mock_executor.execute.call_args
@@ -305,6 +315,8 @@ class TestRunExecutionEntryMode:
         mock_executor = MagicMock(spec=DecisionExecutor)
         mock_executor.execute.return_value = ExecutionResult(action_taken="noop", success=True)
         oc._decision_executor = mock_executor
+        # PR-23 就绪门在执行器前——本组钉"执行器被咨询/入参转发",通门桩
+        oc._check_readiness = lambda *a, **k: None
         state = {"decision": {"action_level": "observe"}}
         oc._run_execution(state)  # no entry_mode
         call_kwargs = mock_executor.execute.call_args

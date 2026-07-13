@@ -425,7 +425,8 @@ class TestStateFamilyGrounding(unittest.TestCase):
                 get_desktop_presence_runtime,
             )
             runtime = get_desktop_presence_runtime()
-            summary = runtime.presence_summary
+            # presence_summary 已从属性演进为方法
+            summary = runtime.presence_summary()
             self.assertIsInstance(summary, dict)
             self.assertIn("dominant_tristate", summary)
         except ModuleNotFoundError as exc:
