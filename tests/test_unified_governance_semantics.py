@@ -110,6 +110,13 @@ def test_takeover_active_blocks_lower_precedence_paths() -> None:
 
 
 def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> None:
+    # 本用例断言 mesh_runtime_state.status == partial(未有 live mesh 运行证明的
+    # 新鲜态)。live proof 快照是进程级单例,全量套件里任何先跑过 staged_mesh
+    # 派发的用例都会把它推成 runtime_proven——与本文件其余 mesh 用例同一模式,
+    # 显式从干净快照出发,消除套件顺序依赖。
+    from core.runtime.source_dispatch_orchestrator import reset_live_mesh_runtime_proof_snapshot
+
+    reset_live_mesh_runtime_proof_snapshot()
     active_sessions = [SimpleNamespace(device_id="dev_local"), SimpleNamespace(device_id="dev_cross")]
     mode_map = {
         "dev_local": SimpleNamespace(mode=SimpleNamespace(value="local")),

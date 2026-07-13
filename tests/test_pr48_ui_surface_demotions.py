@@ -505,19 +505,26 @@ class TestLegacyPathsPR8Entries:
 
 
 class TestLegacyGuardrailEmitter:
+    # PR-R9-CLEAN 把 guardrail 从 WARNING "LEGACY PATH GUARDRAIL" 有意降为
+    # DEBUG "LEGACY GUARDRAIL"(遗留兼容路径的生命周期已由 __init__.py 事件
+    # 跟踪,控制台不再刷屏);且 trace_id 必须出现在日志里(可回溯具体请求)。
     def test_51_guardrail_emitter_dashboard(self, caplog):
         import logging
         m = _import_legacy_paths()
-        with caplog.at_level(logging.WARNING, logger="Galaxy.OrchestrationAuthority"):
+        with caplog.at_level(logging.DEBUG, logger="Galaxy.OrchestrationAuthority"):
             m.emit_legacy_guardrail("dashboard.backend.main", trace_id="test-trace-001")
-        assert any("LEGACY PATH GUARDRAIL" in r.message for r in caplog.records)
+        hits = [r for r in caplog.records if "LEGACY GUARDRAIL" in r.getMessage()]
+        assert hits, "emit_legacy_guardrail 必须发出 LEGACY GUARDRAIL 日志"
+        assert any("test-trace-001" in r.getMessage() for r in hits)
 
     def test_52_guardrail_emitter_windows_client(self, caplog):
         import logging
         m = _import_legacy_paths()
-        with caplog.at_level(logging.WARNING, logger="Galaxy.OrchestrationAuthority"):
+        with caplog.at_level(logging.DEBUG, logger="Galaxy.OrchestrationAuthority"):
             m.emit_legacy_guardrail("windows_client.main", trace_id="test-trace-002")
-        assert any("LEGACY PATH GUARDRAIL" in r.message for r in caplog.records)
+        hits = [r for r in caplog.records if "LEGACY GUARDRAIL" in r.getMessage()]
+        assert hits, "emit_legacy_guardrail 必须发出 LEGACY GUARDRAIL 日志"
+        assert any("test-trace-002" in r.getMessage() for r in hits)
 
 
 class TestPR7EntriesUnchanged:

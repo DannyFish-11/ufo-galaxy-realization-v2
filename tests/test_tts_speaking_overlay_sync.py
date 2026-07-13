@@ -20,8 +20,19 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
+
+
+async def _wait_until(cond, timeout: float = 3.0) -> bool:
+    """轮询等待条件成立(替代固定 sleep——CI 负载抖动下墙钟假设必翻车)。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if cond():
+            return True
+        await asyncio.sleep(0.01)
+    return cond()
 
 
 class _FakeWS:
@@ -78,12 +89,15 @@ async def test_speak_response_toggles_overlay_speaking_during_playback(monkeypat
         monkeypatch.setenv("GALAXY_TTS_STREAMING", "0")
 
         so.speak_response("今天天气不错", source="voice")
-        await asyncio.sleep(0.05)  # 播放已开始，尚未结束
-        assert played["active"] is True
-
-        await asyncio.sleep(0.3)  # 等播放彻底结束
-        assert played["saw_active"] is True
-        assert played["active"] is False
+        assert await _wait_until(lambda: played["active"]), "播放应在期限内开始"
+        assert await _wait_until(
+            lambda: played["saw_active"] and not played["active"]
+        ), "播放应在期限内彻底结束"
+        # 结束后的 speaking=False 广播帧也可能晚于引擎返回一拍,等它落地
+        assert await _wait_until(
+            lambda: (lambda s: True in s and s[-1] is False)(
+                _speaking_sequence(ws.received))
+        ), f"覆盖层应先后收到 speaking=True/False; got {_speaking_sequence(ws.received)}"
     finally:
         await bridge.unregister_client(ws)
 

@@ -20,6 +20,44 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _bypass_dispatch_gates(monkeypatch):
+    """trace 连续性用例钉的是 trace_id 透传,不是能力门与 V3 槽权威(各有专门
+    套件);裸环境两道门会在 handle_agent_task 之前拒掉目标设备,导致透传断言
+    落空(基线红根因)。按 test_pr2_task_envelope_pipeline 的既定钉法放行。"""
+    import core.capability_aware_routing_default as card
+    monkeypatch.setattr(card, "infer_dispatch_capabilities", lambda tool: [])
+
+    from core.canonical_dispatch_slot_authority import (
+        CanonicalDispatchSlot,
+        CanonicalDispatchSlotStatus,
+        CanonicalDispatchSlotsResult,
+    )
+    import core.canonical_dispatch_slot_authority as _slot_mod
+
+    def _approve_all(device_ids, execution_mode, **_kw):
+        slots = [
+            CanonicalDispatchSlot(
+                device_id=d,
+                execution_mode=execution_mode,
+                slot_approved=True,
+                status=CanonicalDispatchSlotStatus.SLOT_APPROVED.value,
+                reason="test override — trace-continuity suite",
+            )
+            for d in device_ids
+        ]
+        return CanonicalDispatchSlotsResult(
+            execution_mode=execution_mode,
+            approved_slots=slots,
+            blocked_slots=[],
+            can_proceed=True,
+            block_reason="",
+        )
+
+    monkeypatch.setattr(_slot_mod, "get_canonical_dispatch_slots", _approve_all)
+
+
 PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -166,18 +204,22 @@ class TestTraceContinuity:
 
         clawd.handle_agent_task = capture_handle_agent_task
 
+        # 本用例钉的是 _dispatch_agent → handle_agent_task 的【透传链】,不是
+        # 远程选路(test_remote_agent_dispatch 专管)。用 local 前缀设备 ID 确定性
+        # 走本地显化路径——否则全量套件里任何先注册过假远程设备/假桥的用例都会
+        # 让 "dev_x" 走真远程成功分支,handle_agent_task 根本不被调用(顺序依赖)。
         trace_id = "trace_dispatch_test_" + uuid.uuid4().hex[:8]
         await clawd._dispatch_agent(
             message="test message",
             intent=None,
-            device_id="dev_x",
+            device_id="local_dev_x",
             session_id="sess_x",
             trace_id=trace_id,
         )
 
         assert received_kwargs.get("trace_id") == trace_id, \
             f"trace_id not forwarded to handle_agent_task: {received_kwargs}"
-        assert received_kwargs.get("device_id") == "dev_x"
+        assert received_kwargs.get("device_id") == "local_dev_x"
         assert received_kwargs.get("session_id") == "sess_x"
 
 

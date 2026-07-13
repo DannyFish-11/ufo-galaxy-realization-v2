@@ -57,6 +57,29 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _force_legacy_truth_chain(monkeypatch):
+    """本套件钉的是【legacy 真相链路径】的契约(多个用例名即 via_legacy_path)。
+    结果处理已收敛到 core.unified_result_ingress(local-mode);统一摄入可用时
+    handler 有意跳过 legacy 链(见 handle_task_result 中 PR-TTC 分支)——裸测试
+    环境统一摄入恰好可导入,导致本套件全部落空(基线红根因)。把统一摄入置为
+    不可用,强制走 legacy 分支;统一摄入自身的契约由其专门套件钉。"""
+    import core.unified_result_ingress as uri
+
+    def _unavailable(*a, **k):
+        raise RuntimeError("unified_result_ingress disabled for legacy-path suite")
+
+    monkeypatch.setattr(uri, "ingest_result_async", _unavailable)
+
+    # 持久化幂等库(data/result_idempotency_set.json)会跨进程记住 task_id——
+    # 本地重复跑测试时同名 id 被静默抑制,legacy 链根本走不到。测试内中和;
+    # 幂等语义由 durable_result_idempotency 自己的套件钉。
+    import core.durable_result_idempotency as dri
+    monkeypatch.setattr(dri, "check_result_idempotency", lambda tid: False)
+    monkeypatch.setattr(dri, "record_result_idempotency", lambda tid: None)
+
+
 # ---------------------------------------------------------------------------
 # Module availability guard
 # ---------------------------------------------------------------------------
@@ -419,7 +442,7 @@ class TestGroupD_RejectedContinuityTruthChainSkipped:
         with patch.object(
             _tl, "_evaluate_continuity_legality", return_value=_make_report("reject")
         ):
-            with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
+            with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
                 with patch.object(_tl, "_run_task_result_truth_chain", None):
                     with patch.object(_tl, "store_task_result", None):
                         _run(_tl.handle_task_result(bridge, None, msg))

@@ -14,6 +14,7 @@ Covers:
 
 import asyncio
 import pytest
+
 from datetime import datetime, timezone
 
 from pydantic import ValidationError
@@ -30,6 +31,44 @@ from core.schemas import TaskEnvelope as TaskEnvelopeFromPackage  # re-export ch
 # ============================================================================
 # 1. Schema creation & defaults
 # ============================================================================
+
+
+@pytest.fixture(autouse=True)
+def _bypass_dispatch_gates(monkeypatch):
+    """本文件的 route_command/route_envelope 用例钉的是信封委派语义,不是
+    能力门与 V3 槽权威(各有专门套件);裸环境两道门会在委派前拒掉目标。
+    按 test_pr2_task_envelope_pipeline 的既定钉法放行。"""
+    import core.capability_aware_routing_default as card
+    monkeypatch.setattr(card, "infer_dispatch_capabilities", lambda tool: [])
+
+    from core.canonical_dispatch_slot_authority import (
+        CanonicalDispatchSlot,
+        CanonicalDispatchSlotStatus,
+        CanonicalDispatchSlotsResult,
+    )
+    import core.canonical_dispatch_slot_authority as _slot_mod
+
+    def _approve_all(device_ids, execution_mode, **_kw):
+        slots = [
+            CanonicalDispatchSlot(
+                device_id=d,
+                execution_mode=execution_mode,
+                slot_approved=True,
+                status=CanonicalDispatchSlotStatus.SLOT_APPROVED.value,
+                reason="test override — envelope-delegation suite",
+            )
+            for d in device_ids
+        ]
+        return CanonicalDispatchSlotsResult(
+            execution_mode=execution_mode,
+            approved_slots=slots,
+            blocked_slots=[],
+            can_proceed=True,
+            block_reason="",
+        )
+
+    monkeypatch.setattr(_slot_mod, "get_canonical_dispatch_slots", _approve_all)
+
 
 class TestTaskEnvelopeDefaults:
     def test_auto_task_id(self):
@@ -65,7 +104,12 @@ class TestTaskEnvelopeDefaults:
     def test_log_context_keys(self):
         env = TaskEnvelope(source="api", tool_name="screenshot")
         ctx = env.log_context()
-        assert set(ctx.keys()) == {"task_id", "trace_id", "source", "tool_name"}
+        # log_context 有意扩展了 session_id/permission_level/lifecycle_status
+        # (会话关联/权限可见性/生命周期观测)。钉当前完整键集。
+        assert set(ctx.keys()) == {
+            "task_id", "trace_id", "source", "tool_name",
+            "session_id", "permission_level", "lifecycle_status",
+        }
 
     def test_re_export_from_package(self):
         """TaskEnvelope is importable from core.schemas directly."""

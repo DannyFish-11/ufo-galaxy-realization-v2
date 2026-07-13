@@ -189,90 +189,15 @@ class TestContinuumStateRuntimeDomain:
 
 
 class TestStatusBoard:
-    """status_board.py must be importable, read-only, and have a CLI entry."""
+    """windows_client/status_board.py 已整体退役拆除(收口到 status_board_v2 与
+    规范面板端点,见 PR-PANEL-CANONICAL / tests/test_pr7_semantic_closure.py)。
+    原 11 个用例钉的是已拆除模块的 CLI/渲染契约,全部失去对象;保留本类仅钉
+    "退役模块不得复活"这一条终态约束。"""
 
-    def test_importable(self):
-        """status_board.py must be importable without side effects."""
-        if "windows_client.status_board" in sys.modules:
-            del sys.modules["windows_client.status_board"]
-        mod = importlib.import_module("windows_client.status_board")
-        assert mod is not None
+    def test_status_board_module_fully_decommissioned(self):
+        import pathlib
+        repo = pathlib.Path(__file__).parent.parent
+        assert not (repo / "windows_client" / "status_board.py").exists(), (
+            "windows_client/status_board.py 已退役拆除,不应被重新引入"
+        )
 
-    def test_has_main_function(self):
-        mod = importlib.import_module("windows_client.status_board")
-        assert callable(getattr(mod, "main", None))
-
-    def test_has_run_function(self):
-        mod = importlib.import_module("windows_client.status_board")
-        assert callable(getattr(mod, "run", None))
-
-    def test_has_fetch_state(self):
-        mod = importlib.import_module("windows_client.status_board")
-        assert callable(getattr(mod, "fetch_state", None))
-
-    def test_no_chat_input_in_source(self):
-        """The status board source must not contain chat input primitives."""
-        src = (
-            pathlib.Path(__file__).parent.parent
-            / "windows_client"
-            / "status_board.py"
-        ).read_text()
-        # It must not send commands or accept chat
-        assert "send_command" not in src
-        assert "chat_input" not in src
-        assert "Entry(" not in src       # no tkinter chat Entry widget
-
-    def test_read_only_stated_in_docstring(self):
-        """The module docstring must mention read-only / no chat input."""
-        mod = importlib.import_module("windows_client.status_board")
-        doc = (mod.__doc__ or "").lower()
-        assert "read-only" in doc or "read only" in doc
-
-    def test_render_board_returns_string(self):
-        """render_board() must return a non-empty string for valid state dicts."""
-        mod = importlib.import_module("windows_client.status_board")
-        state = {
-            "tri_state_phase": "manifest",
-            "runtime_domain": "local",
-            "presence_intensity": 0.8,
-            "coherence": 0.7,
-        }
-        result = mod.render_board(state, "http://127.0.0.1:8000")
-        assert isinstance(result, str)
-        assert "manifest" in result.lower() or "MANIFEST" in result
-        assert len(result) > 10
-
-    def test_render_board_handles_none_domain(self):
-        """render_board() must not crash when runtime_domain is None."""
-        mod = importlib.import_module("windows_client.status_board")
-        state = {
-            "tri_state_phase": "silent",
-            "runtime_domain": None,
-            "presence_intensity": 0.0,
-            "coherence": 0.0,
-        }
-        result = mod.render_board(state, "http://127.0.0.1:8000")
-        assert "unknown" in result.lower() or "silent" in result.lower()
-
-    def test_render_offline_returns_string(self):
-        """render_offline() must return a non-empty string."""
-        mod = importlib.import_module("windows_client.status_board")
-        result = mod.render_offline("http://127.0.0.1:8000", "connection refused")
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    def test_cli_parser_built(self):
-        """_build_parser() must return an argparse.ArgumentParser."""
-        import argparse
-        mod = importlib.import_module("windows_client.status_board")
-        parser = mod._build_parser()
-        assert isinstance(parser, argparse.ArgumentParser)
-
-    def test_cli_defaults(self):
-        """CLI defaults must be sensible."""
-        mod = importlib.import_module("windows_client.status_board")
-        args = mod._build_parser().parse_args([])
-        assert args.host == "127.0.0.1"
-        assert args.port == 8000
-        assert args.interval == 1.0
-        assert args.no_color is False

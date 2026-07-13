@@ -629,7 +629,8 @@ class TestHandlerImports:
         m = _import_handler_module(
             "galaxy_gateway.android.handlers.delegated_signal"
         )
-        assert hasattr(m, "_audit_delegated_signal")
+        # PR-11-V2: 审计收口到生命周期协调器,直挂 _audit_* 钩子退役。
+        assert hasattr(m, "_get_lifecycle_coordinator")
 
     def test_handoff_v2_result_handler_has_audit_binding(self):
         m = _import_handler_module(
@@ -641,10 +642,12 @@ class TestHandlerImports:
         m = _import_handler_module(
             "galaxy_gateway.android.handlers.takeover_response"
         )
-        assert hasattr(m, "_audit_takeover_response")
+        # PR-11-V2: 审计收口到生命周期协调器,直挂 _audit_* 钩子退役。
+        assert hasattr(m, "_get_lifecycle_coordinator")
 
     def test_reconciliation_signal_handler_has_audit_binding(self):
         m = _import_handler_module(
             "galaxy_gateway.android.handlers.reconciliation_signal"
         )
-        assert hasattr(m, "_audit_reconciliation_signal")
+        # PR-11-V2: 审计收口到生命周期协调器,直挂 _audit_* 钩子退役。
+        assert hasattr(m, "get_lifecycle_coordinator") or hasattr(m, "_get_lifecycle_coordinator")

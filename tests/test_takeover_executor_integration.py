@@ -644,10 +644,11 @@ class TestValidationNote:
             takeover_tracking_snapshot,
         )
 
-    def test_U02_takeover_response_handler_has_direct_tracking_hook(self):
-        """Handler exposes _record_takeover_response for testability."""
+    def test_U02_takeover_response_handler_delegates_to_coordinator(self):
+        """PR-11-V2: 追踪/审计已收口到生命周期协调器,handler 不再持有直挂钩子;
+        钉协调器绑定存在(顺序契约由协调器自己的套件钉)。"""
         import galaxy_gateway.android.handlers.takeover_response as mod
-        assert hasattr(mod, "_record_takeover_response")
+        assert hasattr(mod, "_get_lifecycle_coordinator")
 
     def test_U03_lifecycle_coordinator_has_on_takeover_requested_and_on_takeover_response(self):
         """Coordinator exposes both request and response lifecycle methods."""

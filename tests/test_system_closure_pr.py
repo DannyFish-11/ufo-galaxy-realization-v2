@@ -29,10 +29,12 @@ if str(PROJECT_ROOT) not in sys.path:
 # ===========================================================================
 
 
+# register_pending_dispatch 已改为把 Future 挂到【运行中的事件循环】
+# (asyncio.get_running_loop);本组用例转 async(pytest-asyncio AUTO 模式)。
 class TestCanonicalCompletionIngress:
     """Test A: register_pending_dispatch() → notify() resolves the Future."""
 
-    def test_register_returns_future(self):
+    async def test_register_returns_future(self):
         """register_pending_dispatch returns an asyncio.Future."""
         from core.canonical_completion_ingress import CanonicalCompletionIngress
 
@@ -46,7 +48,7 @@ class TestCanonicalCompletionIngress:
         finally:
             loop.close()
 
-    def test_notify_resolves_future_by_handoff_id(self):
+    async def test_notify_resolves_future_by_handoff_id(self):
         """notify() with a terminal envelope resolves the Future."""
         from core.canonical_completion_ingress import CanonicalCompletionIngress
 
@@ -71,7 +73,7 @@ class TestCanonicalCompletionIngress:
         finally:
             loop.close()
 
-    def test_notify_non_terminal_does_not_resolve(self):
+    async def test_notify_non_terminal_does_not_resolve(self):
         """notify() with an ACK (non-terminal) does NOT resolve the Future."""
         from core.canonical_completion_ingress import CanonicalCompletionIngress
 
@@ -94,7 +96,7 @@ class TestCanonicalCompletionIngress:
         finally:
             loop.close()
 
-    def test_complete_pending_dispatch_by_key(self):
+    async def test_complete_pending_dispatch_by_key(self):
         """complete_pending_dispatch() resolves Future by direct key lookup."""
         from core.canonical_completion_ingress import CanonicalCompletionIngress
 
@@ -115,7 +117,7 @@ class TestCanonicalCompletionIngress:
         finally:
             loop.close()
 
-    def test_complete_missing_key_is_safe(self):
+    async def test_complete_missing_key_is_safe(self):
         """complete_pending_dispatch() with unknown key returns False (no error)."""
         from core.canonical_completion_ingress import CanonicalCompletionIngress
 
@@ -128,7 +130,7 @@ class TestCanonicalCompletionIngress:
         finally:
             loop.close()
 
-    def test_singleton_factory(self):
+    async def test_singleton_factory(self):
         """get_canonical_completion_ingress() returns the same instance each call."""
         # Use a fresh module-level singleton by patching
         import core.canonical_completion_ingress as mod

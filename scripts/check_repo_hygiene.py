@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import os
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -167,6 +168,41 @@ def _is_inside_nodes(rel_path: str) -> bool:
     return len(parts) > 0 and parts[0] == "nodes"
 
 
+def _git_ignored_paths(root: Path) -> frozenset:
+    """被 git 主动忽略的路径集合(相对 root,目录不带尾斜杠)。
+
+    本检查的判定对象是"提交进仓库的脏东西"(每条规则的 reason 都是
+    must not be committed)——已被 .gitignore 覆盖的运行期产物不在其列:
+    否则任何先导入过代码的进程都会生成 __pycache__ 等缓存,检查结果就
+    取决于"之前跑没跑过别的东西"(顺序依赖)。已提交的脏文件是 tracked,
+    不会出现在 --others 里,照旧违规。非 git 环境(单测 tmp 树/导出树)
+    返回空集,保持纯文件系统行为。
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z", "--others",
+             "--ignored", "--exclude-standard", "--directory"],
+            capture_output=True, text=True, timeout=30, check=True,
+        ).stdout
+    except Exception:
+        return frozenset()
+    return frozenset(p.rstrip("/") for p in out.split("\0") if p)
+
+
+def _is_git_ignored(rel_path: str, ignored: frozenset) -> bool:
+    """rel_path 本身或其任一祖先目录被 git 忽略。"""
+    if not ignored:
+        return False
+    p = rel_path.replace(os.sep, "/")
+    while p:
+        if p in ignored:
+            return True
+        if "/" not in p:
+            return False
+        p = p.rsplit("/", 1)[0]
+    return False
+
+
 def scan_repository(root: str, subtree: Optional[str] = None) -> HygieneReport:
     """Walk *root* (optionally restricted to *subtree*) and collect violations.
 
@@ -181,6 +217,7 @@ def scan_repository(root: str, subtree: Optional[str] = None) -> HygieneReport:
     report = HygieneReport()
     root_path = Path(root).resolve()
     start_path = (root_path / subtree).resolve() if subtree else root_path
+    ignored = _git_ignored_paths(root_path)
 
     for dirpath, dirnames, filenames in os.walk(start_path):
         # Prune skipped directories in-place so os.walk does not recurse into them
@@ -193,6 +230,10 @@ def scan_repository(root: str, subtree: Optional[str] = None) -> HygieneReport:
         for dirname in list(dirnames):
             rel_item = str(rel_dir / dirname) if str(rel_dir) != "." else dirname
             if _is_allowlisted(rel_item):
+                continue
+            if _is_git_ignored(rel_item, ignored):
+                # git 忽略的运行期产物不算违规;整棵子树都在忽略范围内,剪枝
+                dirnames.remove(dirname)
                 continue
             inside_nodes = _is_inside_nodes(rel_item)
             for pat in ALL_PATTERNS:
@@ -209,6 +250,8 @@ def scan_repository(root: str, subtree: Optional[str] = None) -> HygieneReport:
         for filename in filenames:
             rel_item = str(rel_dir / filename) if str(rel_dir) != "." else filename
             if _is_allowlisted(rel_item):
+                continue
+            if _is_git_ignored(rel_item, ignored):
                 continue
             inside_nodes = _is_inside_nodes(rel_item)
             for pat in ALL_PATTERNS:

@@ -53,6 +53,25 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _force_legacy_truth_chain(monkeypatch):
+    """本套件钉的是 legacy 真相链/追踪推进路径的契约。结果处理已收敛到
+    core.unified_result_ingress(可用时 handler 有意跳过 legacy 链),且持久化
+    幂等库会跨进程抑制重复 task_id——两者都会让本套件在裸环境落空(基线红
+    根因)。此处强制走 legacy 分支并中和幂等;两者自身契约由各自套件钉。"""
+    import core.unified_result_ingress as uri
+
+    def _unavailable(*a, **k):
+        raise RuntimeError("unified_result_ingress disabled for legacy-path suite")
+
+    monkeypatch.setattr(uri, "ingest_result_async", _unavailable)
+
+    import core.durable_result_idempotency as dri
+    monkeypatch.setattr(dri, "check_result_idempotency", lambda tid: False)
+    monkeypatch.setattr(dri, "record_result_idempotency", lambda tid: None)
+
+
 # ---------------------------------------------------------------------------
 # Conditional imports — skip the entire suite if core modules unavailable
 # ---------------------------------------------------------------------------

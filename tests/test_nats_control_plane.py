@@ -51,6 +51,7 @@ def _make_mock_nats_bus(connected: bool = True) -> MagicMock:
     bus.publish_worker_shutdown = AsyncMock(return_value={"success": True, "seq": 5})
     bus.publish_event = AsyncMock(return_value={"success": True, "seq": 4})
     bus._subscribe = AsyncMock(return_value={"success": True})
+    bus.subscribe = AsyncMock(return_value={"success": True})
     bus.subscribe_heartbeats = AsyncMock(return_value={"success": True})
     bus.subscribe_task_results = AsyncMock(return_value={"success": True})
     bus.subscribe_worker_registrations = AsyncMock(return_value={"success": True})
@@ -90,8 +91,9 @@ class TestGatewayNATSAdapter:
         with patch("core.nats_bus.nats_bus", mock_bus):
             await adapter.start()
 
-        mock_bus._subscribe.assert_called_once()
-        call_args = mock_bus._subscribe.call_args
+        # 适配器走公开的 subscribe()(带 durable),不再触碰私有 _subscribe
+        mock_bus.subscribe.assert_awaited_once()
+        call_args = mock_bus.subscribe.call_args
         assert "galaxy.tasks.dispatch.gateway" in call_args[0][0]
         assert adapter._started is True
 
@@ -512,6 +514,7 @@ class TestNATSObservability:
         bus._js = None
         bus._connected = False
         bus._noop = True
+        bus._embedded = None  # PR-NATS-CORE: 嵌入式服务器句柄进了统计面
         bus._subscriptions = []
         bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
 
@@ -520,6 +523,7 @@ class TestNATSObservability:
         assert "noop_mode" in stats
         assert "published" in stats
         assert "received" in stats
+        assert stats["embedded"] is False
 
 
 # ===========================================================================
@@ -591,26 +595,36 @@ class TestNATSURLMissing:
         assert bus.is_connected() is False
 
     @pytest.mark.asyncio
-    async def test_nats_bus_connect_noop_when_url_absent(self):
-        """connect() returns noop result immediately when URL is not set."""
+    async def test_nats_bus_connect_attempts_embedded_when_url_absent(self):
+        """PR-NATS-CORE: URL 缺失不再是 noop——connect() 自动尝试嵌入式服务器;
+        嵌入式起不来则明确报失败(不是静默 noop 成功)。"""
         import core.nats_bus as _nb_mod
 
         bus = _nb_mod.NATSBus.__new__(_nb_mod.NATSBus)
         bus._url = ""
+        bus._auto_local = False
         bus._nc = None
         bus._js = None
         bus._connected = False
-        bus._noop = True
+        bus._noop = False
+        bus._embedded = None
         bus._subscriptions = []
         bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
 
-        result = await bus.connect()
-        assert result.get("noop") is True
-        assert result.get("success") is True
+        class _FailingEmbedded:
+            async def start(self):
+                return False
+
+        with patch("core.nats_server.EmbeddedNATSServer", _FailingEmbedded):
+            result = await bus.connect()
+
+        assert result.get("success") is False
+        assert "embedded" in str(result.get("error", "")).lower()
 
     @pytest.mark.asyncio
-    async def test_publish_noop_is_not_reported_as_success(self):
-        """No-op transport publish must not return success=True."""
+    async def test_publish_noop_is_accepted_and_flagged(self):
+        """PR-NATS-CORE: _noop 只剩测试/一致性用途——publish 放行(success=True)
+        但必须带 noop=True 标记,消费方可区分真实投递;不再报 nats_noop_transport 错。"""
         import core.nats_bus as _nb_mod
 
         bus = _nb_mod.NATSBus.__new__(_nb_mod.NATSBus)
@@ -619,13 +633,14 @@ class TestNATSURLMissing:
         bus._js = None
         bus._connected = False
         bus._noop = True
+        bus._embedded = None
         bus._subscriptions = []
         bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
 
         result = await bus._publish("galaxy.tasks.dispatch.worker-01", {"task_id": "t1"})
         assert result.get("noop") is True
-        assert result.get("success") is False
-        assert result.get("error") == "nats_noop_transport"
+        assert result.get("success") is True
+        assert bus._stats["published"] == 1
 
     @pytest.mark.asyncio
     async def test_master_brain_logs_warning_when_nats_noop(self, caplog):
@@ -648,7 +663,7 @@ class TestNATSURLMissing:
         assert nats_warnings, "Expected a WARNING log about NATS when connection fails"
 
     def test_get_stats_noop_mode_field(self):
-        """get_stats() advertises noop_mode=True when URL is absent."""
+        """get_stats() advertises noop_mode=True when noop is explicitly set."""
         import core.nats_bus as _nb_mod
 
         bus = _nb_mod.NATSBus.__new__(_nb_mod.NATSBus)
@@ -657,6 +672,7 @@ class TestNATSURLMissing:
         bus._js = None
         bus._connected = False
         bus._noop = True
+        bus._embedded = None
         bus._subscriptions = []
         bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
 
@@ -676,20 +692,25 @@ class TestNATSConnectionFailure:
         # Build a real NATSBus instance pointing at a non-existent server
         bus = _nb_mod.NATSBus.__new__(_nb_mod.NATSBus)
         bus._url = "nats://localhost:14222"  # port unlikely to be in use
+        bus._auto_local = False
         bus._nc = None
         bus._js = None
         bus._connected = False
         bus._noop = False  # URL is set, so not noop
+        bus._embedded = None
         bus._subscriptions = []
         bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
 
-        # nats-py is not installed in CI; simulate via mock
-        with patch.object(bus, "_noop", False):
-            if not _nb_mod._HAS_NATS:
-                # Can't actually connect without nats-py; simulate the error path
-                bus._stats["errors"] += 1
-                result = {"success": False, "error": "nats-py not installed"}
-            else:
+        if not _nb_mod._HAS_NATS:
+            # Can't actually connect without nats-py; simulate the error path
+            bus._stats["errors"] += 1
+            result = {"success": False, "error": "nats-py not installed"}
+        else:
+            # 显式 URL + _auto_local=False 时 max_reconnect_attempts=-1(无限重试),
+            # 真拨号会挂死测试——patch 掉拨号本身,只钉失败返回形状。
+            import nats as _nats_mod
+            with patch.object(_nats_mod, "connect",
+                              side_effect=Exception("connection refused")):
                 result = await bus.connect()
 
         assert result["success"] is False
@@ -2045,23 +2066,28 @@ class TestNATSAutoLocal:
         assert bus._auto_local is True
         assert bus._noop is False
 
-    def test_noop_when_url_absent_and_nats_not_available(self):
-        """When GALAXY_NATS_URL is unset AND nats-py is not installed, __init__
-        leaves _noop True immediately (no auto-local attempt)."""
+    def test_no_implicit_noop_when_url_absent_and_nats_not_available(self):
+        """PR-NATS-CORE: 隐式 noop 模式已移除——GALAXY_NATS_URL 未设且 nats-py
+        未安装时,__init__ 只告警,不再自动把 _noop 置 True(noop 只剩显式
+        测试/一致性用途),也不做 auto-local 兜底。"""
         import core.nats_bus as _nb_mod
 
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("GALAXY_NATS_URL", None)
-            with patch.object(_nb_mod, "_HAS_NATS", False):
+            with patch.object(_nb_mod, "_HAS_NATS", False), \
+                 patch.object(_nb_mod.NATSBus, "_detect_tailscale_nats_url",
+                              staticmethod(lambda: "")):
                 bus = _nb_mod.NATSBus()
 
-        assert bus._noop is True
+        assert bus._noop is False
         assert bus._auto_local is False
+        assert bus._url == ""
 
     @pytest.mark.asyncio
-    async def test_connect_auto_local_failure_returns_noop(self):
-        """connect() for an auto-local bus that can't reach localhost returns
-        noop=True and sets _noop=True without raising."""
+    async def test_connect_auto_local_failure_reports_failure(self):
+        """PR-NATS-CORE: auto-local 连不上不再退成"noop 假成功"——先尝试嵌入式
+        服务器兜底,嵌入式也起不来时明确返回 success=False(带错误),
+        且不会把 _noop 悄悄置 True。"""
         import core.nats_bus as _nb_mod
 
         bus = _nb_mod.NATSBus.__new__(_nb_mod.NATSBus)
@@ -2071,24 +2097,25 @@ class TestNATSAutoLocal:
         bus._js = None
         bus._connected = False
         bus._noop = False
+        bus._embedded = None
         bus._subscriptions = []
         bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
 
         if not _nb_mod._HAS_NATS:
-            # Simulate the auto-local failure path manually
-            bus._stats["errors"] += 1
-            bus._noop = True
-            result = {"success": True, "noop": True, "auto_local_failed": True}
-        else:
-            # Patch nats.connect to raise so we exercise the fallback
-            import nats as _nats_mod
-            with patch.object(_nats_mod, "connect", side_effect=Exception("connection refused")):
-                result = await bus.connect()
+            pytest.skip("nats-py not installed")
 
-        assert result.get("success") is True
-        assert result.get("noop") is True
-        assert result.get("auto_local_failed") is True
-        assert bus._noop is True
+        class _FailingEmbedded:
+            async def start(self):
+                return False
+
+        import nats as _nats_mod
+        with patch.object(_nats_mod, "connect", side_effect=Exception("connection refused")), \
+             patch("core.nats_server.EmbeddedNATSServer", _FailingEmbedded):
+            result = await bus.connect()
+
+        assert result.get("success") is False
+        assert "error" in result
+        assert bus._noop is False  # 失败就是失败,不伪装成 noop 成功
 
     @pytest.mark.asyncio
     async def test_connect_auto_local_failure_logs_lan_hint(self):
@@ -2102,32 +2129,26 @@ class TestNATSAutoLocal:
         bus._js = None
         bus._connected = False
         bus._noop = False
+        bus._embedded = None
         bus._subscriptions = []
         bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
 
         fake_lan_ip = "192.168.1.42"
 
         if not _nb_mod._HAS_NATS:
-            # Exercise the warning path directly with a patched LAN IP
-            with patch.object(_nb_mod, "_get_lan_ip", return_value=fake_lan_ip), \
-                 patch.object(_nb_mod.logger, "warning") as mock_warn:
-                bus._stats["errors"] += 1
-                bus._noop = True
-                hint = f" For cross-device support set: GALAXY_NATS_URL=nats://{_nb_mod._get_lan_ip()}:4222"
-                _nb_mod.logger.warning(
-                    "NATSBus: could not reach nats://localhost:4222 — running in no-op mode "
-                    "(single-machine).%s",
-                    hint,
-                )
-                assert mock_warn.called
-                warning_text = " ".join(str(a) for a in mock_warn.call_args[0])
-                assert fake_lan_ip in warning_text
-        else:
-            import nats as _nats_mod
-            with patch.object(_nb_mod, "_get_lan_ip", return_value=fake_lan_ip), \
-                 patch.object(_nats_mod, "connect", side_effect=Exception("refused")), \
-                 patch.object(_nb_mod.logger, "warning") as mock_warn:
-                await bus.connect()
-                assert mock_warn.called
-                all_warnings = " ".join(" ".join(str(a) for a in c[0]) for c in mock_warn.call_args_list)
-                assert fake_lan_ip in all_warnings
+            pytest.skip("nats-py not installed")
+
+        class _FailingEmbedded:
+            async def start(self):
+                return False
+
+        # LAN 提示只在「auto-local 拨号失败 + 嵌入式服务器也起不来」时发出
+        import nats as _nats_mod
+        with patch.object(_nb_mod, "_get_lan_ip", return_value=fake_lan_ip), \
+             patch.object(_nats_mod, "connect", side_effect=Exception("refused")), \
+             patch("core.nats_server.EmbeddedNATSServer", _FailingEmbedded), \
+             patch.object(_nb_mod.logger, "warning") as mock_warn:
+            await bus.connect()
+            assert mock_warn.called
+            all_warnings = " ".join(" ".join(str(a) for a in c[0]) for c in mock_warn.call_args_list)
+            assert fake_lan_ip in all_warnings

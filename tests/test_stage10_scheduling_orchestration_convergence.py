@@ -480,15 +480,16 @@ class TestSchedulerLegacyFallbackGate(unittest.TestCase):
         with patch("core.command_router.get_command_router", side_effect=RuntimeError("router unavailable")), \
              patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph):
             result = json.loads(_run(sched._exec_mesh_send(args)))
+        # PR-MESH-COLLAB 重设计后:Mesh 是路由顾问、WebSocket 是执行传输,
+        # 不再是 fallback 链——"阻断 legacy fallback"语义随之退役(CANONICAL_
+        # ROUTE_REQUIRED 仅保留在其它 exec 工具)。新契约:传输全不可用时
+        # 结构化失败(transport unavailable),任务谱系(mesh_ 前缀 task_id)仍成立。
         self.assertFalse(result.get("success"))
-        self.assertTrue(result.get("legacy_fallback_blocked"))
-        self.assertEqual(result.get("error_code"), "CANONICAL_ROUTE_REQUIRED")
-        self.assertEqual(result.get("canonical_router_owner"), "core.command_router.CommandRouter")
+        self.assertIn("transport unavailable", str(result.get("error", "")))
         self.assertTrue(
             result.get("task_id", "").startswith("mesh_"),
             "Expected task_id to start with mesh_",
         )
-        self.assertEqual(graph.transition.call_count, 1)
 
 
 if __name__ == "__main__":
