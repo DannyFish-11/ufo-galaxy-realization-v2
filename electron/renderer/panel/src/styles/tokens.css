@@ -35,11 +35,11 @@
   --tri-ring: rgba(255, 255, 255, 0.22);
   --tri-idle: rgba(255, 255, 255, 0.14);
 
-  /* 头像/品牌点(与 app 图标里的光球同色系:青 → 紫罗兰 → 洋红) */
-  --avatar-from: #3fd4f0;
-  --avatar-via: #8b6ef0;
-  --avatar-to: #e63ec8;
-  --avatar-glow: 0 0 20px rgba(139, 110, 240, 0.4);
+  /* 头像/品牌点(声音粒子星云色系:白光核 → 长春花蓝紫 → 玫瑰粉) */
+  --avatar-from: #f3f1ff;
+  --avatar-via: #97a4ef;
+  --avatar-to: #e79ec5;
+  --avatar-glow: 0 0 20px rgba(151, 164, 239, 0.45);
 
   /* 语义(柔和) */
   --success: #74b79a;

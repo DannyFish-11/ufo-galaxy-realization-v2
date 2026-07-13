@@ -329,11 +329,11 @@ html, body, #root {
   opacity: 0.82;
 }
 .orb.phase-liminal {
-  box-shadow: var(--avatar-glow), 0 0 24px rgba(63, 212, 240, 0.3);
+  box-shadow: var(--avatar-glow), 0 0 24px rgba(151, 164, 239, 0.35);
   animation: pulse 1.8s var(--ease) infinite;
 }
 .orb.phase-manifest {
-  box-shadow: var(--avatar-glow), 0 0 30px rgba(230, 62, 200, 0.4);
+  box-shadow: var(--avatar-glow), 0 0 30px rgba(231, 158, 197, 0.5);
 }
 .presence-state {
   font-size: 17px;
