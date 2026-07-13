@@ -44,9 +44,11 @@ class TestGatewayRouteAuth:
 
     def _get_route_dependencies(self, app, path: str, method: str) -> list:
         """Return the dependency callables for a specific route."""
-        for route in app.routes:
+        from tests.route_introspection import iter_flat_routes
+
+        for route in iter_flat_routes(app):
             if getattr(route, "path", None) == path:
-                if method.upper() in getattr(route, "methods", set()):
+                if method.upper() in (getattr(route, "methods", None) or set()):
                     deps = getattr(route, "dependencies", [])
                     return [d.dependency for d in deps]
         return []
@@ -55,10 +57,14 @@ class TestGatewayRouteAuth:
         """Return True if the route has require_auth (or _require_auth) as a dependency."""
         from galaxy_gateway.app import app as gateway_app
 
-        for route in gateway_app.routes:
+        # FastAPI 0.137+ include_router 是懒挂载,app.routes 里是 _IncludedRouter
+        # (path=None)——必须经统一助手摊平后再做结构内省。
+        from tests.route_introspection import iter_flat_routes
+
+        for route in iter_flat_routes(gateway_app):
             if getattr(route, "path", None) != path:
                 continue
-            if method.upper() not in getattr(route, "methods", set()):
+            if method.upper() not in (getattr(route, "methods", None) or set()):
                 continue
             # Check endpoint's __code__ for _require_auth usage via Depends
             # The simplest way: check that route.dependant.dependencies is non-empty
@@ -152,29 +158,28 @@ class TestMDCEDispatch:
 
     @pytest.mark.asyncio
     async def test_unified_command_multi_device_attempts_mdce(self, monkeypatch):
-        """When targets > 1, unified_command should attempt MDCE delegation."""
-        mdce_called_with = {}
+        """When targets > 1, unified_command must route ONE canonical envelope
+        carrying cross_device metadata through CommandRouter.route_envelope.
 
-        async def _mock_delegate(request_id, req, created_at):
-            mdce_called_with["request_id"] = request_id
-            mdce_called_with["targets"] = req.targets
-            from fastapi.responses import JSONResponse
-            from core.routes._models import CommandStatus
-            return JSONResponse({
-                "request_id": request_id,
-                "status": CommandStatus.QUEUED,
-                "created_at": created_at,
-                "mdce": True,
-            })
+        原 P0-3 钉的"路由层直连 Node_71 HTTP(_delegate_to_mdce)"已退役:
+        多目标统一收口到 canonical spine(Mainline Routing Enforcement),
+        跨设备基底/MDCE 的选择发生在 CommandRouter 内部,不在 HTTP 路由层。
+        """
+        routed = {}
 
-        monkeypatch.setattr("core.routes.command._delegate_to_mdce", _mock_delegate)
+        async def _mock_route_envelope(envelope):
+            routed["targets"] = list(getattr(envelope, "targets", []) or [])
+            routed["cross_device"] = (getattr(envelope, "metadata", None) or {}).get("cross_device")
+            return {"success": True, "result": {"ok": True}}
 
         from core.routes.command import create_router
+        from core.command_router import get_command_router
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
         app = FastAPI()
         app.include_router(create_router())
+        monkeypatch.setattr(get_command_router(), "route_envelope", _mock_route_envelope)
 
         with TestClient(app, raise_server_exceptions=False) as client:
             resp = client.post("/api/v1/command/unified", json={
@@ -185,9 +190,9 @@ class TestMDCEDispatch:
             })
 
         assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("mdce") is True
-        assert set(mdce_called_with.get("targets", [])) == {"phone_1", "phone_2"}
+        assert set(routed.get("targets", [])) == {"phone_1", "phone_2"}
+        # 多目标必须打上跨设备标记,让 spine 走 canonical 跨设备基底
+        assert routed.get("cross_device") == "true"
 
     @pytest.mark.asyncio
     async def test_unified_command_single_device_skips_mdce(self, monkeypatch):
