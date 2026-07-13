@@ -204,18 +204,22 @@ class TestTraceContinuity:
 
         clawd.handle_agent_task = capture_handle_agent_task
 
+        # 本用例钉的是 _dispatch_agent → handle_agent_task 的【透传链】,不是
+        # 远程选路(test_remote_agent_dispatch 专管)。用 local 前缀设备 ID 确定性
+        # 走本地显化路径——否则全量套件里任何先注册过假远程设备/假桥的用例都会
+        # 让 "dev_x" 走真远程成功分支,handle_agent_task 根本不被调用(顺序依赖)。
         trace_id = "trace_dispatch_test_" + uuid.uuid4().hex[:8]
         await clawd._dispatch_agent(
             message="test message",
             intent=None,
-            device_id="dev_x",
+            device_id="local_dev_x",
             session_id="sess_x",
             trace_id=trace_id,
         )
 
         assert received_kwargs.get("trace_id") == trace_id, \
             f"trace_id not forwarded to handle_agent_task: {received_kwargs}"
-        assert received_kwargs.get("device_id") == "dev_x"
+        assert received_kwargs.get("device_id") == "local_dev_x"
         assert received_kwargs.get("session_id") == "sess_x"
 
 

@@ -879,9 +879,16 @@ class TestOrchestrateSourceRuntimeDispatch:
             mesh_memberships=None,
         )
         assert result.mode == SourceDispatchMode.staged_mesh
-        assert result.success is True
+        # PR-J 真实可达化之后,staged_mesh 不再"备好计划即成功":success 反映
+        # 参与方的真实执行结果。单测环境没有真实传输,参与方必然超时——
+        # success 必为 False 且逐个点名掉线参与方(可观测);协调动作本身完成
+        # (action_taken 仍是 coordinated,而非退回 plan_prepared)。
         assert result.result is not None
         assert result.result.get("action_taken") == "staged_mesh_coordinated"
+        assert result.success is False
+        assert result.decision_reason == "staged_mesh:coordinator_error"
+        joined = " ".join(result.errors or [])
+        assert "participant" in joined
 
     def test_remote_handoff_no_bridge_fallback_local(self):
         """Remote handoff without a real bridge falls back to local."""
