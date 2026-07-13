@@ -689,13 +689,15 @@ class TestWindowsAIPClientSwarmManifestFields:
             },
         }
 
+        # 执行收口 WindowsExecutionArbiter(_get_manager 直连已退役);
+        # 仲裁器不可用 = 诚实失败(不再伪装 success),关联 ID/manifest 照透传。
         with patch(
-            "windows_client.windows_aip_client._get_manager",
-            return_value=None,  # no autonomy manager
+            "windows_client.windows_aip_client._get_arbiter",
+            return_value=None,
         ):
             result = _execute_agent_task(payload)
 
-        assert result["success"] is True
+        assert result["success"] is False
         assert result["agent_id"] == "a_sys"
         assert result["trace_id"] == "tr_sys"
         assert result["manifest_id"] == "swm_abc123"
@@ -712,7 +714,7 @@ class TestWindowsAIPClientSwarmManifestFields:
             "context": {"manifest_id": "swm_deadbeef"},
         }
 
-        with patch("windows_client.windows_aip_client._get_manager", return_value=None):
+        with patch("windows_client.windows_aip_client._get_arbiter", return_value=None):
             result = _execute_agent_task(payload)
 
         assert result.get("manifest_id") == "swm_deadbeef"
@@ -729,7 +731,7 @@ class TestWindowsAIPClientSwarmManifestFields:
             "context": {},
         }
 
-        with patch("windows_client.windows_aip_client._get_manager", return_value=None):
+        with patch("windows_client.windows_aip_client._get_arbiter", return_value=None):
             result = _execute_agent_task(payload)
 
         assert "manifest_id" not in result
@@ -737,9 +739,9 @@ class TestWindowsAIPClientSwarmManifestFields:
     def test_passes_enriched_request_to_autonomy_manager(self):
         from windows_client.windows_aip_client import _execute_agent_task
 
-        mock_mgr = MagicMock()
-        mock_mgr.execute_agent_task.return_value = {
-            "success": True, "output": "manager result"
+        mock_arbiter = MagicMock()
+        mock_arbiter.route_command.return_value = {
+            "success": True, "result": {"output": "arbiter result"}
         }
 
         payload = {
@@ -757,15 +759,16 @@ class TestWindowsAIPClientSwarmManifestFields:
             },
         }
 
-        with patch("windows_client.windows_aip_client._get_manager", return_value=mock_mgr):
+        with patch("windows_client.windows_aip_client._get_arbiter", return_value=mock_arbiter):
             result = _execute_agent_task(payload)
 
-        mock_mgr.execute_agent_task.assert_called_once()
-        call_arg = mock_mgr.execute_agent_task.call_args[0][0]
-        assert call_arg["system_prompt"] == "Analyse carefully"
-        assert call_arg["tool_schemas"] == [{"name": "analyse"}]
-        assert call_arg["memory_snapshot"] == {"prev": "data"}
-        assert call_arg["manifest_id"] == "swm_mgr_001"
+        mock_arbiter.route_command.assert_called_once()
+        params = mock_arbiter.route_command.call_args.kwargs["params"]
+        # PR158 扩展键经 params.context 抵达执行仲裁器(信息一条不丢)
+        assert params["context"]["system_prompt"] == "Analyse carefully"
+        assert params["context"]["tool_schemas"] == [{"name": "analyse"}]
+        assert params["context"]["memory_snapshot"] == {"prev": "data"}
+        assert params["context"]["manifest_id"] == "swm_mgr_001"
         assert result["manifest_id"] == "swm_mgr_001"
 
 
