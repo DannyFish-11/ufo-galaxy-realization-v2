@@ -87,6 +87,7 @@ from galaxy_gateway.android.handlers.goal_execution import (
     handle_parallel_subtask,
     handle_goal_execution_result,
 )
+from galaxy_gateway.android.handlers.auth import handle_auth
 from galaxy_gateway.android.handlers.capability_report import handle_capability_report
 from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
 from galaxy_gateway.android.handlers.vision import handle_vision_request
@@ -961,6 +962,9 @@ class AndroidBridge:
                 return await fn(self, websocket, message)
             return _wrapped_handler
 
+        # PR-AUTH-UNIFIED:客户端 onOpen 首帧 auth 的服务端应答者
+        # (auth_ok/auth_failed)。此前该类型无处理者,状态机两端空转。
+        self._message_handlers[MessageType.AUTH] = _wrap(handle_auth)
         self._message_handlers[MessageType.DEVICE_REGISTER] = _wrap(handle_device_register)
         self._message_handlers[MessageType.DEVICE_HEARTBEAT] = _wrap(handle_heartbeat)
         self._message_handlers[MessageType.TASK_RESULT] = _wrap(handle_task_result)
