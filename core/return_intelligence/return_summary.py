@@ -33,10 +33,10 @@ Usage::
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
-from .return_modes import ReturnMode, MODES_THAT_SUPPRESS_MANIFEST, MODES_THAT_SOFTEN_LIMINAL
+from .return_modes import ReturnMode
 
 
 @dataclass(frozen=True)

@@ -22,7 +22,6 @@ ProxyRelay 利用服务端作为中继, 实现任意设备 A → 设备 B 的指
 """
 
 import asyncio
-import json
 import logging
 import time
 import uuid

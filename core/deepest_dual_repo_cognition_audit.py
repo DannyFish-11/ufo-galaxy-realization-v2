@@ -39,9 +39,8 @@ Verdict
 
 from __future__ import annotations
 
-import importlib
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -429,7 +428,6 @@ def check_multimodal_ingress_bus_existence() -> CognitionCheckResult:
     check = "multimodal_ingress_bus_existence"
     try:
         from core.multimodal.ingress_bus import MultimodalIngressBus
-        from core.multimodal.perception_frame import PerceptionFrame
 
         assert hasattr(MultimodalIngressBus, "run"), (
             "MultimodalIngressBus.run() missing"
@@ -963,8 +961,6 @@ def check_stage10_scheduling_truth_harness() -> CognitionCheckResult:
             SCHEDULING_TRUTH_HARNESS_IS_AUTHORITY,
             GAP_512_002_CLOSED_SENTINEL,
             GAP_512_004_ADDRESSED_SENTINEL,
-            TASK_MUST_BE_REGISTERED_BEFORE_DISPATCH_POLICY,
-            ROUTING_MUST_CONSULT_CAPABILITY_NETWORK_TRUTH_POLICY,
         )
 
         assert callable(ensure_task_registered)

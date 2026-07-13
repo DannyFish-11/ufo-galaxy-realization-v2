@@ -38,10 +38,9 @@ import logging
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from core.auth import require_auth
 
 from core.routes._shared import (
     connection_manager,

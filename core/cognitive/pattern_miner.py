@@ -45,15 +45,13 @@ Integration
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import re
 import threading
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.Cognitive.PatternMiner")
 

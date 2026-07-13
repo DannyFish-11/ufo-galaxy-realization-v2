@@ -22,7 +22,7 @@ POST /api/v1/devices/{device_id}/unquarantine
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field

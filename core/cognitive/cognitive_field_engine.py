@@ -39,7 +39,7 @@ import asyncio
 import logging
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional
 
 from core.cognitive.continuous_state import CognitiveState, get_cognitive_state
 

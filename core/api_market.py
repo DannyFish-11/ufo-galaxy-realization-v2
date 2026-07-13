@@ -16,12 +16,11 @@ import logging
 import re
 from datetime import datetime, timezone
 import os
-import time
 import hashlib
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 logger = logging.getLogger("Galaxy.MarketAPI")
 

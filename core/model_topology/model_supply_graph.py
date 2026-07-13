@@ -20,15 +20,14 @@ Design
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, Iterator, List, Optional
 
 from .model_node import EdgeKind, ModelNode, node_from_entry
-from .provider_inventory import ProviderInventory, ProviderInventoryEntry
+from .provider_inventory import ProviderInventory
 from .topology_types import (
     AggregatorKind,
     AggregatorRouterHint,
-    NormalizedTopologyEntry,
     ProviderCategory,
     TopologyRole,
 )

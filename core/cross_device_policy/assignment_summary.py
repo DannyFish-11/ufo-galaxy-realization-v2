@@ -51,7 +51,7 @@ import dataclasses
 import logging
 from typing import Any, Dict, List, Optional
 
-from .device_role import DeviceRole, DeviceRoleAssignment
+from .device_role import DeviceRole
 from .routing_policy import RoutingPolicy, RoutingPosture, DEFAULT_LOCAL_ROUTING_POLICY
 
 logger = logging.getLogger("Galaxy.CrossDevicePolicy.Summary")

@@ -30,9 +30,8 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
-from core.schemas.aip_v3 import TaskResultMsg
 
 logger = logging.getLogger("Galaxy.NodeFacadeLocal")
 

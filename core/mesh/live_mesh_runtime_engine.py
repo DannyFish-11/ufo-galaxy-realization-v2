@@ -259,7 +259,6 @@ def _emit_aip_v3_mesh_events(
             MeshJoinMsg,
             MeshLeaveMsg,
             MeshResultMsg,
-            MeshTopologyMsg,
         )
         from core.nats_bus import get_nats_bus  # noqa: PLC0415
 

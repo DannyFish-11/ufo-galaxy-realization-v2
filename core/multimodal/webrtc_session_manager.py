@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 import uuid
 from dataclasses import dataclass
 from typing import Callable, List, Optional
@@ -37,7 +36,6 @@ from .webrtc_session import (
     WebRTCSessionConfig,
     WebRTCSessionState,
 )
-from .signal_quality import SignalQuality
 from .multimodal_events import (
     MultimodalEvent,
     WebRTCSessionStartedEvent,

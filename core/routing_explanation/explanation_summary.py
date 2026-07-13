@@ -41,22 +41,17 @@ from .decision_basis import (
     DecisionBasis,
     DecisionFactor,
     basis_from_policy_posture,
-    basis_from_health_score,
-    basis_from_availability,
     basis_list_to_dicts,
     make_decision_basis,
 )
 from .route_confidence import (
-    RouteConfidence,
     ConfidenceBand,
-    compute_confidence,
     UNDETERMINED_CONFIDENCE,
 )
 from .route_explanation import (
     RejectedCandidate,
     RouteExplanation,
     build_route_explanation,
-    EMPTY_ROUTE_EXPLANATION,
 )
 
 __all__ = [

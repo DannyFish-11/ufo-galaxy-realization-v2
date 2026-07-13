@@ -39,7 +39,6 @@ from .platform_api import (
     ClipboardResult,
     FileOpResult,
     HotkeyHandle,
-    NoOpSystemAPI,
     NotificationResult,
     ProcessInfo,
     SystemAPI,

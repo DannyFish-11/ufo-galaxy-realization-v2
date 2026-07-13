@@ -115,14 +115,13 @@ Class:
 
 from __future__ import annotations
 
-import dataclasses
 import logging
 import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Deque, Dict, Iterator, List, Optional, Sequence
+from typing import Any, Deque, Dict, List, Optional, Sequence
 
 logger = logging.getLogger("Galaxy.TaskGraphRuntime")
 

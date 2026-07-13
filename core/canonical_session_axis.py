@@ -92,7 +92,7 @@ import dataclasses
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 __all__ = [
     # Authority / policy sentinels

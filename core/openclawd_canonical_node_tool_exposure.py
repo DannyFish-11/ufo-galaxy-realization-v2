@@ -109,7 +109,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger("Galaxy.OpenClawd.CanonicalNodeToolExposure")
 

@@ -33,9 +33,6 @@ logger = logging.getLogger("master_brain")
 from core.acl import AntiCorruptionLayer, acl
 from core.nats_bus import NATSBus, nats_bus
 from core.schemas.contracts import (
-    AgentEventModel,
-    EventDomain,
-    EventSeverity,
     TaskDispatchModel,
     TaskResultModel,
     TaskStatus,

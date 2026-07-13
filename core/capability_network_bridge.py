@@ -378,7 +378,6 @@ def _probe_path_availability(node_id: str, transport_hints: Dict[str, Any]) -> P
     try:
         from core.network_topology_runtime import (
             get_network_topology_runtime,
-            TopologyConnectionState,
         )
 
         topo = get_network_topology_runtime()
@@ -515,7 +514,6 @@ def joint_select(
     from core.capability_graph_selection import (  # lazy import
         discover_providers,
         score_provider,
-        select_best_provider,
     )
 
     required: List[str] = list(required_capabilities or [])

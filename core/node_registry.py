@@ -14,7 +14,6 @@
 日期：2026-02-06
 """
 
-import os
 import sys
 import json
 import asyncio
@@ -22,8 +21,8 @@ import logging
 import importlib
 import importlib.util
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Callable, Type, Set
-from dataclasses import dataclass, field, asdict
+from typing import Dict, List, Optional, Any, Type, Set
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
 from abc import ABC, abstractmethod

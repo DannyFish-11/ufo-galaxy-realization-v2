@@ -14,9 +14,9 @@ from typing import AsyncIterator, Callable, List, Optional
 
 import numpy as np
 
-from .webrtc_session import WebRTCCameraSession, WebRTCSessionConfig, WebRTCSessionState
+from .webrtc_session import WebRTCCameraSession, WebRTCSessionConfig
 from .video_features import VideoFeatureExtractor, VideoState
-from .signal_quality import SignalQuality, QualityFlag
+from .signal_quality import SignalQuality
 
 logger = logging.getLogger(__name__)
 

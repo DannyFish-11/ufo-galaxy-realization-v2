@@ -40,12 +40,11 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import WebSocket
 
-from .exceptions import DeviceNotFoundError, DeviceSendError, DeviceTimeoutError
-from .models import UnifiedConnectionInfo, UnifiedConnectionState, UnifiedDevice, UnifiedDeviceStatus
+from .models import UnifiedConnectionInfo, UnifiedConnectionState
 
 logger = logging.getLogger("Galaxy.Unified.ConnectionManager")
 

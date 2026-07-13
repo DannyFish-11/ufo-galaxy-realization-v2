@@ -420,7 +420,6 @@ def _probe_delegated_flow_readiness() -> EvidenceDimensionEntry:
     try:
         from core.delegated_flow_readiness_gate import (
             evaluate_delegated_flow_readiness,
-            DelegatedFlowReadinessVerdict,
         )
         report = evaluate_delegated_flow_readiness()
         verdict = getattr(report, "verdict", "")
@@ -554,7 +553,6 @@ def _probe_android_evaluator_artifacts() -> EvidenceDimensionEntry:
     try:
         from core.android_evaluator_artifact_ingress import (
             get_android_evaluator_artifact_registry,
-            AndroidEvaluatorArtifactKind,
         )
         registry = get_android_evaluator_artifact_registry()
         snapshot = registry.snapshot() if hasattr(registry, "snapshot") else []
@@ -829,7 +827,6 @@ def _probe_delegated_flow_decision_history() -> "EvidenceDimensionEntry":
     test_ref = "tests/test_pr_v2_delegated_flow_decision_history.py"
     try:
         from core.delegated_flow_decision_history import (
-            get_decision_history,
             evaluate_delegated_flow_history,
         )
         h_report = evaluate_delegated_flow_history()
@@ -877,7 +874,6 @@ def _probe_recovery_truth_surface() -> "EvidenceDimensionEntry":
     try:
         from core.recovery_truth_surface import (
             build_recovery_truth_report,
-            RECOVERY_TRUTH_SURFACE_AUTHORITY,
         )
         report = build_recovery_truth_report()
         report_dict = report.to_dict()
@@ -958,8 +954,6 @@ def _probe_canonical_cross_repo_pipeline() -> "EvidenceDimensionEntry":
     try:
         from core.canonical_cross_repo_evidence_pipeline import (
             build_canonical_cross_repo_evidence_report,
-            PipelineVerdict,
-            CANONICAL_CROSS_REPO_EVIDENCE_PIPELINE_AUTHORITY,
         )
         report = build_canonical_cross_repo_evidence_report()
         verdict_val = report.pipeline_verdict.value

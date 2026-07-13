@@ -16,7 +16,7 @@ Routes:
 
 import logging
 import uuid
-from typing import Dict, List, Optional
+from typing import List
 
 import httpx
 from fastapi import APIRouter, HTTPException

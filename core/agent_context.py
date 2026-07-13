@@ -16,7 +16,6 @@ Galaxy - Agent 上下文管理
     # context 包含 AGENTS.md 的内容
 """
 
-import os
 from pathlib import Path
 from typing import Optional
 

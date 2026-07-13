@@ -43,8 +43,8 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
-from dataclasses import dataclass, field
+from typing import Any, Dict, Union
+from dataclasses import dataclass
 import threading
 
 logger = logging.getLogger("Galaxy.Config")

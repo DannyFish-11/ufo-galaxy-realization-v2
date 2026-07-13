@@ -76,7 +76,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Sequence
+from typing import List, Sequence
 
 logger = logging.getLogger("Galaxy.CapabilityEnforcementHardener")
 

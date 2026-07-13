@@ -51,9 +51,9 @@ PR-Final: Android-Originated Authority Boundary Model
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, FrozenSet, List, Optional
+from typing import Any, Dict, FrozenSet
 
 # ---------------------------------------------------------------------------
 # Contract sentinels & version

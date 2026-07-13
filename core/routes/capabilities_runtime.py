@@ -124,7 +124,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         try:
             from core.capability_runtime import (
                 CapabilityRuntimeRegistry,
-                UNKNOWN_CAPABILITY_SUMMARY,
             )
             registry = CapabilityRuntimeRegistry.get_instance()
             summary = registry.get_summary(capability_name)

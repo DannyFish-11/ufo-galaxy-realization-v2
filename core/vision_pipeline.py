@@ -21,7 +21,6 @@ Galaxy - 融合视觉理解管线 (Vision Pipeline)
   Level 4: Tesseract + 规则引擎 — 完全离线
 """
 
-import asyncio
 import base64
 import json
 import logging

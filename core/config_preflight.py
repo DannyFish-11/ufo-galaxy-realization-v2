@@ -54,7 +54,7 @@ import logging
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 logger = logging.getLogger("Galaxy.ConfigPreflight")
 

@@ -19,7 +19,6 @@ UUID 定义 (Galaxy BLE Service):
 from typing import List  # auto: missing import
 
 
-import asyncio
 import json
 import logging
 from typing import Any, Dict, Optional

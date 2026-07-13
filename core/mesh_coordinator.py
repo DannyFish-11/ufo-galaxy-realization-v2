@@ -17,10 +17,8 @@ MeshCoordinator — 设备协同网络层
 """
 
 import asyncio
-import json
 import logging
 import time
-import uuid
 from typing import Dict, Any, Optional, Callable, Awaitable, List
 from dataclasses import dataclass, field
 from enum import Enum
@@ -376,7 +374,6 @@ class MeshCoordinator:
         # PR-28: Get server's own tailscale_ip for inclusion in peer list
         server_ts_ip = ""
         try:
-            from core.adapters.tailscale_p2p_adapter import TailscaleP2PAdapter
             ts_adapter = aip_transport.get_adapter("tailscale_p2p")
             if ts_adapter and hasattr(ts_adapter, '_my_ts_ip'):
                 server_ts_ip = ts_adapter._my_ts_ip or ""

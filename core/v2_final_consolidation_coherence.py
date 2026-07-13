@@ -233,7 +233,6 @@ def _probe_ingress_continuity_coherence() -> CoherenceDimensionResult:
                 evaluate_continuity_legality,
                 ContinuityLegalityContext,
                 ContinuityLegalityPath,
-                UNIFIED_CONTINUITY_LEGALITY_AUTHORITY,
             )
             ctx = ContinuityLegalityContext(
                 device_id="probe_device",
@@ -314,11 +313,6 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
     # 1. Unified orchestration spine (V4) authority present
     if _try_import("core.unified_orchestration_spine"):
         try:
-            from core.unified_orchestration_spine import (  # type: ignore[import]
-                UNIFIED_ORCHESTRATION_SPINE_AUTHORITY,
-                ORCHESTRATION_SPINE_V4_CONSUMES_CANONICAL_SLOT_POLICY,
-                get_canonical_dispatch_slots,
-            )
             evidence.append(
                 "core.unified_orchestration_spine (V4): authority sentinel and "
                 "V4-consumes-canonical-slot policy present; spine uses the V3 "
@@ -339,8 +333,6 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
         try:
             from core.orchestration_review_surface import (  # type: ignore[import]
                 build_orchestration_review_snapshot,
-                ORCHESTRATION_REVIEW_SURFACE_IS_AUTHORITY,
-                ORCHESTRATION_REVIEW_SURFACE_PR10_SENTINEL,
             )
             snap = build_orchestration_review_snapshot()
             evidence.append(
@@ -359,10 +351,6 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
     # 3. Live routing decision builder available (per-call decision causality)
     if _try_import("core.routing_explanation.live_decision"):
         try:
-            from core.routing_explanation.live_decision import (  # type: ignore[import]
-                LiveRoutingDecisionBuilder,
-                build_route_explanation,
-            )
             evidence.append(
                 "core.routing_explanation.live_decision: LiveRoutingDecisionBuilder "
                 "and build_route_explanation available; routing decisions record "
@@ -382,7 +370,6 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
         try:
             from core.routing_observability import (  # type: ignore[import]
                 get_control_loop_metrics,
-                record_routing_decision,
             )
             metrics = get_control_loop_metrics()
             evidence.append(
@@ -400,7 +387,6 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
         try:
             from core.hybrid_orchestration_continuity import (  # type: ignore[import]
                 get_continuity_registry,
-                HYBRID_ORCHESTRATION_CONTINUITY_IS_AUTHORITY,
             )
             reg = get_continuity_registry()
             evidence.append(
@@ -436,8 +422,6 @@ def _probe_manifestation_operator_coherence() -> CoherenceDimensionResult:
         try:
             from core.operator_surface import (  # type: ignore[import]
                 OperatorSnapshot,
-                get_operator_surface,
-                reset_operator_surface,
             )
             snap = OperatorSnapshot()
             has_shell = hasattr(snap, "desktop_shell_state")
@@ -500,10 +484,6 @@ def _probe_manifestation_operator_coherence() -> CoherenceDimensionResult:
     # 3. Flow-level operator surface carries authority
     if _try_import("core.flow_level_operator_surface"):
         try:
-            from core.flow_level_operator_surface import (  # type: ignore[import]
-                FlowLevelOperatorSurface,
-                FLOW_LEVEL_OPERATOR_SURFACE_AUTHORITY,
-            )
             evidence.append(
                 "core.flow_level_operator_surface: FlowLevelOperatorSurface "
                 "exposes flow-phase, truth-alignment, execution-event, and "
@@ -537,8 +517,6 @@ def _probe_android_truth_path_coherence() -> CoherenceDimensionResult:
         try:
             from core.android_device_state_store import (  # type: ignore[import]
                 get_android_device_state_store,
-                ANDROID_DEVICE_STATE_STORE_AUTHORITY,
-                list_recent_execution_events,
             )
             store = get_android_device_state_store()
             evidence.append(
@@ -555,12 +533,6 @@ def _probe_android_truth_path_coherence() -> CoherenceDimensionResult:
     # 2. Unified runtime truth ingress — single canonical write path
     if _try_import("core.unified_runtime_truth_ingress"):
         try:
-            from core.unified_runtime_truth_ingress import (  # type: ignore[import]
-                UNIFIED_RUNTIME_TRUTH_INGRESS_AUTHORITY,
-                ANDROID_RUNTIME_STATE_MUST_FLOW_THROUGH_INGRESS_POLICY,
-                NO_PARALLEL_WRITE_TO_CANONICAL_STATE_POLICY,
-                ingest_android_runtime_state_update,
-            )
             evidence.append(
                 "core.unified_runtime_truth_ingress: single canonical write path "
                 "for Android runtime state; NO_PARALLEL_WRITE policy enforces "
@@ -625,11 +597,8 @@ def _probe_completion_status_coherence() -> CoherenceDimensionResult:
         try:
             from core.system_completion_status import (  # type: ignore[import]
                 SystemCompletionStatus,
-                SYSTEM_COMPLETION_STATUS_AUTHORITY,
-                SYSTEM_COMPLETION_STATUS_SENTINEL,
                 SYSTEM_COMPLETION_STATUS_PR10_V2_SENTINEL,
                 MAX_CLOSURE_PCT_WITHOUT_FULL_VERDICT,
-                build_system_completion_status,
             )
             # Verify key attributes without calling the heavy build function
             # (build_system_completion_status calls this module → circular import guard)
@@ -686,9 +655,6 @@ def _probe_completion_status_coherence() -> CoherenceDimensionResult:
         try:
             from core.system_final_acceptance_verdict import (  # type: ignore[import]
                 SystemAcceptanceReport,
-                evaluate_system_acceptance,
-                reset_system_acceptance_evaluator,
-                SYSTEM_FINAL_ACCEPTANCE_VERDICT_AUTHORITY,
             )
             # Check structure without triggering heavy build
             r = SystemAcceptanceReport()
@@ -709,7 +675,6 @@ def _probe_completion_status_coherence() -> CoherenceDimensionResult:
         try:
             from core.dual_repo_system_completeness_review import (  # type: ignore[import]
                 CompletenessVerdict,
-                DualRepoSystemCompletenessReviewer,
             )
             if hasattr(CompletenessVerdict, "fully_closed") and hasattr(CompletenessVerdict, "partial_closure_gaps_present"):
                 evidence.append(

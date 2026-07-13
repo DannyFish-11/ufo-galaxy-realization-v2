@@ -51,10 +51,10 @@ Usage::
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from .execution_policy import ExecutionPolicy
-from .policy_band import PolicyBand, band_allows_execution
+from .policy_band import band_allows_execution
 from .policy_decision import PolicyDecision, PolicyOutcome, _make_allowed
 
 

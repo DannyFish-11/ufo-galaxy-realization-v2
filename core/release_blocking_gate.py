@@ -72,7 +72,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 logger = logging.getLogger("Galaxy.ReleaseBlockingGate")
 

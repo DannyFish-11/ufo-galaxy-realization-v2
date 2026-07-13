@@ -14,7 +14,7 @@ import os
 import tempfile
 import uuid
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 
 @dataclass

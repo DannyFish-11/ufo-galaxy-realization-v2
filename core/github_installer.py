@@ -62,11 +62,8 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
-import time
 # Used by _run_coro_sync to safely bridge async loader calls from sync installer helpers.
 import threading
-import venv
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -1013,7 +1010,7 @@ class GitHubInstaller:
         # 5a. Early contract validation for MCP addons — reject before installing deps
         if detected_type == "mcp" and tool_manifest:
             try:
-                from core.mcp_addon_contract import validate_mcp_addon_contract, MCPAddonContractError
+                from core.mcp_addon_contract import validate_mcp_addon_contract
                 validate_mcp_addon_contract(tool_manifest)
             except Exception as contract_exc:
                 logger.debug("Fallback triggered: %s", contract_exc)

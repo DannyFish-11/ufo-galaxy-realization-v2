@@ -28,9 +28,9 @@ from __future__ import annotations
 import dataclasses
 import time
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from .decision_basis import DecisionBasis, DecisionFactor
+from .decision_basis import DecisionBasis
 
 __all__ = [
     "ConfidenceBand",

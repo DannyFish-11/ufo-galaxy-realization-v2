@@ -30,7 +30,7 @@ import logging
 import os
 import signal
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
 
@@ -630,8 +630,6 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     try:
         from galaxy_gateway.session_roaming import session_roaming
-        from galaxy_gateway.wake_event_bus import wake_event_bus
-        from galaxy_gateway.wake_router import wake_router
 
         results["session_roaming"] = {
             "status": "ok",
@@ -979,7 +977,6 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     if _deps_ok("device_router"):
         try:
-            from galaxy_gateway.device_router import device_router
             results["device_router"] = {"status": "ok", "instance": "device_router"}
             logger.info("设备路由器就绪")
         except Exception as e:
@@ -992,7 +989,6 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     if _deps_ok("orchestrator"):
         try:
-            from galaxy_gateway.orchestrator import GalaxyOrchestrator
             results["orchestrator"] = {"status": "ok"}
             logger.info("GalaxyOrchestrator 就绪")
         except Exception as e:

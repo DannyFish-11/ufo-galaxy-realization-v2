@@ -1207,7 +1207,7 @@ class ExecutionPlanner:
         t0 = time.monotonic()
 
         try:
-            from core.fractal_agent import FractalExecutor, FractalTask, Complexity
+            from core.fractal_agent import FractalExecutor
             from core.agent_factory import get_agent_factory
 
             factory = get_agent_factory(self._llm_router)

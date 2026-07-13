@@ -187,7 +187,6 @@ def validate_fusion_entry_adapter(module: Any) -> FusionEntryAdapterContract:
         Check :attr:`FusionEntryAdapterContract.is_compliant` for a quick
         pass/fail answer.
     """
-    import asyncio
     import inspect
 
     contract = FusionEntryAdapterContract()

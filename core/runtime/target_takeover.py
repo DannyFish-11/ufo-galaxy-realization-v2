@@ -83,7 +83,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -613,7 +613,6 @@ class TargetTakeoverHandler:
         LocalTakeoverResult
         """
         from contracts.local_takeover_result import (
-            LocalTakeoverResult,
             LocalTakeoverStatus,
             from_execution_output,
             failure_result,

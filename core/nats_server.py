@@ -9,7 +9,6 @@ import logging
 import os
 import shutil
 import subprocess
-import time
 from pathlib import Path
 
 logger = logging.getLogger("Galaxy.NATSServer")
@@ -86,8 +85,6 @@ class EmbeddedNATSServer:
                              check=True, timeout=120, capture_output=True, encoding="utf-8", errors="replace")
             elif system == "windows":
                 import urllib.request
-                import json
-                import socket
                 nats_dir = Path.home() / ".lumiv" / "bin"
                 nats_dir.mkdir(parents=True, exist_ok=True)
                 nats_exe = nats_dir / "nats-server.exe"

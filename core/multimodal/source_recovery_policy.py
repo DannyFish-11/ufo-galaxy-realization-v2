@@ -830,7 +830,6 @@ class SourceRecoveryPolicy:
         - Current primary audio/video source IDs
         - Per-category source counts (recoverable / unrecoverable / stale / flapping)
         """
-        from core.multimodal.perception_source_registry import SourceHealthStatus
 
         now = time.time()
         recoverable_count = 0

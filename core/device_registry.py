@@ -59,12 +59,9 @@ Usage::
 import asyncio
 import json
 import logging
-import os
-import socket
 import threading
 import time
 import uuid
-from datetime import datetime
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable

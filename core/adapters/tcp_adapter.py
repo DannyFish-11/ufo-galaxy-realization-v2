@@ -15,7 +15,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from core.aip_transport import TransportAdapter
 

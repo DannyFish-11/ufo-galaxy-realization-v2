@@ -26,14 +26,12 @@ core/context_compressor.py — 上下文压缩与记忆召回系统
     # messages 包含：摘要 + 相关记忆 + 最近对话 + 当前查询
 """
 
-import hashlib
-import json
 import logging
 import os
 import sqlite3
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.ContextCompressor")
 

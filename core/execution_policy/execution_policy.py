@@ -51,7 +51,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Dict, List, Optional
 
-from .policy_band import PolicyBand, band_allows_execution, band_allows_cross_device
+from .policy_band import PolicyBand, band_allows_execution
 
 
 __all__ = ["ExecutionPolicy", "DEFAULT_CONSERVATIVE_POLICY"]

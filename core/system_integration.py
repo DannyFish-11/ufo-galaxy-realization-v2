@@ -24,10 +24,7 @@ Galaxy - 系统集成层
 """
 
 import inspect
-import json
 import logging
-import time
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Callable
 
 from core.unified.capability_contract import (
@@ -415,7 +412,6 @@ class SystemIntegration:
     async def _execute_agent(self, cap: Capability, params: Dict) -> Any:
         """执行 Agent 能力"""
         try:
-            from core.agent_factory import get_agent_factory_instance
 
             agent_id = cap.source_id
             # Agent 执行逻辑

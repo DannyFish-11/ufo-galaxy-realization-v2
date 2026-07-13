@@ -46,7 +46,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from .authority_roles import AuthorityRole, ROLE_CATALOG, role_label, is_authoritative
-from .authority_resolver import classify_module, authority_chain
+from .authority_resolver import classify_module
 
 logger = logging.getLogger("Galaxy.OrchestrationAuthority")
 

@@ -301,7 +301,6 @@ class FormationAutoEnrollmentManager:
 
             if self._coordinator is not None:
                 try:
-                    from .formation_runtime_coordinator import FormationParticipantState
                     decision = self._coordinator.on_participant_lost(
                         device_id, reason=reason or "auto_enrollment_remove"
                     )
@@ -462,7 +461,6 @@ class FormationAutoEnrollmentManager:
             from .formation_role import FormationRole, FormationMember
             from .formation_runtime_coordinator import (
                 FormationRuntimeCoordinator,
-                FormationParticipantState,
             )
 
             active = [e for e in self._participants.values() if e.is_active]

@@ -48,7 +48,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from core.config_schema import (
-    CONFIG_SCHEMA_AUTHORITY,
     ConfigDefaults,
     SECRET_KEYS,
     classify_key,

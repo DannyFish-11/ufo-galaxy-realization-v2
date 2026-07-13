@@ -13,7 +13,7 @@ import json
 import logging
 import time
 import uuid
-from typing import List, Dict, Any, Optional, Callable, Awaitable
+from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 

@@ -936,7 +936,6 @@ def snapshot_canonical_runtime() -> CanonicalRuntimeSnapshot:
     try:
         from core.capability_assimilation import (
             get_capability_assimilation_layer,
-            AssimilationPresenceState,
         )
         layer = get_capability_assimilation_layer()
         layer_snap = layer.snapshot()

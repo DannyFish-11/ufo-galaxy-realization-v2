@@ -7,7 +7,7 @@ Controller Area Network transport for vehicle/industrial devices.
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from core.aip_transport import TransportAdapter
 

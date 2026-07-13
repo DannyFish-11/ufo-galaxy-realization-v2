@@ -33,7 +33,6 @@ cache is kept as a projection supplement.
 版本：2.0 (authority model clarified)
 """
 
-import asyncio
 import json
 import logging
 from datetime import datetime

@@ -40,7 +40,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     """Create monitoring and infrastructure routes router."""
     router = APIRouter()
 
-    from core.monitoring import get_monitoring_manager, AlertSeverity
+    from core.monitoring import get_monitoring_manager
 
     monitoring = get_monitoring_manager()
 

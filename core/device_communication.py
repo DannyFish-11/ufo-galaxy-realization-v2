@@ -36,7 +36,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Callable, Union
+from typing import Any, Dict, List, Optional, Callable
 from fastapi import WebSocket
 
 logger = logging.getLogger("Galaxy.DeviceComm")

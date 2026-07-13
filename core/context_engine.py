@@ -7,7 +7,7 @@ UFO Galaxy - 上下文管理引擎
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.ContextEngine")
 

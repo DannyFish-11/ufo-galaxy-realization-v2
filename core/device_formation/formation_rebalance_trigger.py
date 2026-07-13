@@ -75,12 +75,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from .formation_group import DeviceFormationGroup, EMPTY_FORMATION_GROUP
 from .formation_rebalance_engine import (
     FormationHealthSignal,
-    FormationRebalanceEngine,
     DeviceHealthMap,
     apply_rebalance,
 )

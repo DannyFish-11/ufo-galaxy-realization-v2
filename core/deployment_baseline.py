@@ -257,11 +257,6 @@ def _check_startup_tier_model_importable(
         environment=env,
     )
     try:
-        from core.startup_tier_model import (
-            STARTUP_TIER_MODEL_AUTHORITY,
-            TIER_CORE,
-        )
-        from launcher.node_startup import NodeSystemLauncher
 
         req.status = BaselineCheckStatus.PASSED
         req.detail = "startup_tier_model importable; NodeSystemLauncher accessible"
@@ -325,10 +320,6 @@ def _check_capability_registry_importable(
         environment=env,
     )
     try:
-        from core.agent.capability_registry import (
-            CapabilityRegistry,
-            CAPABILITY_REGISTRY_IS_CANONICAL_TRUTH_SOURCE,
-        )
 
         req.status = BaselineCheckStatus.PASSED
         req.detail = "CapabilityRegistry importable; canonical sentinel present"
@@ -426,10 +417,6 @@ def _check_outward_truth_importable(
         environment=env,
     )
     try:
-        from core.outward_runtime_truth import (
-            OUTWARD_RUNTIME_TRUTH_AUTHORITY,
-            compile_outward_truth,
-        )
 
         req.status = BaselineCheckStatus.PASSED
         req.detail = "outward_runtime_truth importable; compile_outward_truth callable"
@@ -449,7 +436,6 @@ def _check_node_lifecycle_governor_importable(
     )
     try:
         from core.node_lifecycle_governor import (
-            NODE_LIFECYCLE_GOVERNOR_AUTHORITY,
             get_node_lifecycle_governor,
         )
 

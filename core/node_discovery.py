@@ -15,7 +15,7 @@ import logging
 import time
 import socket
 import struct
-from typing import Dict, List, Optional, Callable, Awaitable
+from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 

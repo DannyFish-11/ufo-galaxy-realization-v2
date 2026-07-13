@@ -15,13 +15,11 @@ galaxy_gateway.protocol.aip_v3 (30+ device subtypes).
 """
 
 from enum import Enum
-from typing import List, Optional
 
 # 从 AIP v3.0 重导出细分类型（协议层使用）
 from galaxy_gateway.protocol.aip_v3 import (
     AIPDeviceType,
     DevicePlatform,
-    DeviceCapability as AIPDeviceCapability,
 )
 
 

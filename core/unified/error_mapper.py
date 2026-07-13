@@ -26,15 +26,11 @@ Usage::
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Optional
 
 from .error_codes import (
-    ErrorDomain,
     ErrorPayload,
     GalaxyErrorCode,
-    Retryable,
-    ErrorSeverity,
-    _ErrorCodeDef,
 )
 
 logger = logging.getLogger("Galaxy.ErrorMapper")

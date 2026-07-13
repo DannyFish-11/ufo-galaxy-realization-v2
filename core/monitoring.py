@@ -16,14 +16,12 @@ Galaxy - 监控告警系统
 
 import asyncio
 import logging
-import os
-import platform
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.Monitoring")
 
