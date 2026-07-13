@@ -145,24 +145,31 @@ class TestToolCollection:
     def setup_method(self):
         _reset_all()
 
-    def test_static_node_tools_appear_in_collect_tools(self):
-        """_collect_tools() must always expose the built-in static node tools
-        (e.g. node__06__list for the Filesystem node).  This verifies the
-        _CORE_NODE_ACTIONS → collect_tools pipeline is intact."""
-        from core.openclawd import OpenClawd
-
+    def test_static_node_tools_appear_in_collect_tools(self, monkeypatch):
+        """PR-10 之后静态 _CORE_NODE_ACTIONS 是 COMPAT-ONLY(见
+        LEGACY_LAYER3_IS_COMPAT_ONLY_POLICY):默认关闭——canonical 模式下
+        节点工具只能来自 NodeFabricRegistry→CapabilityRegistry;显式开
+        OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED=true 时静态集合才出现。"""
+        # 默认(canonical):静态工具绝不出现
+        monkeypatch.delenv("OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED", raising=False)
         oc = _make_minimal_openclawd()
-        collected = oc._collect_tools()
-        names = {t["function"]["name"] for t in collected if "function" in t}
+        names = {t["function"]["name"] for t in oc._collect_tools() if "function" in t}
+        assert "node__06__list" not in names, (
+            "canonical 模式下静态 _CORE_NODE_ACTIONS 工具不得出现(PR-10)"
+        )
 
-        # Spot-check a representative set from _CORE_NODE_ACTIONS
+        # 显式 compat 开关:静态集合可用(过渡期兼容)
+        monkeypatch.setenv("OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED", "true")
+        oc = _make_minimal_openclawd()
+        names = {t["function"]["name"] for t in oc._collect_tools() if "function" in t}
         for expected in ("node__06__list", "node__08__get", "node__09__execute"):
             assert expected in names, (
-                f"Static node tool '{expected}' missing from _collect_tools() output"
+                f"compat 开启时静态节点工具 '{expected}' 应出现在 _collect_tools()"
             )
 
-    def test_node_tools_all_have_node_prefix(self):
+    def test_node_tools_all_have_node_prefix(self, monkeypatch):
         """Every tool produced from the node layer must start with 'node__'."""
+        monkeypatch.setenv("OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED", "true")
         oc = _make_minimal_openclawd()
         collected = oc._collect_tools()
         node_tools = [
@@ -212,8 +219,9 @@ class TestToolCollection:
             f"Expected 'skill__{skill_id}' in _collect_tools() output; got: {names[:20]}"
         )
 
-    def test_collect_tools_schema_structure_for_node(self):
+    def test_collect_tools_schema_structure_for_node(self, monkeypatch):
         """Each collected node tool must have the required OpenAI schema fields."""
+        monkeypatch.setenv("OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED", "true")
         oc = _make_minimal_openclawd()
         collected = oc._collect_tools()
         # Pick the first node tool from the static set
@@ -245,9 +253,10 @@ class TestToolCollection:
         assert "parameters" in fn
         assert isinstance(fn["parameters"], dict)
 
-    def test_node_mcp_skill_all_present_simultaneously(self):
+    def test_node_mcp_skill_all_present_simultaneously(self, monkeypatch):
         """When MCP and skill capabilities are registered alongside the built-in
         node tools, all three layers must appear in a single _collect_tools() call."""
+        monkeypatch.setenv("OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED", "true")
         mcp_tool = _inject_mcp_capability("srv_combo", "query")
 
         from core.agent.capability_registry import CapabilityRegistry
@@ -291,31 +300,30 @@ class TestDispatchToolCall:
 
     @pytest.mark.asyncio
     async def test_dispatch_node_tool_reaches_node_layer(self):
-        """node__<id>__<action> dispatch must reach _load_node / _execute_node."""
+        """node__<id>__<action> dispatch must reach the canonical node layer.
+
+        节点执行已收口到 core.node_invocation.invoke_node(治理门 + Golden
+        Path + fusion_entry),不再经 core.routes._helpers 直载——桩打在
+        canonical 入口上。"""
+        from types import SimpleNamespace
+
         oc = _make_minimal_openclawd()
         oc._node_id_to_key["node_dispatch_01"] = "Node_dispatch_01"
 
         node_output = {"status": "ok", "pong": True}
-        fake_node_info = {
-            "type": "function",
-            "execute": AsyncMock(return_value=node_output),
-            "module": None,
-        }
+        mock_invoke = AsyncMock(return_value=SimpleNamespace(
+            success=True, result=node_output, error=None))
 
-        # Patch at the source module so the deferred import inside
-        # _dispatch_tool_call picks up the stubs.
-        with patch("core.routes._helpers._load_node", return_value=fake_node_info) as mock_load, \
-             patch("core.routes._helpers._execute_node",
-                   new_callable=AsyncMock, return_value=node_output) as mock_exec, \
-             patch("core.routes._helpers.nodes_root", "/fake/nodes"), \
-             patch("os.path.exists", return_value=True):
+        with patch("core.node_invocation.invoke_node", mock_invoke):
             result = await oc._dispatch_tool_call(
                 "node__node_dispatch_01__ping", {"params": {}}
             )
 
         assert result.get("success") is True, f"Node dispatch failed: {result}"
-        mock_load.assert_called_once()
-        mock_exec.assert_called_once()
+        mock_invoke.assert_awaited_once()
+        args = mock_invoke.call_args
+        assert args[0][0] == "Node_dispatch_01"   # node_key 经注册表映射
+        assert args[0][1] == "ping"               # action 段正确拆出
 
     @pytest.mark.asyncio
     async def test_dispatch_node_result_in_expected_structure(self):
@@ -323,18 +331,13 @@ class TestDispatchToolCall:
         oc = _make_minimal_openclawd()
         oc._node_id_to_key["node_result_01"] = "Node_result_01"
 
-        node_output = {"status": "ok", "value": 42}
-        fake_node_info = {
-            "type": "function",
-            "execute": AsyncMock(return_value=node_output),
-            "module": None,
-        }
+        from types import SimpleNamespace
 
-        with patch("core.routes._helpers._load_node", return_value=fake_node_info), \
-             patch("core.routes._helpers._execute_node",
-                   new_callable=AsyncMock, return_value=node_output), \
-             patch("core.routes._helpers.nodes_root", "/fake/nodes"), \
-             patch("os.path.exists", return_value=True):
+        node_output = {"status": "ok", "value": 42}
+        mock_invoke = AsyncMock(return_value=SimpleNamespace(
+            success=True, result=node_output, error=None))
+
+        with patch("core.node_invocation.invoke_node", mock_invoke):
             result = await oc._dispatch_tool_call(
                 "node__node_result_01__status", {}
             )
@@ -707,18 +710,13 @@ class TestLayerIndependenceRegression:
         oc = _make_minimal_openclawd()
         oc._node_id_to_key["isolated_node"] = "Node_isolated"
 
-        sentinel_result = {"isolated": "node_ok"}
-        fake_node_info = {
-            "type": "function",
-            "execute": AsyncMock(return_value=sentinel_result),
-            "module": None,
-        }
+        from types import SimpleNamespace
 
-        with patch("core.routes._helpers._load_node", return_value=fake_node_info), \
-             patch("core.routes._helpers._execute_node",
-                   new_callable=AsyncMock, return_value=sentinel_result), \
-             patch("core.routes._helpers.nodes_root", "/fake"), \
-             patch("os.path.exists", return_value=True):
+        sentinel_result = {"isolated": "node_ok"}
+        mock_invoke = AsyncMock(return_value=SimpleNamespace(
+            success=True, result=sentinel_result, error=None))
+
+        with patch("core.node_invocation.invoke_node", mock_invoke):
             result = await oc._dispatch_tool_call(
                 "node__isolated_node__run", {}
             )
