@@ -37,6 +37,51 @@ from core.unified.models import UnifiedDevice, UnifiedDeviceType  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
+# 门豁免夹具:本套件钉的是【预部署顺序契约】(物理设备先 deploy 后 execute),
+# 不是设备级准入策略。后来加入的 PR-CAP-DEFAULT 能力推断 + V3 canonical 槽
+# 权威会把假设备全部拦下(Transport is not alive)——按既定的 sanctioned
+# bypass 模式(test_pr2_task_envelope_pipeline)豁免两道门,专门的门策略
+# 契约由其各自的守卫套件钉。
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _bypass_dispatch_gates(monkeypatch):
+    from core.canonical_dispatch_slot_authority import (
+        CanonicalDispatchSlot,
+        CanonicalDispatchSlotStatus,
+        CanonicalDispatchSlotsResult,
+    )
+
+    def _approve_all(device_ids, execution_mode, **kwargs):
+        slots = [
+            CanonicalDispatchSlot(
+                device_id=d,
+                execution_mode=execution_mode,
+                slot_approved=True,
+                status=CanonicalDispatchSlotStatus.SLOT_APPROVED.value,
+                reason="test override — predeploy-flow suite",
+            )
+            for d in device_ids
+        ]
+        return CanonicalDispatchSlotsResult(
+            execution_mode=execution_mode,
+            approved_slots=slots,
+            blocked_slots=[],
+            can_proceed=True,
+            block_reason="",
+        )
+
+    monkeypatch.setattr(
+        "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+        _approve_all,
+    )
+    monkeypatch.setattr(
+        "core.capability_aware_routing_default.infer_dispatch_capabilities",
+        lambda tool_name: [],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -106,6 +151,8 @@ class TestDispatchAgentRemotePhysicalDevice:
         }
         router._queue_depth = 0
         router._cb = MagicMock(is_open=MagicMock(return_value=True))
+        # __new__ 骨架随 CommandRouter 演进补齐:执行器兜底路径会查 _executor
+        router._executor = None
         return router
 
     @pytest.mark.asyncio
@@ -141,7 +188,7 @@ class TestDispatchAgentRemotePhysicalDevice:
         fake_cm.active_devices = {device_id}
         fake_cm.send_to_device = AsyncMock(side_effect=fake_send_to_device)
 
-        with patch("core.command_router.CommandRouter.route_command", new=AsyncMock(return_value=fake_route_result)) as mock_route, \
+        with patch("core.command_router.CommandRouter.route_envelope", new=AsyncMock(return_value=fake_route_result)) as mock_route, \
              patch("core.routes._shared.connection_manager", fake_cm):
             result = await router.dispatch_agent_remote(
                 device_id=device_id,
@@ -160,15 +207,15 @@ class TestDispatchAgentRemotePhysicalDevice:
         assert call_order[0] == "agent_deploy", (
             f"agent_deploy was not the first message sent (order={call_order})"
         )
-        # agent_execute must follow
+        # agent_execute must follow — PR-7 起 execute 经 route_envelope
+        # (统一基底根)承载,route_command 为有意绕开的 compat shim。
         mock_route.assert_called_once()
-        call_kwargs = mock_route.call_args
-        actual_command = call_kwargs.kwargs.get("command") or (
-            call_kwargs.args[1] if call_kwargs.args and len(call_kwargs.args) > 1 else None
+        _envelope = mock_route.call_args.args[0] if mock_route.call_args.args \
+            else mock_route.call_args.kwargs.get("envelope")
+        assert getattr(_envelope, "tool_name", None) == "agent_execute", (
+            f"route_envelope 未携带 agent_execute(got {getattr(_envelope, 'tool_name', None)!r})"
         )
-        assert actual_command == "agent_execute", (
-            f"route_command was not called with command='agent_execute' (got {actual_command!r})"
-        )
+        assert getattr(_envelope, "targets", None) == [device_id]
 
         assert result["success"] is True
         assert result["agent_id"] == agent_id
@@ -189,9 +236,12 @@ class TestDispatchAgentRemotePhysicalDevice:
 
         fake_cm = MagicMock()
         fake_cm.active_devices = {}  # device offline
+        # 离线判定已收口到 connection_manager.is_online()(不再看 active_devices
+        # 成员关系);MagicMock 默认返回真值会被当"在线",必须显式置 False。
+        fake_cm.is_online = MagicMock(return_value=False)
         fake_cm.send_to_device = AsyncMock(return_value=True)
 
-        with patch("core.command_router.CommandRouter.route_command", new=AsyncMock()) as mock_route, \
+        with patch("core.command_router.CommandRouter.route_envelope", new=AsyncMock()) as mock_route, \
              patch("core.routes._shared.connection_manager", fake_cm):
             result = await router.dispatch_agent_remote(
                 device_id=device_id,
@@ -225,7 +275,7 @@ class TestDispatchAgentRemotePhysicalDevice:
         fake_cm.active_devices = {device_id}
         fake_cm.send_to_device = AsyncMock(return_value=False)  # send fails
 
-        with patch("core.command_router.CommandRouter.route_command", new=AsyncMock()) as mock_route, \
+        with patch("core.command_router.CommandRouter.route_envelope", new=AsyncMock()) as mock_route, \
              patch("core.routes._shared.connection_manager", fake_cm):
             result = await router.dispatch_agent_remote(
                 device_id=device_id,
@@ -257,6 +307,8 @@ class TestDispatchAgentRemoteNonPhysical:
         }
         router._queue_depth = 0
         router._cb = MagicMock(is_open=MagicMock(return_value=True))
+        # __new__ 骨架随 CommandRouter 演进补齐:执行器兜底路径会查 _executor
+        router._executor = None
         return router
 
     @pytest.mark.asyncio
@@ -292,7 +344,7 @@ class TestDispatchAgentRemoteNonPhysical:
         fake_cm.active_devices = {device_id}
         fake_cm.send_to_device = AsyncMock(return_value=True)
 
-        with patch("core.command_router.CommandRouter.route_command", new=AsyncMock(return_value=fake_route_result)) as mock_route, \
+        with patch("core.command_router.CommandRouter.route_envelope", new=AsyncMock(return_value=fake_route_result)) as mock_route, \
              patch("core.routes._shared.connection_manager", fake_cm):
             result = await router.dispatch_agent_remote(
                 device_id=device_id,
@@ -306,8 +358,9 @@ class TestDispatchAgentRemoteNonPhysical:
 
         # deploy must NOT have been sent via connection_manager.send_to_device
         fake_cm.send_to_device.assert_not_called()
-        # route_command must have been called with agent_execute
+        # PR-7:直连 execute 同样经 route_envelope 承载
         mock_route.assert_called_once()
-        result_kw = mock_route.call_args.kwargs
-        assert result_kw.get("command") == "agent_execute"
+        _envelope = mock_route.call_args.args[0] if mock_route.call_args.args \
+            else mock_route.call_args.kwargs.get("envelope")
+        assert getattr(_envelope, "tool_name", None) == "agent_execute"
         assert result["success"] is True
