@@ -1954,7 +1954,13 @@ class DeviceRouter:
                     record_result_idempotency,
                 )
 
-                if check_result_idempotency(task_id):
+                # 自有命名空间:本层防的是"重启后同一完成通知被重投递",
+                # 用裸 task_id 会与 unified_result_ingress 的联合幂等回退键
+                # (消息缺 message_id 时同样落在裸 task_id)共用一个槽——
+                # ingress 刚在 first_accepted 后记录,这里紧接着的首次通知
+                # 就会被误判为跨重启重复,完成唤醒被吞。
+                _dr_durable_key = f"device_router_notify:{task_id}"
+                if check_result_idempotency(_dr_durable_key):
                     # Already processed in a previous V2 process lifetime.
                     # Populate the in-memory set so subsequent calls skip level-2.
                     self._seen_task_result_ids.add(task_id)
@@ -1967,7 +1973,7 @@ class DeviceRouter:
                         },
                     )
                     return
-                record_result_idempotency(task_id)
+                record_result_idempotency(_dr_durable_key)
             except Exception as _idem_exc:  # noqa: BLE001 — durable store must never block dispatch
                 logger.debug(
                     "device_router: durable idempotency check skipped (non-fatal): %s",

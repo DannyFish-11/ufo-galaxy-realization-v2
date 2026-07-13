@@ -651,12 +651,17 @@ async def handle_task_result(
     )
 
     # ── Durable idempotency: suppress cross-restart duplicate results ──
+    # 只查不记:记录延后到本条消息真正被接纳之后(见下方 ingress 之后的
+    # 补记)。"收到即记录"有两个实际危害:
+    #   1) 统一 ingress 在消息缺 message_id/idempotency_key 时回退用裸
+    #      task_id 作联合幂等键,读的是同一个持久库——会把本条消息刚记
+    #      的键当成重复(duplicate_ignored),完成通知被错误抑制,
+    #      device_router 的 awaiter 只能靠超时结束;
+    #   2) 被后续门(schema/连续性合法性)拒绝的结果也已占坑,合法重试
+    #      会被误杀为跨重启重复。
     if task_id:
         try:
-            from core.durable_result_idempotency import (
-                check_result_idempotency,
-                record_result_idempotency,
-            )
+            from core.durable_result_idempotency import check_result_idempotency
             if check_result_idempotency(task_id):
                 logger.info(
                     "task_lifecycle: duplicate task result suppressed (durable store): "
@@ -665,7 +670,6 @@ async def handle_task_result(
                     device_id,
                 )
                 return
-            record_result_idempotency(task_id)
         except Exception as _idem_exc:  # noqa: BLE001 — durable store must never block dispatch
             logger.debug(
                 "task_lifecycle: durable idempotency check skipped (non-fatal): %s",
@@ -911,6 +915,21 @@ async def handle_task_result(
                 "falling back to legacy truth chain task_id=%s err=%s",
                 task_id,
                 _local_ingress_err,
+            )
+
+    # ── Durable idempotency: deferred record ──
+    # 统一 ingress 运行时,其 _record_idempotency 已在 first_accepted 后
+    # 记录联合幂等键(idempotency_key/lineage,含裸 task_id 回退),这里
+    # 不再重复占键;仅当 ingress 不可用走 legacy 链时,才补记裸 task_id
+    # 以保住跨重启去重。
+    if task_id and not _unified_result_ingress_ran:
+        try:
+            from core.durable_result_idempotency import record_result_idempotency
+            record_result_idempotency(task_id)
+        except Exception as _idem_rec_exc:  # noqa: BLE001 — durable store must never block dispatch
+            logger.debug(
+                "task_lifecycle: durable idempotency record skipped (non-fatal): %s",
+                _idem_rec_exc,
             )
 
     # PR-TTC: Run the canonical must-run truth chain when local-mode unified
