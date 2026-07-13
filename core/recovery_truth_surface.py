@@ -949,9 +949,15 @@ def _build_in_flight_continuity_entry(available_modules: List[str]) -> RecoveryT
             continuity_actions_present = None
 
     if continuity_contract_present:
+        # 诚实边界:这里只做了静态结构探测(模块在场、契约字段齐全),
+        # 没有观察到任何一次真实的重启恢复事件。按 RecoveryTruthStatus
+        # 语义,observed 必须有 live coordinator evidence 或 durable
+        # records 支撑——结构完整只配 partial。声称 observed 会恰好违背
+        # 证据里引用的 STATE_RESTORED_IS_NOT_CONTINUITY_RESTORED 原则
+        # (在场不等于确证)。
         return RecoveryTruthEntry(
             dimension=dimension,
-            status=RecoveryTruthStatus.observed,
+            status=RecoveryTruthStatus.partial,
             recovery_level=RecoveryLevel.task_continuity,
             evidence_summary=(
                 "InFlightTaskContinuityContract (PR-P1-1) is present and "
@@ -965,11 +971,17 @@ def _build_in_flight_continuity_entry(available_modules: List[str]) -> RecoveryT
                 "in RuntimeRecoveryReport.continuity_report.  "
                 "STATE_RESTORED_IS_NOT_CONTINUITY_RESTORED_POLICY enforced: "
                 "state presence in the registry does not equal continuity "
-                "confirmation."
+                "confirmation.  No live restart-recovery event was observed "
+                "in this process instance — structural wiring alone does not "
+                "upgrade this dimension to 'observed'."
             ),
             policy_reference=policy,
             supporting_modules=supporting,
-            deferred_note="",
+            deferred_note=(
+                "Upgrade to 'observed' requires a live recovery pass with a "
+                "non-empty TaskContinuityReport (durable evidence), not a "
+                "static module probe."
+            ),
         )
     if continuity_actions_present:
         return RecoveryTruthEntry(

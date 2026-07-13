@@ -804,6 +804,45 @@ class TestOpenClawdAgentDispatchAlwaysAgentRuntime:
 class TestBackwardCompatibility:
     """Existing callers that do not set remote_execution_mode continue to work."""
 
+    @pytest.fixture(autouse=True)
+    def _bypass_dispatch_gates(self, monkeypatch):
+        # V3 槽位门 sanctioned 旁路:本类钉 无模式信封的向后兼容路由,
+        # 不钉门行为;假设备未注册 UDM 会被 canonical 槽位门拦下
+        # (deny-by-default,有意语义),须放行到执行器。
+        from core.canonical_dispatch_slot_authority import (
+            CanonicalDispatchSlot,
+            CanonicalDispatchSlotStatus,
+            CanonicalDispatchSlotsResult,
+        )
+
+        def _approve_all(device_ids, execution_mode, **kwargs):
+            slots = [
+                CanonicalDispatchSlot(
+                    device_id=d,
+                    execution_mode=execution_mode,
+                    slot_approved=True,
+                    status=CanonicalDispatchSlotStatus.SLOT_APPROVED.value,
+                    reason="test override",
+                )
+                for d in device_ids
+            ]
+            return CanonicalDispatchSlotsResult(
+                execution_mode=execution_mode,
+                approved_slots=slots,
+                blocked_slots=[],
+                can_proceed=True,
+                block_reason="",
+            )
+
+        monkeypatch.setattr(
+            "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+            _approve_all,
+        )
+        monkeypatch.setattr(
+            "core.capability_aware_routing_default.infer_dispatch_capabilities",
+            lambda tool_name: [],
+        )
+
     def test_route_envelope_without_mode_succeeds(self):
         """A TaskEnvelope without remote_execution_mode routes successfully."""
         from core.schemas.task_envelope import TaskEnvelope

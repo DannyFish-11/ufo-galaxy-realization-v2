@@ -32,6 +32,23 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
+def _reset_durable_result_store():
+    """清空持久幂等库(与 test_pr9_stability_idempotency 同一卫生模式)。
+
+    本文件用固定 task_id(task-abc/task-xyz 等):不清库的话,上一次
+    进程/用例留下的持久记录会把本次首个结果误判为跨重启重复。
+    """
+    try:
+        from core.durable_result_idempotency import (
+            get_durable_result_id_store,
+            reset_durable_result_id_store,
+        )
+        get_durable_result_id_store().clear()
+        reset_durable_result_id_store()
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # V3 slot gate test helpers
 # ---------------------------------------------------------------------------
@@ -73,6 +90,9 @@ def _v3_all_approved_side_effect(device_ids, execution_mode, **kw):
 class TestTaskResultWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
     """PR-1 P0: handle_task_result must call device_router.handle_task_result."""
 
+    def setUp(self):
+        _reset_durable_result_store()
+
     async def test_handle_task_result_wakes_device_router_event(self):
         """When handle_task_result is called, the DeviceRouter event is set."""
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_result
@@ -100,10 +120,11 @@ class TestTaskResultWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
             new_callable=AsyncMock,
         ), patch(
             "galaxy_gateway.android.handlers.task_lifecycle._reconcile_inbound_message",
-            None,
+            MagicMock(),
         ), patch(
-            "galaxy_gateway.android.handlers.task_lifecycle._ingest_participant_truth",
-            None,
+            # handler 对该钩子是直呼(非 None 守卫):要中和须用可调用桩
+            "galaxy_gateway.android.handlers.task_lifecycle._try_ingest_participant_truth",
+            MagicMock(),
         ), patch(
             "galaxy_gateway.device_router.device_router",
             router,
@@ -142,10 +163,11 @@ class TestTaskResultWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
             new_callable=AsyncMock,
         ), patch(
             "galaxy_gateway.android.handlers.task_lifecycle._reconcile_inbound_message",
-            None,
+            MagicMock(),
         ), patch(
-            "galaxy_gateway.android.handlers.task_lifecycle._ingest_participant_truth",
-            None,
+            # handler 对该钩子是直呼(非 None 守卫):要中和须用可调用桩
+            "galaxy_gateway.android.handlers.task_lifecycle._try_ingest_participant_truth",
+            MagicMock(),
         ), patch(
             "galaxy_gateway.device_router.device_router",
             router,
@@ -161,6 +183,9 @@ class TestTaskResultWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
 
 class TestTaskEndWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
     """PR-1 P0: handle_task_end must also call device_router.handle_task_result."""
+
+    def setUp(self):
+        _reset_durable_result_store()
 
     async def test_handle_task_end_wakes_device_router_event(self):
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_end
@@ -183,10 +208,11 @@ class TestTaskEndWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
 
         with patch(
             "galaxy_gateway.android.handlers.task_lifecycle._reconcile_inbound_message",
-            None,
+            MagicMock(),
         ), patch(
-            "galaxy_gateway.android.handlers.task_lifecycle._ingest_participant_truth",
-            None,
+            # handler 对该钩子是直呼(非 None 守卫):要中和须用可调用桩
+            "galaxy_gateway.android.handlers.task_lifecycle._try_ingest_participant_truth",
+            MagicMock(),
         ), patch(
             "galaxy_gateway.device_router.device_router",
             router,
@@ -205,6 +231,9 @@ class TestTaskEndWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
 
 class TestHandoffV2TerminalWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
     """PR-1 P0: terminal handoff_v2 result must call device_router.handle_task_result."""
+
+    def setUp(self):
+        _reset_durable_result_store()
 
     async def test_terminal_handoff_result_wakes_device_router(self):
         from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
@@ -232,6 +261,10 @@ class TestHandoffV2TerminalWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
 
         msg = {
             "type": "handoff_result",
+            # PR-46 跨仓 schema 门:终局上行须带 schema 版本与 completion-
+            # closure 契约版本,缺失会在 canonical 真相链之前被 REJECT。
+            "schema_version": "1",
+            "completion_closure_contract_version": "1",
             "device_id": "android-dev-1",
             "message_id": "msg-001",
             "task_id": "handoff-task-1",

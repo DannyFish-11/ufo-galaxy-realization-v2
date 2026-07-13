@@ -170,35 +170,27 @@ class TestLearningPlannerFeedback:
         planner = self._planner_with_resource()
         planner.update_decision_weights({})  # missing average_success_rate
 
-    def test_galaxy_l4_calls_update_decision_weights(self):
-        """_perform_optimization in galaxy_main_loop_l4 must call update_decision_weights."""
-        import importlib.util
-        import asyncio
+    def test_root_l4_file_retired_canonical_module_importable(self):
+        """根 galaxy_main_loop_l4.py 已退役删除,canonical L4 在 core 包内。
 
-        spec = importlib.util.spec_from_file_location(
-            "gml4", str(PROJECT_ROOT / "galaxy_main_loop_l4.py")
+        终局钉:canonical 晋升清理(commit 842774e8 "promote canonical L4
+        module")删除了根文件;旧的 _perform_optimization/_learn_from_
+        execution 编排级权重反哺随之退役(planner 级 update_decision_weights
+        API 仍在,由本类其余用例直接覆盖)。根文件不得复活。
+        """
+        assert not (PROJECT_ROOT / "galaxy_main_loop_l4.py").exists(), (
+            "root galaxy_main_loop_l4.py was deleted when the canonical L4 "
+            "module was promoted — do not recreate"
         )
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-
-        loop = mod.GalaxyMainLoopL4()
-
-        # Replace planner and optimizer with mocks so no real IO happens.
-        mock_optimizer = MagicMock()
-        # Return a non-empty insight list so the early-return is not triggered.
-        mock_optimizer.analyze_performance.return_value = [{"type": "test"}]
-        mock_optimizer.generate_optimization_plan.return_value = []
-        mock_optimizer.performance_metrics = {"average_success_rate": 0.85}
-        loop.learning_optimizer = mock_optimizer
-
-        mock_planner = MagicMock()
-        loop.planner = mock_planner
-
-        asyncio.run(loop._perform_optimization())
-
-        mock_planner.update_decision_weights.assert_called_once_with(
-            mock_optimizer.performance_metrics
+        from core.galaxy_main_loop_l4_enhanced import (
+            GalaxyMainLoopL4,
+            get_galaxy_loop,
         )
+        assert callable(GalaxyMainLoopL4)
+        assert callable(get_galaxy_loop)
+        # 旧编排钩子确已退役
+        assert not hasattr(GalaxyMainLoopL4, "_perform_optimization")
+        assert not hasattr(GalaxyMainLoopL4, "_learn_from_execution")
 
 
 # ---------------------------------------------------------------------------
@@ -458,77 +450,33 @@ class TestSelfHealingPhaseLogging:
 # ---------------------------------------------------------------------------
 
 class TestForcedDecisionWeightUpdate:
-    """Loop 2: _learn_from_execution must call update_decision_weights even without
-    the full learning engine (e.g., when numpy is unavailable)."""
+    """Loop 2 的 L4 编排面已退役,权重反哺行为下沉到 planner 层直接钉。
 
-    def test_learn_from_execution_updates_weights_without_learning_engine(self):
-        """Even when learning_optimizer is None, planner.update_decision_weights is called."""
-        import importlib.util
-        import asyncio
+    原两用例经根 galaxy_main_loop_l4.py 的 _learn_from_execution 验证
+    "无学习引擎也强制更新权重"——该编排钩子随 canonical L4 晋升清理
+    (commit 842774e8)一并退役。planner 级契约(update_decision_weights
+    对 availability 的影响)在此直接验证,不再经 L4。
+    """
 
-        spec = importlib.util.spec_from_file_location(
-            "gml4_forced", str(PROJECT_ROOT / "galaxy_main_loop_l4.py")
-        )
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
+    def test_l4_learn_from_execution_retired(self):
+        """终局钉:根 L4 文件与 _learn_from_execution 编排钩子不得复活。"""
+        assert not (PROJECT_ROOT / "galaxy_main_loop_l4.py").exists()
+        from core.galaxy_main_loop_l4_enhanced import GalaxyMainLoopL4
+        assert not hasattr(GalaxyMainLoopL4, "_learn_from_execution")
 
-        loop_obj = mod.GalaxyMainLoopL4()
-        # Force learning engine to None to simulate numpy unavailable
-        loop_obj.learning_optimizer = None
-
-        mock_planner = MagicMock()
-        loop_obj.planner = mock_planner
-
-        execution_result = {
-            "success": True,
-            "summary": {
-                "goal": "test",
-                "total_duration": 1.0,
-                "total_actions": 2,
-                "success_rate": 0.9,
-            },
-        }
-
-        asyncio.run(loop_obj._learn_from_execution(execution_result))
-
-        mock_planner.update_decision_weights.assert_called_once()
-        call_kwargs = mock_planner.update_decision_weights.call_args[0][0]
-        assert "average_success_rate" in call_kwargs
-
-    def test_forced_weight_update_affects_routing(self):
-        """After _learn_from_execution, resource availability changes based on success rate."""
-        import importlib.util
-        import asyncio
+    def test_weight_update_affects_routing_at_planner_level(self):
+        """低成功率指标直接驱动 planner 资源可用度下降(行为契约保留)。"""
         from enhancements.reasoning.autonomous_planner import (
             AutonomousPlanner, Resource, ResourceType,
         )
-
-        spec = importlib.util.spec_from_file_location(
-            "gml4_routing", str(PROJECT_ROOT / "galaxy_main_loop_l4.py")
-        )
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-
-        loop_obj = mod.GalaxyMainLoopL4()
-        loop_obj.learning_optimizer = None
 
         resource = Resource(
             id="r1", type=ResourceType.NODE, name="TestNode",
             capabilities=[], availability=0.5, metadata={}
         )
-        real_planner = AutonomousPlanner(available_resources=[resource])
-        loop_obj.planner = real_planner
-
-        # Low success rate → availability should decrease
-        execution_result = {
-            "success": False,
-            "summary": {
-                "goal": "test", "total_duration": 1.0,
-                "total_actions": 1, "success_rate": 0.1,
-            },
-        }
-        asyncio.run(loop_obj._learn_from_execution(execution_result))
-        assert real_planner.available_resources[0].availability < 0.5
+        planner = AutonomousPlanner(available_resources=[resource])
+        planner.update_decision_weights({"average_success_rate": 0.1})
+        assert planner.available_resources[0].availability < 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -586,8 +534,47 @@ class TestCodeFixSandboxGating:
         applied = fixer.apply_code_fix(target_dir=str(tmp_path))
         assert applied == ""
 
-    def test_auto_commit_calls_apply_on_success(self, tmp_path):
-        """When auto_commit=True and CODE_FIX succeeds, apply_code_fix is invoked."""
+    def test_code_fix_success_delegates_to_mediated_loop(self, tmp_path):
+        """CODE_FIX 成功 → 委托中介式 SelfHealingLoop 六阶段提案链(PR-6)。
+
+        钉住现契约:staged 代码改进的唯一权威是 core.self_improvement 的
+        SelfHealingLoop(propose→gather→plan→apply→validate→record),
+        auto_commit 元数据随 apply_patch 传递;直呼 apply_code_fix 落盘
+        只剩委托抛异常时的降级兜底。"auto_commit=True 即直呼 apply_code_
+        fix" 是中介化之前的退役契约(由下一个用例钉降级路径)。
+        """
+        engine = self.SelfHealingEngine({
+            "report_dir": str(tmp_path),
+            "auto_commit": True,
+            "applied_fixes_dir": str(tmp_path / "fixes"),
+        })
+        code_fix_result = self.FixResult(
+            action=self.FixAction.CODE_FIX, success=True,
+            message="fixed", timestamp="t"
+        )
+        mock_loop = MagicMock()
+        mock_loop.submit_diagnosis.return_value = MagicMock(proposal_id="prop-1")
+        with patch.object(engine.detector, "collect_metrics",
+                          return_value=self._make_metrics()), \
+             patch.object(engine.diagnoser, "diagnose",
+                          return_value=self._make_diag()), \
+             patch.object(engine.fixer, "fix", return_value=code_fix_result), \
+             patch.object(engine.reporter, "generate_report",
+                          return_value=MagicMock()), \
+             patch("core.self_improvement.get_self_healing_loop",
+                   return_value=mock_loop), \
+             patch.object(engine.fixer, "apply_code_fix") as mock_apply:
+            engine.run_once()
+        # 六阶段全部走到,auto_commit 经 apply_patch 元数据传递
+        mock_loop.submit_diagnosis.assert_called_once()
+        mock_loop.apply_patch.assert_called_once()
+        assert mock_loop.apply_patch.call_args.kwargs["apply_metadata"]["auto_commit"] is True
+        mock_loop.record_outcome.assert_called_once()
+        # 中介化后不得再直呼落盘
+        mock_apply.assert_not_called()
+
+    def test_code_fix_falls_back_to_direct_apply_when_loop_unavailable(self, tmp_path):
+        """中介 loop 委托抛异常 → 降级按 auto_commit 直呼 apply_code_fix。"""
         engine = self.SelfHealingEngine({
             "report_dir": str(tmp_path),
             "auto_commit": True,
@@ -604,6 +591,8 @@ class TestCodeFixSandboxGating:
              patch.object(engine.fixer, "fix", return_value=code_fix_result), \
              patch.object(engine.reporter, "generate_report",
                           return_value=MagicMock()), \
+             patch("core.self_improvement.get_self_healing_loop",
+                   side_effect=RuntimeError("loop unavailable")), \
              patch.object(engine.fixer, "apply_code_fix",
                           return_value=str(tmp_path / "fixes" / "fix.py")) as mock_apply:
             engine.run_once()

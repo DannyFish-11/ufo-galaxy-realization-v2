@@ -255,24 +255,33 @@ class TestNATSExecutorEnvelopeIds:
 # ---------------------------------------------------------------------------
 
 class TestDeviceRouterDispatchTaskEnvelope:
-    """PR-2: dispatch_task 内部转换为 TaskEnvelope + route_envelope。"""
+    """PR-AIP-UNIFIED: dispatch_task 是基底层,统一走 AIPTransport。
+
+    钉住现契约(v51 P1/P2):DeviceRouter 不得回环调用编排层的
+    CommandRouter.route_envelope(P2 修复移除了该循环调用);传输统一
+    经 core.aip_transport.get_aip_transport().send()(P1)。
+    "dispatch_task 内部转 route_envelope" 是收口前的退役契约。
+    """
 
     @pytest.mark.asyncio
-    async def test_dispatch_task_uses_route_envelope(self):
-        """When executor is set, dispatch_task should call route_envelope."""
+    async def test_dispatch_task_routes_via_aip_transport(self):
+        """dispatch_task sends through AIPTransport, not route_envelope."""
+        from unittest.mock import AsyncMock, MagicMock, patch as _patch
         from galaxy_gateway.device_router import DeviceRouter, Device
 
+        # 若基底层错误地回环进编排层,这个 executor 会被调用 —— 断言其为空。
         executor = _make_mock_executor()
-
-        # Patch CommandRouter so get_command_router() returns a router with our executor
         from core.command_router import CommandRouter
         mock_router = CommandRouter(executor=executor)
 
-        import galaxy_gateway.device_router as _dr_mod
         import core.command_router as _cr_mod
-
         original_get_router = _cr_mod.get_command_router
         _cr_mod.get_command_router = lambda: mock_router
+
+        mock_transport = MagicMock()
+        mock_transport.send = AsyncMock(
+            return_value={"success": True, "result": {"ok": True}}
+        )
         try:
             dr = DeviceRouter()
             device = Device(
@@ -290,11 +299,20 @@ class TestDeviceRouterDispatchTaskEnvelope:
                     "params": {},
                 },
             }
-            with _patch_v3_slot_gate(["test_device"]):
+            with _patch(
+                "core.aip_transport.get_aip_transport",
+                return_value=mock_transport,
+            ):
                 result = await dr.dispatch_task(task, device)
-            # route_envelope was called → executor was invoked
-            assert executor.calls, "route_envelope should have called the executor"
-            assert executor.calls[0]["target"] == "test_device"
+
+            mock_transport.send.assert_called_once()
+            _msg, _target = mock_transport.send.call_args.args
+            assert _target == "test_device"
+            assert result["success"] is True
+            assert result["via"] == "device_router->aip_transport"
+            assert result["task_id"] == "dr-task-1"
+            # 基底层不得回环进编排层:executor(经 route_envelope)不应被碰
+            assert executor.calls == []
         finally:
             _cr_mod.get_command_router = original_get_router
 

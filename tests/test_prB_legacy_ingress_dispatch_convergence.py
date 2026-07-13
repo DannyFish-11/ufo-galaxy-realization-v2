@@ -235,8 +235,16 @@ class TestSchedulerRelaySpineRouting(unittest.TestCase):
         mock_get.assert_not_called()
         ctx_router.route_envelope.assert_called_once()
 
-    def test_16_exec_relay_falls_back_to_proxy_relay_when_spine_fails(self):
-        """When route_envelope raises, ProxyRelay fallback is attempted."""
+    def test_16_exec_relay_legacy_fallback_gated_when_spine_fails(self):
+        """When route_envelope raises, the legacy ProxyRelay fallback is GATED.
+
+        钉住现契约(canonical 收口):spine 失败时默认**封锁** legacy 回退
+        (CANONICAL_ROUTE_REQUIRED),只有显式 opt-in
+        allow_legacy_scheduler_fallback 才走 ProxyRelay。
+        "spine 失败即无条件回退 ProxyRelay" 是收口前的退役契约。
+        """
+        import json
+
         sched = self._make_scheduler()
 
         mock_router = MagicMock()
@@ -250,17 +258,36 @@ class TestSchedulerRelaySpineRouting(unittest.TestCase):
 
         context = {"command_router": mock_router}
 
+        # ── 默认:回退被封,ProxyRelay 不得被调用 ──
+        with patch("core.proxy_relay.get_proxy_relay", return_value=mock_proxy_relay):
+            with patch("core.proxy_relay.RelayRequest", MagicMock()):
+                blocked_raw = _run(sched._exec_relay(
+                    {"source_device": "s", "target_device": "t", "payload": {}},
+                    context,
+                ))
+        mock_proxy_relay.relay.assert_not_called()
+        blocked = json.loads(blocked_raw)
+        self.assertFalse(blocked.get("success"))
+        self.assertEqual(blocked.get("error_code"), "CANONICAL_ROUTE_REQUIRED")
+        self.assertTrue(blocked.get("legacy_fallback_blocked"))
+
+        # ── 显式 opt-in:ProxyRelay 回退可用,并打 legacy_fallback 标记 ──
         with patch("core.proxy_relay.get_proxy_relay", return_value=mock_proxy_relay):
             with patch("core.proxy_relay.RelayRequest", MagicMock()):
                 result_raw = _run(sched._exec_relay(
-                    {"source_device": "s", "target_device": "t", "payload": {}},
+                    {
+                        "source_device": "s",
+                        "target_device": "t",
+                        "payload": {},
+                        "allow_legacy_scheduler_fallback": True,
+                    },
                     context,
                 ))
 
         mock_proxy_relay.relay.assert_called_once()
-        import json
         result = json.loads(result_raw)
         self.assertTrue(result.get("relayed"))
+        self.assertEqual(result.get("routing_plane"), "legacy_fallback")
 
     def test_17_exec_relay_uses_get_command_router_when_no_context_router(self):
         """_exec_relay calls get_command_router() when context has no router."""
@@ -327,43 +354,70 @@ class TestSchedulerMeshSendSpineRouting(unittest.TestCase):
         result = json.loads(result_raw)
         self.assertTrue(result.get("success"))
 
-    def test_20_exec_mesh_send_falls_back_to_mesh_coordinator_when_spine_fails(self):
-        """When route_envelope raises, MeshCoordinator fallback is attempted."""
-        sched = self._make_scheduler()
+    @staticmethod
+    def _make_mesh_coord(reachable=True):
+        """PR-MESH-COLLAB 协作路由的 mesh 协调器桩。
 
-        mock_router = MagicMock()
-        mock_router.route_envelope = AsyncMock(side_effect=RuntimeError("spine down"))
+        peer 属性必须是真实原语(而非裸 MagicMock):调度器会把
+        reachable_direct/reachable_relay/latency_ms 装进 mesh_advice
+        并 JSON 序列化——MagicMock 漏进去即崩,那是桩的问题不是代码的。
+        """
+        from types import SimpleNamespace
 
         mock_mesh_result = MagicMock()
         mock_mesh_result.to_dict.return_value = {"mesh_sent": True}
 
         mock_mesh_coord = MagicMock()
         mock_mesh_coord.send = AsyncMock(return_value=mock_mesh_result)
+        if reachable:
+            mock_mesh_coord.get_peer.return_value = SimpleNamespace(
+                reachable_direct=True, reachable_relay=False, latency_ms=12.5,
+            )
+        else:
+            mock_mesh_coord.get_peer.return_value = None
+        return mock_mesh_coord
+
+    def test_20_exec_mesh_send_uses_mesh_when_peer_reachable(self):
+        """PR-MESH-COLLAB:mesh 建议可达 → mesh.send() 执行,带 mesh_advice。
+
+        钉住协作路由契约(mesh 建议先行,"NOT a fallback chain"):
+        peer 可达时走 mesh_routed,spine 路由器根本不参与。
+        "spine 失败才回退 mesh" 是收口前的退役契约。
+        """
+        import json
+
+        sched = self._make_scheduler()
+
+        mock_router = MagicMock()
+        mock_router.route_envelope = AsyncMock(side_effect=RuntimeError("spine down"))
+        mock_mesh_coord = self._make_mesh_coord(reachable=True)
 
         with patch("core.command_router.get_command_router", return_value=mock_router):
             with patch("core.mesh_coordinator.get_mesh_coordinator", return_value=mock_mesh_coord):
                 result_raw = _run(sched._exec_mesh_send({"target_device": "tgt"}))
 
         mock_mesh_coord.send.assert_called_once()
-        import json
+        mock_router.route_envelope.assert_not_called()
         result = json.loads(result_raw)
         self.assertTrue(result.get("mesh_sent"))
+        self.assertEqual(result.get("via"), "mesh_routed")
+        self.assertTrue(result.get("mesh_advice", {}).get("reachable_direct"))
 
-    def test_21_exec_mesh_send_uses_node_registry_when_router_unavailable(self):
-        """When CommandRouter is unavailable, falls back to MeshCoordinator."""
+    def test_21_exec_mesh_send_mesh_path_works_when_router_unavailable(self):
+        """CommandRouter 不可用时,mesh 可达路径照常工作(协作路由独立于 spine)。"""
+        import json
+
         sched = self._make_scheduler()
-
-        mock_mesh_result = MagicMock()
-        mock_mesh_result.to_dict.return_value = {"mesh_sent": True, "direct": True}
-
-        mock_mesh_coord = MagicMock()
-        mock_mesh_coord.send = AsyncMock(return_value=mock_mesh_result)
+        mock_mesh_coord = self._make_mesh_coord(reachable=True)
 
         with patch("core.command_router.get_command_router", side_effect=ImportError("no router")):
             with patch("core.mesh_coordinator.get_mesh_coordinator", return_value=mock_mesh_coord):
                 result_raw = _run(sched._exec_mesh_send({"target_device": "tgt"}))
 
         mock_mesh_coord.send.assert_called_once()
+        result = json.loads(result_raw)
+        self.assertTrue(result.get("mesh_sent"))
+        self.assertEqual(result.get("via"), "mesh_routed")
 
     def test_22_exec_mesh_send_records_ingress(self):
         """record_legacy_ingress is called with SCHEDULER source."""

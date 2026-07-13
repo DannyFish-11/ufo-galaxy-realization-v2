@@ -874,7 +874,15 @@ class TestGroupU_RuntimeRecoveryReportToDict:
 # ---------------------------------------------------------------------------
 
 class TestGroupV_RecoveryTruthSurface:
-    def test_V01_in_flight_continuity_entry_is_observed_with_contract(self):
+    def test_V01_in_flight_continuity_entry_is_partial_with_contract(self):
+        """契约在场且接线完整 → partial(而非 observed)。
+
+        诚实边界对账(与 test_recovery_truth_surface.F03 同一原则):
+        build_recovery_truth_report() 只做静态结构探测,observed 必须有
+        live recovery event 或 durable records 支撑——结构完整只到
+        partial。"契约在场即 observed" 是与 STATE_RESTORED_IS_NOT_
+        CONTINUITY_RESTORED 原则相悖的退役契约。
+        """
         from core.recovery_truth_surface import (
             build_recovery_truth_report,
             RecoveryTruthDimension,
@@ -885,8 +893,10 @@ class TestGroupV_RecoveryTruthSurface:
             RecoveryTruthDimension.in_flight_task_continuity_preserved
         )
         assert entry is not None
-        # With InFlightTaskContinuityContract present, status should be observed
-        assert entry.status == RecoveryTruthStatus.observed
+        # With InFlightTaskContinuityContract present but no live recovery
+        # event, status caps at partial and the upgrade path is documented.
+        assert entry.status == RecoveryTruthStatus.partial
+        assert "observed" in (entry.deferred_note or "")
 
     def test_V02_inflight_contract_in_supporting_modules(self):
         from core.recovery_truth_surface import (

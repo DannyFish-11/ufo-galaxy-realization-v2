@@ -23,8 +23,12 @@ def test_shared_execution_visibility_separates_authority_truth_from_done_summary
 
     visibility = _derive_shared_execution_visibility(payload)
 
-    assert visibility["completion_state"] == "closed"
-    assert visibility["closure_candidate_state"] == "closed"
+    # 诚实降级(代码内注释在案):表层闭合信号可见但证据边界未确证成熟
+    # canonical 闭合(is_fully_closed=False + accept_provisional)时,对外
+    # 状态降为 incomplete——advisory 真相不得伪装成 closed。
+    # "表层信号即 closed" 是降级引入前的退役契约。
+    assert visibility["completion_state"] == "incomplete"
+    assert visibility["closure_candidate_state"] == "incomplete"
     assert visibility["authority_completion_truth"] is False
     assert visibility["acceptance_completion_truth"] is False
     assert visibility["operator_visible_done_summary_role"] == "operator_visible_interpretation_only"

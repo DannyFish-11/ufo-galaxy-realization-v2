@@ -512,16 +512,26 @@ class TestLiminalSurface:
         result = self.surface.render(_LIMINAL_SAMPLE)
         assert "Liminal" in result
 
-    def test_render_contains_depth_label(self):
+    # PR-55:默认渲染改为三部制阈限空间地图(本地链/跨设备链/沙箱推演
+    # ——三类唯一允许的内容),Depth/Topology/Ambient 维度条退居 legacy
+    # 兜底(_render_legacy,仅当三部制映射不可用)。"默认渲染含维度条"
+    # 是三部制落地前的退役契约。
+
+    def test_render_contains_local_chain_panel(self):
         result = self.surface.render(_LIMINAL_SAMPLE)
+        assert "Local Execution Chain" in result
+
+    def test_render_contains_speculative_panel(self):
+        result = self.surface.render(_LIMINAL_SAMPLE)
+        assert "Speculative" in result
+
+    def test_legacy_fallback_still_renders_dimension_bars(self):
+        """legacy 兜底路径保留维度条(仅在三部制映射不可用时使用)。"""
+        from desktop_projection import StateSpaceMapper
+        liminal = StateSpaceMapper().map(_LIMINAL_SAMPLE)
+        result = self.surface._render_legacy(liminal)
         assert "Depth" in result
-
-    def test_render_contains_topology_label(self):
-        result = self.surface.render(_LIMINAL_SAMPLE)
         assert "Topology" in result
-
-    def test_render_contains_ambient_label(self):
-        result = self.surface.render(_LIMINAL_SAMPLE)
         assert "Ambient" in result
 
     def test_render_minimal_projection(self):

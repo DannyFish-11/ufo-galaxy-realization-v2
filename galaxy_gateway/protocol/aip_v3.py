@@ -176,6 +176,14 @@ class MessageType(str, Enum):
     #   - aip_to_unified(aip_type, target_platform) -> PlatformSpecificType
     # ===
 
+    # === AIP_STANDARD: 连接认证(PR-AUTH-UNIFIED)===
+    # 客户端(Android/WearOS)onOpen 后发送的首帧统一认证消息;服务端以
+    # auth_ok / auth_failed 应答。此前客户端契约已上线而服务端无应答者
+    # ——状态机两端空转,本次补齐服务端。
+    AUTH = "auth"
+    AUTH_OK = "auth_ok"
+    AUTH_FAILED = "auth_failed"
+
     # === AIP_STANDARD: 设备管理 ===
     DEVICE_REGISTER = "device_register"
     DEVICE_REGISTER_ACK = "device_register_ack"

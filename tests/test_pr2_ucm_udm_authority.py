@@ -315,11 +315,24 @@ class TestGatewayWSManagerDisconnect(unittest.TestCase):
     """Tests 32–33: UCM/SSOT called before local map cleanup on disconnect."""
 
     def _make_manager(self):
+        import asyncio
         from galaxy_gateway.websocket_handler import GatewayWSManager
         mgr = GatewayWSManager.__new__(GatewayWSManager)
         mgr.active_connections = {}
         mgr.device_connections = {}
+        # B4:disconnect 改为 async + 锁保护(见 websocket_handler.disconnect
+        # 的 "B4 fixed" 注释),同步直调只会拿到未执行的协程。
+        mgr._lock = asyncio.Lock()
         return mgr
+
+    @staticmethod
+    def _run(coro):
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
 
     def test_32_disconnect_calls_ucm_unregister_before_local_cleanup(self):
         """UCM unregister is invoked on disconnect path."""
@@ -348,7 +361,7 @@ class TestGatewayWSManagerDisconnect(unittest.TestCase):
              patch.object(mgr, "_ucm", return_value=ucm), \
              patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
 
-            mgr.disconnect("conn-1")
+            self._run(mgr.disconnect("conn-1"))
 
         # Both UCM and UDM must have been called
         ucm_called = any(tag == "ucm_mark_offline" for tag, _ in call_order)
@@ -375,7 +388,7 @@ class TestGatewayWSManagerDisconnect(unittest.TestCase):
              patch.object(mgr, "_ucm", return_value=MagicMock(mark_offline=MagicMock())), \
              patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
 
-            mgr.disconnect("conn-2")
+            self._run(mgr.disconnect("conn-2"))
 
         self.assertIn("dev-ssot-2", udm_called,
                       "udm_write_unregister must be called with the device_id")
