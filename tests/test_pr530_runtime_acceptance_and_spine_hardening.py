@@ -477,11 +477,6 @@ class TestNodeLayerRegression:
         oc._capability_dispatcher._node_id_to_key["node_reg_ok"] = "Node_reg_ok"
 
         sentinel = {"status": "node_ok"}
-        fake_node_info = {
-            "type": "function",
-            "execute": AsyncMock(return_value=sentinel),
-            "module": None,
-        }
 
         # 节点执行已收口 core.node_invocation.invoke_node(canonical),
         # core.routes._helpers 直载路径退役——桩改打 canonical 入口。
@@ -501,11 +496,6 @@ class TestNodeLayerRegression:
         oc._node_id_to_key["node_inline_ok"] = "Node_inline_ok"
 
         sentinel = {"status": "inline_node_ok"}
-        fake_node_info = {
-            "type": "function",
-            "execute": AsyncMock(return_value=sentinel),
-            "module": None,
-        }
 
         # 节点执行已收口 core.node_invocation.invoke_node(canonical),
         # core.routes._helpers 直载路径退役——桩改打 canonical 入口。
@@ -735,11 +725,6 @@ class TestMCPLayerRegression:
         oc._node_id_to_key["after_mcp_node"] = "Node_after_mcp"
         oc._capability_dispatcher._node_id_to_key["after_mcp_node"] = "Node_after_mcp"
         sentinel = {"node_after_mcp_fail": True}
-        fake_node_info = {
-            "type": "function",
-            "execute": AsyncMock(return_value=sentinel),
-            "module": None,
-        }
 
         # 节点执行已收口 core.node_invocation.invoke_node(canonical),
         # core.routes._helpers 直载路径退役——桩改打 canonical 入口。
@@ -1124,11 +1109,6 @@ class TestFailurePaths:
         oc._node_id_to_key["degrade_node"] = "Node_degrade"
         oc._capability_dispatcher._node_id_to_key["degrade_node"] = "Node_degrade"
         sentinel = {"degrade": "node_ok"}
-        fake_node_info = {
-            "type": "function",
-            "execute": AsyncMock(return_value=sentinel),
-            "module": None,
-        }
         # 节点执行已收口 core.node_invocation.invoke_node(canonical),
         # core.routes._helpers 直载路径退役——桩改打 canonical 入口。
         from types import SimpleNamespace as _SN
