@@ -348,6 +348,22 @@ async def build_panel_feed() -> dict:
         })
         feed.setdefault("nats_messages", [])
 
+    # NATS worker 实时状态(面板 Mesh 区显示/开关的数据源;running 为
+    # 真实运行态,enabled_by_env 为启动序列 opt-in 总开关的诚实回显)。
+    try:
+        from core.worker_runtime import get_worker_runtime, worker_enabled
+        _wr = get_worker_runtime()
+        feed["nats_worker"] = {
+            "running": bool(_wr.running),
+            "worker_id": _wr.worker_id,
+            "enabled_by_env": worker_enabled(),
+        }
+    except Exception as exc:  # noqa: BLE001 — worker 模块不可用时诚实缺省
+        logger.debug("panel feed: worker 状态聚合失败: %s", exc)
+        feed.setdefault("nats_worker", {
+            "running": False, "worker_id": "", "enabled_by_env": False,
+        })
+
     # 成本汇总（真实累计：来自 CostTracker，取代面板里写死的 0）
     try:
         from core.cost_tracker import get_cost_tracker

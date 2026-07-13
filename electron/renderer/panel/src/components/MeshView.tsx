@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { getBackendUrl } from '@/lib/api';
 import type { PanelData } from '@/hooks/usePanelData';
 
 const STATUS_TONE: Record<string, string> = {
@@ -12,7 +14,34 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export default function MeshView({ data }: { data: PanelData }) {
-  const { topologyNodes, meshSession, nodeTopology, smartDeviceList } = data;
+  const { topologyNodes, meshSession, nodeTopology, smartDeviceList, natsWorker } = data;
+
+  // NATS worker 开关:调用后端真实启停;结果以 panel feed 回推的
+  // running 为准(乐观态仅在等待期间显示)。
+  const [workerBusy, setWorkerBusy] = useState(false);
+  const [workerError, setWorkerError] = useState('');
+  const toggleWorker = async () => {
+    if (workerBusy) return;
+    setWorkerBusy(true);
+    setWorkerError('');
+    try {
+      const base = await getBackendUrl();
+      const res = await fetch(`${base}/api/v1/mesh/worker/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enable: !natsWorker.running }),
+      });
+      const out = await res.json();
+      if (!natsWorker.running && !out.running) {
+        // 启动请求但没启起来:如实显示后端原因(如 nats_unavailable)
+        setWorkerError(out.reason || '启动失败');
+      }
+    } catch (e) {
+      setWorkerError(String(e));
+    } finally {
+      setWorkerBusy(false);
+    }
+  };
 
   return (
     <div className="view-scroll">
@@ -69,6 +98,32 @@ export default function MeshView({ data }: { data: PanelData }) {
               <div className="row-right mono">{d.state || (d.online ? 'online' : 'offline')}</div>
             </div>
           ))}
+        </div>
+
+        <div className="section-header">NATS Worker</div>
+        <div className="card-list">
+          <div className="row-card">
+            <span className={`dot tone-${natsWorker.running ? 'success' : 'danger'}`} />
+            <div className="row-main">
+              <div className="row-title">任务执行 Worker</div>
+              <div className="row-meta mono">
+                {natsWorker.running
+                  ? `运行中 · ${natsWorker.workerId}`
+                  : natsWorker.enabledByEnv
+                    ? '未运行 · 多设备总开关已开'
+                    : '未运行 · 单机模式'}
+                {workerError ? ` · ${workerError}` : ''}
+              </div>
+            </div>
+            <button
+              className="row-right"
+              onClick={toggleWorker}
+              disabled={workerBusy}
+              style={{ cursor: workerBusy ? 'wait' : 'pointer' }}
+            >
+              {workerBusy ? '…' : natsWorker.running ? '停止' : '启动'}
+            </button>
+          </div>
         </div>
 
         <div className="section-header">Mesh 会话</div>
