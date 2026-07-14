@@ -201,7 +201,16 @@ export default function ConversationView({ onStreamPhase }: ConversationViewProp
           disabled={!input.trim() || sending}
           aria-label="发送"
         >
-          {sending ? <span className="send-dot" /> : '↑'}
+          {sending ? (
+            <span className="send-dot" />
+          ) : (
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path
+                d="M4.4 11.2 18.6 5.1c.9-.4 1.8.5 1.4 1.4l-6.1 14.2c-.4 1-1.9.9-2.2-.2l-1.5-5.2a1 1 0 0 0-.7-.7L4.6 13.4c-1.1-.3-1.2-1.8-.2-2.2Z"
+                fill="currentColor"
+              />
+            </svg>
+          )}
         </button>
       </div>
     </div>
