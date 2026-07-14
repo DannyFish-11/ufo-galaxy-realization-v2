@@ -263,7 +263,8 @@ async def execute_code(request: ExecuteRequest):
         except subprocess.TimeoutExpired:
             return {"success": False, "error": "Execution timed out", "timeout": request.timeout, "language": lang}
         except Exception as e:
-            return {"success": False, "error": str(e), "language": lang}
+            logger.warning("execute 失败: %s", e)
+            return {"success": False, "error": type(e).__name__, "language": lang}
 
 
 @app.post("/execute_files")
@@ -329,7 +330,8 @@ async def execute_files(request: FileExecuteRequest):
         except subprocess.TimeoutExpired:
             return {"success": False, "error": "Execution timed out", "timeout": request.timeout}
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            logger.warning("execute_files 失败: %s", e)
+            return {"success": False, "error": type(e).__name__}
 
 
 @app.post("/eval")
