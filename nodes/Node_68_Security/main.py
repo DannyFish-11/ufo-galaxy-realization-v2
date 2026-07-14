@@ -6,6 +6,7 @@ Enforces access control rules between nodes.
 Validates that only authorized nodes can communicate with each other.
 """
 
+import asyncio
 import os
 import json
 import logging
@@ -312,28 +313,32 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting Node {NODE_ID}: {NODE_NAME}")
     
     security_enforcer = SecurityEnforcer(WHITELIST_PATH)
-    
-    # Register with state machine
-    try:
-        async with httpx.AsyncClient() as client:
-            await client.post(
-                f"{STATE_MACHINE_URL}/node/register",
-                json={
-                    "node_id": NODE_ID,
-                    "node_name": NODE_NAME,
-                    "layer": "L0_KERNEL",
-                    "ip_address": "10.88.0.68",
-                    "capabilities": ["access_control", "security_audit"]
-                },
-                timeout=5.0
-            )
-            logger.info("Registered with state machine")
-    except Exception as e:
-        logger.warning(f"Failed to register with state machine: {e}")
-    
+
+    # 状态机注册放【后台任务】:先 yield 让端口立刻可服务(与 Node_01 同模式)。
+    # 此前 POST(5s 超时)在 yield 前,状态机不在时会拖启动器健康检查预算。
+    async def _register_with_state_machine() -> None:
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{STATE_MACHINE_URL}/node/register",
+                    json={
+                        "node_id": NODE_ID,
+                        "node_name": NODE_NAME,
+                        "layer": "L0_KERNEL",
+                        "ip_address": "10.88.0.68",
+                        "capabilities": ["access_control", "security_audit"]
+                    },
+                    timeout=5.0
+                )
+                logger.info("Registered with state machine")
+        except Exception as e:
+            logger.warning(f"Failed to register with state machine: {e}")
+
+    _register_task = asyncio.get_event_loop().create_task(_register_with_state_machine())
     logger.info(f"Node {NODE_ID} ({NODE_NAME}) is ready")
-    
+
     yield
+    _register_task.cancel()
     
     logger.info(f"Shutting down Node {NODE_ID}")
 
